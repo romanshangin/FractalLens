@@ -5,11 +5,11 @@ import com.shangin.fractal.coloring.Palette;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.FractalColorizer;
 import com.shangin.fractal.render.FractalData;
+import com.shangin.fractal.render.RenderProgressBatch;
+import com.shangin.fractal.render.RenderRegion;
 import javafx.geometry.Insets;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.image.ImageView;
-import javafx.scene.image.PixelBuffer;
-import javafx.scene.image.PixelFormat;
-import javafx.scene.image.WritableImage;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.CornerRadii;
@@ -19,24 +19,18 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.transform.Affine;
 import javafx.stage.Window;
 
-import java.nio.IntBuffer;
+import java.util.List;
 import java.util.Objects;
 
 public final class FractalSurface extends Region {
 
     private final Affine previewTransform = new Affine();
-    private final ImageView imageView = new ImageView();
+    private final ImageView baseImageView = new ImageView();
+    private final ImageView progressiveImageView = new ImageView();
     private final FractalColorizer colorizer = new FractalColorizer();
 
-    // buffer for the next frame
-    private IntBuffer renderBuffer;
-    private PixelBuffer<IntBuffer> renderPixelBuffer;
-    private WritableImage renderImage;
-
-    // current picture on the screen
-    private IntBuffer displayedBuffer;
-    private PixelBuffer<IntBuffer> displayedPixelBuffer;
-    private WritableImage displayedImage;
+    private SurfaceBuffer stagingFrame;
+    private SurfaceBuffer displayedFrame;
     private FractalData displayedData;
     private Viewport displayedViewport;
 
@@ -49,10 +43,158 @@ public final class FractalSurface extends Region {
 
     public FractalSurface() {
         setMinSize(0, 0);
-        configureImageView();
+        configureImageViews();
         configureClip();
         configureHiDpi();
-        getChildren().add(imageView);
+        getChildren().addAll(baseImageView, progressiveImageView);
+    }
+
+    public void beginProgressiveRender() {
+        if (renderWidth < 2 || renderHeight < 2) {
+            return;
+        }
+
+        if (stagingFrame == null
+                || !stagingFrame.matches(
+                renderWidth,
+                renderHeight
+        )) {
+
+            stagingFrame =
+                    new SurfaceBuffer(
+                            renderWidth,
+                            renderHeight
+                    );
+        }
+
+        stagingFrame.clear();
+
+        progressiveImageView.setImage(
+                stagingFrame.image()
+        );
+    }
+
+    private void configureImageViews() {
+        configureImageView(baseImageView);
+        configureImageView(progressiveImageView);
+
+        baseImageView
+                .getTransforms()
+                .add(previewTransform);
+
+        progressiveImageView.setMouseTransparent(true);
+    }
+
+    private void configureImageView(
+            ImageView imageView
+    ) {
+        imageView.setManaged(false);
+        imageView.setPreserveRatio(false);
+        imageView.setSmooth(false);
+
+        imageView.fitWidthProperty()
+                .bind(widthProperty());
+
+        imageView.fitHeightProperty()
+                .bind(heightProperty());
+    }
+
+    public void displayProgress(
+            RenderProgressBatch progress,
+            ColoringStrategy coloring
+    ) {
+        if (stagingFrame == null) {
+            return;
+        }
+
+        FractalData data = progress.data();
+
+        if (data.width() != stagingFrame.width() || data.height() != stagingFrame.height()) {
+            return;
+        }
+
+        if (progress.regions().isEmpty()) {
+            return;
+        }
+
+        for (RenderRegion region : progress.regions()) {
+            colorizer.colorRegion(
+                    data,
+                    stagingFrame.intBuffer(),
+                    coloring,
+                    region
+            );
+        }
+
+        Rectangle2D dirtyRegion = dirtyRegion(progress.regions());
+
+        stagingFrame.pixelBuffer().updateBuffer(
+                pixelBuffer -> dirtyRegion
+        );
+    }
+
+    private static Rectangle2D dirtyRegion(
+            List<RenderRegion> regions
+    ) {
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+
+        for (RenderRegion region : regions) {
+            minX = Math.min(minX, region.x());
+
+            minY = Math.min(minY, region.y());
+
+            maxX = Math.max(maxX, region.x() + region.width());
+
+            maxY = Math.max(maxY, region.y() + region.height());
+        }
+
+        return new Rectangle2D(
+                minX,
+                minY,
+                maxX - minX,
+                maxY - minY
+        );
+    }
+
+    public void completeProgressiveRender(
+            FractalData data,
+            Viewport viewport
+    ) {
+
+        if (stagingFrame == null) {
+            return;
+        }
+
+        promoteStagingFrame(data, viewport);
+    }
+
+    private void promoteStagingFrame(
+            FractalData data,
+            Viewport viewport
+    ) {
+        SurfaceBuffer oldDisplayed =
+                displayedFrame;
+
+        displayedFrame =
+                stagingFrame;
+
+        stagingFrame =
+                oldDisplayed;
+
+        displayedData = data;
+        displayedViewport = viewport;
+
+        baseImageView.setImage(
+                displayedFrame.image()
+        );
+
+        resetPreview();
+
+        progressiveImageView.setImage(null);
     }
 
     public void resizeBuffer(
@@ -62,12 +204,12 @@ public final class FractalSurface extends Region {
         int newRenderWidth = Math.max(2, (int) Math.ceil(logicalWidth * outputScaleX));
         int newRenderHeight = Math.max(2, (int) Math.ceil(logicalHeight * outputScaleY));
 
-        if (newRenderWidth == renderWidth && newRenderHeight == renderHeight && renderBuffer != null) {
+        if (stagingFrame != null && stagingFrame.matches(newRenderWidth, newRenderHeight)) {
             return;
         }
         renderWidth = newRenderWidth;
         renderHeight = newRenderHeight;
-        createRenderBuffer();
+        stagingFrame = new SurfaceBuffer(renderWidth, renderHeight);
     }
 
     public int renderWidth() {
@@ -78,28 +220,8 @@ public final class FractalSurface extends Region {
         return renderHeight;
     }
 
-    private void createRenderBuffer() {
-        renderBuffer = IntBuffer.allocate(renderWidth * renderHeight);
-        renderPixelBuffer = new PixelBuffer<>(
-                renderWidth,
-                renderHeight,
-                renderBuffer,
-                PixelFormat.getIntArgbPreInstance());
-
-        renderImage = new WritableImage(renderPixelBuffer);
-    }
-
     private void resetPreview() {
         previewTransform.setToIdentity();
-    }
-
-    private void configureImageView() {
-        imageView.setManaged(false);
-        imageView.setPreserveRatio(false);
-        imageView.setSmooth(false);
-        imageView.fitWidthProperty().bind(widthProperty());
-        imageView.fitHeightProperty().bind(heightProperty());
-        imageView.getTransforms().add(previewTransform);
     }
 
     public void setOutputScale(
@@ -119,6 +241,9 @@ public final class FractalSurface extends Region {
     }
 
     public void showPreview(Viewport targetViewport) {
+
+        progressiveImageView.setImage(null);
+
         if (displayedViewport == null) {
             return;
         }
@@ -161,43 +286,32 @@ public final class FractalSurface extends Region {
             ColoringStrategy coloring,
             Viewport viewport
     ) {
-        if (data.width() != renderWidth || data.height() != renderHeight) {
-            throw new IllegalArgumentException("Fractal data dimensions do not match render buffer");
+        if (stagingFrame == null) {
+            return;
         }
 
-        colorizer.color(data, renderBuffer, coloring);
+        if (data.width() != renderWidth
+                || data.height() != renderHeight) {
+            throw new IllegalArgumentException(
+                    "Fractal data dimensions do not match render buffer"
+            );
+        }
 
-        renderPixelBuffer.updateBuffer(pixelBuffer -> null);
+        colorizer.color(data, stagingFrame.intBuffer(), coloring);
 
-        // new frame is ready
-        displayedBuffer = renderBuffer;
-        displayedPixelBuffer = renderPixelBuffer;
-        displayedImage = renderImage;
-        displayedData = data;
-        displayedViewport = viewport;
-        resetPreview();
-        imageView.setImage(displayedImage);
+        stagingFrame.update();
+
+        promoteStagingFrame(data, viewport);
     }
 
     public void recolor(ColoringStrategy coloring) {
-        if (displayedData == null || displayedBuffer == null || displayedPixelBuffer == null) {
+        if (displayedData == null || displayedFrame == null) {
             return;
         }
 
-        colorizer.color(displayedData, displayedBuffer, coloring);
+        colorizer.color(displayedData, displayedFrame.intBuffer(), coloring);
 
-        displayedPixelBuffer.updateBuffer(pixelBuffer -> null);
-    }
-
-    private void applyColoring(ColoringStrategy coloring)
-    {
-        if (displayedData == null || displayedBuffer == null || displayedPixelBuffer == null) {
-            return;
-        }
-
-        colorizer.color(displayedData, displayedBuffer, coloring);
-
-        displayedPixelBuffer.updateBuffer(pixelBuffer -> null);
+        displayedFrame.update();
     }
 
     public void setPreviewBackground(Palette palette) {
@@ -208,7 +322,7 @@ public final class FractalSurface extends Region {
         setBackground(new Background(new BackgroundFill(color, CornerRadii.EMPTY, Insets.EMPTY)));
     }
 
-    private Color toFxColor(int argb) {
+    private static Color toFxColor(int argb) {
         int alpha = (argb >>> 24) & 0xFF;
         int red = (argb >>> 16) & 0xFF;
         int green = (argb >>> 8) & 0xFF;

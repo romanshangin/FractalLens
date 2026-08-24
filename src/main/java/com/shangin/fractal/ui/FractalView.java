@@ -177,7 +177,19 @@ public class FractalView extends StackPane {
 
         RenderRequest request = new RenderRequest(calculator, camera.viewport(), renderWidth, renderHeight, maxIterations);
 
-        renderService.render(request, Platform::runLater, data -> fractalSurface.display(data, coloring, request.viewport()), Throwable::printStackTrace);
+        fractalSurface.beginProgressiveRender();
+        renderService.render(
+                request,
+                Platform::runLater,
+                progress ->
+                        fractalSurface.displayProgress(
+                                progress,
+                                coloring),
+                data ->
+                        fractalSurface.completeProgressiveRender(
+                                data,
+                                request.viewport()),
+                Throwable::printStackTrace);
     }
 
 

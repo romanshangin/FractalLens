@@ -21,4 +21,27 @@ public class FractalColorizer {
             buffer.put(index, color);
         }
     }
+
+    public void colorRegion(
+            FractalData data,
+            IntBuffer buffer,
+            ColoringStrategy coloring,
+            RenderRegion region
+    ) {
+        int xTo = region.x() + region.width();
+
+        int yTo = region.y() + region.height();
+
+        for (int y = region.y(); y < yTo; y++) {
+            for (int x = region.x(); x < xTo; x++) {
+                int index = y * data.width() + x;
+                int color = coloring.color(
+                        data.iterations(index),
+                        data.smoothIterations(index),
+                        data.escaped(index),
+                        data.maxIterations());
+                buffer.put(index, color);
+            }
+        }
+    }
 }
