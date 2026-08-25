@@ -7,6 +7,23 @@ public record RenderRequest(
         Viewport viewport,
         int width,
         int height,
-        int maxIterations
+        int maxIterations,
+        RenderPriority priority
 ) {
+    public RenderRequest(
+            FractalCalculator calculator,
+            Viewport viewport,
+            int width,
+            int height,
+            int maxIterations
+    ) {
+        this(
+                calculator,
+                viewport,
+                width,
+                height,
+                maxIterations,
+                RenderPriority.center()
+        );
+    }
 }

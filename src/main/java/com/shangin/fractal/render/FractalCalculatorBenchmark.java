@@ -9,8 +9,8 @@ import java.util.List;
 
 public class FractalCalculatorBenchmark {
 
-    //private static final int WIDTH = 1000;
-    //private static final int HEIGHT = 700;
+    private static final double FOCUS_X = 0.70;
+    private static final double FOCUS_Y = 0.40;
 
     private static final int WARMUP_RUNS = 3;
     private static final int MEASURED_RUNS = 7;
@@ -23,6 +23,8 @@ public class FractalCalculatorBenchmark {
     };
 
     private static final int MAX_ITERATIONS = 2000;
+
+    private RenderPriority renderPriority = RenderPriority.center();
 
     static void main() throws InterruptedException {
 
@@ -65,13 +67,18 @@ public class FractalCalculatorBenchmark {
 
         System.out.printf("%nResolution: %dx%d%n", width, height);
 
+
         RenderRequest request =
                 new RenderRequest(
                         sequentialCalculator,
                         viewport,
                         width,
                         height,
-                        maxIterations
+                        maxIterations,
+                        new RenderPriority(
+                                FOCUS_X,
+                                FOCUS_Y
+                        )
                 );
 
         warmUpSequential(

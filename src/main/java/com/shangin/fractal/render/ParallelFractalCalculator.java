@@ -1,18 +1,25 @@
 package com.shangin.fractal.render;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 
 public final class ParallelFractalCalculator implements AutoCloseable {
 
     private static final int TILE_SIZE = 32;
     private final ExecutorService workers;
+
+    record Tile(
+            int xFrom,
+            int xTo,
+            int yFrom,
+            int yTo
+    ) {}
 
     public ParallelFractalCalculator() {
         this(defaultWorkerCount());
@@ -22,7 +29,9 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         if (workerCount < 1) {
             throw new IllegalArgumentException("Worker count must be at least 1");
         }
-        workers = Executors.newFixedThreadPool(workerCount, daemonThreadFactory("fractal-worker"));
+        workers = Executors.newFixedThreadPool(
+                workerCount,
+                daemonThreadFactory("fractal-worker"));
     }
 
     private static int defaultWorkerCount() {
@@ -34,9 +43,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
 
         return runnable -> {
             Thread thread = new Thread(runnable, prefix + "-" + counter.incrementAndGet());
-
             thread.setDaemon(true);
-
             return thread;
         };
     }
@@ -170,111 +177,95 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         return tasks;
     }
 
-    private List<Callable<Void>> createTileTasks(
-            RenderRequest request,
-            FractalData data,
-            BooleanSupplier cancelled,
-            BiConsumer<FractalData, RenderRegion> regionCompleted
+    private static double distanceSquared(
+            Tile tile,
+            double centerX,
+            double centerY
     ) {
-        List<Callable<Void>> tasks = new ArrayList<>();
+        double tileCenterX = (tile.xFrom() + tile.xTo()) / 2.0;
 
-        for (int y = 0; y < request.height(); y += TILE_SIZE) {
-            int yFrom = y;
-            int yTo = Math.min(y + TILE_SIZE, request.height());
+        double tileCenterY = (tile.yFrom() + tile.yTo()) / 2.0;
 
-            for (int x = 0; x < request.width(); x += TILE_SIZE) {
-                int xFrom = x;
-                int xTo = Math.min(x + TILE_SIZE, request.width());
+        double dx = tileCenterX - centerX;
 
-                tasks.add(() -> {
-                    if (cancelled.getAsBoolean()) {
-                        return null;
-                    }
+        double dy = tileCenterY - centerY;
 
-                    request.calculator().calculateTile(
-                            data,
-                            request.viewport(),
-                            request.width(),
-                            request.height(),
-                            xFrom,
-                            xTo,
-                            yFrom,
-                            yTo,
-                            request.maxIterations(),
-                            cancelled);
-
-                    if (cancelled.getAsBoolean()) {
-                        return null;
-                    }
-
-                    RenderRegion region = new RenderRegion(
-                            xFrom,
-                            yFrom,
-                            xTo - xFrom,
-                            yTo - yFrom);
-
-                    regionCompleted.accept(
-                            data,
-                            region);
-
-                    return null;
-                });
-            }
-        }
-
-        return tasks;
+        return dx * dx + dy * dy;
     }
 
     private List<Callable<Void>> createTileTasks(
             RenderRequest request,
             FractalData data,
             BooleanSupplier cancelled,
-            Consumer<RenderRegion> regionCompleted
+            BiConsumer<FractalData, RenderRegion> regionCompleted
     ) {
-        List<Callable<Void>> tasks = new ArrayList<>();
+        List<Tile> tiles = createOrderedTiles(request);
 
-        for (int y = 0; y < request.height(); y += TILE_SIZE) {
-            int yFrom = y;
-            int yTo = Math.min(y + TILE_SIZE, request.height());
+        List<Callable<Void>> tasks = new ArrayList<>(tiles.size());
 
-            for (int x = 0; x < request.width(); x += TILE_SIZE) {
-                int xFrom = x;
-                int xTo = Math.min(x + TILE_SIZE, request.width());
-
-                tasks.add(() -> {
-                    if (cancelled.getAsBoolean()) {
-                        return null;
-                    }
-
-                    request.calculator().calculateTile(
-                            data,
-                            request.viewport(),
-                            request.width(),
-                            request.height(),
-                            xFrom,
-                            xTo,
-                            yFrom,
-                            yTo,
-                            request.maxIterations(),
-                            cancelled);
-
-                    if (cancelled.getAsBoolean()) {
-                        return null;
-                    }
-
-                    regionCompleted.accept(
-                            new RenderRegion(
-                                    xFrom,
-                                    yFrom,
-                                    xTo - xFrom,
-                                    yTo - yFrom));
-
+        for (Tile tile : tiles) {
+            tasks.add(() -> {
+                if (cancelled.getAsBoolean()) {
                     return null;
-                });
-            }
+                }
+
+                request.calculator().calculateTile(
+                        data,
+                        request.viewport(),
+                        request.width(),
+                        request.height(),
+                        tile.xFrom(),
+                        tile.xTo(),
+                        tile.yFrom(),
+                        tile.yTo(),
+                        request.maxIterations(),
+                        cancelled);
+
+                if (cancelled.getAsBoolean()) {
+                    return null;
+                }
+
+                regionCompleted.accept(
+                        data,
+                        new RenderRegion(
+                                tile.xFrom(),
+                                tile.yFrom(),
+                                tile.xTo() - tile.xFrom(),
+                                tile.yTo() - tile.yFrom()));
+
+                return null;
+            });
         }
 
         return tasks;
+    }
+
+    List<Tile> createOrderedTiles(
+            RenderRequest request
+    ) {
+        List<Tile> tiles = new ArrayList<>();
+
+        for (int y = 0; y < request.height(); y += TILE_SIZE) {
+            int yTo = Math.min(y + TILE_SIZE, request.height());
+
+            for (int x = 0; x < request.width(); x += TILE_SIZE) {
+                int xTo = Math.min(x + TILE_SIZE, request.width());
+
+                tiles.add(new Tile(x, xTo, y, yTo));
+            }
+        }
+
+        double priorityX = request.width() * request.priority().x();
+        double priorityY = request.height() * request.priority().y();
+
+        tiles.sort(Comparator.comparingDouble(
+                tile ->
+                        distanceSquared(
+                                tile,
+                                priorityX,
+                                priorityY)));
+
+        return tiles;
     }
 
     @Override

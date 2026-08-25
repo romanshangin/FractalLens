@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class ColoringTest {
+public class SmoothPaletteColoringTest {
+
     @Test
     void insidePointShouldAlwaysBeBlack() {
         Palette palette = position -> 0xFFFFFFFF;

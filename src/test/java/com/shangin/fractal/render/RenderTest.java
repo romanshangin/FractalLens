@@ -1,7 +1,6 @@
 package com.shangin.fractal.render;
 
 import com.shangin.fractal.formula.FractalPreset;
-import com.shangin.fractal.formula.MandelbrotFormula;
 import com.shangin.fractal.math.Viewport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +18,9 @@ public class RenderTest {
     private FractalCalculator calculator;
     private Viewport viewport;
     private ParallelFractalCalculator parallelCalculator;
+    private static final int WIDTH = 2000;
+    private static final int HEIGHT = 1408;
+    private static final int MAX_ITERATIONS = 2000;
 
     @BeforeEach
     void setUp() {
@@ -105,5 +107,20 @@ public class RenderTest {
                             <= request.height()
             );
         }
+    }
+
+    @Test
+    void constructorWithoutPriorityShouldUseCenter() {
+        RenderRequest request = new RenderRequest(
+                calculator,
+                viewport,
+                WIDTH,
+                HEIGHT,
+                MAX_ITERATIONS);
+
+        assertEquals(
+                RenderPriority.center(),
+                request.priority()
+        );
     }
 }

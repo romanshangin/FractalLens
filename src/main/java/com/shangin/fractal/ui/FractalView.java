@@ -4,16 +4,11 @@ import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.Palette;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
-import com.shangin.fractal.config.AdaptiveIterationPolicy;
-import com.shangin.fractal.config.FractalSettings;
-import com.shangin.fractal.config.IterationPolicy;
+import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
-import com.shangin.fractal.render.FractalCalculator;
-import com.shangin.fractal.render.FractalRenderService;
-import com.shangin.fractal.render.RenderRequest;
+import com.shangin.fractal.render.RenderPriority;
 import javafx.animation.PauseTransition;
-import javafx.application.Platform;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
@@ -23,21 +18,17 @@ public class FractalView extends StackPane {
     private static final Duration RESIZE_DELAY = Duration.millis(200);
     private final PauseTransition resizeDebounce = new PauseTransition(RESIZE_DELAY);
 
-    // zoom int/out + drag&drop
+    //  zoom interactions
     private static final Duration INTERACTION_DELAY = Duration.millis(75);
     private final PauseTransition interactionDebounce = new PauseTransition(INTERACTION_DELAY);
     private double lastDragX;
     private double lastDragY;
     private boolean panning;
+    private boolean panChanged;
 
-    private static final int ITERATIONS_PER_ZOOM_LEVEL = 50;
-    private final IterationPolicy iterationPolicy = new AdaptiveIterationPolicy(ITERATIONS_PER_ZOOM_LEVEL);
-    private final FractalCamera camera;
-    private final FractalRenderService renderService = new FractalRenderService();
-    private final FractalSettings settings = new FractalSettings();
     private final FractalSurface fractalSurface = new FractalSurface();
-
-    private FractalCalculator calculator;
+    private final FractalRenderController renderController = new FractalRenderController(fractalSurface);
+    private final FractalCamera camera;
     private ColoringStrategy coloring;
 
     public FractalView(
@@ -56,21 +47,22 @@ public class FractalView extends StackPane {
     }
 
     private void configureFractal(FractalPreset preset) {
-        calculator = new FractalCalculator(
-                preset.createFormula());
+        renderController.setFractal(preset);
     }
 
     public void setFractal(FractalPreset preset) {
-
         int width = (int) getWidth();
         int height = (int) getHeight();
+
         if (width < 2 || height < 2) {
             return;
         }
 
-        renderService.cancelCurrent();
+        interactionDebounce.stop();
+        renderController.cancelCurrent();
         configureFractal(preset);
         camera.setPreset(preset, width, height);
+        renderController.resetPriority();
         recalculate();
     }
 
@@ -78,12 +70,15 @@ public class FractalView extends StackPane {
     private void configurePalette(PalettePreset preset) {
         Palette palette = preset.palette();
         coloring = new SmoothPaletteColoring(palette);
+        renderController.setColoring(coloring);
         fractalSurface.setPreviewBackground(palette);
     }
 
     public void setPalette(PalettePreset preset) {
         configurePalette(preset);
+        renderController.cancelCurrent();
         fractalSurface.recolor(coloring);
+        recalculate();
     }
 
     private void configureResize() {
@@ -99,16 +94,20 @@ public class FractalView extends StackPane {
     }
 
     private void configureZoom() {
-
-        interactionDebounce.setOnFinished(
-                event -> recalculate()
-        );
-
         setOnScroll(event -> {
-            int logicalWidth = (int) getWidth();
-            int logicalHeight = (int) getHeight();
+            double x = event.getX();
+            double y = event.getY();
 
-            if (logicalWidth < 2 || logicalHeight < 2) {
+            double surfaceWidth = fractalSurface.getWidth();
+            double surfaceHeight = fractalSurface.getHeight();
+
+            int logicalWidth = (int) surfaceWidth;
+            int logicalHeight = (int) surfaceHeight;
+
+            int renderWidth = fractalSurface.renderWidth();
+            int renderHeight = fractalSurface.renderHeight();
+
+            if (logicalWidth < 2 || logicalHeight < 2 || renderWidth < 2 || renderHeight < 2) {
                 return;
             }
 
@@ -122,16 +121,16 @@ public class FractalView extends StackPane {
 
             if (deltaY > 0) {
                 changed = camera.zoomIn(
-                        event.getX(),
-                        event.getY(),
+                        x,
+                        y,
                         logicalWidth,
                         logicalHeight,
-                        fractalSurface.renderWidth(),
-                        fractalSurface.renderHeight());
+                        renderWidth,
+                        renderHeight);
             } else {
                 changed = camera.zoomOut(
-                        event.getX(),
-                        event.getY(),
+                        x,
+                        y,
                         logicalWidth,
                         logicalHeight);
             }
@@ -141,13 +140,18 @@ public class FractalView extends StackPane {
                 return;
             }
 
+            renderController.setPriority(new RenderPriority(
+                    Math.clamp(x / surfaceWidth, 0.0, 1.0),
+                    Math.clamp(y / surfaceHeight, 0.0, 1.0))
+            );
+
             cameraChanged();
             event.consume();
         });
     }
 
     private void scheduleResize() {
-        renderService.cancelCurrent();
+        renderController.cancelCurrent();
         resizeDebounce.playFromStart();
     }
 
@@ -158,55 +162,40 @@ public class FractalView extends StackPane {
         if (width < 2 || height < 2) {
             return;
         }
+
         fractalSurface.resizeBuffer(width, height);
         camera.resize(width, height);
+        renderController.resetPriority();
         recalculate();
     }
 
     private void recalculate() {
         int logicalWidth = (int) getWidth();
         int logicalHeight = (int) getHeight();
-        int renderWidth = fractalSurface.renderWidth();
-        int renderHeight = fractalSurface.renderHeight();
 
-        if (logicalWidth < 2 || logicalHeight < 2 || renderWidth < 2 || renderHeight < 2) {
+        if (logicalWidth < 2 || logicalHeight < 2) {
             return;
         }
 
-        int maxIterations = effectiveMaxIterations(logicalWidth, logicalHeight);
+        Viewport defaultViewport =
+                camera.defaultViewport(
+                        logicalWidth,
+                        logicalHeight
+                );
 
-        RenderRequest request = new RenderRequest(calculator, camera.viewport(), renderWidth, renderHeight, maxIterations);
-
-        fractalSurface.beginProgressiveRender();
-        renderService.render(
-                request,
-                Platform::runLater,
-                progress ->
-                        fractalSurface.displayProgress(
-                                progress,
-                                coloring),
-                data ->
-                        fractalSurface.completeProgressiveRender(
-                                data,
-                                request.viewport()),
-                Throwable::printStackTrace);
-    }
-
-
-    private int effectiveMaxIterations(int width, int height) {
-
-        Viewport defaultViewport = camera.defaultViewport(width, height);
-
-        return iterationPolicy.maxIterations(settings.maxIterations(), defaultViewport.scale(), camera.viewport().scale());
+        renderController.render(
+                camera.viewport(),
+                defaultViewport
+        );
     }
 
     public void close() {
-        renderService.close();
+        renderController.close();
     }
 
     private void cameraChanged() {
         fractalSurface.showPreview(camera.viewport());
-        renderService.cancelCurrent();
+        renderController.cancelCurrent();
         interactionDebounce.playFromStart();
     }
 
@@ -217,10 +206,10 @@ public class FractalView extends StackPane {
             }
 
             interactionDebounce.stop();
-            renderService.cancelCurrent();
             lastDragX = event.getX();
             lastDragY = event.getY();
             panning = true;
+            panChanged = false;
             event.consume();
         });
 
@@ -249,8 +238,12 @@ public class FractalView extends StackPane {
                 return;
             }
 
+            if (!panChanged) {
+                renderController.cancelCurrent();
+                panChanged = true;
+            }
+
             fractalSurface.showPreview(camera.viewport());
-            renderService.cancelCurrent();
             event.consume();
         });
 
@@ -259,7 +252,10 @@ public class FractalView extends StackPane {
                 return;
             }
             panning = false;
-            recalculate();
+            if (panChanged) {
+                renderController.resetPriority();
+                recalculate();
+            }
             event.consume();
         });
     }
