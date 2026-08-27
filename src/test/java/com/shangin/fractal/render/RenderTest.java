@@ -38,7 +38,7 @@ public class RenderTest {
 
     @Test
     void shouldReportAllCompletedRegions() throws InterruptedException {
-        RenderRequest request = new RenderRequest(
+        RenderRequest renderRequest = new RenderRequest(
                 calculator,
                 viewport,
                 100,
@@ -46,17 +46,17 @@ public class RenderTest {
                 300
         );
 
-        List<RenderRegion> regions =
-                new CopyOnWriteArrayList<>();
+        List<RenderRegion> regions = new CopyOnWriteArrayList<>();
 
-        FractalData data =
+        RenderFrame renderFrame = RenderFrame.create(renderRequest);
+
+        RenderFrame resultFrame =
                 parallelCalculator.calculate(
-                        request,
+                        renderFrame,
                         () -> false,
-                        (fractalData, region) -> regions.add(region)
-                );
+                        regions::add);
 
-        assertNotNull(data);
+        assertNotNull(resultFrame.fractalData());
         assertEquals(12, regions.size());
 
         int coveredPixels =
@@ -84,13 +84,18 @@ public class RenderTest {
                 300
         );
 
-        List<RenderRegion> regions =
-                new CopyOnWriteArrayList<>();
+        RenderFrame renderFrame = RenderFrame.create(request);
 
-        parallelCalculator.calculate(
-                request,
-                () -> false,
-                (data, region) -> regions.add(region)
+        List<RenderRegion> regions = new CopyOnWriteArrayList<>();
+
+        RenderFrame resultFrame = parallelCalculator.calculate(
+                        renderFrame,
+                        () -> false,
+                        regions::add);
+
+        assertSame(
+                renderFrame,
+                resultFrame
         );
 
         for (RenderRegion region : regions) {

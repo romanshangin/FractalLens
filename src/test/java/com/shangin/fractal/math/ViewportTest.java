@@ -1,5 +1,6 @@
 package com.shangin.fractal.math;
 
+import com.shangin.fractal.formula.FractalPreset;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -121,5 +122,69 @@ public class ViewportTest {
         Viewport zoomed = viewport.zoomAt(500, 350, 1000, 700, 0.5);
 
         assertEquals(1.2, zoomed.scale(), DELTA);
+    }
+
+    @Test
+    void realMappingShouldBeReversible() {
+        Viewport viewport = FractalPreset.MANDELBROT.defaultViewport();
+
+        int width = 1000;
+        int height = 700;
+
+        double[] positions = {
+                0.0,
+                1.0,
+                100.0,
+                499.5,
+                999.0};
+
+        for (double x : positions) {
+            double real = viewport.realAt(
+                    x,
+                    width,
+                    height);
+
+            double restoredX = viewport.xAt(
+                            real,
+                            width,
+                            height);
+
+            assertEquals(
+                    x,
+                    restoredX,
+                    1e-9
+            );
+        }
+    }
+
+    @Test
+    void imaginaryMappingShouldBeReversible() {
+        Viewport viewport = FractalPreset.MANDELBROT.defaultViewport();
+
+        int height = 700;
+
+        double[] positions = {
+                0.0,
+                1.0,
+                100.0,
+                349.5,
+                699.0
+        };
+
+        for (double y : positions) {
+            double imaginary = viewport.imaginaryAt(
+                    y,
+                    height);
+
+            double restoredY = viewport.yAt(
+                    imaginary,
+                    height);
+
+            assertEquals(
+                    y,
+                    restoredY,
+                    1e-9
+            );
+        }
     }
 }

@@ -248,8 +248,9 @@ public final class ProgressiveRenderBenchmark {
         long start =
                 System.nanoTime();
 
+        RenderFrame renderFrame = RenderFrame.create(request);
         renderService.render(
-                request,
+                renderFrame,
                 DIRECT_EXECUTOR,
 
                 progress -> {

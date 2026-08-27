@@ -2,11 +2,11 @@ package com.shangin.fractal.render;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public final class FractalRenderService implements AutoCloseable {
@@ -39,28 +39,10 @@ public final class FractalRenderService implements AutoCloseable {
     }
 
     public synchronized void render(
-            RenderRequest request,
-            Executor callbackExecutor,
-            Consumer<FractalData> onSuccess,
-            Consumer<Throwable> onError
-    ) {
-        long renderId = generation.incrementAndGet();
-
-        cancelCurrentFuture();
-        currentRender = coordinator.submit(() ->
-                executeRender(
-                        renderId,
-                        request,
-                        callbackExecutor,
-                        onSuccess,
-                        onError));
-    }
-
-    public synchronized void render(
-            RenderRequest request,
+            RenderFrame frame,
             Executor callbackExecutor,
             Consumer<RenderProgressBatch> onProgress,
-            Consumer<FractalData> onSuccess,
+            Consumer<RenderFrame> onSuccess,
             Consumer<Throwable> onError
     ) {
         long renderId = generation.incrementAndGet();
@@ -70,7 +52,7 @@ public final class FractalRenderService implements AutoCloseable {
         currentRender = coordinator.submit(() ->
                         executeRender(
                                 renderId,
-                                request,
+                                frame,
                                 callbackExecutor,
                                 onProgress,
                                 onSuccess,
@@ -87,71 +69,40 @@ public final class FractalRenderService implements AutoCloseable {
 
     private void executeRender(
             long renderId,
-            RenderRequest request,
-            Executor callbackExecutor,
-            Consumer<FractalData> onSuccess,
-            Consumer<Throwable> onError
-    ) {
-        try {
-            FractalData data = parallelCalculator.calculate(
-                            request,
-                            () -> shouldCancel(renderId));
-
-            if (data == null || shouldCancel(renderId)) {
-                return;
-            }
-
-            callbackExecutor.execute(() -> {
-                if (isCurrent(renderId)) {
-                    onSuccess.accept(data);
-                }
-            });
-
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-
-        } catch (RuntimeException e) {
-            if (shouldCancel(renderId)) {
-                return;
-            }
-            callbackExecutor.execute(
-                    () -> onError.accept(e)
-            );
-        }
-    }
-
-    private void executeRender(
-            long renderId,
-            RenderRequest request,
+            RenderFrame frame,
             Executor callbackExecutor,
             Consumer<RenderProgressBatch> onProgress,
-            Consumer<FractalData> onSuccess,
+            Consumer<RenderFrame> onSuccess,
             Consumer<Throwable> onError
     ) {
         ProgressBatcher progressBatcher =
                 new ProgressBatcher(
                         renderId,
+                        frame,
                         callbackExecutor,
                         onProgress
                 );
 
         try {
-            FractalData data =
+            RenderFrame resultFrame =
                     parallelCalculator.calculate(
-                            request,
+                            frame,
                             () -> shouldCancel(renderId),
                             progressBatcher::add
                     );
 
-            if (data == null || shouldCancel(renderId)) {
+            if (shouldCancel(renderId)) {
                 progressBatcher.cancel();
                 return;
             }
 
-            progressBatcher.finish(
-                    data,
-                    () -> onSuccess.accept(data)
-            );
+            if (!resultFrame.isComplete()) {
+                throw new IllegalStateException(
+                        "Completed render contains invalid pixels"
+                );
+            }
+
+            progressBatcher.finish(() -> onSuccess.accept(resultFrame));
 
         } catch (InterruptedException e) {
             progressBatcher.cancel();
@@ -214,29 +165,27 @@ public final class FractalRenderService implements AutoCloseable {
         private final AtomicBoolean flushScheduled =
                 new AtomicBoolean();
 
-        private volatile FractalData data;
+        private final RenderFrame renderFrame;
 
         private boolean finished;
 
         private ProgressBatcher(
                 long renderId,
+                RenderFrame renderFrame,
                 Executor callbackExecutor,
                 Consumer<RenderProgressBatch> onProgress
         ) {
             this.renderId = renderId;
+            this.renderFrame = Objects.requireNonNull(renderFrame);
             this.callbackExecutor = callbackExecutor;
             this.onProgress = onProgress;
         }
 
-        void add(
-                FractalData data,
-                RenderRegion region
-        ) {
+        void add(RenderRegion region) {
             if (shouldCancel(renderId)) {
                 return;
             }
 
-            this.data = data;
             pendingRegions.add(region);
 
             scheduleFlush();
@@ -269,10 +218,7 @@ public final class FractalRenderService implements AutoCloseable {
                     drainRegions();
 
             if (!regions.isEmpty()) {
-                dispatchProgress(
-                        data,
-                        regions
-                );
+                dispatchProgress(regions);
             }
 
             if (!pendingRegions.isEmpty()) {
@@ -281,12 +227,11 @@ public final class FractalRenderService implements AutoCloseable {
         }
 
         private void dispatchProgress(
-                FractalData data,
                 List<RenderRegion> regions
         ) {
             RenderProgressBatch progress =
                     new RenderProgressBatch(
-                            data,
+                            renderFrame,
                             regions
                     );
 
@@ -310,18 +255,14 @@ public final class FractalRenderService implements AutoCloseable {
             return regions;
         }
 
-        synchronized void finish(
-                FractalData data,
-                Runnable onFinished
-        ) {
+        synchronized void finish(Runnable onFinished) {
             if (finished) {
                 return;
             }
 
             finished = true;
 
-            List<RenderRegion> regions =
-                    drainRegions();
+            List<RenderRegion> regions = drainRegions();
 
             callbackExecutor.execute(() -> {
                 if (!isCurrent(renderId)) {
@@ -331,12 +272,11 @@ public final class FractalRenderService implements AutoCloseable {
                 if (!regions.isEmpty()) {
                     onProgress.accept(
                             new RenderProgressBatch(
-                                    data,
+                                    renderFrame,
                                     regions
                             )
                     );
                 }
-
                 onFinished.run();
             });
         }

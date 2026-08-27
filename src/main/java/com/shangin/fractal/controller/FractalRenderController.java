@@ -6,10 +6,7 @@ import com.shangin.fractal.config.FractalSettings;
 import com.shangin.fractal.config.IterationPolicy;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
-import com.shangin.fractal.render.FractalCalculator;
-import com.shangin.fractal.render.FractalRenderService;
-import com.shangin.fractal.render.RenderPriority;
-import com.shangin.fractal.render.RenderRequest;
+import com.shangin.fractal.render.*;
 import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
@@ -27,6 +24,8 @@ public final class FractalRenderController implements AutoCloseable {
     private FractalCalculator calculator;
     private ColoringStrategy coloring;
     private RenderPriority renderPriority = RenderPriority.center();
+    private RenderFrame activeFrame;
+    private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
 
     public FractalRenderController(FractalSurface surface) {
         this.surface = Objects.requireNonNull(surface);
@@ -76,7 +75,7 @@ public final class FractalRenderController implements AutoCloseable {
                 defaultViewport.scale(),
                 viewport.scale());
 
-        RenderRequest request = new RenderRequest(
+        RenderRequest renderRequest = new RenderRequest(
                 calculator,
                 viewport,
                 renderWidth,
@@ -84,13 +83,76 @@ public final class FractalRenderController implements AutoCloseable {
                 maxIterations,
                 renderPriority);
 
+        RenderFrame sourceFrame = activeFrame;
+
+        FrameReuseResult reuseResult = frameReusePlanner.plan(
+                sourceFrame,
+                renderRequest);
+
+        activeFrame = reuseResult.frame();
+
+
+        // temp log
+        int reusedPixels =
+                activeFrame.validity()
+                        .readyPixelCount();
+
+        int totalPixels =
+                activeFrame.fractalData()
+                        .size();
+
+        double reusedPercent =
+                100.0 * reusedPixels / totalPixels;
+
+        System.out.printf(
+                "Frame reuse: %,d / %,d pixels (%.1f%%)%n",
+                reusedPixels,
+                totalPixels,
+                reusedPercent
+        );
+        // temp log
+
         surface.beginProgressiveRender();
 
-        renderService.render(request,
+        boolean imageReused = false;
+
+        if (sourceFrame != null
+                && reuseResult.reused()) {
+
+            imageReused =
+                    surface.reuseDisplayedPixels(
+                            sourceFrame,
+                            reuseResult.shift()
+                                    .orElseThrow()
+                    );
+        }
+
+        if (!imageReused) {
+            surface.displayReadyPixels(
+                    activeFrame,
+                    coloring
+            );
+        }
+
+        renderService.render(
+                activeFrame,
                 Platform::runLater,
-                progress -> surface.displayProgress(progress, coloring),
-                data -> surface.completeProgressiveRender(data, request.viewport()),
-                Throwable::printStackTrace);
+
+                progress ->
+                        surface.displayProgress(
+                                progress,
+                                coloring
+                        ),
+
+                completedFrame ->
+                        surface.completeProgressiveRender(
+                                completedFrame,
+                                completedFrame.request()
+                                        .viewport()
+                        ),
+
+                Throwable::printStackTrace
+        );
     }
 
     @Override

@@ -3,10 +3,7 @@ package com.shangin.fractal.ui;
 import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.Palette;
 import com.shangin.fractal.math.Viewport;
-import com.shangin.fractal.render.FractalColorizer;
-import com.shangin.fractal.render.FractalData;
-import com.shangin.fractal.render.RenderProgressBatch;
-import com.shangin.fractal.render.RenderRegion;
+import com.shangin.fractal.render.*;
 import javafx.geometry.Insets;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.image.ImageView;
@@ -31,7 +28,7 @@ public final class FractalSurface extends Region {
 
     private SurfaceBuffer stagingFrame;
     private SurfaceBuffer displayedFrame;
-    private FractalData displayedData;
+    private RenderFrame displayedRenderFrame;
     private Viewport displayedViewport;
 
     private Runnable renderScaleChangedHandler = () -> {};
@@ -107,7 +104,8 @@ public final class FractalSurface extends Region {
             return;
         }
 
-        FractalData data = progress.data();
+        RenderFrame renderFrame = progress.frame();
+        FractalData data = renderFrame.fractalData();
 
         if (data.width() != stagingFrame.width() || data.height() != stagingFrame.height()) {
             return;
@@ -161,7 +159,7 @@ public final class FractalSurface extends Region {
     }
 
     public void completeProgressiveRender(
-            FractalData data,
+            RenderFrame renderFrame,
             Viewport viewport
     ) {
 
@@ -169,11 +167,11 @@ public final class FractalSurface extends Region {
             return;
         }
 
-        promoteStagingFrame(data, viewport);
+        promoteStagingFrame(renderFrame, viewport);
     }
 
     private void promoteStagingFrame(
-            FractalData data,
+            RenderFrame renderFrame,
             Viewport viewport
     ) {
         SurfaceBuffer oldDisplayed =
@@ -185,7 +183,7 @@ public final class FractalSurface extends Region {
         stagingFrame =
                 oldDisplayed;
 
-        displayedData = data;
+        displayedRenderFrame = renderFrame;
         displayedViewport = viewport;
 
         baseImageView.setImage(
@@ -281,35 +279,12 @@ public final class FractalSurface extends Region {
         previewTransform.setTy(translateY);
     }
 
-    public void display(
-            FractalData data,
-            ColoringStrategy coloring,
-            Viewport viewport
-    ) {
-        if (stagingFrame == null) {
-            return;
-        }
-
-        if (data.width() != renderWidth
-                || data.height() != renderHeight) {
-            throw new IllegalArgumentException(
-                    "Fractal data dimensions do not match render buffer"
-            );
-        }
-
-        colorizer.color(data, stagingFrame.intBuffer(), coloring);
-
-        stagingFrame.update();
-
-        promoteStagingFrame(data, viewport);
-    }
-
     public void recolor(ColoringStrategy coloring) {
-        if (displayedData == null || displayedFrame == null) {
+        if (displayedRenderFrame == null || displayedFrame == null) {
             return;
         }
 
-        colorizer.color(displayedData, displayedFrame.intBuffer(), coloring);
+        colorizer.color(displayedRenderFrame.fractalData(), displayedFrame.intBuffer(), coloring);
 
         displayedFrame.update();
     }
@@ -390,5 +365,112 @@ public final class FractalSurface extends Region {
     public void setOnOutputScaleChanged(Runnable handler) {
         renderScaleChangedHandler =
                 Objects.requireNonNull(handler);
+    }
+
+    public void displayReadyPixels(
+            RenderFrame frame,
+            ColoringStrategy coloring
+    ) {
+        if (stagingFrame == null) {
+            return;
+        }
+
+        FractalData data = frame.fractalData();
+        ValidityMask validity = frame.validity();
+
+        if (data.width() != stagingFrame.width()
+                || data.height() != stagingFrame.height()) {
+            return;
+        }
+
+        for (int y = 0; y < data.height(); y++) {
+
+            int runStart = -1;
+
+            for (int x = 0; x < data.width(); x++) {
+
+                if (validity.isReady(x, y)) {
+
+                    if (runStart < 0) {
+                        runStart = x;
+                    }
+
+                } else if (runStart >= 0) {
+
+                    colorizer.colorRegion(
+                            data,
+                            stagingFrame.intBuffer(),
+                            coloring,
+                            new RenderRegion(
+                                    runStart,
+                                    y,
+                                    x - runStart,
+                                    1
+                            )
+                    );
+
+                    runStart = -1;
+                }
+            }
+
+            if (runStart >= 0) {
+                colorizer.colorRegion(
+                        data,
+                        stagingFrame.intBuffer(),
+                        coloring,
+                        new RenderRegion(
+                                runStart,
+                                y,
+                                data.width() - runStart,
+                                1
+                        )
+                );
+            }
+        }
+
+        stagingFrame.update();
+    }
+
+    public boolean reuseDisplayedPixels(
+            RenderFrame sourceFrame,
+            PixelShift shift
+    ) {
+        if (displayedFrame == null
+                || stagingFrame == null) {
+            return false;
+        }
+
+        /*
+         * Критичная проверка:
+         * displayedFrame должен реально соответствовать
+         * mathematical sourceFrame.
+         */
+        if (displayedRenderFrame != sourceFrame) {
+            return false;
+        }
+
+        if (displayedFrame.width()
+                != stagingFrame.width()
+                || displayedFrame.height()
+                != stagingFrame.height()) {
+            return false;
+        }
+
+        Rectangle2D dirtyRegion =
+                stagingFrame.copyShiftedFrom(
+                        displayedFrame,
+                        shift
+                );
+
+        if (dirtyRegion == null) {
+            return false;
+        }
+
+        stagingFrame.pixelBuffer()
+                .updateBuffer(
+                        ignored -> dirtyRegion
+                );
+
+        return true;
     }
 }

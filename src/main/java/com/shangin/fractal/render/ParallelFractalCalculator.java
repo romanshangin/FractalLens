@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 public final class ParallelFractalCalculator implements AutoCloseable {
 
@@ -48,67 +48,22 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         };
     }
 
-    public FractalData calculate(
-            RenderRequest request,
-            BooleanSupplier cancelled
-    ) throws InterruptedException
-    {
-        Objects.requireNonNull(request);
-        Objects.requireNonNull(cancelled);
-
-        if (cancelled.getAsBoolean()) {
-            return null;
-        }
-
-        FractalData data = new FractalData(request.width(), request.height(), request.maxIterations());
-
-        List<Callable<Void>> tasks = createTileTasks(request, data, cancelled);
-
-        List<Future<Void>> futures = workers.invokeAll(tasks);
-
-        for (Future<Void> future : futures) {
-            if (cancelled.getAsBoolean()) {
-                return null;
-            }
-
-            try {
-                future.get();
-            } catch (CancellationException e) {
-                return null;
-            } catch (ExecutionException e) {
-                throw new IllegalStateException("Tile calculation failed", e.getCause());
-            }
-        }
-
-        if (cancelled.getAsBoolean()) {
-            return null;
-        }
-
-        return data;
-    }
-
-    public FractalData calculate(
-            RenderRequest request,
+    public RenderFrame calculate(
+            RenderFrame frame,
             BooleanSupplier cancelled,
-            BiConsumer<FractalData, RenderRegion> regionCompleted
+            Consumer<RenderRegion> regionCompleted
     ) throws InterruptedException
     {
-        Objects.requireNonNull(request);
+        Objects.requireNonNull(frame);
         Objects.requireNonNull(cancelled);
         Objects.requireNonNull(regionCompleted);
 
         if (cancelled.getAsBoolean()) {
-            return null;
+            return frame;
         }
 
-        FractalData data = new FractalData(
-                request.width(),
-                request.height(),
-                request.maxIterations());
-
         List<Callable<Void>> tasks = createTileTasks(
-                request,
-                data,
+                frame,
                 cancelled,
                 regionCompleted);
 
@@ -116,65 +71,18 @@ public final class ParallelFractalCalculator implements AutoCloseable {
 
         for (Future<Void> future : futures) {
             if (cancelled.getAsBoolean()) {
-                return null;
+                return frame;
             }
 
             try {
                 future.get();
             } catch (CancellationException e) {
-                return null;
+                return frame;
             } catch (ExecutionException e) {
                 throw new IllegalStateException("Tile calculation failed",e.getCause());
             }
         }
-
-        if (cancelled.getAsBoolean()) {
-            return null;
-        }
-
-        return data;
-    }
-
-    private List<Callable<Void>> createTileTasks(
-            RenderRequest request,
-            FractalData data,
-            BooleanSupplier cancelled
-    ) {
-        List<Callable<Void>> tasks = new ArrayList<>();
-
-        for (int y = 0; y < request.height(); y += TILE_SIZE) {
-
-            int yFrom = y;
-            int yTo = Math.min(y + TILE_SIZE, request.height());
-
-            for (int x = 0; x < request.width(); x += TILE_SIZE) {
-
-                int xFrom = x;
-                int xTo = Math.min(x + TILE_SIZE, request.width());
-
-                tasks.add(() -> {
-                    if (cancelled.getAsBoolean()) {
-                        return null;
-                    }
-
-                    request.calculator().calculateTile(
-                            data,
-                            request.viewport(),
-                            request.width(),
-                            request.height(),
-                            xFrom,
-                            xTo,
-                            yFrom,
-                            yTo,
-                            request.maxIterations(),
-                            cancelled);
-
-                    return null;
-                });
-            }
-        }
-
-        return tasks;
+        return frame;
     }
 
     private static double distanceSquared(
@@ -194,44 +102,52 @@ public final class ParallelFractalCalculator implements AutoCloseable {
     }
 
     private List<Callable<Void>> createTileTasks(
-            RenderRequest request,
-            FractalData data,
+            RenderFrame renderFrame,
             BooleanSupplier cancelled,
-            BiConsumer<FractalData, RenderRegion> regionCompleted
+            Consumer<RenderRegion> regionCompleted
     ) {
-        List<Tile> tiles = createOrderedTiles(request);
+        RenderRequest renderRequest = renderFrame.request();
+        FractalData fractalData = renderFrame.fractalData();
+        RenderGrid renderGrid = renderFrame.renderGrid();
+
+        List<Tile> tiles = createOrderedTiles(renderRequest);
 
         List<Callable<Void>> tasks = new ArrayList<>(tiles.size());
 
         for (Tile tile : tiles) {
+            RenderRegion region = new RenderRegion(
+                    tile.xFrom(),
+                    tile.yFrom(),
+                    tile.xTo() - tile.xFrom(),
+                    tile.yTo() - tile.yFrom());
+
+            if (renderFrame.validity().isRegionReady(region)) {
+                continue;
+            }
+
             tasks.add(() -> {
                 if (cancelled.getAsBoolean()) {
                     return null;
                 }
 
-                request.calculator().calculateTile(
-                        data,
-                        request.viewport(),
-                        request.width(),
-                        request.height(),
-                        tile.xFrom(),
-                        tile.xTo(),
-                        tile.yFrom(),
-                        tile.yTo(),
-                        request.maxIterations(),
-                        cancelled);
+                boolean completed = renderRequest
+                        .calculator()
+                        .calculateTile(
+                                fractalData,
+                                renderGrid,
+                                tile.xFrom(),
+                                tile.xTo(),
+                                tile.yFrom(),
+                                tile.yTo(),
+                                renderRequest.maxIterations(),
+                                cancelled);
 
-                if (cancelled.getAsBoolean()) {
+                if (!completed) {
                     return null;
                 }
 
-                regionCompleted.accept(
-                        data,
-                        new RenderRegion(
-                                tile.xFrom(),
-                                tile.yFrom(),
-                                tile.xTo() - tile.xFrom(),
-                                tile.yTo() - tile.yFrom()));
+                renderFrame.validity().markReady(region);
+                regionCompleted.accept(region);
 
                 return null;
             });

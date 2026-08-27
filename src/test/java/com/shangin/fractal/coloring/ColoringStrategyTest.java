@@ -20,12 +20,14 @@ public class ColoringStrategyTest {
 
         FractalCalculator calculator = new FractalCalculator(preset.createFormula());
 
-        RenderRequest request = new RenderRequest(
+        RenderRequest renderRequest = new RenderRequest(
                 calculator,
                 preset.defaultViewport(),
                 100,
                 70,
                 300);
+
+        RenderFrame renderFrame = RenderFrame.create(renderRequest);
 
         List<RenderRegion> regions = new CopyOnWriteArrayList<>();
 
@@ -34,10 +36,9 @@ public class ColoringStrategyTest {
         try (ParallelFractalCalculator parallel = new ParallelFractalCalculator()) {
 
             data = parallel.calculate(
-                    request,
+                    renderFrame,
                     () -> false,
-                    (_, region) ->
-                            regions.add(region));
+                    regions::add).fractalData();
         }
 
         assertNotNull(data);
@@ -47,9 +48,9 @@ public class ColoringStrategyTest {
         FractalColorizer colorizer =
                 new FractalColorizer();
 
-        IntBuffer fullBuffer = IntBuffer.allocate(request.width() * request.height());
+        IntBuffer fullBuffer = IntBuffer.allocate(renderRequest.width() * renderRequest.height());
 
-        IntBuffer progressiveBuffer = IntBuffer.allocate(request.width() * request.height());
+        IntBuffer progressiveBuffer = IntBuffer.allocate(renderRequest.width() * renderRequest.height());
 
         // old
         colorizer.color(data, fullBuffer, coloring);

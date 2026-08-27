@@ -162,4 +162,19 @@ public final class FractalCamera {
 
         return true;
     }
+
+    public void snapToRenderGrid(
+            Viewport reference,
+            int renderWidth,
+            int renderHeight
+    ) {
+        viewport =
+                viewport.snapToPixelGrid(
+                        reference,
+                        renderWidth,
+                        renderHeight
+                );
+    }
+
+
 }

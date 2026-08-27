@@ -2,7 +2,6 @@ package com.shangin.fractal.render;
 
 import com.shangin.fractal.formula.FractalFormula;
 import com.shangin.fractal.formula.FractalSample;
-import com.shangin.fractal.math.Viewport;
 
 import java.util.function.BooleanSupplier;
 
@@ -15,23 +14,33 @@ public class FractalCalculator {
         this.formula = formula;
     }
 
-    public void calculate(
+    public FractalData calculate(
             int width,
             int height,
-            Viewport viewport,
+            RenderGrid renderGrid,
             int maxIterations
     ) {
-        FractalData data = new FractalData(width, height, maxIterations);
+        FractalData fractalData = new FractalData(
+                width,
+                height,
+                maxIterations);
 
-        calculateTile(data, viewport, width, height, 0, width, 0, height, maxIterations, () -> false);
+        calculateTile(
+                fractalData,
+                renderGrid,
+                0,
+                width,
+                0,
+                height,
+                maxIterations,
+                () -> false);
 
+        return fractalData;
     }
 
-    public void calculateTile(
-            FractalData data,
-            Viewport viewport,
-            int width,
-            int height,
+    boolean calculateTile(
+            FractalData fractalData,
+            RenderGrid renderGrid,
             int xFrom,
             int xTo,
             int yFrom,
@@ -42,23 +51,25 @@ public class FractalCalculator {
         for (int y = yFrom; y < yTo; y++) {
 
             if (cancelled.getAsBoolean()) {
-                return;
+                return false;
             }
 
-            double imaginary = viewport.imaginaryAt(y, height);
+            double imaginary = renderGrid.imaginaryAt(y);
 
             for (int x = xFrom; x < xTo; x++) {
 
                 if (((x - xFrom) & (CANCELLATION_CHECK_INTERVAL - 1)) == 0  && cancelled.getAsBoolean()) {
-                    return;
+                    return false;
                 }
 
-                double real = viewport.realAt(x, width, height);
+                double real = renderGrid.realAt(x);
 
                 FractalSample sample = formula.calculate(real, imaginary, maxIterations);
 
-                data.set(y * width + x, sample);
+                fractalData.set(x, y, sample);
             }
         }
+
+        return true;
     }
 }

@@ -3,7 +3,6 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +24,7 @@ class FractalRenderServiceTest {
     private static final Executor DIRECT_EXECUTOR = Runnable::run;
 
     private FractalRenderService renderService;
-    private RenderRequest request;
+    private RenderFrame renderFrame;
 
     @BeforeEach
     void setUp() {
@@ -35,7 +34,7 @@ class FractalRenderServiceTest {
 
         Viewport viewport = preset.defaultViewport();
 
-        request = new RenderRequest(calculator, viewport, WIDTH, HEIGHT, MAX_ITERATIONS);
+        renderFrame = RenderFrame.create(new RenderRequest(calculator, viewport, WIDTH, HEIGHT, MAX_ITERATIONS));
 
         renderService = new FractalRenderService();
     }
@@ -54,7 +53,7 @@ class FractalRenderServiceTest {
 
         AtomicReference<Throwable> error = new AtomicReference<>();
 
-        renderService.render(request, DIRECT_EXECUTOR,
+        renderService.render(renderFrame, DIRECT_EXECUTOR,
 
                 progress -> regions.addAll(progress.regions()),
 
@@ -71,7 +70,11 @@ class FractalRenderServiceTest {
 
         int renderedPixels = regions.stream().mapToInt(region -> region.width() * region.height()).sum();
 
-        assertEquals(WIDTH * HEIGHT, renderedPixels);
+        assertTrue(renderFrame.isComplete());
+
+        assertEquals(
+                WIDTH * HEIGHT,
+                renderFrame.validity().readyPixelCount());
     }
 
     @Test
@@ -81,15 +84,24 @@ class FractalRenderServiceTest {
 
         CountDownLatch completed = new CountDownLatch(1);
 
+        AtomicReference<Throwable> error = new AtomicReference<>();
+
         renderService.render(
-                request,
+                renderFrame,
                 DIRECT_EXECUTOR,
                 batches::add,
-                data -> completed.countDown(),
-                Assertions::fail);
+
+                frame ->
+                        completed.countDown(),
+
+                throwable -> {
+                    error.set(throwable);
+                    completed.countDown();
+                }
+        );
 
         assertTrue(completed.await(5, TimeUnit.SECONDS));
-
+        assertNull(error.get());
         assertFalse(batches.isEmpty());
 
         int totalRegions = batches.stream().mapToInt(batch -> batch.regions().size()).sum();
@@ -106,7 +118,7 @@ class FractalRenderServiceTest {
 
         CountDownLatch completed = new CountDownLatch(1);
 
-        renderService.render(request, DIRECT_EXECUTOR,
+        renderService.render(renderFrame, DIRECT_EXECUTOR,
 
                 progress -> events.add("progress"),
 
@@ -130,30 +142,67 @@ class FractalRenderServiceTest {
     }
 
     @Test
-    void progressShouldReferToSameDataAsCompletedRender() throws InterruptedException {
+    void progressShouldReferToSameFrameAsCompletedRender()
+            throws InterruptedException {
 
-        AtomicReference<FractalData> progressData = new AtomicReference<>();
+        AtomicReference<RenderFrame> progressFrame =
+                new AtomicReference<>();
 
-        AtomicReference<FractalData> completedData = new AtomicReference<>();
+        AtomicReference<RenderFrame> completedFrame =
+                new AtomicReference<>();
 
-        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> error =
+                new AtomicReference<>();
 
-        renderService.render(request, DIRECT_EXECUTOR,
+        CountDownLatch completed =
+                new CountDownLatch(1);
 
-                progress -> progressData.compareAndSet(null, progress.data()),
+        renderService.render(
+                renderFrame,
+                DIRECT_EXECUTOR,
 
-                data -> {
-                    completedData.set(data);
+                progress ->
+                        progressFrame.compareAndSet(
+                                null,
+                                progress.frame()
+                        ),
+
+                frame -> {
+                    completedFrame.set(frame);
                     completed.countDown();
                 },
 
-                Assertions::fail);
+                throwable -> {
+                    error.set(throwable);
+                    completed.countDown();
+                }
+        );
 
-        assertTrue(completed.await(5, TimeUnit.SECONDS));
+        assertTrue(
+                completed.await(
+                        5,
+                        TimeUnit.SECONDS
+                )
+        );
 
-        assertNotNull(progressData.get());
-        assertNotNull(completedData.get());
+        assertNull(error.get());
 
-        assertSame(progressData.get(), completedData.get());
+        assertNotNull(progressFrame.get());
+        assertNotNull(completedFrame.get());
+
+        assertSame(
+                renderFrame,
+                progressFrame.get()
+        );
+
+        assertSame(
+                renderFrame,
+                completedFrame.get()
+        );
+
+        assertSame(
+                progressFrame.get(),
+                completedFrame.get()
+        );
     }
 }

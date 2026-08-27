@@ -31,6 +31,8 @@ public class FractalView extends StackPane {
     private final FractalCamera camera;
     private ColoringStrategy coloring;
 
+    private Viewport panSourceViewport;
+
     public FractalView(
             FractalPreset initialFractal,
             PalettePreset initialPalette
@@ -204,6 +206,7 @@ public class FractalView extends StackPane {
             if (!event.isPrimaryButtonDown()) {
                 return;
             }
+            panSourceViewport = camera.viewport();
 
             interactionDebounce.stop();
             lastDragX = event.getX();
@@ -253,6 +256,12 @@ public class FractalView extends StackPane {
             }
             panning = false;
             if (panChanged) {
+                camera.snapToRenderGrid(
+                        panSourceViewport,
+                        fractalSurface.renderWidth(),
+                        fractalSurface.renderHeight()
+                );
+
                 renderController.resetPriority();
                 recalculate();
             }

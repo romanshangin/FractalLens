@@ -9,7 +9,7 @@ public class MainView extends BorderPane {
     private final FractalView fractalView;
 
     public MainView() {
-        FractalPreset initialFractal = FractalPreset.JULIA;
+        FractalPreset initialFractal = FractalPreset.MANDELBROT;
         PalettePreset initialPalette = PalettePreset.ICE;
 
         this.fractalView = new FractalView(initialFractal, initialPalette);

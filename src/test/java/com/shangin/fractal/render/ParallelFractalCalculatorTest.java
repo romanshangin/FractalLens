@@ -98,4 +98,5 @@ class ParallelFractalCalculatorTest {
 
         assertTrue(topLeftFirst.yFrom() < bottomRightFirst.yFrom());
     }
+
 }

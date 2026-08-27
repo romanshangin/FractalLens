@@ -1,11 +1,14 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.render.PixelShift;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.image.PixelBuffer;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
 
 import java.nio.IntBuffer;
 import java.util.Arrays;
+import java.util.Objects;
 
 public class SurfaceBuffer {
 
@@ -61,5 +64,97 @@ public class SurfaceBuffer {
 
     int height() {
         return height;
+    }
+
+    public Rectangle2D copyShiftedFrom(
+            SurfaceBuffer source,
+            PixelShift shift
+    ) {
+        Objects.requireNonNull(source);
+        Objects.requireNonNull(shift);
+
+        if (source.width() != width
+                || source.height() != height) {
+            throw new IllegalArgumentException(
+                    "SurfaceBuffer dimensions must match"
+            );
+        }
+
+        if (source == this) {
+            throw new IllegalArgumentException(
+                    "Source and target buffers must be different"
+            );
+        }
+
+        int sourceXFrom =
+                Math.max(0, -shift.dx());
+
+        int sourceXTo =
+                Math.min(
+                        width,
+                        width - shift.dx()
+                );
+
+        int sourceYFrom =
+                Math.max(0, -shift.dy());
+
+        int sourceYTo =
+                Math.min(
+                        height,
+                        height - shift.dy()
+                );
+
+        if (sourceXFrom >= sourceXTo
+                || sourceYFrom >= sourceYTo) {
+            return null;
+        }
+
+        int copyWidth =
+                sourceXTo - sourceXFrom;
+
+        IntBuffer sourceBuffer =
+                source.intBuffer();
+
+        IntBuffer targetBuffer =
+                intBuffer();
+
+        for (int sourceY = sourceYFrom;
+             sourceY < sourceYTo;
+             sourceY++) {
+
+            int targetY =
+                    sourceY + shift.dy();
+
+            int sourceIndex =
+                    sourceY * width
+                            + sourceXFrom;
+
+            int targetIndex =
+                    targetY * width
+                            + sourceXFrom
+                            + shift.dx();
+
+            IntBuffer sourceRow =
+                    sourceBuffer.duplicate();
+
+            sourceRow.position(sourceIndex);
+            sourceRow.limit(
+                    sourceIndex + copyWidth
+            );
+
+            IntBuffer targetRow =
+                    targetBuffer.duplicate();
+
+            targetRow.position(targetIndex);
+
+            targetRow.put(sourceRow);
+        }
+
+        return new Rectangle2D(
+                sourceXFrom + shift.dx(),
+                sourceYFrom + shift.dy(),
+                copyWidth,
+                sourceYTo - sourceYFrom
+        );
     }
 }

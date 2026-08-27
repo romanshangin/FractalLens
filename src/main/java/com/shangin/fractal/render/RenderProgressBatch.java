@@ -4,11 +4,11 @@ import java.util.List;
 import java.util.Objects;
 
 public record RenderProgressBatch(
-        FractalData data,
+        RenderFrame frame,
         List<RenderRegion> regions
 ) {
     public RenderProgressBatch {
-        Objects.requireNonNull(data);
+        Objects.requireNonNull(frame);
         regions = List.copyOf(regions);
     }
 }
