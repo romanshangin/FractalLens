@@ -483,8 +483,11 @@ public final class FractalSurface extends Region {
     public boolean reuseProgressivePixels(
             RenderFrame sourceFrame,
             RenderFrame targetFrame,
-            PixelShift shift
+            PixelShift shift,
+            ColoringStrategy coloring
     ) {
+        Objects.requireNonNull(coloring);
+
         if (stagingFrame == null || stagingRenderFrame != sourceFrame) {
             return false;
         }
@@ -494,6 +497,15 @@ public final class FractalSurface extends Region {
         }
 
         stagingRenderFrame = targetFrame;
+
+        /*
+         * A cancelled tile can contain complete rows that are valid but have
+         * not produced a tile-level progress event yet. Recolor every reused
+         * valid sample so those rows are present in the shifted image before
+         * the resumed renderer skips them.
+         */
+        displayReadyPixels(targetFrame, coloring);
+
         return true;
     }
 

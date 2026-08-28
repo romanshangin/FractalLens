@@ -158,7 +158,8 @@ public final class FractalRenderController implements AutoCloseable {
             imageReused = surface.reuseProgressivePixels(
                     sourceFrame,
                     targetFrame,
-                    shift
+                    shift,
+                    coloring
             );
         }
 
