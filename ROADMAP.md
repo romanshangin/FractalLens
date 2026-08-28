@@ -24,14 +24,14 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 - [x] Establish dedicated Mandelbrot and Julia calculation benchmarks covering throughput, nanoseconds per pixel, iteration distributions, 1080p/HiDPI, and multiple zoom levels.
 - [x] Add Mandelbrot main-cardioid and period-2-bulb interior rejection.
 - [x] Evaluate exact periodicity checking; reject it because benchmark overhead exceeds the benefit for current scenarios.
-- [ ] Evaluate other proven interior-point shortcuts.
+- [x] Evaluate other proven interior-point shortcuts; retain only the exact main-cardioid and period-2-bulb tests because higher-period components lack equally cheap exact membership predicates and approximate bulb circles risk false interiors.
 - [x] Evaluate cached orbit squares; reject the manual optimization because the JIT already eliminates the repeated work and Julia regresses.
 - [x] Measure `FractalSample` allocation cost; retain the value-returning API because escape analysis removes most allocations and the remaining cost is negligible in iteration-heavy scenes.
 - [x] Reuse conjugate Mandelbrot rows for empty frames centered around the real axis; verify exact output equivalence and a 1.72-1.88x parallel-render speedup.
-- [ ] Compare the scalar kernel with the Java Vector API.
-- [ ] Retune tile size and worker count after optimizing the calculation kernel.
-- [ ] Evaluate whether Julia benefits from a specialized calculation pipeline.
-- [ ] After exhausting double-precision optimizations, investigate perturbation and reference-orbit rendering for deep zoom.
+- [x] Compare the scalar kernel with the Java Vector API; retain scalar production code because the current 128-bit/two-double species regresses overview rendering and provides only a small deep-zoom gain.
+- [x] Retune tile size and worker count after optimizing the calculation kernel; retain 32-pixel tiles and `CPU - 1` workers as the best throughput, progressive-latency, and UI-responsiveness balance.
+- [x] Evaluate a specialized direct-to-data Julia pipeline; retain the generic formula pipeline because HotSpot removes its abstraction cost and the measured difference is about 1%.
+- [x] Investigate perturbation/reference-orbit rendering; defer production integration until arbitrary-precision coordinates provide a high-precision reference orbit.
 
 ## 4. Strengthen user interaction
 
@@ -57,7 +57,7 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 ## 7. Implement deep zoom
 
 - Add arbitrary-precision coordinates.
-- Investigate perturbation/reference-orbit rendering and series approximation.
+- Implement perturbation/reference-orbit rendering with glitch detection and rebasing, then investigate series approximation.
 - Cache reference orbits and support multiple numeric backends.
 
 This phase should remain separate from the current pan-reuse optimization.

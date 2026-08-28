@@ -134,3 +134,137 @@ the exact negation of the corresponding upper-half coordinates. A dense
 401x301 comparison against the full calculation therefore verifies identical
 iteration counts, escape flags, and smooth-iteration values. The standalone
 benchmark can be repeated with `mvn -Psymmetry-benchmark verify -DskipTests`.
+
+## Additional analytic interior shortcuts
+
+Higher-period hyperbolic components were evaluated as candidates for static
+interior rejection. Unlike the main component and period-2 component, their
+boundaries are not a cardioid and an exact circle with comparably inexpensive
+membership predicates. Period-3 boundaries already require a higher-degree
+parametric description.
+
+Approximate circles commonly drawn inside higher-period bulbs are unsuitable
+as general membership tests: an overestimated radius produces false interior
+pixels, while rigorously conservative inscribed disks cover relatively small
+areas and add checks to every Mandelbrot sample. They also do not cover the
+current 100x and 10000x benchmark views around Seahorse Valley sufficiently to
+offset that constant overhead.
+
+No additional static interior predicate was therefore added. The exact main
+cardioid and period-2 bulb rejection remains the production fast path; more
+general interior detection would require an orbit-based technique, whose exact
+checkpoint variant has already been benchmarked and rejected above.
+
+## Java Vector API experiment
+
+A standalone Mandelbrot kernel prototype compared the scalar loop with a
+masked `DoubleVector` loop on the same 960x540 inputs. Both implementations
+included the cardioid and period-2 bulb checks. Two warmups and five measured
+runs were used, and the final iteration counts, escape flags, and orbit values
+were verified bit-for-bit.
+
+On the current Apple ARM runtime, JDK 26 selected a 128-bit preferred double
+species, providing only two lanes:
+
+| Scenario | Scalar p50 | Vector p50 | Scalar / Vector |
+| --- | ---: | ---: | ---: |
+| Mandelbrot 1x | 9.53 ms | 17.37 ms | 0.55x |
+| Mandelbrot 100x | 84.80 ms | 85.37 ms | 0.99x |
+| Mandelbrot 10000x | 205.05 ms | 190.73 ms | 1.08x |
+
+The masked vector loop regresses the inexpensive overview substantially,
+reaches parity at 100x, and gains only about 8% in the iteration-heavy 10000x
+case. Two-lane parallelism is insufficient to offset mask management, lane
+divergence, and result extraction. Integrating the prototype would also add a
+dependency on the incubating `jdk.incubator.vector` module and require a
+separate production calculation path.
+
+The scalar kernel is therefore retained. This decision can be revisited when
+the Vector API is stable or the target runtime exposes wider double species.
+
+## Tile-size and worker-count retuning
+
+The parallel renderer was benchmarked again after the formula, symmetry, and
+partial-frame optimizations. The sweep used a 1920x1080 frame on a 12-processor
+runtime, two warmups, five measured runs, tile sizes 16/32/64, and worker counts
+6/11/12. It measured both the first completed progressive region and total
+frame time.
+
+Representative p50 results:
+
+| Scenario | Tile | Workers | First region | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Mandelbrot overview | 32 | 11 | 0.29 ms | 12.05 ms |
+| Mandelbrot overview | 64 | 11 | 0.16 ms | 8.39 ms |
+| Mandelbrot 10000x | 32 | 11 | 0.76 ms | 105.66 ms |
+| Mandelbrot 10000x | 64 | 11 | 2.14 ms | 106.18 ms |
+| Julia 10000x | 32 | 11 | 0.96 ms | 184.75 ms |
+| Julia 10000x | 64 | 11 | 3.06 ms | 186.38 ms |
+
+Sixteen-pixel tiles consistently add scheduling overhead. Sixty-four-pixel
+tiles improve the inexpensive Mandelbrot overview but delay the first deep
+region by roughly 2-3 times and provide no deep-render throughput advantage.
+Thirty-two-pixel tiles remain the best balanced default.
+
+Using all 12 processors instead of 11 improved the measured deep total time by
+only about 3-5%. The application keeps `availableProcessors() - 1` workers so
+the JavaFX application thread and system retain scheduling headroom during a
+long deep render. The benchmark can be repeated with
+`mvn -Prender-tuning-benchmark verify -DskipTests`.
+
+## Specialized Julia pipeline experiment
+
+A direct Julia pipeline was compared with the generic `FractalFormula` and
+`FractalSample` path. The specialized prototype inlined the Julia constant and
+orbit loop and wrote primitive iteration, smooth-iteration, and escape values
+directly into structure-of-arrays storage. The benchmark used 960x540 inputs,
+two warmups, five measured runs, and alternated execution order to reduce
+ordering bias.
+
+| Scenario | Generic p50 | Direct p50 | Generic / Direct |
+| --- | ---: | ---: | ---: |
+| Julia 1x | 38.05 ms | 37.59 ms | 1.01x |
+| Julia 100x | 362.05 ms | 359.67 ms | 1.01x |
+| Julia 10000x | 370.90 ms | 368.08 ms | 1.01x |
+
+Iteration counts, escape flags, and smooth-iteration values matched bit for
+bit. The approximately 1% difference is too small to distinguish from normal
+run-to-run variation and confirms the earlier allocation experiment: HotSpot
+already inlines the formula call and scalar-replaces the short-lived sample in
+the hot path.
+
+The generic pipeline is retained to avoid duplicating calculation, cancellation,
+partial-frame, and correctness logic. The experiment can be repeated with
+`mvn -Pjulia-pipeline-benchmark verify -DskipTests`.
+
+## Perturbation and reference-orbit investigation
+
+Perturbation represents each pixel orbit as a delta from one shared reference
+orbit. For a reference `Z(n + 1) = Z(n)^2 + C` and pixel offset `c`, the delta
+recurrence is `z(n + 1) = 2 Z(n) z(n) + z(n)^2 + c`. This allows the reference
+to use arbitrary precision while most per-pixel work remains in hardware
+floating point.
+
+A double-only prototype compared this recurrence with direct Mandelbrot
+iteration at 480x270, using one warmup and three measured runs:
+
+| Zoom | Direct p50 | Perturbation p50 | Direct / perturbation | Iteration mismatches |
+| ---: | ---: | ---: | ---: | ---: |
+| 10000x | 54.36 ms | 96.27 ms | 0.56x | 595 |
+| 1000000x | 266.76 ms | 481.26 ms | 0.55x | 820 |
+| 100000000x | 328.48 ms | 599.34 ms | 0.55x | 0 |
+
+With both paths limited to doubles, perturbation adds arithmetic without
+removing any expensive operation and is about 1.8 times slower. The mismatches
+at the two shallower scales occur near sensitive boundaries because direct and
+delta coordinate construction use different floating-point operation orders;
+they demonstrate why a production implementation cannot treat a naive delta
+recurrence as an exact replacement.
+
+Perturbation becomes useful only after the viewport can represent coordinates
+beyond double precision and calculate a high-precision reference orbit. That
+implementation must also detect unreliable deltas and rebase them to another
+reference orbit. Reference caching and series approximation can then reduce
+the amortized cost further. Production integration is therefore deferred to
+the deep-zoom phase; the current scalar kernel remains unchanged. The prototype
+can be repeated with `mvn -Pperturbation-benchmark verify -DskipTests`.
