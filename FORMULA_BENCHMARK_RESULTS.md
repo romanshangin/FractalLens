@@ -72,3 +72,11 @@ The Mandelbrot 100x scenario regressed from 365.22 ms to 375.35 ms (about 2.8%)
 and the remaining changes were within run-to-run noise. The production change
 was therefore rejected. A dense Julia reference-grid comparison was retained
 to protect future loop-level optimizations.
+
+## Cached orbit-square experiment
+
+Manually carrying `zr²` and `zi²` between loop iterations was bit-for-bit
+equivalent but did not improve Mandelbrot and slowed the measured Julia cases
+by roughly 4-5%. HotSpot already performs the useful common-subexpression work,
+while the additional live variables increase register pressure. The production
+change was rejected.

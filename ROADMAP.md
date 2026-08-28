@@ -25,6 +25,7 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 - [x] Add Mandelbrot main-cardioid and period-2-bulb interior rejection.
 - [x] Evaluate exact periodicity checking; reject it because benchmark overhead exceeds the benefit for current scenarios.
 - [ ] Evaluate other proven interior-point shortcuts.
+- [x] Evaluate cached orbit squares; reject the manual optimization because the JIT already eliminates the repeated work and Julia regresses.
 - [ ] Investigate Mandelbrot symmetry around the real axis.
 - [ ] Compare the scalar kernel with the Java Vector API.
 - [ ] Retune tile size and worker count after optimizing the calculation kernel.
