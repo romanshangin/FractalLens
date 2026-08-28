@@ -89,13 +89,13 @@ public class RenderGridTest {
         int sourceYFrom =
                 Math.max(
                         0,
-                        -shift.y()
+                        -shift.dy()
                 );
 
         int sourceYTo =
                 Math.min(
                         height,
-                        height - shift.y()
+                        height - shift.dy()
                 );
 
         assertTrue(sourceXFrom < sourceXTo);
@@ -129,7 +129,7 @@ public class RenderGridTest {
              sourceY++) {
 
             int targetY =
-                    sourceY + shift.y();
+                    sourceY + shift.dy();
 
             double sourceImaginary =
                     sourceGrid.imaginaryAt(sourceY);

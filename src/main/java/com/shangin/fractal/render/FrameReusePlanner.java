@@ -91,17 +91,131 @@ public final class FrameReusePlanner {
                         targetGrid
                 );
 
-        int reusedPixels =
-                copyReusablePixels(
-                        sourceFrame,
-                        targetFrame,
-                        pixelShift
-                );
+        int reusedPixels;
+
+        if (sourceFrame.isComplete()) {
+
+            reusedPixels =
+                    copyReusableRectangle(
+                            sourceFrame,
+                            targetFrame,
+                            pixelShift
+                    );
+
+        } else {
+
+            reusedPixels =
+                    copyReusablePixels(
+                            sourceFrame,
+                            targetFrame,
+                            pixelShift
+                    );
+        }
 
         return FrameReuseResult.reused(
                 targetFrame,
                 pixelShift,
                 reusedPixels
+        );
+    }
+
+    private int copyReusableRectangle(
+            RenderFrame sourceFrame,
+            RenderFrame targetFrame,
+            PixelShift shift
+    ) {
+        int width =
+                sourceFrame.request()
+                        .width();
+
+        int height =
+                sourceFrame.request()
+                        .height();
+
+        /*
+         * Определяем прямоугольник source,
+         * который останется внутри target
+         * после shift.
+         */
+        int sourceXFrom =
+                Math.max(
+                        0,
+                        -shift.dx()
+                );
+
+        int sourceXTo =
+                Math.min(
+                        width,
+                        width - shift.dx()
+                );
+
+        int sourceYFrom =
+                Math.max(
+                        0,
+                        -shift.dy()
+                );
+
+        int sourceYTo =
+                Math.min(
+                        height,
+                        height - shift.dy()
+                );
+
+        /*
+         * Кадры не пересекаются.
+         */
+        if (sourceXFrom >= sourceXTo
+                || sourceYFrom >= sourceYTo) {
+            return 0;
+        }
+
+        int reusableWidth =
+                sourceXTo - sourceXFrom;
+
+        int reusableHeight =
+                sourceYTo - sourceYFrom;
+
+        int targetXFrom =
+                sourceXFrom + shift.dx();
+
+        int targetYFrom =
+                sourceYFrom + shift.dy();
+
+        /*
+         * Все pixels source frame гарантированно valid,
+         * поскольку fast path вызывается только когда
+         * sourceFrame.isComplete().
+         */
+        targetFrame.fractalData()
+                .copyRegionFrom(
+                        sourceFrame.fractalData(),
+                        sourceXFrom,
+                        sourceYFrom,
+                        targetXFrom,
+                        targetYFrom,
+                        reusableWidth,
+                        reusableHeight
+                );
+
+        /*
+         * Весь overlap сразу можно пометить ready.
+         *
+         * ValidityMask сам внутри использует BitSet.set()
+         * по каждой строке.
+         */
+        targetFrame.validity()
+                .markReady(
+                        new RenderRegion(
+                                targetXFrom,
+                                targetYFrom,
+                                reusableWidth,
+                                reusableHeight
+                        )
+                );
+
+        return Math.multiplyExact(
+                reusableWidth,
+                reusableHeight
         );
     }
 

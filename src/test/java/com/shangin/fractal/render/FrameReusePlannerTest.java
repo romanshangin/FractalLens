@@ -6,6 +6,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrameReusePlannerTest {
@@ -298,5 +300,80 @@ class FrameReusePlannerTest {
         assertTrue(referenceFrame.isComplete());
 
         assertFractalDataEquals(referenceFrame.fractalData(), reusedFrame.fractalData());
+    }
+
+    @Test
+    void cancelledPanRenderShouldPreserveProgressAndResumeToExactResult() throws InterruptedException {
+        RenderFrame sourceFrame = RenderFrame.create(sourceRequest);
+
+        parallelCalculator.calculate(
+                sourceFrame,
+                () -> false,
+                ignored -> {}
+        );
+
+        PixelShift shift = new PixelShift(40, 0);
+        Viewport targetViewport = sourceViewport.shiftedByPixels(
+                shift.dx(),
+                shift.dy(),
+                WIDTH,
+                HEIGHT
+        );
+
+        RenderRequest targetRequest = new RenderRequest(
+                calculator,
+                targetViewport,
+                WIDTH,
+                HEIGHT,
+                MAX_ITERATIONS
+        );
+
+        RenderFrame reusedFrame = planner.createFrame(
+                sourceFrame,
+                targetRequest
+        );
+
+        int reusedPixelCount = reusedFrame.validity().readyPixelCount();
+        AtomicInteger completedRegions = new AtomicInteger();
+        AtomicInteger timingCallbacks = new AtomicInteger();
+
+        try (ParallelFractalCalculator cancellableCalculator =
+                     new ParallelFractalCalculator(1)) {
+
+            cancellableCalculator.calculate(
+                    reusedFrame,
+                    () -> completedRegions.get() >= 1,
+                    ignored -> completedRegions.incrementAndGet(),
+                    ignored -> timingCallbacks.incrementAndGet()
+            );
+        }
+
+        assertEquals(1, completedRegions.get());
+        assertEquals(0, timingCallbacks.get());
+        assertTrue(reusedFrame.validity().readyPixelCount() > reusedPixelCount);
+        assertFalse(reusedFrame.isComplete());
+
+        parallelCalculator.calculate(
+                reusedFrame,
+                () -> false,
+                ignored -> {}
+        );
+
+        RenderFrame referenceFrame = RenderFrame.create(
+                targetRequest,
+                reusedFrame.renderGrid()
+        );
+
+        parallelCalculator.calculate(
+                referenceFrame,
+                () -> false,
+                ignored -> {}
+        );
+
+        assertTrue(reusedFrame.isComplete());
+        assertFractalDataEquals(
+                referenceFrame.fractalData(),
+                reusedFrame.fractalData()
+        );
     }
 }

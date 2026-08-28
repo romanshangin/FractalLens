@@ -90,4 +90,77 @@ public class FractalData {
         smoothIterations[targetIndex] = source.smoothIterations[sourceIndex];
         escaped[targetIndex] = source.escaped[sourceIndex];
     }
+
+    public void copyRegionFrom(
+            FractalData source,
+            int sourceX,
+            int sourceY,
+            int targetX,
+            int targetY,
+            int regionWidth,
+            int regionHeight
+    ) {
+        Objects.requireNonNull(source);
+
+        if (regionWidth <= 0 || regionHeight <= 0) {
+            throw new IllegalArgumentException(
+                    "Region dimensions must be positive"
+            );
+        }
+
+        if (sourceX < 0
+                || sourceY < 0
+                || sourceX + regionWidth > source.width
+                || sourceY + regionHeight > source.height) {
+
+            throw new IllegalArgumentException(
+                    "Source region is outside source data"
+            );
+        }
+
+        if (targetX < 0
+                || targetY < 0
+                || targetX + regionWidth > width
+                || targetY + regionHeight > height) {
+
+            throw new IllegalArgumentException(
+                    "Target region is outside target data"
+            );
+        }
+
+        for (int row = 0; row < regionHeight; row++) {
+
+            int sourceIndex =
+                    (sourceY + row) * source.width
+                            + sourceX;
+
+            int targetIndex =
+                    (targetY + row) * width
+                            + targetX;
+
+            System.arraycopy(
+                    source.iterations,
+                    sourceIndex,
+                    iterations,
+                    targetIndex,
+                    regionWidth
+            );
+
+            System.arraycopy(
+                    source.smoothIterations,
+                    sourceIndex,
+                    smoothIterations,
+                    targetIndex,
+                    regionWidth
+            );
+
+            System.arraycopy(
+                    source.escaped,
+                    sourceIndex,
+                    escaped,
+                    targetIndex,
+                    regionWidth
+            );
+        }
+    }
 }
