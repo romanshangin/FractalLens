@@ -60,3 +60,15 @@ as a control group.
 Correctness is checked against the original iterative algorithm over a dense
 401x301 overview grid. Iteration counts, escape flags, and smooth-iteration
 values remain identical for every sampled point.
+
+## Exact periodicity experiment
+
+An exact checkpoint-based periodicity check was evaluated for both formulas.
+It compared orbit states only with exact floating-point equality, making the
+classification correctness-preserving, but repeated states were too rare to
+offset the additional checks in every iteration.
+
+The Mandelbrot 100x scenario regressed from 365.22 ms to 375.35 ms (about 2.8%)
+and the remaining changes were within run-to-run noise. The production change
+was therefore rejected. A dense Julia reference-grid comparison was retained
+to protect future loop-level optimizations.
