@@ -40,3 +40,23 @@ binary zoom level.
 - Julia 100x and 10000x have high mean iteration counts despite low interior
   percentages. They are the primary scenarios for evaluating periodicity checks
   and loop-level optimizations that apply to both formulas.
+
+## Main-cardioid and period-2-bulb rejection
+
+After adding analytic rejection for the two largest known Mandelbrot interior
+regions, the 1920x1080 benchmark produced:
+
+| Scenario | Baseline p50 | Optimized p50 | Speedup |
+|---|---:|---:|---:|
+| Mandelbrot 1x | 271.29 ms | 73.70 ms | 3.68x |
+| Mandelbrot 100x | 1503.33 ms | 365.22 ms | 4.12x |
+| Mandelbrot 10000x | 853.57 ms | 863.12 ms | 0.99x |
+
+The result follows the measured interior distribution: overview and 100x spend
+substantial time on analytically recognizable interior points, while the chosen
+10000x region contains almost none. Julia is unchanged and continues to serve
+as a control group.
+
+Correctness is checked against the original iterative algorithm over a dense
+401x301 overview grid. Iteration counts, escape flags, and smooth-iteration
+values remain identical for every sampled point.

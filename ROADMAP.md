@@ -22,7 +22,9 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 ## 3. Optimize Mandelbrot and Julia calculation
 
 - [x] Establish dedicated Mandelbrot and Julia calculation benchmarks covering throughput, nanoseconds per pixel, iteration distributions, 1080p/HiDPI, and multiple zoom levels.
-- [ ] Add safe algorithmic fast paths: Mandelbrot cardioid and period-2 bulb rejection, periodicity checking, and other proven interior-point shortcuts.
+- [x] Add Mandelbrot main-cardioid and period-2-bulb interior rejection.
+- [ ] Add correctness-preserving periodicity checking for remaining Mandelbrot and Julia interior points.
+- [ ] Evaluate other proven interior-point shortcuts.
 - [ ] Investigate Mandelbrot symmetry around the real axis.
 - [ ] Compare the scalar kernel with the Java Vector API.
 - [ ] Retune tile size and worker count after optimizing the calculation kernel.
