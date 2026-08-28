@@ -26,7 +26,8 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 - [x] Evaluate exact periodicity checking; reject it because benchmark overhead exceeds the benefit for current scenarios.
 - [ ] Evaluate other proven interior-point shortcuts.
 - [x] Evaluate cached orbit squares; reject the manual optimization because the JIT already eliminates the repeated work and Julia regresses.
-- [ ] Investigate Mandelbrot symmetry around the real axis.
+- [x] Measure `FractalSample` allocation cost; retain the value-returning API because escape analysis removes most allocations and the remaining cost is negligible in iteration-heavy scenes.
+- [x] Reuse conjugate Mandelbrot rows for empty frames centered around the real axis; verify exact output equivalence and a 1.72-1.88x parallel-render speedup.
 - [ ] Compare the scalar kernel with the Java Vector API.
 - [ ] Retune tile size and worker count after optimizing the calculation kernel.
 - [ ] Evaluate whether Julia benefits from a specialized calculation pipeline.

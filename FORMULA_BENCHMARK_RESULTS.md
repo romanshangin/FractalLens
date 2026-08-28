@@ -80,3 +80,57 @@ equivalent but did not improve Mandelbrot and slowed the measured Julia cases
 by roughly 4-5%. HotSpot already performs the useful common-subexpression work,
 while the additional live variables increase register pressure. The production
 change was rejected.
+
+## `FractalSample` allocation-cost experiment
+
+The formula benchmark was recorded with Java Flight Recorder at 960x540, using
+two warmups and five measured runs per scenario. The same workload was then
+repeated with HotSpot escape analysis disabled via `-XX:-DoEscapeAnalysis`.
+
+With normal escape analysis, JFR attributed 44 allocation samples and about
+39 MB of sampled allocation weight to `FractalSample`. Disabling escape
+analysis increased this to 538 samples and about 933 MB: roughly 24 times the
+sampled allocation weight. This confirms that HotSpot scalar-replaces most of
+the per-pixel result records in the current calculation path.
+
+The timing effect depends on the amount of orbit work per pixel:
+
+| Scenario | Normal p50 | No-EA p50 | Change |
+| --- | ---: | ---: | ---: |
+| Mandelbrot 1x | 18.41 ms | 19.86 ms | +7.9% |
+| Mandelbrot 100x | 91.33 ms | 94.67 ms | +3.7% |
+| Mandelbrot 10000x | 214.89 ms | 218.15 ms | +1.5% |
+| Julia 1x | 38.96 ms | 46.33 ms | +18.9% |
+| Julia 100x | 373.69 ms | 374.47 ms | +0.2% |
+| Julia 10000x | 383.17 ms | 383.35 ms | +0.05% |
+
+Allocation overhead is measurable for inexpensive overview pixels, especially
+Julia 1x, but becomes negligible when iteration cost dominates. A mutable
+output parameter or a formula-to-`FractalData` API would spread coupling and
+complexity through the calculation boundary for little benefit in the slowest
+scenarios. The value-returning `FractalSample` API is therefore retained.
+
+## Mandelbrot conjugate-symmetry optimization
+
+Mandelbrot samples are identical for conjugate coordinates, so an empty frame
+whose render grid is centered around the real axis now calculates only its top
+half. Each completed row span is copied to its conjugate row before both
+regions are marked ready for progressive display. The optimization is guarded
+by a formula capability, an ULP-bounded grid-symmetry check, and an empty
+validity mask. Shifted views, Julia, and partially reused frames retain the
+normal tile path.
+
+The parallel render path was benchmarked at 1920x1080 with three warmups. Both
+variants used the same delegated formula; only its symmetry capability was
+toggled.
+
+| Maximum iterations | Full-frame p50 | Symmetric p50 | Speedup |
+| ---: | ---: | ---: | ---: |
+| 300 | 10.80 ms | 5.76 ms | 1.88x |
+| 3000 | 35.84 ms | 20.88 ms | 1.72x |
+
+A centered render grid canonicalizes its lower-half imaginary coordinates as
+the exact negation of the corresponding upper-half coordinates. A dense
+401x301 comparison against the full calculation therefore verifies identical
+iteration counts, escape flags, and smooth-iteration values. The standalone
+benchmark can be repeated with `mvn -Psymmetry-benchmark verify -DskipTests`.
