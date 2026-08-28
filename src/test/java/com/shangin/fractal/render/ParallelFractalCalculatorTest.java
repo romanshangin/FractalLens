@@ -102,6 +102,34 @@ class ParallelFractalCalculatorTest {
     }
 
     @Test
+    void customTileSizeShouldControlGridPartitioning() {
+        try (ParallelFractalCalculator customCalculator =
+                     new ParallelFractalCalculator(1, 64)) {
+
+            RenderRequest request = new RenderRequest(
+                    calculator,
+                    viewport,
+                    129,
+                    65,
+                    100
+            );
+
+            assertEquals(
+                    6,
+                    customCalculator.createOrderedTiles(request).size()
+            );
+        }
+    }
+
+    @Test
+    void tileSizeShouldBePositive() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ParallelFractalCalculator(1, 0)
+        );
+    }
+
+    @Test
     void timingStatisticsShouldDescribeCalculatedTiles() throws InterruptedException {
         RenderRequest request = new RenderRequest(
                 calculator,

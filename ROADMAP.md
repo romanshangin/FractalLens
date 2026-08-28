@@ -8,16 +8,16 @@
 - [x] Verify cancellation during partially completed pan rendering.
 - [x] Cover frame-reuse fast paths in every direction, including zero shift and no overlap.
 - [x] Isolate temporary profiling from the normal rendering pipeline.
-- [ ] Split the current optimization work into focused commits.
+- [x] Split the current optimization work into focused commits.
 
 Exit criterion: `mvn test` succeeds and temporary profiling code is isolated from the main rendering pipeline.
 
 ## 2. Prove the effectiveness of frame reuse
 
-- Measure time to first correct updated region and total pan-render time.
-- Track reused-pixel percentage, calculation/colorization time, tile count, and p50/p95 timings.
-- Benchmark 1080p and HiDPI scenarios with short, medium, and near-full-frame pans.
-- Move benchmarks into a dedicated Maven profile and compare tile sizes such as 16, 32, and 64.
+- [x] Measure time to first correct updated region and total pan-render time.
+- [x] Track reused-pixel percentage, calculation/colorization time, tile count, and p50/p95 timings.
+- [x] Benchmark 1080p and HiDPI scenarios with short, medium, and near-full-frame pans.
+- [x] Move benchmarks into a dedicated Maven profile and compare tile sizes 16, 32, and 64.
 
 ## 3. Strengthen user interaction
 

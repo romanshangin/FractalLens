@@ -16,8 +16,9 @@ import java.util.function.Consumer;
  */
 public final class ParallelFractalCalculator implements AutoCloseable {
 
-    private static final int TILE_SIZE = 32;
+    private static final int DEFAULT_TILE_SIZE = 32;
     private final ExecutorService workers;
+    private final int tileSize;
 
     record Tile(
             int xFrom,
@@ -27,13 +28,24 @@ public final class ParallelFractalCalculator implements AutoCloseable {
     ) {}
 
     public ParallelFractalCalculator() {
-        this(defaultWorkerCount());
+        this(defaultWorkerCount(), DEFAULT_TILE_SIZE);
     }
 
     public ParallelFractalCalculator(int workerCount) {
+        this(workerCount, DEFAULT_TILE_SIZE);
+    }
+
+    public ParallelFractalCalculator(
+            int workerCount,
+            int tileSize
+    ) {
         if (workerCount < 1) {
             throw new IllegalArgumentException("Worker count must be at least 1");
         }
+        if (tileSize < 1) {
+            throw new IllegalArgumentException("Tile size must be at least 1");
+        }
+        this.tileSize = tileSize;
         workers = Executors.newFixedThreadPool(
                 workerCount,
                 daemonThreadFactory("fractal-worker"));
@@ -328,11 +340,11 @@ public final class ParallelFractalCalculator implements AutoCloseable {
     ) {
         List<Tile> tiles = new ArrayList<>();
 
-        for (int y = 0; y < request.height(); y += TILE_SIZE) {
-            int yTo = Math.min(y + TILE_SIZE, request.height());
+        for (int y = 0; y < request.height(); y += tileSize) {
+            int yTo = Math.min(y + tileSize, request.height());
 
-            for (int x = 0; x < request.width(); x += TILE_SIZE) {
-                int xTo = Math.min(x + TILE_SIZE, request.width());
+            for (int x = 0; x < request.width(); x += tileSize) {
+                int xTo = Math.min(x + tileSize, request.width());
 
                 tiles.add(new Tile(x, xTo, y, yTo));
             }
