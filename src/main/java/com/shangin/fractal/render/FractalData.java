@@ -4,6 +4,7 @@ import com.shangin.fractal.formula.FractalSample;
 
 import java.util.Objects;
 
+/** Structure-of-arrays storage for the calculated sample values of one frame. */
 public class FractalData {
     private final int width;
     private final int height;
@@ -91,6 +92,7 @@ public class FractalData {
         escaped[targetIndex] = source.escaped[sourceIndex];
     }
 
+    /** Copies a rectangular sample region without reallocating either frame. */
     public void copyRegionFrom(
             FractalData source,
             int sourceX,

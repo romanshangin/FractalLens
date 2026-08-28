@@ -125,15 +125,10 @@ class FrameReusePlannerTest {
          */
         assertTrue(targetFrame.validity().isReady(10, 7));
 
-        /*
-         * Новая область слева появилась после pan,
-         * поэтому данных для неё в source frame нет.
-         */
+        /* The newly exposed area on the left has no source-frame data. */
         assertFalse(targetFrame.validity().isReady(0, 7));
 
-        /*
-         * Аналогично новая область сверху.
-         */
+        /* The newly exposed area at the top is also invalid. */
         assertFalse(targetFrame.validity().isReady(10, 0));
     }
 
@@ -245,23 +240,20 @@ class FrameReusePlannerTest {
 
         RenderRequest targetRequest = new RenderRequest(calculator, targetViewport, WIDTH, HEIGHT, MAX_ITERATIONS);
 
-        // Создаём partially reused frame.
+        // Create a partially reused frame.
         RenderFrame reusedFrame = planner.createFrame(sourceFrame, targetRequest);
 
         assertFalse(reusedFrame.isComplete());
 
         assertTrue(reusedFrame.validity().readyPixelCount() > 0);
 
-        // Досчитываем только то, чего не хватает.
+        // Calculate only the missing regions.
         parallelCalculator.calculate(reusedFrame, () -> false, region -> {
         });
 
         assertTrue(reusedFrame.isComplete());
 
-        /*
-         * Reference считаем с нуля,
-         * но ОБЯЗАТЕЛЬНО на той же RenderGrid.
-         */
+        /* Calculate the reference from scratch on the same render grid. */
         RenderFrame referenceFrame = RenderFrame.create(targetRequest, reusedFrame.renderGrid());
 
         parallelCalculator.calculate(referenceFrame, () -> false, region -> {

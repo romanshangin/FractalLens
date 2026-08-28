@@ -2,6 +2,10 @@ package com.shangin.fractal.render;
 
 import java.util.Objects;
 
+/**
+ * Mutable render state for one request: its stable coordinate grid, calculated
+ * sample data, and a mask identifying pixels that are ready for display.
+ */
 public final class RenderFrame {
 
     private final RenderRequest request;
@@ -29,6 +33,7 @@ public final class RenderFrame {
         }
     }
 
+    /** Creates an empty frame using a grid derived from the request viewport. */
     public static RenderFrame create(RenderRequest request) {
         Objects.requireNonNull(request);
 
@@ -82,6 +87,7 @@ public final class RenderFrame {
         return validity;
     }
 
+    /** Returns whether every pixel in the frame contains a valid sample. */
     public boolean isComplete() {
         return validity.isComplete();
     }

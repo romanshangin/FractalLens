@@ -14,6 +14,10 @@ import javafx.util.Duration;
 
 import java.util.function.DoubleConsumer;
 
+/**
+ * Interactive fractal viewport that translates resize, scroll, and drag events
+ * into camera updates and debounced render requests.
+ */
 public class FractalView extends StackPane {
 
     // for resize only

@@ -96,12 +96,7 @@ class FrameReusePlannerPanTest {
 
     private void assertPanReuse(int testNumber, int dx, int dy, int expectedReusablePixels) throws InterruptedException {
 
-        /*
-         * Сначала полностью считаем source frame.
-         *
-         * Его calculation НЕ входит в измеряемое
-         * время reuse.
-         */
+        /* Calculate the source frame before starting the reuse measurement. */
         RenderFrame sourceFrame = RenderFrame.create(sourceRequest);
 
         parallelCalculator.calculate(sourceFrame, () -> false, region -> {
@@ -109,18 +104,12 @@ class FrameReusePlannerPanTest {
 
         assertTrue(sourceFrame.isComplete());
 
-        /*
-         * Создаём target viewport, сдвинутый
-         * ровно на заданное количество pixels.
-         */
+        /* Shift the target viewport by an exact number of pixels. */
         Viewport targetViewport = sourceViewport.shiftedByPixels(dx, dy, WIDTH, HEIGHT);
 
         RenderRequest targetRequest = new RenderRequest(calculator, targetViewport, WIDTH, HEIGHT, MAX_ITERATIONS);
 
-        /*
-         * Измеряем только создание нового frame
-         * и перенос reusable FractalData.
-         */
+        /* Measure only target-frame creation and reusable data transfer. */
         long start = System.nanoTime();
 
         RenderFrame targetFrame = planner.createFrame(sourceFrame, targetRequest);
@@ -135,19 +124,12 @@ class FrameReusePlannerPanTest {
 
         double reuseMs = elapsedNanos / 1_000_000.0;
 
-        /*
-         * Проверяем сам reuse.
-         */
+        /* Verify the reported reuse. */
         assertEquals(expectedReusablePixels, actualReusablePixels);
 
         assertFalse(targetFrame.isComplete());
 
-        /*
-         * Дополнительная страховка:
-         *
-         * теоретический overlap должен совпадать
-         * с тем, что реально сделал planner.
-         */
+        /* The theoretical overlap must match the planner result. */
         int expectedFromFormula = (WIDTH - Math.abs(dx)) * (HEIGHT - Math.abs(dy));
 
         assertEquals(expectedFromFormula, actualReusablePixels);

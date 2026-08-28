@@ -2,6 +2,10 @@ package com.shangin.fractal.math;
 
 import java.util.Objects;
 
+/**
+ * Immutable mapping between a rectangular view of the complex plane and
+ * logical or render pixel coordinates.
+ */
 public record Viewport(
         double centerReal,
         double centerImaginary,
@@ -166,6 +170,7 @@ public record Viewport(
         return maxImaginary() - position * visibleHeight();
     }
 
+    /** Returns a viewport zoomed around a logical screen coordinate. */
     public Viewport zoomAt(
             double x,
             double y,
@@ -203,6 +208,7 @@ public record Viewport(
         return visibleHeight() / (height - 1.0);
     }
 
+    /** Checks whether adjacent render pixels remain distinguishable as doubles. */
     public boolean hasSufficientPrecision(
             int width,
             int height,
@@ -231,6 +237,7 @@ public record Viewport(
     }
 
     // test
+    /** Returns the viewport corresponding to an integer screen-space shift. */
     public Viewport shiftedByPixels(
             int shiftX,
             int shiftY,
@@ -259,6 +266,7 @@ public record Viewport(
         );
     }
 
+    /** Snaps the viewport center to the render grid of a reference viewport. */
     public Viewport snapToPixelGrid(
             Viewport reference,
             int width,

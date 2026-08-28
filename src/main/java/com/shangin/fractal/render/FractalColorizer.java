@@ -4,6 +4,7 @@ import com.shangin.fractal.coloring.ColoringStrategy;
 
 import java.nio.IntBuffer;
 
+/** Converts calculated fractal samples into packed ARGB pixels. */
 public class FractalColorizer {
 
     public void color(

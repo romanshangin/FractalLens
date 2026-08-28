@@ -5,6 +5,7 @@ import com.shangin.fractal.formula.FractalSample;
 
 import java.util.function.BooleanSupplier;
 
+/** Evaluates a fractal formula over pixel regions mapped by a render grid. */
 public class FractalCalculator {
 
     private final FractalFormula formula;

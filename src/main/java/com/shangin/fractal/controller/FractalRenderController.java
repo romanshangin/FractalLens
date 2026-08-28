@@ -13,6 +13,10 @@ import javafx.application.Platform;
 import java.util.Objects;
 import java.util.function.DoubleConsumer;
 
+/**
+ * Coordinates render requests between the camera-facing UI and the background
+ * rendering pipeline, including iteration policy, frame reuse, and coloring.
+ */
 public final class FractalRenderController implements AutoCloseable {
 
     private static final int ITERATIONS_PER_ZOOM_LEVEL = 50;
@@ -55,6 +59,7 @@ public final class FractalRenderController implements AutoCloseable {
         renderService.cancelCurrent();
     }
 
+    /** Starts a progressive render for the supplied viewport. */
     public void render(
             Viewport viewport,
             Viewport defaultViewport
@@ -147,11 +152,7 @@ public final class FractalRenderController implements AutoCloseable {
 
         }
 
-        /*
-         * Если готовое image переиспользовать
-         * нельзя, раскрашиваем уже имеющиеся
-         * FractalData.
-         */
+        /* Color reusable sample data when the displayed image cannot be shifted. */
         if (!imageReused) {
 
             surface.displayReadyPixels(

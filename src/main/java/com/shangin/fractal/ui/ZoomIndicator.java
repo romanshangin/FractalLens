@@ -5,6 +5,7 @@ import javafx.scene.control.TextField;
 
 import java.util.Locale;
 
+/** Read-only, copyable text field showing the current zoom factor. */
 public final class ZoomIndicator extends TextField {
 
     public ZoomIndicator() {
@@ -19,10 +20,7 @@ public final class ZoomIndicator extends TextField {
 
         setText(formatZoom(1.0));
 
-        /*
-         * Один клик выделяет значение целиком.
-         * После этого Cmd+C / Ctrl+C сразу копирует его.
-         */
+        /* Select the complete value with one click for immediate copying. */
         setOnMouseClicked(event -> {
             if (event.getClickCount() == 1) {
                 selectAll();

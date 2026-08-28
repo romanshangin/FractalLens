@@ -10,6 +10,7 @@ import java.nio.IntBuffer;
 import java.util.Arrays;
 import java.util.Objects;
 
+/** Owns the writable PixelBuffer and backing ARGB array for one surface frame. */
 public class SurfaceBuffer {
 
     private final int width;
@@ -66,6 +67,7 @@ public class SurfaceBuffer {
         return height;
     }
 
+    /** Copies the overlapping pixels after a shift and returns the dirty rectangle. */
     public Rectangle2D copyShiftedFrom(
             SurfaceBuffer source,
             PixelShift shift

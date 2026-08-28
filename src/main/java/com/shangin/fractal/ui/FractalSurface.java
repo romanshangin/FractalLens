@@ -19,6 +19,10 @@ import javafx.stage.Window;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * JavaFX surface that owns display buffers, applies interaction previews, and
+ * publishes progressively colored regions to a PixelBuffer-backed image.
+ */
 public final class FractalSurface extends Region {
 
     private final Affine previewTransform = new Affine();
@@ -46,6 +50,7 @@ public final class FractalSurface extends Region {
         getChildren().addAll(baseImageView, progressiveImageView);
     }
 
+    /** Prepares the staging buffer for a new progressive frame. */
     public void beginProgressiveRender() {
         if (renderWidth < 2 || renderHeight < 2) {
             return;
@@ -96,6 +101,7 @@ public final class FractalSurface extends Region {
                 .bind(heightProperty());
     }
 
+    /** Colors and publishes regions completed by the background renderer. */
     public void displayProgress(
             RenderProgressBatch progress,
             ColoringStrategy coloring
@@ -239,6 +245,7 @@ public final class FractalSurface extends Region {
         this.outputScaleY = outputScaleY;
     }
 
+    /** Transforms the last completed image as an immediate pan/zoom preview. */
     public void showPreview(Viewport targetViewport) {
 
         progressiveImageView.setImage(null);
@@ -432,6 +439,10 @@ public final class FractalSurface extends Region {
         stagingFrame.update();
     }
 
+    /**
+     * Copies shifted pixels from the displayed image when it represents the
+     * same source render frame used by the reuse planner.
+     */
     public boolean reuseDisplayedPixels(
             RenderFrame sourceFrame,
             PixelShift shift
@@ -441,10 +452,7 @@ public final class FractalSurface extends Region {
             return false;
         }
 
-        /*
-         * displayedFrame должен реально соответствовать
-         * mathematical sourceFrame.
-         */
+        /* The displayed image must represent the mathematical source frame. */
         if (displayedRenderFrame != sourceFrame) {
             return false;
         }

@@ -5,6 +5,10 @@ import com.shangin.fractal.math.Viewport;
 
 import java.util.Objects;
 
+/**
+ * Maintains the current viewport and applies bounded, precision-safe pan,
+ * zoom, resize, and grid-snapping operations.
+ */
 public final class FractalCamera {
 
     private static final double MIN_ULPS_PER_PIXEL = 16.0;
@@ -52,6 +56,7 @@ public final class FractalCamera {
         viewportHeight = height;
     }
 
+    /** Zooms toward a logical screen point if double precision remains sufficient. */
     public boolean zoomIn(
             double x,
             double y,
@@ -128,6 +133,7 @@ public final class FractalCamera {
         viewportHeight = height;
     }
 
+    /** Pans in screen pixels while keeping the viewport within preset bounds. */
     public boolean pan(
             double deltaX,
             double deltaY,
@@ -163,6 +169,7 @@ public final class FractalCamera {
         return true;
     }
 
+    /** Aligns the current viewport with an earlier frame for exact pixel reuse. */
     public void snapToRenderGrid(
             Viewport reference,
             int renderWidth,

@@ -120,8 +120,7 @@ public final class ProgressiveRenderBenchmark {
                             focusY - regionHeight / 2.0
                     );
 
-            // Сдвигаем область внутрь viewport,
-            // сохраняя её полный размер.
+            // Move the region inside the viewport while preserving its size.
             xFrom =
                     Math.clamp(
                             xFrom,

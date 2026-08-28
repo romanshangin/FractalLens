@@ -5,15 +5,17 @@ import com.shangin.fractal.math.Viewport;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * Builds render frames for new requests and reuses compatible pixel data from
+ * an earlier frame when the viewport movement maps to an integer pixel shift.
+ */
 public final class FrameReusePlanner {
 
     private static final double INTEGER_SHIFT_EPSILON = 1e-6;
 
     /**
-     * Старый простой API.
-     *
-     * Оставляем его, чтобы существующие тесты и код,
-     * которым нужен только RenderFrame, не пришлось менять.
+     * Creates a frame for the target request, reusing compatible source data
+     * when possible.
      */
     public RenderFrame createFrame(
             RenderFrame sourceFrame,
@@ -26,10 +28,7 @@ public final class FrameReusePlanner {
     }
 
     /**
-     * Расширенный API.
-     *
-     * Возвращает не только новый RenderFrame,
-     * но и информацию о реально выполненном reuse.
+     * Plans frame reuse and returns both the target frame and reuse metadata.
      */
     public FrameReuseResult plan(
             RenderFrame sourceFrame,
@@ -71,13 +70,9 @@ public final class FrameReusePlanner {
                 shift.get();
 
         /*
-         * ВАЖНО:
-         *
-         * Не создаём RenderGrid заново из target Viewport.
-         *
-         * Продолжаем стабильную render-grid старого frame
-         * через integer offset. Именно это гарантирует
-         * bit-for-bit одинаковые координаты reusable pixels.
+         * Extend the source render grid through integer offsets instead of
+         * rebuilding it from the target viewport. This preserves bit-for-bit
+         * coordinates for every reused pixel.
          */
         RenderGrid targetGrid =
                 sourceFrame.renderGrid()
@@ -132,11 +127,7 @@ public final class FrameReusePlanner {
                 sourceFrame.request()
                         .height();
 
-        /*
-         * Определяем прямоугольник source,
-         * который останется внутри target
-         * после shift.
-         */
+        /* Find the source rectangle that remains inside the shifted target. */
         int sourceXFrom =
                 Math.max(
                         0,
@@ -161,9 +152,7 @@ public final class FrameReusePlanner {
                         height - shift.dy()
                 );
 
-        /*
-         * Кадры не пересекаются.
-         */
+        /* The frames do not overlap. */
         if (sourceXFrom >= sourceXTo
                 || sourceYFrom >= sourceYTo) {
             return 0;
@@ -181,11 +170,7 @@ public final class FrameReusePlanner {
         int targetYFrom =
                 sourceYFrom + shift.dy();
 
-        /*
-         * Все pixels source frame гарантированно valid,
-         * поскольку fast path вызывается только когда
-         * sourceFrame.isComplete().
-         */
+        /* Every source pixel is valid because this path requires a complete frame. */
         targetFrame.fractalData()
                 .copyRegionFrom(
                         sourceFrame.fractalData(),
@@ -197,12 +182,7 @@ public final class FrameReusePlanner {
                         reusableHeight
                 );
 
-        /*
-         * Весь overlap сразу можно пометить ready.
-         *
-         * ValidityMask сам внутри использует BitSet.set()
-         * по каждой строке.
-         */
+        /* Mark the complete overlap ready in row-sized BitSet ranges. */
         targetFrame.validity()
                 .markReady(
                         new RenderRegion(
@@ -226,10 +206,7 @@ public final class FrameReusePlanner {
         RenderRequest sourceRequest =
                 sourceFrame.request();
 
-        /*
-         * Размер render grid должен совпадать.
-         * Resize пока не поддерживаем.
-         */
+        /* Reuse across different render dimensions is not supported yet. */
         if (sourceRequest.width()
                 != targetRequest.width()) {
             return false;
@@ -240,31 +217,19 @@ public final class FrameReusePlanner {
             return false;
         }
 
-        /*
-         * Данные, рассчитанные с другим maxIterations,
-         * нельзя считать эквивалентными.
-         */
+        /* Samples calculated with different iteration limits are not equivalent. */
         if (sourceRequest.maxIterations()
                 != targetRequest.maxIterations()) {
             return false;
         }
 
-        /*
-         * Пока используем identity calculator.
-         *
-         * Это автоматически запрещает reuse,
-         * например, после Mandelbrot -> Julia.
-         */
+        /* Calculator identity prevents reuse across formulas or formula parameters. */
         if (sourceRequest.calculator()
                 != targetRequest.calculator()) {
             return false;
         }
 
-        /*
-         * Zoom пока не поддерживаем.
-         *
-         * Для partial-pan scale должен быть тем же.
-         */
+        /* Partial pan reuse currently requires an unchanged viewport scale. */
         return Double.compare(
                 sourceRequest.viewport().scale(),
                 targetRequest.viewport().scale()
@@ -286,29 +251,16 @@ public final class FrameReusePlanner {
                 sourceFrame.renderGrid();
 
         /*
-         * Семантика PixelShift:
-         *
-         * targetX = sourceX + shiftX
-         * targetY = sourceY + shiftY
-         *
-         *
-         * X:
-         *
-         * target viewport ушёл влево по complex plane
-         * -> старое изображение визуально ушло вправо
-         * -> shiftX положительный.
+         * PixelShift uses target = source + shift. Moving the target viewport
+         * left in the complex plane moves the old image right on screen and
+         * therefore produces a positive horizontal shift.
          */
         double rawShiftX =
                 (sourceViewport.centerReal()
                         - targetViewport.centerReal())
                         / grid.realStep();
 
-        /*
-         * Y:
-         *
-         * imaginary axis направлена вверх,
-         * экранный Y — вниз.
-         */
+        /* The imaginary axis points up while screen Y points down. */
         double rawShiftY =
                 (targetViewport.centerImaginary()
                         - sourceViewport.centerImaginary())
@@ -353,17 +305,8 @@ public final class FrameReusePlanner {
         }
 
         /*
-         * После snapToRenderGrid обычно видим что-то вроде:
-         *
-         * 340.000000000001
-         *
-         * Это допустимая floating-point погрешность.
-         *
-         * Настоящий fractional pan:
-         *
-         * 340.17
-         *
-         * будет отклонён.
+         * Grid snapping can produce values such as 340.000000000001. Accept
+         * that floating-point noise while rejecting true fractional shifts.
          */
         if (Math.abs(value - rounded)
                 > INTEGER_SHIFT_EPSILON) {
@@ -388,10 +331,7 @@ public final class FrameReusePlanner {
                 sourceFrame.request()
                         .height();
 
-        /*
-         * Ищем часть source frame, которая после shift
-         * останется внутри target frame.
-         */
+        /* Find the source area that remains inside the shifted target frame. */
         int sourceXFrom =
                 Math.max(
                         0,
@@ -416,9 +356,7 @@ public final class FrameReusePlanner {
                         height - shift.dy()
                 );
 
-        /*
-         * Кадры вообще не пересекаются.
-         */
+        /* The frames do not overlap. */
         if (sourceXFrom >= sourceXTo
                 || sourceYFrom >= sourceYTo) {
             return 0;
@@ -445,13 +383,7 @@ public final class FrameReusePlanner {
             int targetY =
                     sourceY + shift.dy();
 
-            /*
-             * Собираем соседние valid pixels одной строки
-             * в RenderRegion.
-             *
-             * Это лучше, чем вызывать markReady()
-             * для каждого отдельного пикселя.
-             */
+            /* Group adjacent valid pixels into row runs to reduce mask updates. */
             int runStartTargetX = -1;
 
             for (int sourceX = sourceXFrom;
@@ -486,10 +418,7 @@ public final class FrameReusePlanner {
 
                 } else if (runStartTargetX >= 0) {
 
-                    /*
-                     * Закончился contiguous run
-                     * готовых пикселей.
-                     */
+                    /* The contiguous run of ready pixels has ended. */
                     markRunReady(
                             targetValidity,
                             runStartTargetX,
@@ -501,10 +430,7 @@ public final class FrameReusePlanner {
                 }
             }
 
-            /*
-             * Ready-run мог закончиться ровно
-             * на правой границе overlap.
-             */
+            /* Flush a ready run that ends at the right edge of the overlap. */
             if (runStartTargetX >= 0) {
 
                 int targetXTo =

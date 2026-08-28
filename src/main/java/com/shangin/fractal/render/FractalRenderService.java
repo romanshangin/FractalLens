@@ -10,6 +10,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.LongConsumer;
 
+/**
+ * Owns the asynchronous render lifecycle, cancels superseded generations, and
+ * batches worker progress before dispatching callbacks on a caller-provided executor.
+ */
 public final class FractalRenderService implements AutoCloseable {
 
     private final ExecutorService coordinator;
@@ -39,6 +43,7 @@ public final class FractalRenderService implements AutoCloseable {
         };
     }
 
+    /** Starts a render without collecting diagnostic timing information. */
     public void render(
             RenderFrame frame,
             Executor callbackExecutor,
@@ -57,6 +62,7 @@ public final class FractalRenderService implements AutoCloseable {
         );
     }
 
+    /** Starts a render and reports calculation and per-tile timings. */
     public synchronized void render(
             RenderFrame frame,
             Executor callbackExecutor,
@@ -107,6 +113,7 @@ public final class FractalRenderService implements AutoCloseable {
                 );
     }
 
+    /** Cancels the active generation and suppresses any pending callbacks. */
     public synchronized void cancelCurrent() {
         generation.incrementAndGet();
 

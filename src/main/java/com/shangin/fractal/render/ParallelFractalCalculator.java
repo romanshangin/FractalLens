@@ -9,6 +9,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
+/**
+ * Calculates incomplete regions of a render frame on a fixed worker pool.
+ * Tiles are ordered around the request priority point and completed regions
+ * are reported incrementally to support progressive display.
+ */
 public final class ParallelFractalCalculator implements AutoCloseable {
 
     private static final int TILE_SIZE = 32;
@@ -48,6 +53,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         };
     }
 
+    /** Calculates all missing tiles unless cancellation is requested. */
     public RenderFrame calculate(
             RenderFrame frame,
             BooleanSupplier cancelled,
@@ -61,6 +67,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         );
     }
 
+    /** Calculates missing tiles and reports aggregate per-tile timing data. */
     public RenderFrame calculate(
             RenderFrame frame,
             BooleanSupplier cancelled,
@@ -129,10 +136,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             }
         }
 
-        /*
-         * invokeAll() уже дождался завершения всех tasks,
-         * поэтому здесь коллекция timings стабильна.
-         */
+        /* invokeAll has completed, so the timing collection is now stable. */
         if (timingCompleted != null) {
             timingCompleted.accept(
                     createTimingStats(
@@ -263,9 +267,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                             tile.yTo() - tile.yFrom()
                     );
 
-            /*
-             * Reused tiles сюда вообще не попадают.
-             */
+            /* Fully reused tiles do not need worker tasks. */
             if (renderFrame.validity()
                     .isRegionReady(region)) {
 
@@ -278,12 +280,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                     return null;
                 }
 
-                /*
-                 * Измеряем ТОЛЬКО fractal calculation.
-                 *
-                 * markReady() и progress callback
-                 * в timing не входят.
-                 */
+                /* Measure calculation only; mask and progress updates are excluded. */
                 long tileStart = tileTimesNanos == null
                         ? 0L
                         : System.nanoTime();
