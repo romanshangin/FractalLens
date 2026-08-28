@@ -129,6 +129,7 @@ public final class FractalSurface extends Region {
         stagingFrame.pixelBuffer().updateBuffer(
                 pixelBuffer -> dirtyRegion
         );
+
     }
 
     private static Rectangle2D dirtyRegion(
@@ -441,7 +442,6 @@ public final class FractalSurface extends Region {
         }
 
         /*
-         * Критичная проверка:
          * displayedFrame должен реально соответствовать
          * mathematical sourceFrame.
          */
@@ -459,8 +459,7 @@ public final class FractalSurface extends Region {
         Rectangle2D dirtyRegion =
                 stagingFrame.copyShiftedFrom(
                         displayedFrame,
-                        shift
-                );
+                        shift);
 
         if (dirtyRegion == null) {
             return false;

@@ -11,6 +11,7 @@ import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
 import java.util.Objects;
+import java.util.function.DoubleConsumer;
 
 public final class FractalRenderController implements AutoCloseable {
 
@@ -30,6 +31,8 @@ public final class FractalRenderController implements AutoCloseable {
     public FractalRenderController(FractalSurface surface) {
         this.surface = Objects.requireNonNull(surface);
     }
+
+    private DoubleConsumer zoomChangedHandler = ignored -> {};
 
     public void setFractal(FractalPreset preset) {
         Objects.requireNonNull(preset);
@@ -59,62 +62,78 @@ public final class FractalRenderController implements AutoCloseable {
         Objects.requireNonNull(viewport);
         Objects.requireNonNull(defaultViewport);
 
-        if (calculator == null || coloring == null) {
+        if (calculator == null
+                || coloring == null) {
             return;
         }
 
-        int renderWidth = surface.renderWidth();
-        int renderHeight = surface.renderHeight();
+        double zoomFactor =
+                defaultViewport.scale()
+                        / viewport.scale();
 
-        if (renderWidth < 2 || renderHeight < 2) {
-            return;
-        }
-
-        int maxIterations = iterationPolicy.maxIterations(
-                settings.maxIterations(),
-                defaultViewport.scale(),
-                viewport.scale());
-
-        RenderRequest renderRequest = new RenderRequest(
-                calculator,
-                viewport,
-                renderWidth,
-                renderHeight,
-                maxIterations,
-                renderPriority);
-
-        RenderFrame sourceFrame = activeFrame;
-
-        FrameReuseResult reuseResult = frameReusePlanner.plan(
-                sourceFrame,
-                renderRequest);
-
-        activeFrame = reuseResult.frame();
-
-
-        // temp log
-        int reusedPixels =
-                activeFrame.validity()
-                        .readyPixelCount();
-
-        int totalPixels =
-                activeFrame.fractalData()
-                        .size();
-
-        double reusedPercent =
-                100.0 * reusedPixels / totalPixels;
-
-        System.out.printf(
-                "Frame reuse: %,d / %,d pixels (%.1f%%)%n",
-                reusedPixels,
-                totalPixels,
-                reusedPercent
+        zoomChangedHandler.accept(
+                zoomFactor
         );
-        // temp log
+
+        int renderWidth =
+                surface.renderWidth();
+
+        int renderHeight =
+                surface.renderHeight();
+
+        if (renderWidth < 2
+                || renderHeight < 2) {
+            return;
+        }
+
+        int maxIterations =
+                iterationPolicy.maxIterations(
+                        settings.maxIterations(),
+                        defaultViewport.scale(),
+                        viewport.scale()
+                );
+
+        RenderRequest renderRequest =
+                new RenderRequest(
+                        calculator,
+                        viewport,
+                        renderWidth,
+                        renderHeight,
+                        maxIterations,
+                        renderPriority
+                );
+
+        RenderFrame sourceFrame =
+                activeFrame;
+
+        /*
+         * --------------------------------
+         * DATA REUSE
+         * --------------------------------
+         */
+
+        FrameReuseResult reuseResult =
+                frameReusePlanner.plan(
+                        sourceFrame,
+                        renderRequest
+                );
+
+        RenderFrame targetFrame =
+                reuseResult.frame();
+
+        activeFrame =
+                targetFrame;
+
+        /*
+         * --------------------------------
+         * PREPARE IMAGE
+         * --------------------------------
+         */
 
         surface.beginProgressiveRender();
 
-        boolean imageReused = false;
+        boolean imageReused =
+                false;
 
         if (sourceFrame != null
                 && reuseResult.reused()) {
@@ -125,34 +144,60 @@ public final class FractalRenderController implements AutoCloseable {
                             reuseResult.shift()
                                     .orElseThrow()
                     );
+
         }
 
+        /*
+         * Если готовое image переиспользовать
+         * нельзя, раскрашиваем уже имеющиеся
+         * FractalData.
+         */
         if (!imageReused) {
+
             surface.displayReadyPixels(
                     activeFrame,
                     coloring
             );
         }
 
+        /*
+         * --------------------------------
+         * CALCULATE MISSING
+         * +
+         * COLOR MISSING
+         * --------------------------------
+         */
+
         renderService.render(
                 activeFrame,
                 Platform::runLater,
 
-                progress ->
-                        surface.displayProgress(
-                                progress,
-                                coloring
-                        ),
+                progress -> surface.displayProgress(
+                        progress,
+                        coloring
+                ),
 
-                completedFrame ->
-                        surface.completeProgressiveRender(
-                                completedFrame,
-                                completedFrame.request()
-                                        .viewport()
-                        ),
+                completedFrame -> {
+
+                    surface.completeProgressiveRender(
+                            completedFrame,
+                            completedFrame.request()
+                                    .viewport()
+                    );
+
+                },
 
                 Throwable::printStackTrace
         );
+    }
+
+    public void setOnZoomChanged(
+            DoubleConsumer handler
+    ) {
+        zoomChangedHandler =
+                Objects.requireNonNull(
+                        handler
+                );
     }
 
     @Override

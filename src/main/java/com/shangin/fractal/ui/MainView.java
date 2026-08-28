@@ -20,6 +20,10 @@ public class MainView extends BorderPane {
                 fractalView::setFractal,
                 fractalView::setPalette);
 
+        fractalView.setOnZoomChanged(
+                controlPanel::setZoom
+        );
+
         setTop(controlPanel);
         setCenter(fractalView);
     }

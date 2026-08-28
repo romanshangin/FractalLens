@@ -12,6 +12,8 @@ import javafx.animation.PauseTransition;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
+import java.util.function.DoubleConsumer;
+
 public class FractalView extends StackPane {
 
     // for resize only
@@ -267,5 +269,13 @@ public class FractalView extends StackPane {
             }
             event.consume();
         });
+    }
+
+    public void setOnZoomChanged(
+            DoubleConsumer handler
+    ) {
+        renderController.setOnZoomChanged(
+                handler
+        );
     }
 }

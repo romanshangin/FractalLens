@@ -7,6 +7,8 @@ import javafx.geometry.Pos;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 
 import java.util.function.Consumer;
 
@@ -14,6 +16,7 @@ public class ControlPanel extends HBox {
 
     private static final double SPACING = 10.0;
     private static final double COMBO_BOX_WIDTH = 150.0;
+    private final ZoomIndicator zoomIndicator = new ZoomIndicator();
 
     public ControlPanel(
             FractalPreset initialFractal,
@@ -27,14 +30,30 @@ public class ControlPanel extends HBox {
 
         ComboBox<PalettePreset> paletteComboBox = createPaletteComboBox(initialPalette, onPaletteChanged);
 
+        Region spacer =
+                new Region();
+
+        HBox.setHgrow(
+                spacer,
+                Priority.ALWAYS
+        );
+
         getChildren().addAll(
                 new Label("Fractal:"),
                 fractalComboBox,
                 new Label("Palette:"),
-                paletteComboBox);
+                paletteComboBox,
+                spacer,
+                zoomIndicator);
 
         setPadding(new Insets(10));
         setAlignment(Pos.CENTER_LEFT);
+    }
+
+    public void setZoom(double zoomFactor) {
+        zoomIndicator.setZoom(
+                zoomFactor
+        );
     }
 
     private ComboBox<FractalPreset> createFractalComboBox(
