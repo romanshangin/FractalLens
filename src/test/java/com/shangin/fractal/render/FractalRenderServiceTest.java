@@ -11,6 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -204,5 +205,34 @@ class FractalRenderServiceTest {
                 progressFrame.get(),
                 completedFrame.get()
         );
+    }
+
+    @Test
+    void diagnosticRenderShouldReportCalculationAndTileTimings()
+            throws InterruptedException {
+
+        AtomicLong calculationNanos = new AtomicLong(-1L);
+        AtomicReference<TileTimingStats> tileStats = new AtomicReference<>();
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        CountDownLatch completed = new CountDownLatch(1);
+
+        renderService.render(
+                renderFrame,
+                DIRECT_EXECUTOR,
+                ignored -> {},
+                calculationNanos::set,
+                tileStats::set,
+                ignored -> completed.countDown(),
+                throwable -> {
+                    error.set(throwable);
+                    completed.countDown();
+                }
+        );
+
+        assertTrue(completed.await(5, TimeUnit.SECONDS));
+        assertNull(error.get());
+        assertTrue(calculationNanos.get() >= 0L);
+        assertNotNull(tileStats.get());
+        assertEquals(70, tileStats.get().tileCount());
     }
 }

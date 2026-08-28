@@ -8,6 +8,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -97,6 +99,95 @@ class ParallelFractalCalculatorTest {
         assertTrue(topLeftFirst.xFrom() < bottomRightFirst.xFrom());
 
         assertTrue(topLeftFirst.yFrom() < bottomRightFirst.yFrom());
+    }
+
+    @Test
+    void timingStatisticsShouldDescribeCalculatedTiles() throws InterruptedException {
+        RenderRequest request = new RenderRequest(
+                calculator,
+                viewport,
+                65,
+                33,
+                100
+        );
+
+        RenderFrame frame = RenderFrame.create(request);
+        AtomicReference<TileTimingStats> capturedStats = new AtomicReference<>();
+
+        RenderFrame result = parallelCalculator.calculate(
+                frame,
+                () -> false,
+                ignored -> {},
+                capturedStats::set
+        );
+
+        TileTimingStats stats = capturedStats.get();
+
+        assertTrue(result.isComplete());
+        assertNotNull(stats);
+        assertEquals(6, stats.tileCount());
+        assertTrue(stats.minMs() >= 0.0);
+        assertTrue(stats.medianMs() >= stats.minMs());
+        assertTrue(stats.maxMs() >= stats.medianMs());
+    }
+
+    @Test
+    void completedFrameShouldReportEmptyTimingStatistics() throws InterruptedException {
+        RenderFrame frame = RenderFrame.create(
+                new RenderRequest(
+                        calculator,
+                        viewport,
+                        32,
+                        32,
+                        100
+                )
+        );
+
+        parallelCalculator.calculate(
+                frame,
+                () -> false,
+                ignored -> {}
+        );
+
+        AtomicReference<TileTimingStats> capturedStats = new AtomicReference<>();
+
+        parallelCalculator.calculate(
+                frame,
+                () -> false,
+                ignored -> fail("Completed frame must not produce progress"),
+                capturedStats::set
+        );
+
+        assertEquals(
+                new TileTimingStats(0, 0.0, 0.0, 0.0),
+                capturedStats.get()
+        );
+    }
+
+    @Test
+    void cancelledCalculationShouldNotReportTimingStatistics() throws InterruptedException {
+        RenderFrame frame = RenderFrame.create(
+                new RenderRequest(
+                        calculator,
+                        viewport,
+                        64,
+                        64,
+                        100
+                )
+        );
+
+        AtomicInteger callbackCount = new AtomicInteger();
+
+        RenderFrame result = parallelCalculator.calculate(
+                frame,
+                () -> true,
+                ignored -> fail("Cancelled render must not produce progress"),
+                ignored -> callbackCount.incrementAndGet()
+        );
+
+        assertSame(frame, result);
+        assertFalse(result.isComplete());
+        assertEquals(0, callbackCount.get());
     }
 
 }

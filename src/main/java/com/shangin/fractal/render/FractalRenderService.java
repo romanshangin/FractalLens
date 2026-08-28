@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 
 public final class FractalRenderService implements AutoCloseable {
 
@@ -38,10 +39,53 @@ public final class FractalRenderService implements AutoCloseable {
         };
     }
 
+    public void render(
+            RenderFrame frame,
+            Executor callbackExecutor,
+            Consumer<RenderProgressBatch> onProgress,
+            Consumer<RenderFrame> onSuccess,
+            Consumer<Throwable> onError
+    ) {
+        submitRender(
+                frame,
+                callbackExecutor,
+                onProgress,
+                null,
+                null,
+                onSuccess,
+                onError
+        );
+    }
+
     public synchronized void render(
             RenderFrame frame,
             Executor callbackExecutor,
             Consumer<RenderProgressBatch> onProgress,
+            LongConsumer onCalculationComplete,
+            Consumer<TileTimingStats> onTileTimingComplete,
+            Consumer<RenderFrame> onSuccess,
+            Consumer<Throwable> onError
+    ) {
+        Objects.requireNonNull(onCalculationComplete);
+        Objects.requireNonNull(onTileTimingComplete);
+
+        submitRender(
+                frame,
+                callbackExecutor,
+                onProgress,
+                onCalculationComplete,
+                onTileTimingComplete,
+                onSuccess,
+                onError
+        );
+    }
+
+    private synchronized void submitRender(
+            RenderFrame frame,
+            Executor callbackExecutor,
+            Consumer<RenderProgressBatch> onProgress,
+            LongConsumer onCalculationComplete,
+            Consumer<TileTimingStats> onTileTimingComplete,
             Consumer<RenderFrame> onSuccess,
             Consumer<Throwable> onError
     ) {
@@ -55,6 +99,8 @@ public final class FractalRenderService implements AutoCloseable {
                                 frame,
                                 callbackExecutor,
                                 onProgress,
+                                onCalculationComplete,
+                                onTileTimingComplete,
                                 onSuccess,
                                 onError
                         )
@@ -72,6 +118,8 @@ public final class FractalRenderService implements AutoCloseable {
             RenderFrame frame,
             Executor callbackExecutor,
             Consumer<RenderProgressBatch> onProgress,
+            LongConsumer onCalculationComplete,
+            Consumer<TileTimingStats> onTileTimingComplete,
             Consumer<RenderFrame> onSuccess,
             Consumer<Throwable> onError
     ) {
@@ -84,12 +132,27 @@ public final class FractalRenderService implements AutoCloseable {
                 );
 
         try {
-            RenderFrame resultFrame =
-                    parallelCalculator.calculate(
-                            frame,
-                            () -> shouldCancel(renderId),
-                            progressBatcher::add
-                    );
+
+            long calculationStart = onCalculationComplete == null
+                    ? 0L
+                    : System.nanoTime();
+
+            RenderFrame resultFrame;
+
+            if (onTileTimingComplete == null) {
+                resultFrame = parallelCalculator.calculate(
+                        frame,
+                        () -> shouldCancel(renderId),
+                        progressBatcher::add
+                );
+            } else {
+                resultFrame = parallelCalculator.calculate(
+                        frame,
+                        () -> shouldCancel(renderId),
+                        progressBatcher::add,
+                        onTileTimingComplete
+                );
+            }
 
             if (shouldCancel(renderId)) {
                 progressBatcher.cancel();
@@ -99,6 +162,12 @@ public final class FractalRenderService implements AutoCloseable {
             if (!resultFrame.isComplete()) {
                 throw new IllegalStateException(
                         "Completed render contains invalid pixels"
+                );
+            }
+
+            if (onCalculationComplete != null) {
+                onCalculationComplete.accept(
+                        System.nanoTime() - calculationStart
                 );
             }
 

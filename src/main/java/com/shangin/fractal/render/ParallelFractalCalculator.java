@@ -52,8 +52,38 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             RenderFrame frame,
             BooleanSupplier cancelled,
             Consumer<RenderRegion> regionCompleted
-    ) throws InterruptedException
-    {
+    ) throws InterruptedException {
+        return calculateInternal(
+                frame,
+                cancelled,
+                regionCompleted,
+                null
+        );
+    }
+
+    public RenderFrame calculate(
+            RenderFrame frame,
+            BooleanSupplier cancelled,
+            Consumer<RenderRegion> regionCompleted,
+            Consumer<TileTimingStats> timingCompleted
+    ) throws InterruptedException {
+        Objects.requireNonNull(timingCompleted);
+
+        return calculateInternal(
+                frame,
+                cancelled,
+                regionCompleted,
+                timingCompleted
+        );
+    }
+
+    private RenderFrame calculateInternal(
+            RenderFrame frame,
+            BooleanSupplier cancelled,
+            Consumer<RenderRegion> regionCompleted,
+            Consumer<TileTimingStats> timingCompleted
+    ) throws InterruptedException {
+
         Objects.requireNonNull(frame);
         Objects.requireNonNull(cancelled);
         Objects.requireNonNull(regionCompleted);
@@ -62,27 +92,124 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             return frame;
         }
 
-        List<Callable<Void>> tasks = createTileTasks(
-                frame,
-                cancelled,
-                regionCompleted);
+        ConcurrentLinkedQueue<Long> tileTimesNanos = timingCompleted == null
+                ? null
+                : new ConcurrentLinkedQueue<>();
 
-        List<Future<Void>> futures = workers.invokeAll(tasks);
+        List<Callable<Void>> tasks =
+                createTileTasks(
+                        frame,
+                        cancelled,
+                        regionCompleted,
+                        tileTimesNanos
+                );
+
+        List<Future<Void>> futures =
+                workers.invokeAll(tasks);
 
         for (Future<Void> future : futures) {
+
             if (cancelled.getAsBoolean()) {
                 return frame;
             }
 
             try {
                 future.get();
+
             } catch (CancellationException e) {
+
                 return frame;
+
             } catch (ExecutionException e) {
-                throw new IllegalStateException("Tile calculation failed",e.getCause());
+
+                throw new IllegalStateException(
+                        "Tile calculation failed",
+                        e.getCause()
+                );
             }
         }
+
+        /*
+         * invokeAll() уже дождался завершения всех tasks,
+         * поэтому здесь коллекция timings стабильна.
+         */
+        if (timingCompleted != null) {
+            timingCompleted.accept(
+                    createTimingStats(
+                            tileTimesNanos
+                    )
+            );
+        }
+
         return frame;
+    }
+
+    private static TileTimingStats createTimingStats(
+            ConcurrentLinkedQueue<Long> timings
+    ) {
+        if (timings.isEmpty()) {
+            return new TileTimingStats(
+                    0,
+                    0.0,
+                    0.0,
+                    0.0
+            );
+        }
+
+        List<Long> sorted =
+                new ArrayList<>(
+                        timings
+                );
+
+        sorted.sort(
+                Long::compare
+        );
+
+        int size =
+                sorted.size();
+
+        long minNanos =
+                sorted.get(0);
+
+        long maxNanos =
+                sorted.get(
+                        size - 1
+                );
+
+        double medianNanos;
+
+        int middle =
+                size / 2;
+
+        if (size % 2 == 0) {
+
+            medianNanos =
+                    (
+                            sorted.get(middle - 1)
+                                    .doubleValue()
+                                    +
+                                    sorted.get(middle)
+                                            .doubleValue()
+                    ) / 2.0;
+
+        } else {
+
+            medianNanos =
+                    sorted.get(middle);
+        }
+
+        return new TileTimingStats(
+                size,
+                nanosToMs(minNanos),
+                nanosToMs(medianNanos),
+                nanosToMs(maxNanos)
+        );
+    }
+
+    private static double nanosToMs(
+            double nanos
+    ) {
+        return nanos / 1_000_000.0;
     }
 
     private static double distanceSquared(
@@ -104,50 +231,93 @@ public final class ParallelFractalCalculator implements AutoCloseable {
     private List<Callable<Void>> createTileTasks(
             RenderFrame renderFrame,
             BooleanSupplier cancelled,
-            Consumer<RenderRegion> regionCompleted
+            Consumer<RenderRegion> regionCompleted,
+            ConcurrentLinkedQueue<Long> tileTimesNanos
     ) {
-        RenderRequest renderRequest = renderFrame.request();
-        FractalData fractalData = renderFrame.fractalData();
-        RenderGrid renderGrid = renderFrame.renderGrid();
+        RenderRequest renderRequest =
+                renderFrame.request();
 
-        List<Tile> tiles = createOrderedTiles(renderRequest);
+        FractalData fractalData =
+                renderFrame.fractalData();
 
-        List<Callable<Void>> tasks = new ArrayList<>(tiles.size());
+        RenderGrid renderGrid =
+                renderFrame.renderGrid();
+
+        List<Tile> tiles =
+                createOrderedTiles(
+                        renderRequest
+                );
+
+        List<Callable<Void>> tasks =
+                new ArrayList<>(
+                        tiles.size()
+                );
 
         for (Tile tile : tiles) {
-            RenderRegion region = new RenderRegion(
-                    tile.xFrom(),
-                    tile.yFrom(),
-                    tile.xTo() - tile.xFrom(),
-                    tile.yTo() - tile.yFrom());
 
-            if (renderFrame.validity().isRegionReady(region)) {
+            RenderRegion region =
+                    new RenderRegion(
+                            tile.xFrom(),
+                            tile.yFrom(),
+                            tile.xTo() - tile.xFrom(),
+                            tile.yTo() - tile.yFrom()
+                    );
+
+            /*
+             * Reused tiles сюда вообще не попадают.
+             */
+            if (renderFrame.validity()
+                    .isRegionReady(region)) {
+
                 continue;
             }
 
             tasks.add(() -> {
+
                 if (cancelled.getAsBoolean()) {
                     return null;
                 }
 
-                boolean completed = renderRequest
-                        .calculator()
-                        .calculateTile(
-                                fractalData,
-                                renderGrid,
-                                tile.xFrom(),
-                                tile.xTo(),
-                                tile.yFrom(),
-                                tile.yTo(),
-                                renderRequest.maxIterations(),
-                                cancelled);
+                /*
+                 * Измеряем ТОЛЬКО fractal calculation.
+                 *
+                 * markReady() и progress callback
+                 * в timing не входят.
+                 */
+                long tileStart = tileTimesNanos == null
+                        ? 0L
+                        : System.nanoTime();
+
+                boolean completed =
+                        renderRequest
+                                .calculator()
+                                .calculateTile(
+                                        fractalData,
+                                        renderGrid,
+                                        tile.xFrom(),
+                                        tile.xTo(),
+                                        tile.yFrom(),
+                                        tile.yTo(),
+                                        renderRequest.maxIterations(),
+                                        cancelled
+                                );
 
                 if (!completed) {
                     return null;
                 }
 
-                renderFrame.validity().markReady(region);
-                regionCompleted.accept(region);
+                if (tileTimesNanos != null) {
+                    tileTimesNanos.add(
+                            System.nanoTime() - tileStart
+                    );
+                }
+
+                renderFrame.validity()
+                        .markReady(region);
+
+                regionCompleted.accept(
+                        region
+                );
 
                 return null;
             });
