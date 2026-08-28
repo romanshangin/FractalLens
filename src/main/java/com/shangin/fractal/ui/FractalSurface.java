@@ -26,12 +26,14 @@ import java.util.Objects;
 public final class FractalSurface extends Region {
 
     private final Affine previewTransform = new Affine();
+    private final Affine progressivePreviewTransform = new Affine();
     private final ImageView baseImageView = new ImageView();
     private final ImageView progressiveImageView = new ImageView();
     private final FractalColorizer colorizer = new FractalColorizer();
 
     private SurfaceBuffer stagingFrame;
     private SurfaceBuffer displayedFrame;
+    private RenderFrame stagingRenderFrame;
     private RenderFrame displayedRenderFrame;
     private Viewport displayedViewport;
 
@@ -51,7 +53,7 @@ public final class FractalSurface extends Region {
     }
 
     /** Prepares the staging buffer for a new progressive frame. */
-    public void beginProgressiveRender() {
+    public void beginProgressiveRender(RenderFrame renderFrame) {
         if (renderWidth < 2 || renderHeight < 2) {
             return;
         }
@@ -69,7 +71,12 @@ public final class FractalSurface extends Region {
                     );
         }
 
-        stagingFrame.clear();
+        if (stagingRenderFrame != renderFrame) {
+            stagingFrame.clear();
+        }
+
+        stagingRenderFrame = renderFrame;
+        progressivePreviewTransform.setToIdentity();
 
         progressiveImageView.setImage(
                 stagingFrame.image()
@@ -83,6 +90,10 @@ public final class FractalSurface extends Region {
         baseImageView
                 .getTransforms()
                 .add(previewTransform);
+
+        progressiveImageView
+                .getTransforms()
+                .add(progressivePreviewTransform);
 
         progressiveImageView.setMouseTransparent(true);
     }
@@ -111,6 +122,11 @@ public final class FractalSurface extends Region {
         }
 
         RenderFrame renderFrame = progress.frame();
+
+        if (stagingRenderFrame != renderFrame) {
+            return;
+        }
+
         FractalData data = renderFrame.fractalData();
 
         if (data.width() != stagingFrame.width() || data.height() != stagingFrame.height()) {
@@ -192,6 +208,7 @@ public final class FractalSurface extends Region {
 
         displayedRenderFrame = renderFrame;
         displayedViewport = viewport;
+        stagingRenderFrame = null;
 
         baseImageView.setImage(
                 displayedFrame.image()
@@ -215,6 +232,7 @@ public final class FractalSurface extends Region {
         renderWidth = newRenderWidth;
         renderHeight = newRenderHeight;
         stagingFrame = new SurfaceBuffer(renderWidth, renderHeight);
+        stagingRenderFrame = null;
     }
 
     public int renderWidth() {
@@ -227,6 +245,7 @@ public final class FractalSurface extends Region {
 
     private void resetPreview() {
         previewTransform.setToIdentity();
+        progressivePreviewTransform.setToIdentity();
     }
 
     public void setOutputScale(
@@ -248,8 +267,6 @@ public final class FractalSurface extends Region {
     /** Transforms the last completed image as an immediate pan/zoom preview. */
     public void showPreview(Viewport targetViewport) {
 
-        progressiveImageView.setImage(null);
-
         if (displayedViewport == null) {
             return;
         }
@@ -261,8 +278,32 @@ public final class FractalSurface extends Region {
             return;
         }
 
-        Viewport source = displayedViewport;
+        applyPreviewTransform(
+                previewTransform,
+                displayedViewport,
+                targetViewport,
+                width,
+                height
+        );
 
+        if (stagingRenderFrame != null) {
+            applyPreviewTransform(
+                    progressivePreviewTransform,
+                    stagingRenderFrame.request().viewport(),
+                    targetViewport,
+                    width,
+                    height
+            );
+        }
+    }
+
+    private static void applyPreviewTransform(
+            Affine transform,
+            Viewport source,
+            Viewport targetViewport,
+            int width,
+            int height
+    ) {
         double scaleX = source.visibleWidth(width, height)
                         / targetViewport.visibleWidth(width, height);
 
@@ -279,12 +320,11 @@ public final class FractalSurface extends Region {
                         / targetViewport.visibleHeight()
                         * (height - 1.0);
 
-        previewTransform.setToIdentity();
-
-        previewTransform.setMxx(scaleX);
-        previewTransform.setMyy(scaleY);
-        previewTransform.setTx(translateX);
-        previewTransform.setTy(translateY);
+        transform.setToIdentity();
+        transform.setMxx(scaleX);
+        transform.setMyy(scaleY);
+        transform.setTx(translateX);
+        transform.setTy(translateY);
     }
 
     public void recolor(ColoringStrategy coloring) {
@@ -379,7 +419,7 @@ public final class FractalSurface extends Region {
             RenderFrame frame,
             ColoringStrategy coloring
     ) {
-        if (stagingFrame == null) {
+        if (stagingFrame == null || stagingRenderFrame != frame) {
             return;
         }
 
@@ -437,6 +477,24 @@ public final class FractalSurface extends Region {
         }
 
         stagingFrame.update();
+    }
+
+    /** Keeps a visible partial render when its samples are shifted by a pan. */
+    public boolean reuseProgressivePixels(
+            RenderFrame sourceFrame,
+            RenderFrame targetFrame,
+            PixelShift shift
+    ) {
+        if (stagingFrame == null || stagingRenderFrame != sourceFrame) {
+            return false;
+        }
+
+        if (!stagingFrame.shiftInPlace(shift)) {
+            return false;
+        }
+
+        stagingRenderFrame = targetFrame;
+        return true;
     }
 
     /**

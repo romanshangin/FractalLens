@@ -4,6 +4,7 @@ import com.shangin.fractal.formula.FractalFormula;
 import com.shangin.fractal.formula.FractalSample;
 
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /** Evaluates a fractal formula over pixel regions mapped by a render grid. */
 public class FractalCalculator {
@@ -54,6 +55,32 @@ public class FractalCalculator {
             int maxIterations,
             BooleanSupplier cancelled
     ) {
+        return calculateTile(
+                fractalData,
+                renderGrid,
+                xFrom,
+                xTo,
+                yFrom,
+                yTo,
+                maxIterations,
+                cancelled,
+                (x, y) -> false,
+                ignored -> {}
+        );
+    }
+
+    boolean calculateTile(
+            FractalData fractalData,
+            RenderGrid renderGrid,
+            int xFrom,
+            int xTo,
+            int yFrom,
+            int yTo,
+            int maxIterations,
+            BooleanSupplier cancelled,
+            PixelReady ready,
+            Consumer<RenderRegion> rowCompleted
+    ) {
         for (int y = yFrom; y < yTo; y++) {
 
             if (cancelled.getAsBoolean()) {
@@ -63,6 +90,10 @@ public class FractalCalculator {
             double imaginary = renderGrid.imaginaryAt(y);
 
             for (int x = xFrom; x < xTo; x++) {
+
+                if (ready.test(x, y)) {
+                    continue;
+                }
 
                 if (((x - xFrom) & (CANCELLATION_CHECK_INTERVAL - 1)) == 0  && cancelled.getAsBoolean()) {
                     return false;
@@ -74,6 +105,15 @@ public class FractalCalculator {
 
                 fractalData.set(x, y, sample);
             }
+
+            rowCompleted.accept(
+                    new RenderRegion(
+                            xFrom,
+                            y,
+                            xTo - xFrom,
+                            1
+                    )
+            );
         }
 
         return true;

@@ -265,6 +265,9 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                         && renderRequest.calculator().hasConjugateSymmetry()
                         && renderGrid.isConjugateSymmetric(renderRequest.height());
 
+        boolean hasReusablePixels =
+                renderFrame.validity().readyPixelCount() > 0;
+
         List<Tile> tiles =
                 createOrderedTiles(
                         renderRequest,
@@ -317,36 +320,42 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                                         tile.yFrom(),
                                         tile.yTo(),
                                         renderRequest.maxIterations(),
-                                        cancelled
+                                        cancelled,
+                                        hasReusablePixels
+                                                ? renderFrame.validity()::isReady
+                                                : (x, y) -> false,
+                                        completedRow -> {
+                                            renderFrame.validity().markReady(completedRow);
+
+                                            if (useConjugateSymmetry) {
+                                                int mirrorY = renderRequest.height()
+                                                        - 1
+                                                        - completedRow.y();
+
+                                                if (mirrorY != completedRow.y()) {
+                                                    fractalData.copyRowFrom(
+                                                            fractalData,
+                                                            completedRow.y(),
+                                                            mirrorY,
+                                                            completedRow.x(),
+                                                            completedRow.x() + completedRow.width()
+                                                    );
+
+                                                    RenderRegion mirrorRow = new RenderRegion(
+                                                            completedRow.x(),
+                                                            mirrorY,
+                                                            completedRow.width(),
+                                                            1
+                                                    );
+
+                                                    renderFrame.validity().markReady(mirrorRow);
+                                                }
+                                            }
+                                        }
                                 );
 
                 if (!completed) {
                     return null;
-                }
-
-                RenderRegion mirrorRegion = null;
-
-                if (useConjugateSymmetry) {
-                    for (int sourceY = tile.yFrom(); sourceY < tile.yTo(); sourceY++) {
-                        int targetY = renderRequest.height() - 1 - sourceY;
-
-                        if (targetY != sourceY) {
-                            fractalData.copyRowFrom(
-                                    fractalData,
-                                    sourceY,
-                                    targetY,
-                                    tile.xFrom(),
-                                    tile.xTo()
-                            );
-                        }
-                    }
-
-                    mirrorRegion = new RenderRegion(
-                            tile.xFrom(),
-                            renderRequest.height() - tile.yTo(),
-                            tile.xTo() - tile.xFrom(),
-                            tile.yTo() - tile.yFrom()
-                    );
                 }
 
                 if (tileTimesNanos != null) {
@@ -355,19 +364,19 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                     );
                 }
 
-                renderFrame.validity()
-                        .markReady(region);
+                regionCompleted.accept(region);
 
-                if (mirrorRegion != null) {
-                    renderFrame.validity().markReady(mirrorRegion);
-                }
+                if (useConjugateSymmetry) {
+                    RenderRegion mirrorRegion = new RenderRegion(
+                            tile.xFrom(),
+                            renderRequest.height() - tile.yTo(),
+                            tile.xTo() - tile.xFrom(),
+                            tile.yTo() - tile.yFrom()
+                    );
 
-                regionCompleted.accept(
-                        region
-                );
-
-                if (mirrorRegion != null && !mirrorRegion.equals(region)) {
-                    regionCompleted.accept(mirrorRegion);
+                    if (!mirrorRegion.equals(region)) {
+                        regionCompleted.accept(mirrorRegion);
+                    }
                 }
 
                 return null;

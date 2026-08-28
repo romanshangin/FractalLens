@@ -1,6 +1,7 @@
 package com.shangin.fractal.render;
 
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.math.Viewport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -367,5 +368,44 @@ class FrameReusePlannerTest {
                 referenceFrame.fractalData(),
                 reusedFrame.fractalData()
         );
+    }
+
+    @Test
+    void shouldResumePartialRetainedFrameAfterReverseZoom() {
+        RenderFrame retainedFrame = RenderFrame.create(sourceRequest);
+        FractalSample sample = FractalPreset.MANDELBROT.createFormula().calculate(
+                retainedFrame.renderGrid().realAt(12),
+                retainedFrame.renderGrid().imaginaryAt(9),
+                MAX_ITERATIONS
+        );
+
+        retainedFrame.fractalData().set(12, 9, sample);
+        retainedFrame.validity().markReady(new RenderRegion(12, 9, 1, 1));
+
+        Viewport zoomedViewport = sourceViewport.zoom(0.8);
+        RenderRequest zoomedRequest = new RenderRequest(
+                calculator,
+                zoomedViewport,
+                WIDTH,
+                HEIGHT,
+                MAX_ITERATIONS
+        );
+        RenderFrame activeZoomedFrame = RenderFrame.create(zoomedRequest);
+
+        FrameReuseSelection selection = planner.plan(
+                activeZoomedFrame,
+                retainedFrame,
+                sourceRequest
+        );
+
+        assertSame(retainedFrame, selection.sourceFrame());
+        assertTrue(selection.result().reused());
+        assertEquals(1, selection.result().reusedPixels());
+        assertTrue(selection.result().frame().validity().isReady(12, 9));
+        assertEquals(
+                sample.smoothIterations(),
+                selection.result().frame().fractalData().smoothIterations(9 * WIDTH + 12)
+        );
+        assertFalse(selection.result().frame().isComplete());
     }
 }

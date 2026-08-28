@@ -322,4 +322,37 @@ class ParallelFractalCalculatorTest {
         }
     }
 
+    @Test
+    void cancelledTileShouldRetainCompletedRowsAndSkipThemOnResume() throws InterruptedException {
+        AtomicInteger calculationCount = new AtomicInteger();
+        FractalFormula countingFormula = (real, imaginary, maxIterations) -> {
+            calculationCount.incrementAndGet();
+            return new FractalSample(1, true, real, imaginary);
+        };
+        RenderRequest request = new RenderRequest(
+                new FractalCalculator(countingFormula),
+                new Viewport(-0.75, 0.1, 2.4),
+                32,
+                32,
+                100
+        );
+        RenderFrame frame = RenderFrame.create(request);
+        AtomicInteger completedRegions = new AtomicInteger();
+
+        parallelCalculator.calculate(
+                frame,
+                () -> calculationCount.get() >= 32 * 3,
+                ignored -> completedRegions.incrementAndGet()
+        );
+
+        assertFalse(frame.isComplete());
+        assertEquals(32 * 3, frame.validity().readyPixelCount());
+        assertEquals(0, completedRegions.get());
+
+        parallelCalculator.calculate(frame, () -> false, ignored -> {});
+
+        assertTrue(frame.isComplete());
+        assertEquals(32 * 32, calculationCount.get());
+    }
+
 }

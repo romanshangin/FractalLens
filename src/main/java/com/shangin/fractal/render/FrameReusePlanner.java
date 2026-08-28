@@ -39,17 +39,52 @@ public final class FrameReusePlanner {
                 "Target request must not be null"
         );
 
-        if (sourceFrame == null
-                || !canReuse(
+        return planCandidate(
                 sourceFrame,
                 targetRequest
-        )) {
+        ).orElseGet(
+                () -> FrameReuseResult.fresh(
+                        RenderFrame.create(targetRequest)
+                )
+        );
+    }
 
-            return FrameReuseResult.fresh(
-                    RenderFrame.create(
-                            targetRequest
-                    )
-            );
+    /** Checks the active frame and then the retained frame for reusable data. */
+    public FrameReuseSelection plan(
+            RenderFrame activeFrame,
+            RenderFrame retainedFrame,
+            RenderRequest targetRequest
+    ) {
+        Objects.requireNonNull(targetRequest, "Target request must not be null");
+
+        Optional<FrameReuseResult> activeResult =
+                planCandidate(activeFrame, targetRequest)
+                        .filter(FrameReuseResult::reused);
+
+        if (activeResult.isPresent()) {
+            return new FrameReuseSelection(activeFrame, activeResult.get());
+        }
+
+        Optional<FrameReuseResult> retainedResult =
+                planCandidate(retainedFrame, targetRequest)
+                        .filter(FrameReuseResult::reused);
+
+        if (retainedResult.isPresent()) {
+            return new FrameReuseSelection(retainedFrame, retainedResult.get());
+        }
+
+        return new FrameReuseSelection(
+                null,
+                FrameReuseResult.fresh(RenderFrame.create(targetRequest))
+        );
+    }
+
+    private Optional<FrameReuseResult> planCandidate(
+            RenderFrame sourceFrame,
+            RenderRequest targetRequest
+    ) {
+        if (sourceFrame == null || !canReuse(sourceFrame, targetRequest)) {
+            return Optional.empty();
         }
 
         Optional<PixelShift> shift =
@@ -59,11 +94,7 @@ public final class FrameReusePlanner {
                 );
 
         if (shift.isEmpty()) {
-            return FrameReuseResult.fresh(
-                    RenderFrame.create(
-                            targetRequest
-                    )
-            );
+            return Optional.empty();
         }
 
         PixelShift pixelShift =
@@ -107,10 +138,12 @@ public final class FrameReusePlanner {
                     );
         }
 
-        return FrameReuseResult.reused(
-                targetFrame,
-                pixelShift,
-                reusedPixels
+        return Optional.of(
+                FrameReuseResult.reused(
+                        targetFrame,
+                        pixelShift,
+                        reusedPixels
+                )
         );
     }
 

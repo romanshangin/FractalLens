@@ -30,6 +30,7 @@ public final class FractalRenderController implements AutoCloseable {
     private ColoringStrategy coloring;
     private RenderPriority renderPriority = RenderPriority.center();
     private RenderFrame activeFrame;
+    private RenderFrame retainedFrame;
     private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
 
     public FractalRenderController(FractalSurface surface) {
@@ -41,6 +42,8 @@ public final class FractalRenderController implements AutoCloseable {
     public void setFractal(FractalPreset preset) {
         Objects.requireNonNull(preset);
         calculator = new FractalCalculator(preset.createFormula());
+        activeFrame = null;
+        retainedFrame = null;
     }
 
     public void setColoring(ColoringStrategy coloring) {
@@ -108,8 +111,7 @@ public final class FractalRenderController implements AutoCloseable {
                         renderPriority
                 );
 
-        RenderFrame sourceFrame =
-                activeFrame;
+        RenderFrame previousActiveFrame = activeFrame;
 
         /*
          * --------------------------------
@@ -117,11 +119,15 @@ public final class FractalRenderController implements AutoCloseable {
          * --------------------------------
          */
 
-        FrameReuseResult reuseResult =
+        FrameReuseSelection reuseSelection =
                 frameReusePlanner.plan(
-                        sourceFrame,
+                        previousActiveFrame,
+                        retainedFrame,
                         renderRequest
                 );
+
+        RenderFrame sourceFrame = reuseSelection.sourceFrame();
+        FrameReuseResult reuseResult = reuseSelection.result();
 
         RenderFrame targetFrame =
                 reuseResult.frame();
@@ -129,18 +135,37 @@ public final class FractalRenderController implements AutoCloseable {
         activeFrame =
                 targetFrame;
 
+        /* Keep the displaced zoom level so a reverse zoom can resume it. */
+        if (sourceFrame != previousActiveFrame) {
+            retainedFrame = previousActiveFrame;
+        }
+
         /*
          * --------------------------------
          * PREPARE IMAGE
          * --------------------------------
          */
 
-        surface.beginProgressiveRender();
-
         boolean imageReused =
                 false;
 
         if (sourceFrame != null
+                && reuseResult.reused()) {
+
+            PixelShift shift = reuseResult.shift()
+                    .orElseThrow();
+
+            imageReused = surface.reuseProgressivePixels(
+                    sourceFrame,
+                    targetFrame,
+                    shift
+            );
+        }
+
+        surface.beginProgressiveRender(targetFrame);
+
+        if (!imageReused
+                && sourceFrame != null
                 && reuseResult.reused()) {
 
             imageReused =

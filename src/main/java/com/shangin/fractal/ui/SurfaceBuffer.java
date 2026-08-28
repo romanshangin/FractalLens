@@ -159,4 +159,70 @@ public class SurfaceBuffer {
                 sourceYTo - sourceYFrom
         );
     }
+
+    /** Shifts pixels within this buffer and clears the newly exposed bands. */
+    public boolean shiftInPlace(PixelShift shift) {
+        Objects.requireNonNull(shift);
+
+        int dx = shift.dx();
+        int dy = shift.dy();
+
+        if (dx <= -width || dx >= width || dy <= -height || dy >= height) {
+            clear();
+            return false;
+        }
+
+        int sourceX = Math.max(0, -dx);
+        int targetX = Math.max(0, dx);
+        int copyWidth = width - Math.abs(dx);
+        int sourceY = Math.max(0, -dy);
+        int targetY = Math.max(0, dy);
+        int copyHeight = height - Math.abs(dy);
+        int[] pixels = intBuffer.array();
+
+        if (dy > 0) {
+            for (int row = copyHeight - 1; row >= 0; row--) {
+                System.arraycopy(
+                        pixels,
+                        (sourceY + row) * width + sourceX,
+                        pixels,
+                        (targetY + row) * width + targetX,
+                        copyWidth
+                );
+            }
+        } else {
+            for (int row = 0; row < copyHeight; row++) {
+                System.arraycopy(
+                        pixels,
+                        (sourceY + row) * width + sourceX,
+                        pixels,
+                        (targetY + row) * width + targetX,
+                        copyWidth
+                );
+            }
+        }
+
+        if (dy > 0) {
+            Arrays.fill(pixels, 0, dy * width, 0);
+        } else if (dy < 0) {
+            Arrays.fill(pixels, (height + dy) * width, height * width, 0);
+        }
+
+        if (dx != 0) {
+            int clearFrom = dx > 0 ? 0 : width + dx;
+            int clearTo = dx > 0 ? dx : width;
+
+            for (int y = 0; y < height; y++) {
+                Arrays.fill(
+                        pixels,
+                        y * width + clearFrom,
+                        y * width + clearTo,
+                        0
+                );
+            }
+        }
+
+        update();
+        return true;
+    }
 }
