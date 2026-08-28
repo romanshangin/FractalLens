@@ -67,6 +67,10 @@ public class SurfaceBuffer {
         return height;
     }
 
+    int[] copyPixels() {
+        return intBuffer.array().clone();
+    }
+
     /** Copies the overlapping pixels after a shift and returns the dirty rectangle. */
     public Rectangle2D copyShiftedFrom(
             SurfaceBuffer source,

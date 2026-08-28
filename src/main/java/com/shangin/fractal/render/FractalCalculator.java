@@ -21,6 +21,15 @@ public class FractalCalculator {
         return formula.hasConjugateSymmetry();
     }
 
+    /** Evaluates one coordinate for off-screen and adaptive sampling pipelines. */
+    public FractalSample calculateSample(
+            double real,
+            double imaginary,
+            int maxIterations
+    ) {
+        return formula.calculate(real, imaginary, maxIterations);
+    }
+
     public FractalData calculate(
             int width,
             int height,
@@ -101,7 +110,7 @@ public class FractalCalculator {
 
                 double real = renderGrid.realAt(x);
 
-                FractalSample sample = formula.calculate(real, imaginary, maxIterations);
+                FractalSample sample = calculateSample(real, imaginary, maxIterations);
 
                 fractalData.set(x, y, sample);
             }

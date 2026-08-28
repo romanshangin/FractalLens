@@ -5,6 +5,7 @@ import com.shangin.fractal.formula.FractalPreset;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -17,18 +18,22 @@ public class ControlPanel extends HBox {
     private static final double SPACING = 10.0;
     private static final double COMBO_BOX_WIDTH = 150.0;
     private final ZoomIndicator zoomIndicator = new ZoomIndicator();
+    private final Button exportButton;
 
     public ControlPanel(
             FractalPreset initialFractal,
             PalettePreset initialPalette,
             Consumer<FractalPreset> onFractalChanged,
-            Consumer<PalettePreset> onPaletteChanged
+            Consumer<PalettePreset> onPaletteChanged,
+            Runnable onExport
     ) {
         super(SPACING);
 
         ComboBox<FractalPreset> fractalComboBox = createFractalComboBox(initialFractal, onFractalChanged);
 
         ComboBox<PalettePreset> paletteComboBox = createPaletteComboBox(initialPalette, onPaletteChanged);
+
+        exportButton = createExportButton(onExport);
 
         Region spacer =
                 new Region();
@@ -44,10 +49,25 @@ public class ControlPanel extends HBox {
                 new Label("Palette:"),
                 paletteComboBox,
                 spacer,
+                exportButton,
+                new Label("Zoom ×"),
                 zoomIndicator);
 
         setPadding(new Insets(10));
         setAlignment(Pos.CENTER_LEFT);
+    }
+
+    private Button createExportButton(Runnable onExport) {
+        Button button = new Button("Export PNG (Adaptive AA)…");
+        button.setOnAction(event -> onExport.run());
+        return button;
+    }
+
+    public void setExportInProgress(boolean inProgress) {
+        exportButton.setDisable(inProgress);
+        exportButton.setText(inProgress
+                ? "Exporting…"
+                : "Export PNG (Adaptive AA)…");
     }
 
     public void setZoom(double zoomFactor) {

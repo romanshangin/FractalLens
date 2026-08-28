@@ -31,6 +31,7 @@ public final class FractalRenderController implements AutoCloseable {
     private RenderPriority renderPriority = RenderPriority.center();
     private RenderFrame activeFrame;
     private RenderFrame retainedFrame;
+    private boolean initialFramePending = true;
     private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
 
     public FractalRenderController(FractalSurface surface) {
@@ -199,12 +200,24 @@ public final class FractalRenderController implements AutoCloseable {
                 activeFrame,
                 Platform::runLater,
 
-                progress -> surface.displayProgress(
-                        progress,
-                        coloring
-                ),
+                progress -> {
+                    if (!initialFramePending) {
+                        surface.displayProgress(
+                                progress,
+                                coloring
+                        );
+                    }
+                },
 
                 completedFrame -> {
+
+                    if (initialFramePending) {
+                        surface.displayReadyPixels(
+                                completedFrame,
+                                coloring
+                        );
+                        initialFramePending = false;
+                    }
 
                     surface.completeProgressiveRender(
                             completedFrame,

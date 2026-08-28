@@ -5,6 +5,8 @@ import com.shangin.fractal.coloring.Palette;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.controller.FractalRenderController;
+import com.shangin.fractal.export.AdaptivePngExportService;
+import com.shangin.fractal.export.ExportFileName;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.RenderPriority;
@@ -12,6 +14,9 @@ import javafx.animation.PauseTransition;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 
 /**
@@ -36,6 +41,8 @@ public class FractalView extends StackPane {
     private final FractalRenderController renderController = new FractalRenderController(fractalSurface);
     private final FractalCamera camera;
     private ColoringStrategy coloring;
+    private FractalPreset fractalPreset;
+    private PalettePreset palettePreset;
 
     private Viewport panSourceViewport;
 
@@ -43,6 +50,8 @@ public class FractalView extends StackPane {
             FractalPreset initialFractal,
             PalettePreset initialPalette
     ) {
+        fractalPreset = initialFractal;
+        palettePreset = initialPalette;
         camera = new FractalCamera(initialFractal);
         configureFractal(initialFractal);
         configurePalette(initialPalette);
@@ -68,6 +77,7 @@ public class FractalView extends StackPane {
 
         interactionDebounce.stop();
         renderController.cancelCurrent();
+        fractalPreset = preset;
         configureFractal(preset);
         camera.setPreset(preset, width, height);
         renderController.resetPriority();
@@ -83,6 +93,7 @@ public class FractalView extends StackPane {
     }
 
     public void setPalette(PalettePreset preset) {
+        palettePreset = preset;
         configurePalette(preset);
         renderController.cancelCurrent();
         fractalSurface.recolor(coloring);
@@ -199,6 +210,52 @@ public class FractalView extends StackPane {
 
     public void close() {
         renderController.close();
+    }
+
+    public boolean hasCompletedFrame() {
+        return fractalSurface.hasCompletedFrame();
+    }
+
+    public void writeCompletedFrame(Path path) throws IOException {
+        fractalSurface.writeCompletedFrame(path);
+    }
+
+    public void exportAntialiasedPng(
+            AdaptivePngExportService exportService,
+            Path path,
+            Consumer<Path> onSuccess,
+            Consumer<Throwable> onError
+    ) {
+        var frame = fractalSurface.completedRenderFrame();
+
+        if (frame == null) {
+            throw new IllegalStateException("No completed frame is available");
+        }
+
+        exportService.export(
+                frame,
+                coloring,
+                path,
+                onSuccess,
+                onError
+        );
+    }
+
+    public String suggestedExportFileName() {
+        var frame = fractalSurface.completedRenderFrame();
+
+        if (frame == null) {
+            return "fractal.png";
+        }
+
+        Viewport viewport = frame.request().viewport();
+
+        return ExportFileName.create(
+                fractalPreset.toString(),
+                palettePreset.toString(),
+                viewport.centerReal(),
+                viewport.centerImaginary()
+        );
     }
 
     private void cameraChanged() {

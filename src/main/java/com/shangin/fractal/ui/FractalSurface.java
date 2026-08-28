@@ -2,6 +2,7 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.Palette;
+import com.shangin.fractal.export.PngExporter;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import javafx.geometry.Insets;
@@ -16,6 +17,8 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.transform.Affine;
 import javafx.stage.Window;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
@@ -241,6 +244,30 @@ public final class FractalSurface extends Region {
 
     public int renderHeight() {
         return renderHeight;
+    }
+
+    public boolean hasCompletedFrame() {
+        return displayedFrame != null;
+    }
+
+    public RenderFrame completedRenderFrame() {
+        return displayedRenderFrame;
+    }
+
+    /** Writes the most recently completed render at its native pixel dimensions. */
+    public void writeCompletedFrame(Path path) throws IOException {
+        Objects.requireNonNull(path);
+
+        if (displayedFrame == null) {
+            throw new IllegalStateException("No completed frame is available");
+        }
+
+        PngExporter.write(
+                path,
+                displayedFrame.width(),
+                displayedFrame.height(),
+                displayedFrame.copyPixels()
+        );
     }
 
     private void resetPreview() {

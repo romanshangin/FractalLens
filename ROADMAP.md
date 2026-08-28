@@ -41,7 +41,7 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 - Add iteration controls and editable Julia parameters.
 - Add keyboard navigation and render progress/status.
 - Show user-facing errors instead of printing stack traces.
-- Add PNG export and copyable/shareable viewport presets.
+- Add copyable/shareable viewport presets.
 
 ## 5. Add history and reproducibility
 
@@ -51,14 +51,31 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 ## 6. Expand the rendering engine
 
 - Add Multibrot and Burning Ship.
-- Add histogram coloring, distance estimation, supersampling, orbit traps, and editable palette stops.
+- [x] Preserve smooth escape-time coloring as the default treatment for palette banding, with a slower seamless ping-pong cycle and perceptually uniform OKLab palette interpolation.
+- [x] Precompute each OKLab gradient into a 65,536-entry lookup table so per-pixel coloring remains a constant-time array lookup.
+- [x] Add basic PNG export of the current render without antialiasing.
+- [x] Add adaptive 2x2–8x8 subpixel sampling to off-screen export, preserving the current output dimensions and averaging colors in linear light.
+- [x] Add weak deterministic export dithering to reduce visible 8-bit gradient quantization without blurring fractal detail.
+- Add adaptive subpixel sampling for interactive rendering, with deterministic jitter as an optional sampling pattern.
+- Investigate distance-estimation antialiasing after extending samples with derivative and distance data.
+- Treat image-space edge filtering as an optional fast display mode rather than the source of export-quality output.
+- Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
+- Add orbit traps and editable palette stops.
 - Add a render cache, resize reuse, and a separate high-resolution/off-screen export pipeline.
 
 ## 7. Implement deep zoom
 
-- Add arbitrary-precision coordinates.
-- Implement perturbation/reference-orbit rendering with glitch detection and rebasing, then investigate series approximation.
-- Cache reference orbits and support multiple numeric backends.
+- Introduce an arbitrary-precision complex coordinate type with precision derived from the current scale.
+- Store the viewport center and scale without `double` precision loss, and update zoom, pan, resize, display, serialization, and preset handling accordingly.
+- Keep the existing direct `double` renderer for normal zoom levels and select a separate deep-zoom backend only when hardware precision becomes insufficient.
+- Build a high-precision Mandelbrot reference orbit for the current viewport while retaining hardware floating point for per-pixel deltas.
+- Add a specialized perturbation Mandelbrot calculator that shares the reference orbit across tiles and still produces the final orbit values required by smooth coloring.
+- Detect unreliable perturbation results and recover through rebasing, additional reference orbits, or direct high-precision fallback for affected pixels.
+- Cache reference orbits across compatible renders and define cancellation and memory limits for orbit construction.
+- Verify deep-zoom output against direct arbitrary-precision reference renders, including boundary points, long-running interior points, glitches, pan/zoom transitions, and cancellation.
+- Benchmark the backend-selection threshold, reference-orbit overhead, cache effectiveness, time to first visible tile, and total render time.
+- Initially enable deep zoom only for Mandelbrot; retain the current Julia path until its coordinate and orbit semantics receive a separate design.
+- Support multiple numeric backends after the first implementation is correct and measured, then investigate series approximation as a later optimization.
 
 This phase should remain separate from the current pan-reuse optimization.
 

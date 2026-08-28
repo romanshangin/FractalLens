@@ -14,9 +14,9 @@ public final class ZoomIndicator extends TextField {
 
         setAlignment(Pos.CENTER_RIGHT);
 
-        setPrefWidth(180);
-        setMinWidth(150);
-        setMaxWidth(220);
+        setPrefWidth(130);
+        setMinWidth(100);
+        setMaxWidth(180);
 
         setText(formatZoom(1.0));
 
@@ -32,18 +32,18 @@ public final class ZoomIndicator extends TextField {
 
     private static String formatZoom(double zoomFactor) {
         if (zoomFactor < 10.0) {
-            return String.format(Locale.ROOT, "Zoom ×%.2f", zoomFactor);
+            return String.format(Locale.ROOT, "%.2f", zoomFactor);
         }
 
         if (zoomFactor < 1_000.0) {
-            return String.format(Locale.ROOT, "Zoom ×%.1f", zoomFactor);
+            return String.format(Locale.ROOT, "%.1f", zoomFactor);
         }
 
         if (zoomFactor < 1_000_000.0) {
-            return String.format(Locale.ROOT, "Zoom ×%.0f", zoomFactor);
+            return String.format(Locale.ROOT, "%.0f", zoomFactor);
         }
 
-        return String.format(Locale.ROOT, "Zoom ×%.6e", zoomFactor);
+        return String.format(Locale.ROOT, "%.6e", zoomFactor);
     }
 
     public void setZoom(double zoomFactor) {
