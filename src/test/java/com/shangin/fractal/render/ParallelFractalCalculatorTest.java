@@ -1,6 +1,8 @@
 package com.shangin.fractal.render;
 
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.formula.FractalFormula;
+import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.ParallelFractalCalculator.Tile;
 import org.junit.jupiter.api.AfterEach;
@@ -153,7 +155,7 @@ class ParallelFractalCalculatorTest {
 
         assertTrue(result.isComplete());
         assertNotNull(stats);
-        assertEquals(6, stats.tileCount());
+        assertEquals(3, stats.tileCount());
         assertTrue(stats.minMs() >= 0.0);
         assertTrue(stats.medianMs() >= stats.minMs());
         assertTrue(stats.maxMs() >= stats.medianMs());
@@ -216,6 +218,108 @@ class ParallelFractalCalculatorTest {
         assertSame(frame, result);
         assertFalse(result.isComplete());
         assertEquals(0, callbackCount.get());
+    }
+
+    @Test
+    void conjugateSymmetryShouldCalculateOnlyOneHalfOfEmptyFrame() throws InterruptedException {
+        AtomicInteger calculationCount = new AtomicInteger();
+        FractalFormula symmetricFormula = new FractalFormula() {
+            @Override
+            public boolean hasConjugateSymmetry() {
+                return true;
+            }
+
+            @Override
+            public FractalSample calculate(double real, double imaginary, int maxIterations) {
+                calculationCount.incrementAndGet();
+                return new FractalSample(1, true, real, Math.abs(imaginary));
+            }
+        };
+
+        RenderRequest request = new RenderRequest(
+                new FractalCalculator(symmetricFormula),
+                new Viewport(-0.75, 0.0, 2.4),
+                17,
+                9,
+                100
+        );
+        RenderFrame frame = RenderFrame.create(request);
+
+        parallelCalculator.calculate(frame, () -> false, ignored -> {});
+
+        assertTrue(frame.isComplete());
+        assertEquals(17 * 5, calculationCount.get());
+
+        for (int y = 0; y < request.height(); y++) {
+            int mirrorY = request.height() - 1 - y;
+
+            for (int x = 0; x < request.width(); x++) {
+                int index = y * request.width() + x;
+                int mirrorIndex = mirrorY * request.width() + x;
+
+                assertEquals(frame.fractalData().iterations(index), frame.fractalData().iterations(mirrorIndex));
+                assertEquals(frame.fractalData().smoothIterations(index), frame.fractalData().smoothIterations(mirrorIndex));
+                assertEquals(frame.fractalData().escaped(index), frame.fractalData().escaped(mirrorIndex));
+            }
+        }
+    }
+
+    @Test
+    void asymmetricGridShouldCalculateEveryPixel() throws InterruptedException {
+        AtomicInteger calculationCount = new AtomicInteger();
+        FractalFormula symmetricFormula = new FractalFormula() {
+            @Override
+            public boolean hasConjugateSymmetry() {
+                return true;
+            }
+
+            @Override
+            public FractalSample calculate(double real, double imaginary, int maxIterations) {
+                calculationCount.incrementAndGet();
+                return new FractalSample(1, true, real, imaginary);
+            }
+        };
+
+        RenderRequest request = new RenderRequest(
+                new FractalCalculator(symmetricFormula),
+                new Viewport(-0.75, 0.1, 2.4),
+                17,
+                9,
+                100
+        );
+        RenderFrame frame = RenderFrame.create(request);
+
+        parallelCalculator.calculate(frame, () -> false, ignored -> {});
+
+        assertTrue(frame.isComplete());
+        assertEquals(17 * 9, calculationCount.get());
+    }
+
+    @Test
+    void mandelbrotSymmetryShouldMatchFullCalculation() throws InterruptedException {
+        int width = 401;
+        int height = 301;
+        int maxIterations = 500;
+        RenderGrid grid = RenderGrid.from(viewport, width, height);
+        FractalData reference = calculator.calculate(width, height, grid, maxIterations);
+        RenderRequest request = new RenderRequest(
+                calculator,
+                viewport,
+                width,
+                height,
+                maxIterations
+        );
+        RenderFrame frame = RenderFrame.create(request, grid);
+
+        parallelCalculator.calculate(frame, () -> false, ignored -> {});
+
+        assertTrue(frame.isComplete());
+
+        for (int index = 0; index < reference.size(); index++) {
+            assertEquals(reference.iterations(index), frame.fractalData().iterations(index));
+            assertEquals(reference.smoothIterations(index), frame.fractalData().smoothIterations(index));
+            assertEquals(reference.escaped(index), frame.fractalData().escaped(index));
+        }
     }
 
 }

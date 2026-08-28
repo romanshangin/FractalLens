@@ -7,9 +7,40 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RenderGridTest {
+
+    @Test
+    void centeredGridShouldHaveExactConjugateRows() {
+        RenderGrid grid = RenderGrid.from(
+                new Viewport(-0.75, 0.0, 2.4),
+                17,
+                9
+        );
+
+        assertTrue(grid.isConjugateSymmetric(9));
+
+        RenderGrid fullHdGrid = RenderGrid.from(
+                new Viewport(-0.75, 0.0, 2.4),
+                1920,
+                1080
+        );
+
+        assertTrue(fullHdGrid.isConjugateSymmetric(1080));
+    }
+
+    @Test
+    void verticallyShiftedGridShouldNotHaveConjugateRows() {
+        RenderGrid grid = RenderGrid.from(
+                new Viewport(-0.75, 0.1, 2.4),
+                17,
+                9
+        );
+
+        assertFalse(grid.isConjugateSymmetric(9));
+    }
 
     @Test
     void identicalViewportsShouldHaveZeroShift() {

@@ -92,6 +92,36 @@ public class FractalData {
         escaped[targetIndex] = source.escaped[sourceIndex];
     }
 
+    /** Copies one horizontal sample span to another row. */
+    public void copyRowFrom(
+            FractalData source,
+            int sourceY,
+            int targetY,
+            int xFrom,
+            int xTo
+    ) {
+        Objects.requireNonNull(source);
+
+        if (source.width != width
+                || sourceY < 0
+                || sourceY >= source.height
+                || targetY < 0
+                || targetY >= height
+                || xFrom < 0
+                || xTo > width
+                || xFrom >= xTo) {
+            throw new IllegalArgumentException("Row span is outside fractal data");
+        }
+
+        int length = xTo - xFrom;
+        int sourceIndex = sourceY * source.width + xFrom;
+        int targetIndex = targetY * width + xFrom;
+
+        System.arraycopy(source.iterations, sourceIndex, iterations, targetIndex, length);
+        System.arraycopy(source.smoothIterations, sourceIndex, smoothIterations, targetIndex, length);
+        System.arraycopy(source.escaped, sourceIndex, escaped, targetIndex, length);
+    }
+
     /** Copies a rectangular sample region without reallocating either frame. */
     public void copyRegionFrom(
             FractalData source,

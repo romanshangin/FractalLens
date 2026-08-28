@@ -5,6 +5,11 @@ public class MandelbrotFormula implements FractalFormula {
     private static final double ESCAPE_RADIUS_SQUARED = 4.0;
 
     @Override
+    public boolean hasConjugateSymmetry() {
+        return true;
+    }
+
+    @Override
     public FractalSample calculate(
             double real,
             double imaginary,

@@ -15,6 +15,11 @@ public class FractalCalculator {
         this.formula = formula;
     }
 
+    /** Returns whether rows mirrored around the real axis share their samples. */
+    public boolean hasConjugateSymmetry() {
+        return formula.hasConjugateSymmetry();
+    }
+
     public FractalData calculate(
             int width,
             int height,

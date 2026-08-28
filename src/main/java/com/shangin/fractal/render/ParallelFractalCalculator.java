@@ -259,9 +259,18 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         RenderGrid renderGrid =
                 renderFrame.renderGrid();
 
+        boolean useConjugateSymmetry =
+                fractalData.height() > 1
+                        && renderFrame.validity().readyPixelCount() == 0
+                        && renderRequest.calculator().hasConjugateSymmetry()
+                        && renderGrid.isConjugateSymmetric(renderRequest.height());
+
         List<Tile> tiles =
                 createOrderedTiles(
-                        renderRequest
+                        renderRequest,
+                        useConjugateSymmetry
+                                ? (renderRequest.height() + 1) / 2
+                                : renderRequest.height()
                 );
 
         List<Callable<Void>> tasks =
@@ -315,6 +324,31 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                     return null;
                 }
 
+                RenderRegion mirrorRegion = null;
+
+                if (useConjugateSymmetry) {
+                    for (int sourceY = tile.yFrom(); sourceY < tile.yTo(); sourceY++) {
+                        int targetY = renderRequest.height() - 1 - sourceY;
+
+                        if (targetY != sourceY) {
+                            fractalData.copyRowFrom(
+                                    fractalData,
+                                    sourceY,
+                                    targetY,
+                                    tile.xFrom(),
+                                    tile.xTo()
+                            );
+                        }
+                    }
+
+                    mirrorRegion = new RenderRegion(
+                            tile.xFrom(),
+                            renderRequest.height() - tile.yTo(),
+                            tile.xTo() - tile.xFrom(),
+                            tile.yTo() - tile.yFrom()
+                    );
+                }
+
                 if (tileTimesNanos != null) {
                     tileTimesNanos.add(
                             System.nanoTime() - tileStart
@@ -324,9 +358,17 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                 renderFrame.validity()
                         .markReady(region);
 
+                if (mirrorRegion != null) {
+                    renderFrame.validity().markReady(mirrorRegion);
+                }
+
                 regionCompleted.accept(
                         region
                 );
+
+                if (mirrorRegion != null && !mirrorRegion.equals(region)) {
+                    regionCompleted.accept(mirrorRegion);
+                }
 
                 return null;
             });
@@ -338,10 +380,17 @@ public final class ParallelFractalCalculator implements AutoCloseable {
     List<Tile> createOrderedTiles(
             RenderRequest request
     ) {
+        return createOrderedTiles(request, request.height());
+    }
+
+    private List<Tile> createOrderedTiles(
+            RenderRequest request,
+            int renderedHeight
+    ) {
         List<Tile> tiles = new ArrayList<>();
 
-        for (int y = 0; y < request.height(); y += tileSize) {
-            int yTo = Math.min(y + tileSize, request.height());
+        for (int y = 0; y < renderedHeight; y += tileSize) {
+            int yTo = Math.min(y + tileSize, renderedHeight);
 
             for (int x = 0; x < request.width(); x += tileSize) {
                 int xTo = Math.min(x + tileSize, request.width());

@@ -57,7 +57,7 @@ public class RenderTest {
                         regions::add);
 
         assertNotNull(resultFrame.fractalData());
-        assertEquals(12, regions.size());
+        assertEquals(16, regions.size());
 
         int coveredPixels =
                 regions.stream()

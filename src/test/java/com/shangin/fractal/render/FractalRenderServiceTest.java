@@ -233,6 +233,6 @@ class FractalRenderServiceTest {
         assertNull(error.get());
         assertTrue(calculationNanos.get() >= 0L);
         assertNotNull(tileStats.get());
-        assertEquals(70, tileStats.get().tileCount());
+        assertEquals(40, tileStats.get().tileCount());
     }
 }
