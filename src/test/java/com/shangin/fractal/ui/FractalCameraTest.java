@@ -5,6 +5,9 @@ import com.shangin.fractal.math.Viewport;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FractalCameraTest {
 
@@ -82,5 +85,34 @@ class FractalCameraTest {
         camera.reset(width, height);
 
         assertEquals(camera.defaultViewport(width, height), camera.viewport());
+    }
+
+    @Test
+    void setCenterShouldMoveViewportToExplicitCoordinates() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        int width = 1000;
+        int height = 700;
+        camera.resize(width, height);
+        camera.zoomIn(500, 350, width, height, 2000, 1400);
+
+        assertTrue(camera.setCenter(-0.5, 0.2, width, height));
+        assertEquals(-0.5, camera.viewport().centerReal(), DELTA);
+        assertEquals(0.2, camera.viewport().centerImaginary(), DELTA);
+
+        assertTrue(camera.setCenter(100.0, -100.0, width, height));
+        assertEquals(100.0, camera.viewport().centerReal(), DELTA);
+        assertEquals(-100.0, camera.viewport().centerImaginary(), DELTA);
+        assertFalse(camera.setCenter(100.0, -100.0, width, height));
+    }
+
+    @Test
+    void setCenterShouldRejectNonFiniteCoordinates() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(1000, 700);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> camera.setCenter(Double.NaN, 0.0, 1000, 700)
+        );
     }
 }

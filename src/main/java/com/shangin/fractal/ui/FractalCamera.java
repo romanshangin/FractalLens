@@ -169,6 +169,28 @@ public final class FractalCamera {
         return true;
     }
 
+    /** Moves the viewport center to explicit complex-plane coordinates. */
+    public boolean setCenter(
+            double centerReal,
+            double centerImaginary,
+            int width,
+            int height
+    ) {
+        validateDimensions(width, height);
+
+        if (!Double.isFinite(centerReal) || !Double.isFinite(centerImaginary)) {
+            throw new IllegalArgumentException("Center coordinates must be finite");
+        }
+
+        if (centerReal == viewport.centerReal()
+                && centerImaginary == viewport.centerImaginary()) {
+            return false;
+        }
+
+        viewport = new Viewport(centerReal, centerImaginary, viewport.scale());
+        return true;
+    }
+
     /** Aligns the current viewport with an earlier frame for exact pixel reuse. */
     public void snapToRenderGrid(
             Viewport reference,

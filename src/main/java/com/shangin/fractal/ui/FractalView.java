@@ -43,6 +43,7 @@ public class FractalView extends StackPane {
     private final FractalCamera camera;
     private FractalScene scene;
     private RenderPriority renderPriority = RenderPriority.center();
+    private Consumer<Viewport> viewportChangedHandler = ignored -> {};
 
     private Viewport panSourceViewport;
 
@@ -92,6 +93,23 @@ public class FractalView extends StackPane {
         resetPriority();
         fractalSurface.showPreview(camera.viewport());
         recalculate();
+    }
+
+    public void setCenter(double centerReal, double centerImaginary) {
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+
+        if (width < 2 || height < 2) {
+            return;
+        }
+
+        if (!camera.setCenter(centerReal, centerImaginary, width, height)) {
+            viewportChangedHandler.accept(camera.viewport());
+            return;
+        }
+
+        resetPriority();
+        cameraChanged();
     }
 
 
@@ -218,6 +236,7 @@ public class FractalView extends StackPane {
                 );
 
         scene = scene.withViewport(camera.viewport());
+        viewportChangedHandler.accept(scene.viewport());
 
         RenderTarget target = new RenderTarget(
                 renderWidth,
@@ -359,6 +378,11 @@ public class FractalView extends StackPane {
         renderController.setOnZoomChanged(
                 handler
         );
+    }
+
+    public void setOnViewportChanged(Consumer<Viewport> handler) {
+        viewportChangedHandler = java.util.Objects.requireNonNull(handler);
+        viewportChangedHandler.accept(camera.viewport());
     }
 
     private void resetPriority() {
