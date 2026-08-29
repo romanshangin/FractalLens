@@ -291,9 +291,12 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                             tile.yTo() - tile.yFrom()
                     );
 
+            List<RenderRegion> missingSpans = hasReusablePixels
+                    ? renderFrame.validity().missingRowSpans(region)
+                    : List.of(region);
+
             /* Fully reused tiles do not need worker tasks. */
-            if (renderFrame.validity()
-                    .isRegionReady(region)) {
+            if (missingSpans.isEmpty()) {
 
                 continue;
             }
@@ -309,50 +312,59 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                         ? 0L
                         : System.nanoTime();
 
-                boolean completed =
-                        renderRequest
-                                .calculator()
-                                .calculateTile(
-                                        fractalData,
-                                        renderGrid,
-                                        tile.xFrom(),
-                                        tile.xTo(),
-                                        tile.yFrom(),
-                                        tile.yTo(),
-                                        renderRequest.maxIterations(),
-                                        cancelled,
-                                        hasReusablePixels
-                                                ? renderFrame.validity()::isReady
-                                                : (x, y) -> false,
-                                        completedRow -> {
-                                            renderFrame.validity().markReady(completedRow);
+                boolean completed = true;
 
-                                            if (useConjugateSymmetry) {
-                                                int mirrorY = renderRequest.height()
-                                                        - 1
-                                                        - completedRow.y();
+                for (RenderRegion missingSpan : missingSpans) {
+                    completed = renderRequest
+                            .calculator()
+                            .calculateTile(
+                                    fractalData,
+                                    renderGrid,
+                                    missingSpan.x(),
+                                    missingSpan.x() + missingSpan.width(),
+                                    missingSpan.y(),
+                                    missingSpan.y() + missingSpan.height(),
+                                    renderRequest.maxIterations(),
+                                    cancelled,
+                                    (x, y) -> false,
+                                    completedRow -> {
+                                        renderFrame.validity().markReady(completedRow);
 
-                                                if (mirrorY != completedRow.y()) {
-                                                    fractalData.copyRowFrom(
-                                                            fractalData,
-                                                            completedRow.y(),
-                                                            mirrorY,
-                                                            completedRow.x(),
-                                                            completedRow.x() + completedRow.width()
-                                                    );
+                                        if (hasReusablePixels) {
+                                            regionCompleted.accept(completedRow);
+                                        }
 
-                                                    RenderRegion mirrorRow = new RenderRegion(
-                                                            completedRow.x(),
-                                                            mirrorY,
-                                                            completedRow.width(),
-                                                            1
-                                                    );
+                                        if (useConjugateSymmetry) {
+                                            int mirrorY = renderRequest.height()
+                                                    - 1
+                                                    - completedRow.y();
 
-                                                    renderFrame.validity().markReady(mirrorRow);
-                                                }
+                                            if (mirrorY != completedRow.y()) {
+                                                fractalData.copyRowFrom(
+                                                        fractalData,
+                                                        completedRow.y(),
+                                                        mirrorY,
+                                                        completedRow.x(),
+                                                        completedRow.x() + completedRow.width()
+                                                );
+
+                                                RenderRegion mirrorRow = new RenderRegion(
+                                                        completedRow.x(),
+                                                        mirrorY,
+                                                        completedRow.width(),
+                                                        1
+                                                );
+
+                                                renderFrame.validity().markReady(mirrorRow);
                                             }
                                         }
-                                );
+                                    }
+                            );
+
+                    if (!completed) {
+                        break;
+                    }
+                }
 
                 if (!completed) {
                     return null;
@@ -364,9 +376,11 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                     );
                 }
 
-                regionCompleted.accept(region);
+                if (!hasReusablePixels) {
+                    regionCompleted.accept(region);
+                }
 
-                if (useConjugateSymmetry) {
+                if (!hasReusablePixels && useConjugateSymmetry) {
                     RenderRegion mirrorRegion = new RenderRegion(
                             tile.xFrom(),
                             renderRequest.height() - tile.yTo(),

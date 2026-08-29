@@ -3,7 +3,7 @@ package com.shangin.fractal.coloring;
 public class SmoothPaletteColoring implements ColoringStrategy {
 
     private static final int INSIDE_COLOR = 0xFF000000;
-    private static final double DEFAULT_COLOR_SCALE = 0.0075;
+    public static final double DEFAULT_COLOR_SCALE = 0.0075;
 
     private final Palette palette;
     private final double colorScale;

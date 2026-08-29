@@ -1,12 +1,10 @@
 package com.shangin.fractal.controller;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
-import com.shangin.fractal.config.AdaptiveIterationPolicy;
-import com.shangin.fractal.config.FractalSettings;
-import com.shangin.fractal.config.IterationPolicy;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
+import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
@@ -19,16 +17,11 @@ import java.util.function.DoubleConsumer;
  */
 public final class FractalRenderController implements AutoCloseable {
 
-    private static final int ITERATIONS_PER_ZOOM_LEVEL = 50;
-
     private final FractalSurface surface;
     private final FractalRenderService renderService = new FractalRenderService();
-    private final FractalSettings settings = new FractalSettings();
-    private final IterationPolicy iterationPolicy = new AdaptiveIterationPolicy(ITERATIONS_PER_ZOOM_LEVEL);
 
     private FractalCalculator calculator;
-    private ColoringStrategy coloring;
-    private RenderPriority renderPriority = RenderPriority.center();
+    private FractalPreset calculatorPreset;
     private RenderFrame activeFrame;
     private RenderFrame retainedFrame;
     private boolean initialFramePending = true;
@@ -40,41 +33,29 @@ public final class FractalRenderController implements AutoCloseable {
 
     private DoubleConsumer zoomChangedHandler = ignored -> {};
 
-    public void setFractal(FractalPreset preset) {
-        Objects.requireNonNull(preset);
-        calculator = new FractalCalculator(preset.createFormula());
-        activeFrame = null;
-        retainedFrame = null;
-    }
-
-    public void setColoring(ColoringStrategy coloring) {
-        this.coloring = Objects.requireNonNull(coloring);
-    }
-
-    public void setPriority(RenderPriority priority) {
-        renderPriority = Objects.requireNonNull(priority);
-    }
-
-    public void resetPriority() {
-        renderPriority = RenderPriority.center();
-    }
-
     public void cancelCurrent() {
         renderService.cancelCurrent();
     }
 
     /** Starts a progressive render for the supplied viewport. */
     public void render(
-            Viewport viewport,
+            FractalScene scene,
+            RenderTarget target,
             Viewport defaultViewport
     ) {
-        Objects.requireNonNull(viewport);
+        Objects.requireNonNull(scene);
+        Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
 
-        if (calculator == null
-                || coloring == null) {
-            return;
+        if (calculatorPreset != scene.fractal()) {
+            calculatorPreset = scene.fractal();
+            calculator = new FractalCalculator(scene.fractal().createFormula());
+            activeFrame = null;
+            retainedFrame = null;
         }
+
+        ColoringStrategy coloring = scene.coloring().createStrategy();
+        Viewport viewport = scene.viewport();
 
         double zoomFactor =
                 defaultViewport.scale()
@@ -84,20 +65,8 @@ public final class FractalRenderController implements AutoCloseable {
                 zoomFactor
         );
 
-        int renderWidth =
-                surface.renderWidth();
-
-        int renderHeight =
-                surface.renderHeight();
-
-        if (renderWidth < 2
-                || renderHeight < 2) {
-            return;
-        }
-
         int maxIterations =
-                iterationPolicy.maxIterations(
-                        settings.maxIterations(),
+                scene.iterations().maxIterations(
                         defaultViewport.scale(),
                         viewport.scale()
                 );
@@ -106,10 +75,10 @@ public final class FractalRenderController implements AutoCloseable {
                 new RenderRequest(
                         calculator,
                         viewport,
-                        renderWidth,
-                        renderHeight,
+                        target.width(),
+                        target.height(),
                         maxIterations,
-                        renderPriority
+                        target.priority()
                 );
 
         RenderFrame previousActiveFrame = activeFrame;
@@ -221,8 +190,7 @@ public final class FractalRenderController implements AutoCloseable {
 
                     surface.completeProgressiveRender(
                             completedFrame,
-                            completedFrame.request()
-                                    .viewport()
+                            scene
                     );
 
                 },

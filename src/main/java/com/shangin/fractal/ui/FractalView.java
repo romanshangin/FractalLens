@@ -1,20 +1,21 @@
 package com.shangin.fractal.ui;
 
-import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.Palette;
 import com.shangin.fractal.coloring.PalettePreset;
-import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.export.ExportFileName;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.render.CompletedRender;
 import com.shangin.fractal.render.RenderPriority;
+import com.shangin.fractal.render.RenderTarget;
+import com.shangin.fractal.scene.ColoringSettings;
+import com.shangin.fractal.scene.FractalScene;
 import javafx.animation.PauseTransition;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
@@ -40,9 +41,8 @@ public class FractalView extends StackPane {
     private final FractalSurface fractalSurface = new FractalSurface();
     private final FractalRenderController renderController = new FractalRenderController(fractalSurface);
     private final FractalCamera camera;
-    private ColoringStrategy coloring;
-    private FractalPreset fractalPreset;
-    private PalettePreset palettePreset;
+    private FractalScene scene;
+    private RenderPriority renderPriority = RenderPriority.center();
 
     private Viewport panSourceViewport;
 
@@ -50,10 +50,8 @@ public class FractalView extends StackPane {
             FractalPreset initialFractal,
             PalettePreset initialPalette
     ) {
-        fractalPreset = initialFractal;
-        palettePreset = initialPalette;
+        scene = FractalScene.create(initialFractal, initialPalette);
         camera = new FractalCamera(initialFractal);
-        configureFractal(initialFractal);
         configurePalette(initialPalette);
         configureResize();
         configureZoom();
@@ -61,10 +59,6 @@ public class FractalView extends StackPane {
         getChildren().add(fractalSurface);
         interactionDebounce.setOnFinished(event -> recalculate());
         fractalSurface.setOnOutputScaleChanged(this::scheduleResize);
-    }
-
-    private void configureFractal(FractalPreset preset) {
-        renderController.setFractal(preset);
     }
 
     public void setFractal(FractalPreset preset) {
@@ -77,26 +71,24 @@ public class FractalView extends StackPane {
 
         interactionDebounce.stop();
         renderController.cancelCurrent();
-        fractalPreset = preset;
-        configureFractal(preset);
         camera.setPreset(preset, width, height);
-        renderController.resetPriority();
+        scene = scene.withFractal(preset, camera.viewport());
+        resetPriority();
         recalculate();
     }
 
 
     private void configurePalette(PalettePreset preset) {
         Palette palette = preset.palette();
-        coloring = new SmoothPaletteColoring(palette);
-        renderController.setColoring(coloring);
         fractalSurface.setPreviewBackground(palette);
     }
 
     public void setPalette(PalettePreset preset) {
-        palettePreset = preset;
+        ColoringSettings settings = new ColoringSettings(preset);
+        scene = scene.withColoring(settings);
         configurePalette(preset);
         renderController.cancelCurrent();
-        fractalSurface.recolor(coloring);
+        fractalSurface.recolor(settings.createStrategy(), settings);
         recalculate();
     }
 
@@ -159,10 +151,9 @@ public class FractalView extends StackPane {
                 return;
             }
 
-            renderController.setPriority(new RenderPriority(
+            renderPriority = new RenderPriority(
                     Math.clamp(x / surfaceWidth, 0.0, 1.0),
-                    Math.clamp(y / surfaceHeight, 0.0, 1.0))
-            );
+                    Math.clamp(y / surfaceHeight, 0.0, 1.0));
 
             cameraChanged();
             event.consume();
@@ -184,7 +175,7 @@ public class FractalView extends StackPane {
 
         fractalSurface.resizeBuffer(width, height);
         camera.resize(width, height);
-        renderController.resetPriority();
+        resetPriority();
         recalculate();
     }
 
@@ -196,14 +187,30 @@ public class FractalView extends StackPane {
             return;
         }
 
+        int renderWidth = fractalSurface.renderWidth();
+        int renderHeight = fractalSurface.renderHeight();
+
+        if (renderWidth < 2 || renderHeight < 2) {
+            return;
+        }
+
         Viewport defaultViewport =
                 camera.defaultViewport(
                         logicalWidth,
                         logicalHeight
                 );
 
+        scene = scene.withViewport(camera.viewport());
+
+        RenderTarget target = new RenderTarget(
+                renderWidth,
+                renderHeight,
+                renderPriority
+        );
+
         renderController.render(
-                camera.viewport(),
+                scene,
+                target,
                 defaultViewport
         );
     }
@@ -216,25 +223,21 @@ public class FractalView extends StackPane {
         return fractalSurface.hasCompletedFrame();
     }
 
-    public void writeCompletedFrame(Path path) throws IOException {
-        fractalSurface.writeCompletedFrame(path);
-    }
-
     public void exportAntialiasedPng(
             AdaptivePngExportService exportService,
             Path path,
             Consumer<Path> onSuccess,
             Consumer<Throwable> onError
     ) {
-        var frame = fractalSurface.completedRenderFrame();
+        CompletedRender completed = fractalSurface.completedRender();
 
-        if (frame == null) {
+        if (completed == null) {
             throw new IllegalStateException("No completed frame is available");
         }
 
         exportService.export(
-                frame,
-                coloring,
+                completed.frame(),
+                completed.scene().coloring().createStrategy(),
                 path,
                 onSuccess,
                 onError
@@ -242,17 +245,18 @@ public class FractalView extends StackPane {
     }
 
     public String suggestedExportFileName() {
-        var frame = fractalSurface.completedRenderFrame();
+        CompletedRender completed = fractalSurface.completedRender();
 
-        if (frame == null) {
+        if (completed == null) {
             return "fractal.png";
         }
 
-        Viewport viewport = frame.request().viewport();
+        FractalScene completedScene = completed.scene();
+        Viewport viewport = completedScene.viewport();
 
         return ExportFileName.create(
-                fractalPreset.toString(),
-                palettePreset.toString(),
+                completedScene.fractal().toString(),
+                completedScene.coloring().palette().toString(),
                 viewport.centerReal(),
                 viewport.centerImaginary()
         );
@@ -325,7 +329,7 @@ public class FractalView extends StackPane {
                         fractalSurface.renderHeight()
                 );
 
-                renderController.resetPriority();
+                resetPriority();
                 recalculate();
             }
             event.consume();
@@ -338,5 +342,9 @@ public class FractalView extends StackPane {
         renderController.setOnZoomChanged(
                 handler
         );
+    }
+
+    private void resetPriority() {
+        renderPriority = RenderPriority.center();
     }
 }

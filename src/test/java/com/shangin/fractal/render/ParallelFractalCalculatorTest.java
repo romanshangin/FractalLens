@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -353,6 +354,72 @@ class ParallelFractalCalculatorTest {
 
         assertTrue(frame.isComplete());
         assertEquals(32 * 32, calculationCount.get());
+    }
+
+    @Test
+    void reusedFrameShouldPublishCompletedRowBeforeTileFinishes() throws InterruptedException {
+        AtomicInteger calculationCount = new AtomicInteger();
+        FractalFormula countingFormula = (real, imaginary, maxIterations) -> {
+            calculationCount.incrementAndGet();
+            return new FractalSample(1, true, real, imaginary);
+        };
+        RenderRequest request = new RenderRequest(
+                new FractalCalculator(countingFormula),
+                new Viewport(-0.75, 0.1, 2.4),
+                32,
+                32,
+                100
+        );
+        RenderFrame frame = RenderFrame.create(request);
+        FractalSample reusedSample = new FractalSample(1, true, 0.0, 0.0);
+        frame.fractalData().set(0, 0, reusedSample);
+        frame.validity().markReady(new RenderRegion(0, 0, 1, 1));
+        List<RenderRegion> completedRegions = new CopyOnWriteArrayList<>();
+
+        parallelCalculator.calculate(
+                frame,
+                () -> calculationCount.get() >= 31,
+                completedRegions::add
+        );
+
+        assertFalse(frame.isComplete());
+        assertEquals(31, calculationCount.get());
+        assertEquals(32, frame.validity().readyPixelCount());
+        assertEquals(List.of(new RenderRegion(1, 0, 31, 1)), completedRegions);
+    }
+
+    @Test
+    void reusedFrameShouldCalculateOnlyMissingSpans() throws InterruptedException {
+        AtomicInteger calculationCount = new AtomicInteger();
+        FractalFormula countingFormula = (real, imaginary, maxIterations) -> {
+            calculationCount.incrementAndGet();
+            return new FractalSample(1, true, real, imaginary);
+        };
+        RenderRequest request = new RenderRequest(
+                new FractalCalculator(countingFormula),
+                new Viewport(-0.75, 0.1, 2.4),
+                8,
+                2,
+                100
+        );
+        RenderFrame frame = RenderFrame.create(request);
+        frame.validity().markReady(new RenderRegion(0, 0, 2, 1));
+        frame.validity().markReady(new RenderRegion(5, 0, 3, 1));
+        frame.validity().markReady(new RenderRegion(2, 1, 4, 1));
+        List<RenderRegion> completedRegions = new CopyOnWriteArrayList<>();
+
+        parallelCalculator.calculate(frame, () -> false, completedRegions::add);
+
+        assertTrue(frame.isComplete());
+        assertEquals(7, calculationCount.get());
+        assertEquals(
+                List.of(
+                        new RenderRegion(2, 0, 3, 1),
+                        new RenderRegion(0, 1, 2, 1),
+                        new RenderRegion(6, 1, 2, 1)
+                ),
+                completedRegions
+        );
     }
 
 }

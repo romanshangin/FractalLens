@@ -2,9 +2,10 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.Palette;
-import com.shangin.fractal.export.PngExporter;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
+import com.shangin.fractal.scene.ColoringSettings;
+import com.shangin.fractal.scene.FractalScene;
 import javafx.geometry.Insets;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.image.ImageView;
@@ -17,8 +18,6 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.transform.Affine;
 import javafx.stage.Window;
 
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,6 +37,7 @@ public final class FractalSurface extends Region {
     private SurfaceBuffer displayedFrame;
     private RenderFrame stagingRenderFrame;
     private RenderFrame displayedRenderFrame;
+    private FractalScene displayedScene;
     private Viewport displayedViewport;
 
     private Runnable renderScaleChangedHandler = () -> {};
@@ -186,19 +186,19 @@ public final class FractalSurface extends Region {
 
     public void completeProgressiveRender(
             RenderFrame renderFrame,
-            Viewport viewport
+            FractalScene scene
     ) {
 
         if (stagingFrame == null) {
             return;
         }
 
-        promoteStagingFrame(renderFrame, viewport);
+        promoteStagingFrame(renderFrame, scene);
     }
 
     private void promoteStagingFrame(
             RenderFrame renderFrame,
-            Viewport viewport
+            FractalScene scene
     ) {
         SurfaceBuffer oldDisplayed =
                 displayedFrame;
@@ -210,7 +210,8 @@ public final class FractalSurface extends Region {
                 oldDisplayed;
 
         displayedRenderFrame = renderFrame;
-        displayedViewport = viewport;
+        displayedScene = Objects.requireNonNull(scene);
+        displayedViewport = scene.viewport();
         stagingRenderFrame = null;
 
         baseImageView.setImage(
@@ -250,24 +251,12 @@ public final class FractalSurface extends Region {
         return displayedFrame != null;
     }
 
-    public RenderFrame completedRenderFrame() {
-        return displayedRenderFrame;
-    }
-
-    /** Writes the most recently completed render at its native pixel dimensions. */
-    public void writeCompletedFrame(Path path) throws IOException {
-        Objects.requireNonNull(path);
-
-        if (displayedFrame == null) {
-            throw new IllegalStateException("No completed frame is available");
+    public CompletedRender completedRender() {
+        if (displayedRenderFrame == null || displayedScene == null) {
+            return null;
         }
 
-        PngExporter.write(
-                path,
-                displayedFrame.width(),
-                displayedFrame.height(),
-                displayedFrame.copyPixels()
-        );
+        return new CompletedRender(displayedScene, displayedRenderFrame);
     }
 
     private void resetPreview() {
@@ -354,12 +343,19 @@ public final class FractalSurface extends Region {
         transform.setTy(translateY);
     }
 
-    public void recolor(ColoringStrategy coloring) {
+    public void recolor(
+            ColoringStrategy coloring,
+            ColoringSettings settings
+    ) {
         if (displayedRenderFrame == null || displayedFrame == null) {
             return;
         }
 
         colorizer.color(displayedRenderFrame.fractalData(), displayedFrame.intBuffer(), coloring);
+
+        if (displayedScene != null) {
+            displayedScene = displayedScene.withColoring(settings);
+        }
 
         displayedFrame.update();
     }

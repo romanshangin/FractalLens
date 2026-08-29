@@ -18,6 +18,8 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 - [x] Track reused-pixel percentage, calculation/colorization time, tile count, and p50/p95 timings.
 - [x] Benchmark 1080p and HiDPI scenarios with short, medium, and near-full-frame pans.
 - [x] Move benchmarks into a dedicated Maven profile and compare tile sizes 16, 32, and 64.
+- [x] Publish completed rows immediately after pan reuse so deep-zoom pixels do not wait for an entire 32x32 tile before appearing.
+- [x] Calculate only missing horizontal spans in partially reused tiles, avoiding synchronized per-pixel validity checks after pan.
 
 ## 3. Optimize Mandelbrot and Julia calculation
 
@@ -45,8 +47,11 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 
 ## 5. Add history and reproducibility
 
-- Introduce an immutable `FractalScene` containing formula, parameters, viewport, iteration settings, coloring, and render dimensions.
-- Add undo/redo, bookmarks, JSON serialization, last-session restore, and arbitrary-resolution export.
+- [x] Introduce an immutable `FractalScene` containing formula, viewport, iteration settings, and coloring, and pair every completed frame with the exact scene snapshot it represents.
+- [x] Keep transient output dimensions and scheduling priority in a separate immutable `RenderTarget` so window resizes do not alter scene history.
+- Add undo/redo and bookmarks based on `FractalScene` snapshots.
+- Add JSON serialization and last-session restore.
+- Add arbitrary-resolution export by combining a scene snapshot with an independent render target.
 
 ## 6. Expand the rendering engine
 
