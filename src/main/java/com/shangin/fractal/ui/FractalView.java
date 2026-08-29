@@ -13,6 +13,7 @@ import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
 import javafx.animation.PauseTransition;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
@@ -32,6 +33,7 @@ public class FractalView extends StackPane {
 
     //  zoom interactions
     private static final Duration INTERACTION_DELAY = Duration.millis(75);
+    private static final double SWIPE_PAN_FRACTION = 0.2;
     private final PauseTransition interactionDebounce = new PauseTransition(INTERACTION_DELAY);
     private double lastDragX;
     private double lastDragY;
@@ -46,6 +48,7 @@ public class FractalView extends StackPane {
     private Consumer<Viewport> viewportChangedHandler = ignored -> {};
 
     private Viewport panSourceViewport;
+    private Viewport trackpadPanSourceViewport;
 
     public FractalView(
             FractalPreset initialFractal,
@@ -57,8 +60,9 @@ public class FractalView extends StackPane {
         configureResize();
         configureZoom();
         configurePan();
+        configureTrackpadGestures();
         getChildren().add(fractalSurface);
-        interactionDebounce.setOnFinished(event -> recalculate());
+        interactionDebounce.setOnFinished(event -> finishInteraction());
         fractalSurface.setOnOutputScaleChanged(this::scheduleResize);
     }
 
@@ -141,6 +145,12 @@ public class FractalView extends StackPane {
 
     private void configureZoom() {
         setOnScroll(event -> {
+            if (isTrackpadPan(event)) {
+                panByTrackpadScroll(event);
+                event.consume();
+                return;
+            }
+
             double x = event.getX();
             double y = event.getY();
 
@@ -193,6 +203,138 @@ public class FractalView extends StackPane {
             cameraChanged();
             event.consume();
         });
+    }
+
+    private static boolean isTrackpadPan(ScrollEvent event) {
+        return event.getTextDeltaXUnits() == ScrollEvent.HorizontalTextScrollUnits.NONE
+                && event.getTextDeltaYUnits() == ScrollEvent.VerticalTextScrollUnits.NONE;
+    }
+
+    private void panByTrackpadScroll(ScrollEvent event) {
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+
+        if (width < 2 || height < 2
+                || (event.getDeltaX() == 0.0 && event.getDeltaY() == 0.0)) {
+            return;
+        }
+
+        if (trackpadPanSourceViewport == null) {
+            trackpadPanSourceViewport = camera.viewport();
+            interactionDebounce.stop();
+            renderController.cancelCurrent();
+        }
+
+        if (!camera.pan(event.getDeltaX(), event.getDeltaY(), width, height)) {
+            return;
+        }
+
+        resetPriority();
+        fractalSurface.showPreview(camera.viewport());
+        interactionDebounce.playFromStart();
+    }
+
+    private void finishInteraction() {
+        if (trackpadPanSourceViewport != null) {
+            camera.snapToRenderGrid(
+                    trackpadPanSourceViewport,
+                    fractalSurface.renderWidth(),
+                    fractalSurface.renderHeight()
+            );
+            trackpadPanSourceViewport = null;
+        }
+
+        recalculate();
+    }
+
+    private void configureTrackpadGestures() {
+        setOnZoom(event -> {
+            double surfaceWidth = fractalSurface.getWidth();
+            double surfaceHeight = fractalSurface.getHeight();
+            int logicalWidth = (int) surfaceWidth;
+            int logicalHeight = (int) surfaceHeight;
+            int renderWidth = fractalSurface.renderWidth();
+            int renderHeight = fractalSurface.renderHeight();
+
+            if (logicalWidth < 2 || logicalHeight < 2
+                    || renderWidth < 2 || renderHeight < 2) {
+                return;
+            }
+
+            double zoomFactor = event.getZoomFactor();
+            if (!Double.isFinite(zoomFactor) || zoomFactor <= 0.0) {
+                return;
+            }
+
+            boolean changed = camera.zoomBy(
+                    event.getX(),
+                    event.getY(),
+                    1.0 / zoomFactor,
+                    logicalWidth,
+                    logicalHeight,
+                    renderWidth,
+                    renderHeight
+            );
+
+            if (changed) {
+                renderPriority = new RenderPriority(
+                        Math.clamp(event.getX() / surfaceWidth, 0.0, 1.0),
+                        Math.clamp(event.getY() / surfaceHeight, 0.0, 1.0)
+                );
+                cameraChanged();
+            }
+
+            event.consume();
+        });
+
+        setOnSwipeLeft(event -> {
+            panBySwipe(-SWIPE_PAN_FRACTION, 0.0);
+            event.consume();
+        });
+        setOnSwipeRight(event -> {
+            panBySwipe(SWIPE_PAN_FRACTION, 0.0);
+            event.consume();
+        });
+        setOnSwipeUp(event -> {
+            panBySwipe(0.0, -SWIPE_PAN_FRACTION);
+            event.consume();
+        });
+        setOnSwipeDown(event -> {
+            panBySwipe(0.0, SWIPE_PAN_FRACTION);
+            event.consume();
+        });
+    }
+
+    private void panBySwipe(double horizontalFraction, double verticalFraction) {
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+
+        if (width < 2 || height < 2) {
+            return;
+        }
+
+        Viewport sourceViewport = camera.viewport();
+        boolean changed = camera.pan(
+                horizontalFraction * width,
+                verticalFraction * height,
+                width,
+                height
+        );
+
+        if (!changed) {
+            return;
+        }
+
+        interactionDebounce.stop();
+        renderController.cancelCurrent();
+        fractalSurface.showPreview(camera.viewport());
+        camera.snapToRenderGrid(
+                sourceViewport,
+                fractalSurface.renderWidth(),
+                fractalSurface.renderHeight()
+        );
+        resetPriority();
+        recalculate();
     }
 
     private void scheduleResize() {

@@ -40,6 +40,7 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 - [x] Replace the crowded top control row with a global toolbar, left inspector, canvas, and bottom render status area.
 - [x] Add Reset View.
 - [x] Display and edit center coordinates where appropriate.
+- [x] Support native macOS trackpad pinch zoom, continuous two-finger panning, and directional swipe panning.
 - Display zoom and iteration count.
 - Add iteration controls and editable Julia parameters.
 - Add keyboard navigation and render progress/status.

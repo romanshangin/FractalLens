@@ -98,6 +98,54 @@ public final class FractalCamera {
         return true;
     }
 
+    /** Applies a continuous scale factor around a logical screen point. */
+    public boolean zoomBy(
+            double x,
+            double y,
+            double scaleFactor,
+            int logicalWidth,
+            int logicalHeight,
+            int renderWidth,
+            int renderHeight
+    ) {
+        validateDimensions(logicalWidth, logicalHeight);
+        validateDimensions(renderWidth, renderHeight);
+
+        if (!Double.isFinite(scaleFactor) || scaleFactor <= 0.0) {
+            throw new IllegalArgumentException("Zoom scale factor must be positive and finite");
+        }
+
+        if (scaleFactor == 1.0) {
+            return false;
+        }
+
+        Viewport defaultViewport = defaultViewport(logicalWidth, logicalHeight);
+        double requestedScale = viewport.scale() * scaleFactor;
+
+        if (scaleFactor > 1.0 && requestedScale >= defaultViewport.scale()) {
+            if (viewport.equals(defaultViewport)) {
+                return false;
+            }
+            viewport = defaultViewport;
+            return true;
+        }
+
+        Viewport candidate = viewport.zoomAt(
+                x,
+                y,
+                logicalWidth,
+                logicalHeight,
+                scaleFactor
+        );
+
+        if (!candidate.hasSufficientPrecision(renderWidth, renderHeight, MIN_ULPS_PER_PIXEL)) {
+            return false;
+        }
+
+        viewport = candidate;
+        return true;
+    }
+
     private void validateDimensions(
             int width,
             int height

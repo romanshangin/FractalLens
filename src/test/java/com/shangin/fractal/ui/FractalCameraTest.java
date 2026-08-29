@@ -115,4 +115,43 @@ class FractalCameraTest {
                 () -> camera.setCenter(Double.NaN, 0.0, 1000, 700)
         );
     }
+
+    @Test
+    void continuousZoomShouldUseGestureFactorAndFocalPoint() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        int width = 1000;
+        int height = 700;
+        camera.resize(width, height);
+        Viewport before = camera.viewport();
+
+        assertTrue(camera.zoomBy(750, 200, 0.5, width, height, 2000, 1400));
+
+        assertEquals(before.scale() * 0.5, camera.viewport().scale(), DELTA);
+        assertTrue(camera.viewport().centerReal() > before.centerReal());
+        assertTrue(camera.viewport().centerImaginary() > before.centerImaginary());
+    }
+
+    @Test
+    void continuousZoomOutShouldStopAtDefaultViewport() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        int width = 1000;
+        int height = 700;
+        camera.resize(width, height);
+        camera.zoomBy(500, 350, 0.5, width, height, 2000, 1400);
+
+        assertTrue(camera.zoomBy(500, 350, 10.0, width, height, 2000, 1400));
+        assertEquals(camera.defaultViewport(width, height), camera.viewport());
+        assertFalse(camera.zoomBy(500, 350, 1.1, width, height, 2000, 1400));
+    }
+
+    @Test
+    void continuousZoomShouldRejectInvalidFactor() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(1000, 700);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> camera.zoomBy(500, 350, 0.0, 1000, 700, 2000, 1400)
+        );
+    }
 }
