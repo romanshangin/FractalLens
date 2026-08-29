@@ -14,7 +14,8 @@ import java.nio.file.Path;
 public class MainView extends BorderPane {
 
     private final FractalView fractalView;
-    private final ControlPanel controlPanel;
+    private final MainToolbar toolbar;
+    private final FractalInspector inspector;
     private final AdaptivePngExportService exportService =
             new AdaptivePngExportService();
 
@@ -24,21 +25,24 @@ public class MainView extends BorderPane {
 
         this.fractalView = new FractalView(initialFractal, initialPalette);
 
-        controlPanel = new ControlPanel(
+        toolbar = new MainToolbar(
+                fractalView::resetView,
+                this::exportPng
+        );
+        inspector = new FractalInspector(
                 initialFractal,
                 initialPalette,
                 fractalView::setFractal,
                 fractalView::setPalette,
-                fractalView::resetView,
-                fractalView::setCenter,
-                this::exportPng);
-
-        fractalView.setOnZoomChanged(
-                controlPanel::setZoom
+                fractalView::setCenter
         );
-        fractalView.setOnViewportChanged(controlPanel::setCenter);
+        fractalView.setOnZoomChanged(
+                inspector::setZoom
+        );
+        fractalView.setOnViewportChanged(inspector::setCenter);
 
-        setTop(controlPanel);
+        setTop(toolbar);
+        setLeft(inspector);
         setCenter(fractalView);
     }
 
@@ -66,7 +70,7 @@ public class MainView extends BorderPane {
 
         Path target = withPngExtension(selected.toPath());
 
-        controlPanel.setExportInProgress(true);
+        toolbar.setExportInProgress(true);
 
         fractalView.exportAntialiasedPng(
                 exportService,
@@ -96,7 +100,7 @@ public class MainView extends BorderPane {
     }
 
     private void exportCompleted(Path path) {
-        controlPanel.setExportInProgress(false);
+        toolbar.setExportInProgress(false);
 
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.initOwner(getScene().getWindow());
@@ -107,7 +111,7 @@ public class MainView extends BorderPane {
     }
 
     private void exportFailed(Throwable exception) {
-        controlPanel.setExportInProgress(false);
+        toolbar.setExportInProgress(false);
         showError(
                 "Export failed",
                 "The PNG image could not be saved: " + exception.getMessage()
