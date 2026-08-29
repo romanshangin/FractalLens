@@ -18,7 +18,28 @@ public enum FractalPreset {
             () -> new JuliaFormula(-0.8, 0.156),
             new Viewport(0.0, 0.0, 2.4),
             3.0,
-            2.4);
+            2.4),
+
+    MULTIBROT_CUBIC(
+            "Multibrot (z³)",
+            () -> new MultibrotFormula(3),
+            new Viewport(0.0, 0.0, 2.4),
+            3.0,
+            2.4),
+
+    BURNING_SHIP(
+            "Burning Ship",
+            BurningShipFormula::new,
+            new Viewport(-0.5, 0.5, 2.5),
+            3.5,
+            2.5),
+
+    TRICORN(
+            "Tricorn",
+            TricornFormula::new,
+            new Viewport(0.0, 0.0, 2.5),
+            3.5,
+            2.5);
 
     private final String displayName;
     private final Supplier<FractalFormula> formulaSupplier;

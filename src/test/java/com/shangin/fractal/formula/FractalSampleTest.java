@@ -3,6 +3,7 @@ package com.shangin.fractal.formula;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class FractalSampleTest {
@@ -21,5 +22,13 @@ public class FractalSampleTest {
 
         assertTrue(smooth > 0.0);
         assertTrue(smooth < 11.0);
+    }
+
+    @Test
+    void smoothIterationsShouldUseFormulaPower() {
+        FractalSample quadratic = new FractalSample(5, true, 4.0, 0.0, 2.0);
+        FractalSample cubic = new FractalSample(5, true, 4.0, 0.0, 3.0);
+
+        assertNotEquals(quadratic.smoothIterations(), cubic.smoothIterations());
     }
 }

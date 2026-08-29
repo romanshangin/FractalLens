@@ -13,7 +13,6 @@ import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
 import javafx.animation.PauseTransition;
-import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
@@ -49,6 +48,7 @@ public class FractalView extends StackPane {
 
     private Viewport panSourceViewport;
     private Viewport trackpadPanSourceViewport;
+    private boolean trackpadScrollActive;
 
     public FractalView(
             FractalPreset initialFractal,
@@ -144,8 +144,18 @@ public class FractalView extends StackPane {
     }
 
     private void configureZoom() {
+        setOnScrollStarted(event -> {
+            trackpadScrollActive = true;
+            event.consume();
+        });
+
+        setOnScrollFinished(event -> {
+            trackpadScrollActive = false;
+            event.consume();
+        });
+
         setOnScroll(event -> {
-            if (isTrackpadPan(event)) {
+            if (trackpadScrollActive || event.isInertia() || event.getDeltaX() != 0.0) {
                 panByTrackpadScroll(event);
                 event.consume();
                 return;
@@ -205,12 +215,7 @@ public class FractalView extends StackPane {
         });
     }
 
-    private static boolean isTrackpadPan(ScrollEvent event) {
-        return event.getTextDeltaXUnits() == ScrollEvent.HorizontalTextScrollUnits.NONE
-                && event.getTextDeltaYUnits() == ScrollEvent.VerticalTextScrollUnits.NONE;
-    }
-
-    private void panByTrackpadScroll(ScrollEvent event) {
+    private void panByTrackpadScroll(javafx.scene.input.ScrollEvent event) {
         int width = (int) getWidth();
         int height = (int) getHeight();
 

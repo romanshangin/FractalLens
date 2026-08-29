@@ -37,6 +37,8 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 
 ## 4. Strengthen user interaction
 
+Remaining items in this section are deferred while rendering-engine work is prioritized.
+
 - [x] Replace the crowded top control row with a global toolbar, left inspector, canvas, and bottom render status area.
 - [x] Add Reset View.
 - [x] Display and edit center coordinates where appropriate.
@@ -57,7 +59,7 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 
 ## 6. Expand the rendering engine
 
-- Add Multibrot and Burning Ship.
+- [x] Add cubic Multibrot, Burning Ship, and Tricorn presets on reusable formula implementations.
 - [x] Preserve smooth escape-time coloring as the default treatment for palette banding, with a slower seamless ping-pong cycle and perceptually uniform OKLab palette interpolation.
 - [x] Precompute each OKLab gradient into a 65,536-entry lookup table so per-pixel coloring remains a constant-time array lookup.
 - [x] Add basic PNG export of the current render without antialiasing.
