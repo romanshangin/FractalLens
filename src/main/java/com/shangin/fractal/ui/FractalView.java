@@ -12,6 +12,8 @@ import com.shangin.fractal.render.RenderPriority;
 import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.AntialiasSettings;
+import com.shangin.fractal.scene.SamplingPattern;
 import javafx.animation.PauseTransition;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
@@ -128,6 +130,12 @@ public class FractalView extends StackPane {
         configurePalette(preset);
         renderController.cancelCurrent();
         fractalSurface.recolor(settings.createStrategy(), settings);
+        recalculate();
+    }
+
+    public void setSamplingPattern(SamplingPattern pattern) {
+        scene = scene.withAntialiasing(new AntialiasSettings(pattern));
+        renderController.cancelCurrent();
         recalculate();
     }
 

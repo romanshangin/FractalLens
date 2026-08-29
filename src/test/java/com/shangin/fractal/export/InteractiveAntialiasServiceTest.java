@@ -4,6 +4,7 @@ import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.render.*;
+import com.shangin.fractal.scene.SamplingPattern;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -41,6 +42,7 @@ class InteractiveAntialiasServiceTest {
             service.refine(
                     frame,
                     new SmoothPaletteColoring(PalettePreset.ICE.palette()),
+                    SamplingPattern.REGULAR,
                     Runnable::run,
                     colors -> {
                         result.set(colors);

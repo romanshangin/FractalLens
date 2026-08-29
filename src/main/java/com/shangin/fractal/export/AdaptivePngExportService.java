@@ -7,6 +7,7 @@ import com.shangin.fractal.render.FractalColorizer;
 import com.shangin.fractal.render.FractalData;
 import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderGrid;
+import com.shangin.fractal.scene.SamplingPattern;
 
 import java.io.IOException;
 import java.nio.IntBuffer;
@@ -320,7 +321,8 @@ public final class AdaptivePngExportService implements AutoCloseable {
             int maxIterations,
             int pixelX,
             int pixelY,
-            int sampleGridSize
+            int sampleGridSize,
+            SamplingPattern samplingPattern
     ) {
         return sampleGrid(
                 calculator,
@@ -329,7 +331,8 @@ public final class AdaptivePngExportService implements AutoCloseable {
                 maxIterations,
                 pixelX,
                 pixelY,
-                sampleGridSize
+                sampleGridSize,
+                samplingPattern
         ).color();
     }
 
@@ -342,17 +345,42 @@ public final class AdaptivePngExportService implements AutoCloseable {
             int pixelY,
             int sampleGridSize
     ) {
+        return sampleGrid(
+                calculator,
+                coloring,
+                grid,
+                maxIterations,
+                pixelX,
+                pixelY,
+                sampleGridSize,
+                SamplingPattern.REGULAR
+        );
+    }
+
+    private static SampleResult sampleGrid(
+            FractalCalculator calculator,
+            ColoringStrategy coloring,
+            RenderGrid grid,
+            int maxIterations,
+            int pixelX,
+            int pixelY,
+            int sampleGridSize,
+            SamplingPattern samplingPattern
+    ) {
         double centerReal = grid.realAt(pixelX);
         double centerImaginary = grid.imaginaryAt(pixelY);
         ColorAccumulator accumulator = new ColorAccumulator();
 
         for (int sampleY = 0; sampleY < sampleGridSize; sampleY++) {
-            double offsetY = ((sampleY + 0.5) / sampleGridSize) - 0.5;
-            double imaginary = centerImaginary - offsetY * grid.imaginaryStep();
-
             for (int sampleX = 0; sampleX < sampleGridSize; sampleX++) {
-                double offsetX = ((sampleX + 0.5) / sampleGridSize) - 0.5;
+                double offsetX = ((sampleX + sampleOffset(
+                        samplingPattern, pixelX, pixelY, sampleX, sampleY, 0
+                )) / sampleGridSize) - 0.5;
+                double offsetY = ((sampleY + sampleOffset(
+                        samplingPattern, pixelX, pixelY, sampleX, sampleY, 1
+                )) / sampleGridSize) - 0.5;
                 double real = centerReal + offsetX * grid.realStep();
+                double imaginary = centerImaginary - offsetY * grid.imaginaryStep();
                 FractalSample sample = calculator.calculateSample(real, imaginary, maxIterations);
                 int color = coloring.color(
                         sample.iterations(),
@@ -366,6 +394,26 @@ public final class AdaptivePngExportService implements AutoCloseable {
         }
 
         return accumulator.result();
+    }
+
+    private static double sampleOffset(
+            SamplingPattern pattern,
+            int pixelX,
+            int pixelY,
+            int sampleX,
+            int sampleY,
+            int axis
+    ) {
+        if (pattern == SamplingPattern.REGULAR) {
+            return 0.5;
+        }
+
+        int seed = pixelX * 0x1f123bb5
+                ^ pixelY * 0x5f356495
+                ^ sampleX * 0x68bc21eb
+                ^ sampleY * 0x02e5be93
+                ^ axis * 0x7f4a7c15;
+        return unitNoise(mix(seed));
     }
 
     private static double colorContrast(int first, int second) {

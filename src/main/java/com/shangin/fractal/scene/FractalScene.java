@@ -11,13 +11,24 @@ public record FractalScene(
         FractalPreset fractal,
         Viewport viewport,
         IterationSettings iterations,
-        ColoringSettings coloring
+        ColoringSettings coloring,
+        AntialiasSettings antialiasing
 ) {
     public FractalScene {
         Objects.requireNonNull(fractal);
         Objects.requireNonNull(viewport);
         Objects.requireNonNull(iterations);
         Objects.requireNonNull(coloring);
+        Objects.requireNonNull(antialiasing);
+    }
+
+    public FractalScene(
+            FractalPreset fractal,
+            Viewport viewport,
+            IterationSettings iterations,
+            ColoringSettings coloring
+    ) {
+        this(fractal, viewport, iterations, coloring, new AntialiasSettings());
     }
 
     public static FractalScene create(
@@ -28,22 +39,27 @@ public record FractalScene(
                 fractal,
                 fractal.defaultViewport(),
                 new IterationSettings(),
-                new ColoringSettings(palette)
+                new ColoringSettings(palette),
+                new AntialiasSettings()
         );
     }
 
     public FractalScene withViewport(Viewport viewport) {
-        return new FractalScene(fractal, viewport, iterations, coloring);
+        return new FractalScene(fractal, viewport, iterations, coloring, antialiasing);
     }
 
     public FractalScene withFractal(
             FractalPreset fractal,
             Viewport viewport
     ) {
-        return new FractalScene(fractal, viewport, iterations, coloring);
+        return new FractalScene(fractal, viewport, iterations, coloring, antialiasing);
     }
 
     public FractalScene withColoring(ColoringSettings coloring) {
-        return new FractalScene(fractal, viewport, iterations, coloring);
+        return new FractalScene(fractal, viewport, iterations, coloring, antialiasing);
+    }
+
+    public FractalScene withAntialiasing(AntialiasSettings antialiasing) {
+        return new FractalScene(fractal, viewport, iterations, coloring, antialiasing);
     }
 }

@@ -9,6 +9,8 @@ import com.shangin.fractal.render.FractalData;
 import com.shangin.fractal.render.ParallelFractalCalculator;
 import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderRequest;
+import com.shangin.fractal.render.RenderGrid;
+import com.shangin.fractal.scene.SamplingPattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -64,6 +66,37 @@ class AdaptivePngExportServiceTest {
         }
 
         assertTrue(results.size() > 1);
+    }
+
+    @Test
+    void jitteredSamplingShouldBeDeterministic() {
+        FractalPreset preset = FractalPreset.MANDELBROT;
+        FractalCalculator calculator = new FractalCalculator(preset.createFormula());
+        SmoothPaletteColoring coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        RenderGrid grid = RenderGrid.from(preset.defaultViewport(), 64, 48);
+
+        int first = AdaptivePngExportService.sampleGridColor(
+                calculator,
+                coloring,
+                grid,
+                300,
+                21,
+                17,
+                4,
+                SamplingPattern.DETERMINISTIC_JITTER
+        );
+        int second = AdaptivePngExportService.sampleGridColor(
+                calculator,
+                coloring,
+                grid,
+                300,
+                21,
+                17,
+                4,
+                SamplingPattern.DETERMINISTIC_JITTER
+        );
+
+        assertEquals(first, second);
     }
 
     @Test

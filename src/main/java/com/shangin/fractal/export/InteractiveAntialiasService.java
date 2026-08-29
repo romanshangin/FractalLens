@@ -5,6 +5,7 @@ import com.shangin.fractal.render.FractalCalculator;
 import com.shangin.fractal.render.FractalData;
 import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderGrid;
+import com.shangin.fractal.scene.SamplingPattern;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,12 +37,14 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     public synchronized void refine(
             RenderFrame frame,
             ColoringStrategy coloring,
+            SamplingPattern samplingPattern,
             Executor callbackExecutor,
             Consumer<int[]> onSuccess,
             Consumer<Throwable> onError
     ) {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(coloring);
+        Objects.requireNonNull(samplingPattern);
         Objects.requireNonNull(callbackExecutor);
         Objects.requireNonNull(onSuccess);
         Objects.requireNonNull(onError);
@@ -56,6 +59,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 refinementId,
                 frame,
                 coloring,
+                samplingPattern,
                 callbackExecutor,
                 onSuccess,
                 onError
@@ -66,6 +70,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             long refinementId,
             RenderFrame frame,
             ColoringStrategy coloring,
+            SamplingPattern samplingPattern,
             Executor callbackExecutor,
             Consumer<int[]> onSuccess,
             Consumer<Throwable> onError
@@ -83,6 +88,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         refinementId,
                         frame,
                         coloring,
+                        samplingPattern,
                         baseColors,
                         refinedColors,
                         yFrom,
@@ -118,6 +124,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             long refinementId,
             RenderFrame frame,
             ColoringStrategy coloring,
+            SamplingPattern samplingPattern,
             int[] baseColors,
             int[] refinedColors,
             int yFrom,
@@ -149,7 +156,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                                 frame.request().maxIterations(),
                                 x,
                                 y,
-                                SAMPLE_GRID
+                                SAMPLE_GRID,
+                                samplingPattern
                         );
             }
         }

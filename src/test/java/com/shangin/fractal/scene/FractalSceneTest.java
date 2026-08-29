@@ -42,4 +42,23 @@ class FractalSceneTest {
         assertEquals(PalettePreset.FIRE, updated.coloring().palette());
         assertEquals(source.viewport(), updated.viewport());
     }
+
+    @Test
+    void changesAntialiasingAsAnIndependentSceneSnapshot() {
+        FractalScene source = FractalScene.create(
+                FractalPreset.MANDELBROT,
+                PalettePreset.ICE
+        );
+
+        FractalScene updated = source.withAntialiasing(
+                new AntialiasSettings(SamplingPattern.DETERMINISTIC_JITTER)
+        );
+
+        assertEquals(SamplingPattern.REGULAR, source.antialiasing().samplingPattern());
+        assertEquals(
+                SamplingPattern.DETERMINISTIC_JITTER,
+                updated.antialiasing().samplingPattern()
+        );
+        assertEquals(source.viewport(), updated.viewport());
+    }
 }
