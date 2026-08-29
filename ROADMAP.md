@@ -37,7 +37,7 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 
 ## 4. Strengthen user interaction
 
-- Add Reset View.
+- [x] Add Reset View.
 - Display and edit center coordinates where appropriate.
 - Display zoom and iteration count.
 - Add iteration controls and editable Julia parameters.

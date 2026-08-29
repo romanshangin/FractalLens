@@ -77,6 +77,23 @@ public class FractalView extends StackPane {
         recalculate();
     }
 
+    public void resetView() {
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+
+        if (width < 2 || height < 2) {
+            return;
+        }
+
+        interactionDebounce.stop();
+        renderController.cancelCurrent();
+        camera.reset(width, height);
+        scene = scene.withViewport(camera.viewport());
+        resetPriority();
+        fractalSurface.showPreview(camera.viewport());
+        recalculate();
+    }
+
 
     private void configurePalette(PalettePreset preset) {
         Palette palette = preset.palette();

@@ -29,6 +29,7 @@ public class MainView extends BorderPane {
                 initialPalette,
                 fractalView::setFractal,
                 fractalView::setPalette,
+                fractalView::resetView,
                 this::exportPng);
 
         fractalView.setOnZoomChanged(

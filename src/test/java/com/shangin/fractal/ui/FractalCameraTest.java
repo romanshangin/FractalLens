@@ -69,4 +69,18 @@ class FractalCameraTest {
         assertEquals(centerRealBefore, camera.viewport().centerReal(), DELTA);
         assertEquals(centerImaginaryBefore, camera.viewport().centerImaginary(), DELTA);
     }
+
+    @Test
+    void resetShouldRestoreFittedPresetViewport() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        int width = 1000;
+        int height = 700;
+
+        camera.resize(width, height);
+        camera.zoomIn(750, 200, width, height, 2000, 1400);
+        camera.pan(100, -50, width, height);
+        camera.reset(width, height);
+
+        assertEquals(camera.defaultViewport(width, height), camera.viewport());
+    }
 }

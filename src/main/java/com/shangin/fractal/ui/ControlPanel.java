@@ -25,6 +25,7 @@ public class ControlPanel extends HBox {
             PalettePreset initialPalette,
             Consumer<FractalPreset> onFractalChanged,
             Consumer<PalettePreset> onPaletteChanged,
+            Runnable onResetView,
             Runnable onExport
     ) {
         super(SPACING);
@@ -34,6 +35,7 @@ public class ControlPanel extends HBox {
         ComboBox<PalettePreset> paletteComboBox = createPaletteComboBox(initialPalette, onPaletteChanged);
 
         exportButton = createExportButton(onExport);
+        Button resetViewButton = createResetViewButton(onResetView);
 
         Region spacer =
                 new Region();
@@ -48,6 +50,7 @@ public class ControlPanel extends HBox {
                 fractalComboBox,
                 new Label("Palette:"),
                 paletteComboBox,
+                resetViewButton,
                 spacer,
                 exportButton,
                 new Label("Zoom ×"),
@@ -55,6 +58,12 @@ public class ControlPanel extends HBox {
 
         setPadding(new Insets(10));
         setAlignment(Pos.CENTER_LEFT);
+    }
+
+    private Button createResetViewButton(Runnable onResetView) {
+        Button button = new Button("Reset View");
+        button.setOnAction(event -> onResetView.run());
+        return button;
     }
 
     private Button createExportButton(Runnable onExport) {
