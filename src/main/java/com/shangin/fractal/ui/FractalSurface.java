@@ -259,6 +259,27 @@ public final class FractalSurface extends Region {
         return new CompletedRender(displayedScene, displayedRenderFrame);
     }
 
+    /** Replaces the visible base colors only when refinement belongs to it. */
+    public void applyAntialiasing(RenderFrame frame, int[] colors) {
+        Objects.requireNonNull(colors);
+
+        if (displayedRenderFrame != frame || displayedFrame == null) {
+            return;
+        }
+        if (colors.length != displayedFrame.width() * displayedFrame.height()) {
+            throw new IllegalArgumentException("AA color buffer dimensions do not match frame");
+        }
+
+        System.arraycopy(
+                colors,
+                0,
+                displayedFrame.intBuffer().array(),
+                0,
+                colors.length
+        );
+        displayedFrame.update();
+    }
+
     private void resetPreview() {
         previewTransform.setToIdentity();
         progressivePreviewTransform.setToIdentity();

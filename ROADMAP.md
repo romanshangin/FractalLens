@@ -65,7 +65,8 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - [x] Add basic PNG export of the current render without antialiasing.
 - [x] Add adaptive 2x2–8x8 subpixel sampling to off-screen export, preserving the current output dimensions and averaging colors in linear light.
 - [x] Add weak deterministic export dithering to reduce visible 8-bit gradient quantization without blurring fractal detail.
-- Add adaptive subpixel sampling for interactive rendering, with deterministic jitter as an optional sampling pattern.
+- [x] Add cancellable edge-adaptive 4x4 subpixel refinement after the interactive base frame is visible.
+- Add deterministic jitter as an optional interactive sampling pattern.
 - Investigate distance-estimation antialiasing after extending samples with derivative and distance data.
 - Treat image-space edge filtering as an optional fast display mode rather than the source of export-quality output.
 - Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
@@ -74,6 +75,7 @@ Remaining items in this section are deferred while rendering-engine work is prio
 
 ## 7. Implement deep zoom
 
+- [x] Add a conservative Julia-specific double-precision guard so unstable orbit blocks are not presented as real detail before a deep-zoom backend exists.
 - Introduce an arbitrary-precision complex coordinate type with precision derived from the current scale.
 - Store the viewport center and scale without `double` precision loss, and update zoom, pan, resize, display, serialization, and preset handling accordingly.
 - Keep the existing direct `double` renderer for normal zoom levels and select a separate deep-zoom backend only when hardware precision becomes insufficient.

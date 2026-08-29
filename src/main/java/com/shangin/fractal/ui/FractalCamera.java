@@ -11,7 +11,6 @@ import java.util.Objects;
  */
 public final class FractalCamera {
 
-    private static final double MIN_ULPS_PER_PIXEL = 16.0;
     private static final double ZOOM_IN_FACTOR = 0.8;
     private static final double ZOOM_OUT_FACTOR = 1.25;
 
@@ -67,7 +66,11 @@ public final class FractalCamera {
     ) {
         Viewport candidate = viewport.zoomAt(x, y, logicalWidth, logicalHeight, ZOOM_IN_FACTOR);
 
-        if (!candidate.hasSufficientPrecision(renderWidth, renderHeight, MIN_ULPS_PER_PIXEL)) {
+        if (!candidate.hasSufficientPrecision(
+                renderWidth,
+                renderHeight,
+                preset.minimumUlpsPerPixel()
+        )) {
             return false;
         }
 
@@ -138,7 +141,11 @@ public final class FractalCamera {
                 scaleFactor
         );
 
-        if (!candidate.hasSufficientPrecision(renderWidth, renderHeight, MIN_ULPS_PER_PIXEL)) {
+        if (!candidate.hasSufficientPrecision(
+                renderWidth,
+                renderHeight,
+                preset.minimumUlpsPerPixel()
+        )) {
             return false;
         }
 

@@ -154,4 +154,44 @@ class FractalCameraTest {
                 () -> camera.zoomBy(500, 350, 0.0, 1000, 700, 2000, 1400)
         );
     }
+
+    @Test
+    void juliaShouldStopBeforeOrbitDetailBecomesNumericallyBlocky() {
+        FractalCamera camera = new FractalCamera(FractalPreset.JULIA);
+        int logicalWidth = 1000;
+        int logicalHeight = 700;
+        int renderWidth = 2000;
+        int renderHeight = 1400;
+        camera.resize(logicalWidth, logicalHeight);
+
+        assertTrue(camera.zoomIn(
+                650,
+                250,
+                logicalWidth,
+                logicalHeight,
+                renderWidth,
+                renderHeight
+        ));
+
+        int acceptedZooms = 0;
+        while (camera.zoomBy(
+                logicalWidth / 2.0,
+                logicalHeight / 2.0,
+                0.8,
+                logicalWidth,
+                logicalHeight,
+                renderWidth,
+                renderHeight
+        )) {
+            acceptedZooms++;
+            assertTrue(acceptedZooms < 200, "Julia precision guard did not stop zooming");
+        }
+
+        assertTrue(camera.viewport().hasSufficientPrecision(
+                renderWidth,
+                renderHeight,
+                FractalPreset.JULIA.minimumUlpsPerPixel()
+        ));
+        assertTrue(acceptedZooms > 20);
+    }
 }

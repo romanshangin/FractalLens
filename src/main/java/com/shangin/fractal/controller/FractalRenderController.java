@@ -2,6 +2,7 @@ package com.shangin.fractal.controller;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.FractalScene;
@@ -19,6 +20,8 @@ public final class FractalRenderController implements AutoCloseable {
 
     private final FractalSurface surface;
     private final FractalRenderService renderService = new FractalRenderService();
+    private final InteractiveAntialiasService antialiasService =
+            new InteractiveAntialiasService();
 
     private FractalCalculator calculator;
     private FractalPreset calculatorPreset;
@@ -35,6 +38,7 @@ public final class FractalRenderController implements AutoCloseable {
 
     public void cancelCurrent() {
         renderService.cancelCurrent();
+        antialiasService.cancelCurrent();
     }
 
     /** Starts a progressive render for the supplied viewport. */
@@ -46,6 +50,7 @@ public final class FractalRenderController implements AutoCloseable {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
+        antialiasService.cancelCurrent();
 
         if (calculatorPreset != scene.fractal()) {
             calculatorPreset = scene.fractal();
@@ -193,6 +198,14 @@ public final class FractalRenderController implements AutoCloseable {
                             scene
                     );
 
+                    antialiasService.refine(
+                            completedFrame,
+                            coloring,
+                            Platform::runLater,
+                            colors -> surface.applyAntialiasing(completedFrame, colors),
+                            Throwable::printStackTrace
+                    );
+
                 },
 
                 Throwable::printStackTrace
@@ -210,6 +223,7 @@ public final class FractalRenderController implements AutoCloseable {
 
     @Override
     public void close() {
+        antialiasService.close();
         renderService.close();
     }
 }

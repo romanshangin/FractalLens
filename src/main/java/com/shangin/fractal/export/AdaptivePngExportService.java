@@ -44,7 +44,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
             Math.max(1, Runtime.getRuntime().availableProcessors() - 1),
             daemonThreadFactory("fractal-export-worker")
     );
-    private final FractalColorizer colorizer = new FractalColorizer();
+    private static final FractalColorizer COLORIZER = new FractalColorizer();
     private final AtomicLong generation = new AtomicLong();
 
     private Future<?> currentExport;
@@ -124,9 +124,9 @@ public final class AdaptivePngExportService implements AutoCloseable {
         }
     }
 
-    private int[] colorBaseFrame(FractalData data, ColoringStrategy coloring) {
+    static int[] colorBaseFrame(FractalData data, ColoringStrategy coloring) {
         int[] colors = new int[data.size()];
-        colorizer.color(data, IntBuffer.wrap(colors), coloring);
+        COLORIZER.color(data, IntBuffer.wrap(colors), coloring);
         return colors;
     }
 
@@ -311,6 +311,26 @@ public final class AdaptivePngExportService implements AutoCloseable {
         }
 
         return false;
+    }
+
+    static int sampleGridColor(
+            FractalCalculator calculator,
+            ColoringStrategy coloring,
+            RenderGrid grid,
+            int maxIterations,
+            int pixelX,
+            int pixelY,
+            int sampleGridSize
+    ) {
+        return sampleGrid(
+                calculator,
+                coloring,
+                grid,
+                maxIterations,
+                pixelX,
+                pixelY,
+                sampleGridSize
+        ).color();
     }
 
     private static SampleResult sampleGrid(
