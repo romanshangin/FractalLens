@@ -1,5 +1,7 @@
 package com.shangin.fractal.render;
 
+import com.shangin.fractal.formula.DistanceEstimatingFormula;
+import com.shangin.fractal.formula.DistanceSample;
 import com.shangin.fractal.formula.FractalFormula;
 import com.shangin.fractal.formula.FractalSample;
 
@@ -28,6 +30,21 @@ public class FractalCalculator {
             int maxIterations
     ) {
         return formula.calculate(real, imaginary, maxIterations);
+    }
+
+    public boolean supportsDistanceEstimation() {
+        return formula instanceof DistanceEstimatingFormula;
+    }
+
+    public DistanceSample calculateDistanceSample(
+            double real,
+            double imaginary,
+            int maxIterations
+    ) {
+        if (!(formula instanceof DistanceEstimatingFormula distanceFormula)) {
+            throw new UnsupportedOperationException("Formula does not support distance estimation");
+        }
+        return distanceFormula.calculateDistance(real, imaginary, maxIterations);
     }
 
     public FractalData calculate(

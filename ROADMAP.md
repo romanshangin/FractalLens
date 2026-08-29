@@ -67,7 +67,8 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - [x] Add weak deterministic export dithering to reduce visible 8-bit gradient quantization without blurring fractal detail.
 - [x] Add cancellable edge-adaptive 4x4 subpixel refinement after the interactive base frame is visible.
 - [x] Add deterministic jitter as an optional, reproducible interactive sampling pattern.
-- Investigate distance-estimation antialiasing after extending samples with derivative and distance data.
+- [x] Add and benchmark exterior distance estimates for Mandelbrot, Julia, and cubic Multibrot; measurements show a 1.4–2x base-pass cost versus roughly 16x for full 4x4 coverage, but exterior estimates alone miss interior-centered boundary pixels.
+- Combine distance candidates with the existing image-space edge detector before using distance estimation to schedule interactive or export supersampling; keep Burning Ship and Tricorn on the current detector because their maps are non-analytic.
 - Treat image-space edge filtering as an optional fast display mode rather than the source of export-quality output.
 - Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
 - Add orbit traps and editable palette stops.

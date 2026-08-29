@@ -37,6 +37,15 @@ class JuliaFormulaTest {
     }
 
     @Test
+    void exteriorPointShouldProvideDistanceEstimate() {
+        DistanceSample distance = formula.calculateDistance(2.0, 0.0, 1000);
+
+        assertTrue(distance.sample().escaped());
+        assertTrue(distance.hasDistance());
+        assertTrue(distance.distance() > 0.0);
+    }
+
+    @Test
     void periodicityCheckShouldMatchReferenceRenderingGrid() {
         double cReal = -0.8;
         double cImaginary = 0.156;

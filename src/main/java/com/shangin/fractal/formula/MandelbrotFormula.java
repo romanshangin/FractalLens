@@ -1,6 +1,6 @@
 package com.shangin.fractal.formula;
 
-public class MandelbrotFormula implements FractalFormula {
+public class MandelbrotFormula implements DistanceEstimatingFormula {
 
     private static final double ESCAPE_RADIUS_SQUARED = 4.0;
 
@@ -64,5 +64,67 @@ public class MandelbrotFormula implements FractalFormula {
         double bulbX = real + 1.0;
 
         return bulbX * bulbX + imaginarySquared < 0.0625;
+    }
+
+    @Override
+    public DistanceSample calculateDistance(
+            double real,
+            double imaginary,
+            int maxIterations
+    ) {
+        if (isInMainCardioidOrPeriodTwoBulb(real, imaginary)) {
+            return DistanceSample.unavailable(
+                    new FractalSample(maxIterations, false, 0.0, 0.0)
+            );
+        }
+
+        double zr = 0.0;
+        double zi = 0.0;
+        double derivativeReal = 0.0;
+        double derivativeImaginary = 0.0;
+        int iteration = 0;
+
+        while (zr * zr + zi * zi <= ESCAPE_RADIUS_SQUARED
+                && iteration < maxIterations) {
+            double nextDerivativeReal = 2.0
+                    * (zr * derivativeReal - zi * derivativeImaginary) + 1.0;
+            double nextDerivativeImaginary = 2.0
+                    * (zr * derivativeImaginary + zi * derivativeReal);
+            double nextReal = zr * zr - zi * zi + real;
+            double nextImaginary = 2.0 * zr * zi + imaginary;
+
+            derivativeReal = nextDerivativeReal;
+            derivativeImaginary = nextDerivativeImaginary;
+            zr = nextReal;
+            zi = nextImaginary;
+            iteration++;
+        }
+
+        FractalSample sample = new FractalSample(
+                iteration,
+                iteration < maxIterations,
+                zr,
+                zi
+        );
+        return distanceSample(sample, derivativeReal, derivativeImaginary);
+    }
+
+    static DistanceSample distanceSample(
+            FractalSample sample,
+            double derivativeReal,
+            double derivativeImaginary
+    ) {
+        if (!sample.escaped()) {
+            return DistanceSample.unavailable(sample);
+        }
+
+        double modulus = Math.hypot(sample.zr(), sample.zi());
+        double derivativeModulus = Math.hypot(derivativeReal, derivativeImaginary);
+        double distance = modulus * Math.log(modulus) / derivativeModulus;
+
+        if (!Double.isFinite(distance) || distance < 0.0) {
+            return DistanceSample.unavailable(sample);
+        }
+        return new DistanceSample(sample, distance);
     }
 }

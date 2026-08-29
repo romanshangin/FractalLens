@@ -29,6 +29,16 @@ class MultibrotFormulaTest {
     }
 
     @Test
+    void exteriorPointShouldProvideDistanceEstimate() {
+        DistanceSample distance = new MultibrotFormula(3)
+                .calculateDistance(1.0, 1.0, 500);
+
+        assertTrue(distance.sample().escaped());
+        assertTrue(distance.hasDistance());
+        assertTrue(distance.distance() > 0.0);
+    }
+
+    @Test
     void quadraticMultibrotShouldMatchMandelbrotOutsideAnalyticInterior() {
         FractalSample expected = new MandelbrotFormula().calculate(-0.75, 0.1, 500);
         FractalSample actual = new MultibrotFormula(2).calculate(-0.75, 0.1, 500);

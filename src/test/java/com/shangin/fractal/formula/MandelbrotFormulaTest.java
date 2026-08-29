@@ -48,6 +48,15 @@ public class MandelbrotFormulaTest {
     }
 
     @Test
+    void exteriorPointShouldProvideDistanceEstimate() {
+        DistanceSample distance = formula.calculateDistance(1.0, 1.0, 1000);
+
+        assertTrue(distance.sample().escaped());
+        assertTrue(distance.hasDistance());
+        assertTrue(distance.distance() > 0.0);
+    }
+
+    @Test
     void shouldRecognizePointsInsideMainCardioid() {
         assertTrue(
                 MandelbrotFormula.isInMainCardioidOrPeriodTwoBulb(
