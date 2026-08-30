@@ -28,17 +28,21 @@ import java.util.Objects;
 public final class FractalSurface extends Region {
 
     private final Affine previewTransform = new Affine();
+    private final Affine retainedPreviewTransform = new Affine();
     private final Affine progressivePreviewTransform = new Affine();
     private final ImageView baseImageView = new ImageView();
+    private final ImageView retainedImageView = new ImageView();
     private final ImageView progressiveImageView = new ImageView();
     private final FractalColorizer colorizer = new FractalColorizer();
 
     private SurfaceBuffer stagingFrame;
     private SurfaceBuffer displayedFrame;
+    private SurfaceBuffer retainedProgressFrame;
     private ValidityMask stagingRefinementValidity;
     private ValidityMask displayedRefinementValidity;
     private RenderFrame stagingRenderFrame;
     private RenderFrame displayedRenderFrame;
+    private RenderFrame retainedProgressRenderFrame;
     private FractalScene displayedScene;
     private Viewport displayedViewport;
 
@@ -54,13 +58,23 @@ public final class FractalSurface extends Region {
         configureImageViews();
         configureClip();
         configureHiDpi();
-        getChildren().addAll(baseImageView, progressiveImageView);
+        getChildren().addAll(baseImageView, retainedImageView, progressiveImageView);
     }
 
     /** Prepares the staging buffer for a new progressive frame. */
     public void beginProgressiveRender(RenderFrame renderFrame) {
         if (renderWidth < 2 || renderHeight < 2) {
             return;
+        }
+
+        if (ProgressiveFrameRetention.shouldRetain(
+                stagingRenderFrame,
+                renderFrame,
+                progressiveImageView.getImage() != null
+        )) {
+            retainVisibleProgress();
+            stagingFrame = null;
+            stagingRefinementValidity = null;
         }
 
         if (stagingFrame == null
@@ -92,17 +106,31 @@ public final class FractalSurface extends Region {
 
     private void configureImageViews() {
         configureImageView(baseImageView);
+        configureImageView(retainedImageView);
         configureImageView(progressiveImageView);
 
         baseImageView
                 .getTransforms()
                 .add(previewTransform);
 
+        retainedImageView
+                .getTransforms()
+                .add(retainedPreviewTransform);
+
         progressiveImageView
                 .getTransforms()
                 .add(progressivePreviewTransform);
 
         progressiveImageView.setMouseTransparent(true);
+        retainedImageView.setMouseTransparent(true);
+    }
+
+    private void retainVisibleProgress() {
+        retainedProgressFrame = stagingFrame;
+        retainedProgressRenderFrame = stagingRenderFrame;
+        retainedPreviewTransform.setToTransform(progressivePreviewTransform);
+        retainedImageView.setImage(stagingFrame.image());
+        progressiveImageView.setImage(null);
     }
 
     private void configureImageView(
@@ -244,6 +272,9 @@ public final class FractalSurface extends Region {
         resetPreview();
 
         progressiveImageView.setImage(null);
+        retainedImageView.setImage(null);
+        retainedProgressFrame = null;
+        retainedProgressRenderFrame = null;
     }
 
     public void resizeBuffer(
@@ -370,6 +401,7 @@ public final class FractalSurface extends Region {
 
     private void resetPreview() {
         previewTransform.setToIdentity();
+        retainedPreviewTransform.setToIdentity();
         progressivePreviewTransform.setToIdentity();
     }
 
@@ -415,6 +447,16 @@ public final class FractalSurface extends Region {
             applyPreviewTransform(
                     progressivePreviewTransform,
                     stagingRenderFrame.request().viewport(),
+                    targetViewport,
+                    width,
+                    height
+            );
+        }
+
+        if (retainedProgressRenderFrame != null) {
+            applyPreviewTransform(
+                    retainedPreviewTransform,
+                    retainedProgressRenderFrame.request().viewport(),
                     targetViewport,
                     width,
                     height

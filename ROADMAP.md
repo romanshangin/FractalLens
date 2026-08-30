@@ -65,7 +65,7 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - [x] Add basic PNG export of the current render without antialiasing.
 - [x] Add adaptive 2x2–8x8 subpixel sampling to off-screen export, preserving the current output dimensions and averaging colors in linear light.
 - [x] Add weak deterministic export dithering to reduce visible 8-bit gradient quantization without blurring fractal detail.
-- [x] Add cancellable edge-adaptive 4x4 subpixel refinement after the interactive base frame is visible, publishing refined 32x32 tiles progressively and preserving already refined overlap across pans instead of resampling the visible area.
+- [x] Add cancellable edge-adaptive 4x4 subpixel refinement after the interactive base frame is visible, publishing refined 32x32 tiles progressively, preserving refined overlap across pans, and retaining visible partial results when zoom interrupts an unfinished render.
 - [x] Add deterministic jitter as an optional, reproducible interactive sampling pattern.
 - [x] Add and benchmark exterior distance estimates for Mandelbrot, Julia, and cubic Multibrot; measurements show a 1.4–2x base-pass cost versus roughly 16x for full 4x4 coverage, but exterior estimates alone miss interior-centered boundary pixels.
 - [x] Combine distance candidates with the existing image-space edge detector before using distance estimation to schedule interactive or export supersampling; keep Burning Ship and Tricorn on the current detector because their maps are non-analytic.

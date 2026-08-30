@@ -158,7 +158,7 @@ public final class FractalRenderController implements AutoCloseable {
         }
 
         /* Color reusable sample data when the displayed image cannot be shifted. */
-        if (!imageReused) {
+        if (!imageReused && !refinedDisplay) {
 
             surface.displayReadyPixels(
                     activeFrame,
