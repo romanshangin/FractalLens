@@ -12,6 +12,7 @@ import java.util.Optional;
 public final class FrameReusePlanner {
 
     private static final double INTEGER_SHIFT_EPSILON = 1e-6;
+    private static final double MAX_INTEGER_SHIFT_UNCERTAINTY = 0.25;
 
     /**
      * Creates a frame for the target request, reusing compatible source data
@@ -301,12 +302,22 @@ public final class FrameReusePlanner {
 
         Optional<Integer> shiftX =
                 toIntegerShift(
-                        rawShiftX
+                        rawShiftX,
+                        pixelShiftUncertainty(
+                                sourceViewport.centerReal(),
+                                targetViewport.centerReal(),
+                                grid.realStep()
+                        )
                 );
 
         Optional<Integer> shiftY =
                 toIntegerShift(
-                        rawShiftY
+                        rawShiftY,
+                        pixelShiftUncertainty(
+                                sourceViewport.centerImaginary(),
+                                targetViewport.centerImaginary(),
+                                grid.imaginaryStep()
+                        )
                 );
 
         if (shiftX.isEmpty()
@@ -323,9 +334,12 @@ public final class FrameReusePlanner {
     }
 
     private Optional<Integer> toIntegerShift(
-            double value
+            double value,
+            double uncertainty
     ) {
-        if (!Double.isFinite(value)) {
+        if (!Double.isFinite(value)
+                || !Double.isFinite(uncertainty)
+                || uncertainty >= MAX_INTEGER_SHIFT_UNCERTAINTY) {
             return Optional.empty();
         }
 
@@ -341,14 +355,39 @@ public final class FrameReusePlanner {
          * Grid snapping can produce values such as 340.000000000001. Accept
          * that floating-point noise while rejecting true fractional shifts.
          */
-        if (Math.abs(value - rounded)
-                > INTEGER_SHIFT_EPSILON) {
+        double tolerance = Math.max(
+                INTEGER_SHIFT_EPSILON,
+                uncertainty
+                        + 2.0 * Math.ulp(value)
+        );
+
+        if (Math.abs(value - rounded) > tolerance) {
             return Optional.empty();
         }
 
         return Optional.of(
                 (int) rounded
         );
+    }
+
+    private double pixelShiftUncertainty(
+            double sourceCoordinate,
+            double targetCoordinate,
+            double pixelStep
+    ) {
+        if (!Double.isFinite(pixelStep) || pixelStep == 0.0) {
+            return Double.POSITIVE_INFINITY;
+        }
+
+        /*
+         * At deep zooms a center coordinate can move only in whole ULPs. A
+         * viewport snapped to an integer render-pixel shift therefore may
+         * decode a few hundredths away from that integer. Bound that expected
+         * representation error in pixel units instead of applying one fixed
+         * epsilon at every zoom depth.
+         */
+        return (Math.ulp(sourceCoordinate) + Math.ulp(targetCoordinate))
+                / Math.abs(pixelStep);
     }
 
     private int copyReusablePixels(

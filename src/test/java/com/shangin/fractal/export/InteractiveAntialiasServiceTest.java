@@ -6,6 +6,7 @@ import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.SamplingPattern;
+import com.shangin.fractal.ui.FractalCamera;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -22,6 +23,76 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InteractiveAntialiasServiceTest {
+
+    @Test
+    void deepPanShouldQueueAntialiasingOnlyForExposedEdgeTiles() {
+        FractalPreset preset = FractalPreset.MANDELBROT;
+        FractalCamera camera = new FractalCamera(preset);
+        int logicalWidth = 48;
+        int logicalHeight = 32;
+        int renderWidth = 96;
+        int renderHeight = 64;
+        camera.resize(logicalWidth, logicalHeight);
+
+        while (camera.zoomBy(
+                logicalWidth / 2.0,
+                logicalHeight / 2.0,
+                0.8,
+                logicalWidth,
+                logicalHeight,
+                renderWidth,
+                renderHeight
+        )) {
+            // Exercise the same precision boundary as the interactive camera.
+        }
+
+        var sourceViewport = camera.viewport();
+        FractalCalculator calculator = new FractalCalculator(preset.createFormula());
+        RenderFrame sourceFrame = RenderFrame.create(new RenderRequest(
+                calculator,
+                sourceViewport,
+                renderWidth,
+                renderHeight,
+                1_000
+        ));
+        sourceFrame.validity().markReady(
+                new RenderRegion(0, 0, renderWidth, renderHeight)
+        );
+
+        assertTrue(camera.pan(3.0, -2.0, logicalWidth, logicalHeight));
+        camera.snapToRenderGrid(sourceViewport, renderWidth, renderHeight);
+        FrameReuseResult reuse = new FrameReusePlanner().plan(
+                sourceFrame,
+                new RenderRequest(
+                        calculator,
+                        camera.viewport(),
+                        renderWidth,
+                        renderHeight,
+                        1_000
+                )
+        );
+        assertTrue(reuse.reused());
+        assertEquals(new PixelShift(6, -4), reuse.shift().orElseThrow());
+
+        ValidityMask sourceRefinement = completeMask(renderWidth, renderHeight);
+        ValidityMask shiftedRefinement = new ValidityMask(renderWidth, renderHeight);
+        shiftedRefinement.copyShiftedFrom(
+                sourceRefinement,
+                reuse.shift().orElseThrow()
+        );
+        List<RenderRegion> pending = InteractiveAntialiasService.orderedTiles(
+                reuse.frame(),
+                new RefinedPixelSnapshot(
+                        renderWidth,
+                        renderHeight,
+                        new int[renderWidth * renderHeight],
+                        shiftedRefinement
+                )
+        );
+
+        assertEquals(4, pending.size());
+        assertTrue(pending.stream().allMatch(tile -> tile.x() == 0 || tile.y() == 32));
+    }
 
     @Test
     void schedulerShouldExcludeFullyRefinedTilesBeforeSubmittingWorkers() {

@@ -181,6 +181,41 @@ class FrameReusePlannerTest {
     }
 
     @Test
+    void shouldRejectRepresentableFractionalPixelShiftAtDeepZoom() {
+        Viewport deepViewport = new Viewport(-0.5, 0.125, 1e-12);
+        RenderRequest deepRequest = new RenderRequest(
+                calculator,
+                deepViewport,
+                WIDTH,
+                HEIGHT,
+                MAX_ITERATIONS
+        );
+        RenderFrame sourceFrame = RenderFrame.create(deepRequest);
+        sourceFrame.validity().markReady(new RenderRegion(0, 0, WIDTH, HEIGHT));
+
+        double fractionalShift = 10.25;
+        Viewport fractionalViewport = new Viewport(
+                deepViewport.centerReal()
+                        - fractionalShift * deepViewport.realUnitsPerPixel(WIDTH, HEIGHT),
+                deepViewport.centerImaginary(),
+                deepViewport.scale()
+        );
+        FrameReuseResult result = planner.plan(
+                sourceFrame,
+                new RenderRequest(
+                        calculator,
+                        fractionalViewport,
+                        WIDTH,
+                        HEIGHT,
+                        MAX_ITERATIONS
+                )
+        );
+
+        assertFalse(result.reused());
+        assertEquals(0, result.frame().validity().readyPixelCount());
+    }
+
+    @Test
     void shouldCreateFreshFrameWhenCalculatorChanges() throws InterruptedException {
 
         RenderFrame sourceFrame = RenderFrame.create(sourceRequest);

@@ -1,8 +1,19 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.render.FractalCalculator;
+import com.shangin.fractal.render.FrameReusePlanner;
+import com.shangin.fractal.render.FrameReuseResult;
+import com.shangin.fractal.render.ParallelFractalCalculator;
+import com.shangin.fractal.render.PixelShift;
+import com.shangin.fractal.render.RenderFrame;
+import com.shangin.fractal.render.RenderRegion;
+import com.shangin.fractal.render.RenderRequest;
 import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -193,5 +204,83 @@ class FractalCameraTest {
                 FractalPreset.JULIA.minimumUlpsPerPixel()
         ));
         assertTrue(acceptedZooms > 20);
+    }
+
+    @Test
+    void snappedPanAtDeepestSupportedZoomShouldCalculateOnlyExposedPixels() throws Exception {
+        FractalPreset preset = FractalPreset.MANDELBROT;
+        FractalCamera camera = new FractalCamera(preset);
+        int logicalWidth = 320;
+        int logicalHeight = 240;
+        int renderWidth = 640;
+        int renderHeight = 480;
+        camera.resize(logicalWidth, logicalHeight);
+
+        while (camera.zoomBy(
+                logicalWidth / 2.0,
+                logicalHeight / 2.0,
+                0.8,
+                logicalWidth,
+                logicalHeight,
+                renderWidth,
+                renderHeight
+        )) {
+            // Stop only when the production precision guard rejects the next zoom.
+        }
+
+        Viewport sourceViewport = camera.viewport();
+        AtomicInteger formulaCalls = new AtomicInteger();
+        FractalCalculator calculator = new FractalCalculator(
+                (real, imaginary, maximum) -> {
+                    formulaCalls.incrementAndGet();
+                    return new FractalSample(1, true, 1.0, 0.0);
+                }
+        );
+        RenderRequest sourceRequest = new RenderRequest(
+                calculator,
+                sourceViewport,
+                renderWidth,
+                renderHeight,
+                1_000
+        );
+        RenderFrame sourceFrame = RenderFrame.create(sourceRequest);
+        sourceFrame.validity().markReady(
+                new RenderRegion(0, 0, renderWidth, renderHeight)
+        );
+
+        assertTrue(camera.pan(3.0, -2.0, logicalWidth, logicalHeight));
+        camera.snapToRenderGrid(sourceViewport, renderWidth, renderHeight);
+
+        FrameReuseResult reuse = new FrameReusePlanner().plan(
+                sourceFrame,
+                new RenderRequest(
+                        calculator,
+                        camera.viewport(),
+                        renderWidth,
+                        renderHeight,
+                        1_000
+                )
+        );
+
+        double rawShiftX = (sourceViewport.centerReal() - camera.viewport().centerReal())
+                / sourceViewport.realUnitsPerPixel(renderWidth, renderHeight);
+        double rawShiftY = (camera.viewport().centerImaginary() - sourceViewport.centerImaginary())
+                / sourceViewport.imaginaryUnitsPerPixel(renderHeight);
+        assertTrue(
+                reuse.reused(),
+                "A render-grid-snapped deep pan must not discard the frame; raw shift="
+                        + rawShiftX + ", " + rawShiftY
+        );
+        PixelShift expectedShift = new PixelShift(6, -4);
+        int expectedReused = (renderWidth - 6) * (renderHeight - 4);
+        assertEquals(expectedShift, reuse.shift().orElseThrow());
+        assertEquals(expectedReused, reuse.reusedPixels());
+
+        try (ParallelFractalCalculator workers = new ParallelFractalCalculator(4)) {
+            workers.calculate(reuse.frame(), () -> false, ignored -> {});
+        }
+
+        assertEquals(renderWidth * renderHeight - expectedReused, formulaCalls.get());
+        assertTrue(reuse.frame().isComplete());
     }
 }
