@@ -210,6 +210,13 @@ class InteractiveAntialiasServiceTest {
                     region.width() <= 32 && region.height() <= 32
             ));
             assertFalse(Arrays.equals(baseColors, result));
+            assertArrayEquals(
+                    result,
+                    service.recolorCached(
+                            frame,
+                            new SmoothPaletteColoring(PalettePreset.ICE.palette())),
+                    "Animated recolor must preserve the completed AA frame"
+            );
             assertEquals(readyPixels, frame.validity().readyPixelCount());
         }
     }

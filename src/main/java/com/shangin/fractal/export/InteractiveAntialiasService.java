@@ -1,6 +1,8 @@
 package com.shangin.fractal.export;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
+import com.shangin.fractal.coloring.SmoothPaletteColoring;
+import com.shangin.fractal.coloring.SmoothColorLookup;
 import com.shangin.fractal.render.FractalCalculator;
 import com.shangin.fractal.render.FractalData;
 import com.shangin.fractal.render.RenderFrame;
@@ -9,6 +11,7 @@ import com.shangin.fractal.render.RenderRegion;
 import com.shangin.fractal.render.RefinedPixelSnapshot;
 import com.shangin.fractal.render.AntialiasSampleCache;
 import com.shangin.fractal.render.PixelShift;
+import com.shangin.fractal.render.BaseColorPhaseCache;
 import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.scene.SamplingPattern;
 
@@ -20,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 /**
  * Runs a cancellable, candidate-only antialiasing pass after the interactive
@@ -41,6 +45,10 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private final AtomicLong generation = new AtomicLong();
     private final AntialiasSampleCache sampleCache;
     private RenderFrame cachedFrame;
+    private RenderFrame basePhaseFrame;
+    private BaseColorPhaseCache basePhaseCache;
+    private final ThreadLocal<SmoothColorLookup> recolorLookup =
+            ThreadLocal.withInitial(SmoothColorLookup::new);
     private Future<?> currentRefinement;
 
     public InteractiveAntialiasService() {
@@ -84,6 +92,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             if (cachedFrame != frame) {
                 sampleCache.clear();
                 cachedFrame = frame;
+                basePhaseFrame = null;
+                basePhaseCache = null;
             }
         }
         currentRefinement = coordinator.submit(() -> runRefinement(
@@ -113,6 +123,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         try {
             FractalData data = frame.fractalData();
             int[] baseColors = AdaptivePngExportService.colorBaseFrame(data, coloring);
+            SmoothColorLookup lookup = coloring instanceof SmoothPaletteColoring smooth
+                    ? new SmoothColorLookup(smooth)
+                    : null;
             List<Future<?>> tasks = new ArrayList<>();
 
             for (RenderRegion tile : orderedTiles(frame, reusedPixels)) {
@@ -123,6 +136,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         samplingPattern,
                         baseColors,
                         reusedPixels,
+                        lookup,
                         tile,
                         callbackExecutor,
                         onTileReady
@@ -160,6 +174,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             SamplingPattern samplingPattern,
             int[] baseColors,
             RefinedPixelSnapshot reusedPixels,
+            SmoothColorLookup lookup,
             RenderRegion tile,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady
@@ -183,8 +198,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 int tileIndex = (y - tile.y()) * tile.width() + x - tile.x();
                 int frameIndex = y * data.width() + x;
 
-                Integer cachedColor = sampleCache.color(
-                        frameIndex, coloring, frame.request().maxIterations());
+                Integer cachedColor = lookup == null
+                        ? null
+                        : sampleCache.color(frameIndex, lookup);
                 if (cachedColor != null) {
                     tileColors[tileIndex] = cachedColor;
                     continue;
@@ -212,9 +228,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
                 FractalSample[] samples = sampleGrid(
                         calculator, grid, frame.request().maxIterations(), x, y, samplingPattern);
-                sampleCache.put(frameIndex, samples);
-                tileColors[tileIndex] = sampleCache.color(
-                        frameIndex, coloring, frame.request().maxIterations());
+                if (coloring instanceof SmoothPaletteColoring smooth) {
+                    sampleCache.put(frameIndex, samples, smooth);
+                }
+                tileColors[tileIndex] = AdaptivePngExportService.colorSamples(
+                        samples, coloring, frame.request().maxIterations());
             }
         }
 
@@ -233,19 +251,62 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     public int[] recolorCached(RenderFrame frame, ColoringStrategy coloring) {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(coloring);
-        int[] colors = AdaptivePngExportService.colorBaseFrame(frame.fractalData(), coloring);
-        synchronized (this) {
-            if (cachedFrame != frame) {
-                return colors;
-            }
-        }
-        for (int index = 0; index < colors.length; index++) {
-            Integer refined = sampleCache.color(index, coloring, frame.request().maxIterations());
-            if (refined != null) {
-                colors[index] = refined;
-            }
-        }
+        int[] colors = new int[frame.fractalData().size()];
+        recolorCachedInto(frame, coloring, colors);
         return colors;
+    }
+
+    /** Recolors into caller-owned storage so animation buffers can be reused. */
+    public void recolorCachedInto(
+            RenderFrame frame,
+            ColoringStrategy coloring,
+            int[] colors
+    ) {
+        Objects.requireNonNull(frame);
+        Objects.requireNonNull(coloring);
+        Objects.requireNonNull(colors);
+        FractalData data = frame.fractalData();
+        if (colors.length != data.size()) {
+            throw new IllegalArgumentException("Recolor buffer dimensions do not match frame");
+        }
+
+        if (coloring instanceof SmoothPaletteColoring smooth) {
+            BaseColorPhaseCache phases = basePhases(frame, smooth);
+            SmoothColorLookup lookup = recolorLookup.get();
+            lookup.update(smooth);
+            phases.recolorInto(colors, lookup);
+            synchronized (this) {
+                if (cachedFrame != frame) {
+                    return;
+                }
+            }
+            sampleCache.recolorInto(colors, lookup);
+            return;
+        }
+
+        IntStream.range(0, data.size()).parallel().forEach(index ->
+                colors[index] = coloring.color(
+                        data.iterations(index), data.smoothIterations(index),
+                        data.escaped(index), data.maxIterations()));
+    }
+
+    private BaseColorPhaseCache basePhases(
+            RenderFrame frame,
+            SmoothPaletteColoring coloring
+    ) {
+        synchronized (this) {
+            if (basePhaseFrame == frame
+                    && basePhaseCache != null
+                    && basePhaseCache.matches(coloring)) {
+                return basePhaseCache;
+            }
+        }
+        BaseColorPhaseCache created = BaseColorPhaseCache.create(frame.fractalData(), coloring);
+        synchronized (this) {
+            basePhaseFrame = frame;
+            basePhaseCache = created;
+        }
+        return created;
     }
 
     /** Transfers cached AA samples along the exact pixel shift used for frame reuse. */
@@ -258,6 +319,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             sampleCache.shift(source.fractalData().width(), source.fractalData().height(), shift);
         }
         cachedFrame = target;
+        basePhaseFrame = null;
+        basePhaseCache = null;
     }
 
     private static FractalSample[] sampleGrid(

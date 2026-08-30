@@ -34,12 +34,27 @@ public class SmoothPaletteColoring implements ColoringStrategy {
             return INSIDE_COLOR;
         }
 
-        double phase = smoothIterations * colorScale + offset;
+        return colorFromBasePhase(basePhase(smoothIterations));
+    }
+
+    /** Palette-independent phase before the animated offset is applied. */
+    public double basePhase(double smoothIterations) {
+        double phase = smoothIterations * colorScale;
+        return phase - Math.floor(phase / 2.0) * 2.0;
+    }
+
+    /** Colors a cached base phase using this strategy's current offset. */
+    public int colorFromBasePhase(double basePhase) {
+        double phase = basePhase + offset;
         double wrapped = phase - Math.floor(phase / 2.0) * 2.0;
         double position = wrapped <= 1.0
                 ? wrapped
                 : 2.0 - wrapped;
 
         return palette.color(position);
+    }
+
+    public double colorScale() {
+        return colorScale;
     }
 }

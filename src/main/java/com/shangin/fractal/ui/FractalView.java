@@ -50,6 +50,7 @@ public class FractalView extends StackPane {
     private RenderPriority renderPriority = RenderPriority.center();
     private Consumer<Viewport> viewportChangedHandler = ignored -> {};
     private Consumer<Boolean> renderingChangedHandler = ignored -> {};
+    private Runnable colorCyclingStoppedHandler = () -> {};
     private boolean rendering;
     private boolean colorCyclePaused;
     private boolean colorCycling;
@@ -95,6 +96,7 @@ public class FractalView extends StackPane {
             return;
         }
 
+        stopColorCyclingForSceneChange();
         interactionDebounce.stop();
         renderController.cancelCurrent();
         camera.setPreset(preset, width, height);
@@ -111,6 +113,7 @@ public class FractalView extends StackPane {
             return;
         }
 
+        stopColorCyclingForSceneChange();
         interactionDebounce.stop();
         renderController.cancelCurrent();
         camera.reset(width, height);
@@ -133,6 +136,7 @@ public class FractalView extends StackPane {
             return;
         }
 
+        stopColorCyclingForSceneChange();
         resetPriority();
         cameraChanged();
     }
@@ -149,6 +153,7 @@ public class FractalView extends StackPane {
         scene = scene.withColoring(settings);
         colorCycleOffset = settings.offset();
         configurePalette(preset);
+        renderController.cancelRecolor();
         renderController.recolor(settings);
     }
 
@@ -156,6 +161,19 @@ public class FractalView extends StackPane {
         colorCycling = enabled;
         colorCycleOffset = scene.coloring().offset();
         lastCycleTick = 0L;
+    }
+
+    public void setOnColorCyclingStopped(Runnable handler) {
+        colorCyclingStoppedHandler = java.util.Objects.requireNonNull(handler);
+    }
+
+    private void stopColorCyclingForSceneChange() {
+        if (!colorCycling) {
+            return;
+        }
+        colorCycling = false;
+        lastCycleTick = 0L;
+        colorCyclingStoppedHandler.run();
     }
 
     private void advanceColorCycle(long now) {
@@ -197,6 +215,7 @@ public class FractalView extends StackPane {
     }
 
     public void setSamplingPattern(SamplingPattern pattern) {
+        stopColorCyclingForSceneChange();
         scene = scene.withAntialiasing(new AntialiasSettings(
                 pattern,
                 scene.antialiasing().renderMode()
@@ -207,6 +226,7 @@ public class FractalView extends StackPane {
     }
 
     public void setInteractiveRenderMode(InteractiveRenderMode renderMode) {
+        stopColorCyclingForSceneChange();
         scene = scene.withAntialiasing(new AntialiasSettings(
                 scene.antialiasing().samplingPattern(),
                 renderMode
@@ -325,6 +345,7 @@ public class FractalView extends StackPane {
             return;
         }
 
+        stopColorCyclingForSceneChange();
         resetPriority();
         fractalSurface.showPreview(camera.viewport());
         interactionDebounce.playFromStart();
@@ -421,6 +442,7 @@ public class FractalView extends StackPane {
             return;
         }
 
+        stopColorCyclingForSceneChange();
         interactionDebounce.stop();
         renderController.cancelCurrent();
         fractalSurface.showPreview(camera.viewport());
@@ -434,6 +456,7 @@ public class FractalView extends StackPane {
     }
 
     private void scheduleResize() {
+        stopColorCyclingForSceneChange();
         renderController.cancelCurrent();
         colorCyclePaused = true;
         resizeDebounce.playFromStart();
@@ -539,6 +562,7 @@ public class FractalView extends StackPane {
     }
 
     private void cameraChanged() {
+        stopColorCyclingForSceneChange();
         fractalSurface.showPreview(camera.viewport());
         renderController.cancelCurrent();
         colorCyclePaused = true;
@@ -587,6 +611,7 @@ public class FractalView extends StackPane {
             }
 
             if (!panChanged) {
+                stopColorCyclingForSceneChange();
                 renderController.cancelCurrent();
                 panChanged = true;
             }

@@ -44,6 +44,8 @@ public class MainView extends BorderPane {
         );
         fractalView.setOnViewportChanged(inspector::setCenter);
         fractalView.setOnRenderingChanged(inspector::setAppearanceDisabled);
+        fractalView.setOnColorCyclingStopped(
+                () -> inspector.setColorCyclingSelected(false));
 
         setTop(toolbar);
         setLeft(inspector);

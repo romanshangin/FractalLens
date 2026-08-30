@@ -376,6 +376,22 @@ public final class AdaptivePngExportService implements AutoCloseable {
         ).color();
     }
 
+    static int colorSamples(
+            FractalSample[] samples,
+            ColoringStrategy coloring,
+            int maxIterations
+    ) {
+        ColorAccumulator accumulator = new ColorAccumulator();
+        for (FractalSample sample : samples) {
+            accumulator.add(coloring.color(
+                    sample.iterations(),
+                    sample.smoothIterations(),
+                    sample.escaped(),
+                    maxIterations));
+        }
+        return accumulator.result().color();
+    }
+
     private static SampleResult sampleGrid(
             FractalCalculator calculator,
             ColoringStrategy coloring,

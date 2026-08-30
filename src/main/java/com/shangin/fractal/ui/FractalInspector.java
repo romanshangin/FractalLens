@@ -28,6 +28,7 @@ public final class FractalInspector extends ScrollPane {
     private final TextField centerRealField = createCoordinateField();
     private final TextField centerImaginaryField = createCoordinateField();
     private final ZoomIndicator zoomIndicator = new ZoomIndicator();
+    private final CheckBox colorCycling = new CheckBox("Animate");
     private final GridPane appearanceControls;
     private double centerReal;
     private double centerImaginary;
@@ -68,7 +69,6 @@ public final class FractalInspector extends ScrollPane {
         renderMode.setOnAction(event ->
                 onRenderModeChanged.accept(renderMode.getValue()));
 
-        CheckBox colorCycling = new CheckBox("Animate");
         colorCycling.setTooltip(new Tooltip("Cycle the palette without recalculating the fractal"));
         colorCycling.setOnAction(event -> onColorCyclingChanged.accept(colorCycling.isSelected()));
 
@@ -117,9 +117,9 @@ public final class FractalInspector extends ScrollPane {
     ) {
         GridPane grid = createGrid();
         grid.addRow(0, new Label("Palette"), palette);
-        grid.addRow(1, new Label("AA pattern"), samplingPattern);
-        grid.addRow(2, new Label("Display"), renderMode);
-        grid.addRow(3, new Label("Color cycle"), colorCycling);
+        grid.addRow(1, new Label("Color cycle"), colorCycling);
+        grid.addRow(2, new Label("AA pattern"), samplingPattern);
+        grid.addRow(3, new Label("Display"), renderMode);
         GridPane.setHgrow(palette, Priority.ALWAYS);
         GridPane.setHgrow(samplingPattern, Priority.ALWAYS);
         GridPane.setHgrow(renderMode, Priority.ALWAYS);
@@ -191,6 +191,10 @@ public final class FractalInspector extends ScrollPane {
 
     public void setAppearanceDisabled(boolean disabled) {
         appearanceControls.setDisable(disabled);
+    }
+
+    public void setColorCyclingSelected(boolean selected) {
+        colorCycling.setSelected(selected);
     }
 
     private void updateCoordinateText() {

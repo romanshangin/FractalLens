@@ -1,10 +1,13 @@
 package com.shangin.fractal.render;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
+import com.shangin.fractal.coloring.SmoothPaletteColoring;
+import com.shangin.fractal.coloring.SmoothColorLookup;
 import com.shangin.fractal.formula.FractalSample;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 /**
  * Bounded, palette-independent LRU storage for supersampled display pixels.
@@ -13,13 +16,17 @@ import java.util.Map;
  */
 public final class AntialiasSampleCache {
 
-    public static final long DEFAULT_MAX_BYTES = 64L * 1024L * 1024L;
-    private static final int SAMPLE_BYTES = Integer.BYTES + Double.BYTES + 1;
+    public static final long DEFAULT_MAX_BYTES = Long.getLong(
+            "fractal.aaCache.maxBytes", 128L * 1024L * 1024L);
+    private static final int SAMPLE_BYTES = Short.BYTES;
+    private static final int[] LINEAR_TO_SRGB = createSrgbLookup();
 
     private final long maxBytes;
     private final LinkedHashMap<Integer, Samples> entries =
             new LinkedHashMap<>(256, 0.75f, true);
     private long usedBytes;
+    private Snapshot recolorSnapshot;
+    private double cachedColorScale = Double.NaN;
 
     public AntialiasSampleCache() {
         this(DEFAULT_MAX_BYTES);
@@ -32,13 +39,22 @@ public final class AntialiasSampleCache {
         this.maxBytes = maxBytes;
     }
 
-    public synchronized void put(int pixelIndex, FractalSample[] samples) {
-        Samples value = Samples.copyOf(samples);
+    public synchronized void put(
+            int pixelIndex,
+            FractalSample[] samples,
+            SmoothPaletteColoring coloring
+    ) {
+        if (Double.compare(cachedColorScale, coloring.colorScale()) != 0) {
+            clear();
+            cachedColorScale = coloring.colorScale();
+        }
+        Samples value = Samples.copyOf(samples, coloring);
         long bytes = value.estimatedBytes();
         Samples replaced = entries.remove(pixelIndex);
         if (replaced != null) {
             usedBytes -= replaced.estimatedBytes();
         }
+        recolorSnapshot = null;
         if (bytes > maxBytes) {
             return;
         }
@@ -53,7 +69,27 @@ public final class AntialiasSampleCache {
 
     public synchronized Integer color(int pixelIndex, ColoringStrategy coloring, int maxIterations) {
         Samples samples = entries.get(pixelIndex);
-        return samples == null ? null : samples.color(coloring, maxIterations);
+        return samples == null || !(coloring instanceof SmoothPaletteColoring smooth)
+                || Double.compare(cachedColorScale, smooth.colorScale()) != 0
+                ? null
+                : samples.color(new SmoothColorLookup(smooth));
+    }
+
+    public synchronized Integer color(int pixelIndex, SmoothColorLookup lookup) {
+        Samples samples = entries.get(pixelIndex);
+        return samples == null ? null : samples.color(lookup);
+    }
+
+    /**
+     * Applies an immutable cache snapshot in parallel. No LRU lock is taken in
+     * the per-pixel animation loop, and each worker writes a distinct pixel.
+     */
+    public void recolorInto(int[] colors, SmoothColorLookup lookup) {
+        Snapshot snapshot = snapshot();
+        IntStream.range(0, snapshot.pixelIndices().length).parallel().forEach(index -> {
+            colors[snapshot.pixelIndices()[index]] =
+                    snapshot.samples()[index].color(lookup);
+        });
     }
 
     public synchronized boolean contains(int pixelIndex) {
@@ -75,6 +111,8 @@ public final class AntialiasSampleCache {
     public synchronized void clear() {
         entries.clear();
         usedBytes = 0;
+        recolorSnapshot = null;
+        cachedColorScale = Double.NaN;
     }
 
     /** Retains samples whose pixels remain visible after an integer pan. */
@@ -92,58 +130,90 @@ public final class AntialiasSampleCache {
         entries.clear();
         entries.putAll(shifted);
         usedBytes = entries.values().stream().mapToLong(Samples::estimatedBytes).sum();
+        recolorSnapshot = null;
     }
 
-    private record Samples(int[] iterations, double[] smoothIterations, boolean[] escaped) {
-        static Samples copyOf(FractalSample[] samples) {
+    private synchronized Snapshot snapshot() {
+        if (recolorSnapshot != null) {
+            return recolorSnapshot;
+        }
+        int[] pixelIndices = new int[entries.size()];
+        Samples[] samples = new Samples[entries.size()];
+        int index = 0;
+        for (Map.Entry<Integer, Samples> entry : entries.entrySet()) {
+            pixelIndices[index] = entry.getKey();
+            samples[index] = entry.getValue();
+            index++;
+        }
+        recolorSnapshot = new Snapshot(pixelIndices, samples);
+        return recolorSnapshot;
+    }
+
+    private record Samples(short[] phases, int escapedMask) {
+        static Samples copyOf(FractalSample[] samples, SmoothPaletteColoring coloring) {
             if (samples == null || samples.length == 0) {
                 throw new IllegalArgumentException("AA samples cannot be empty");
             }
-            int[] iterations = new int[samples.length];
-            double[] smooth = new double[samples.length];
-            boolean[] escaped = new boolean[samples.length];
+            if (samples.length > Integer.SIZE) {
+                throw new IllegalArgumentException("At most 32 AA samples are supported");
+            }
+            short[] phases = new short[samples.length];
+            int escapedMask = 0;
             for (int index = 0; index < samples.length; index++) {
                 FractalSample sample = java.util.Objects.requireNonNull(samples[index]);
-                iterations[index] = sample.iterations();
-                smooth[index] = sample.smoothIterations();
-                escaped[index] = sample.escaped();
+                if (sample.escaped()) {
+                    escapedMask |= 1 << index;
+                    double phase = coloring.basePhase(sample.smoothIterations());
+                    phases[index] = SmoothColorLookup.encode(phase);
+                }
             }
-            return new Samples(iterations, smooth, escaped);
+            return new Samples(phases, escapedMask);
         }
 
         long estimatedBytes() {
-            return (long) iterations.length * SAMPLE_BYTES;
+            return (long) phases.length * SAMPLE_BYTES + Integer.BYTES;
         }
 
-        int color(ColoringStrategy coloring, int maxIterations) {
+        int color(SmoothColorLookup lookup) {
             long alpha = 0;
             double red = 0, green = 0, blue = 0;
-            for (int index = 0; index < iterations.length; index++) {
-                int color = coloring.color(iterations[index], smoothIterations[index], escaped[index], maxIterations);
+            for (int index = 0; index < phases.length; index++) {
+                boolean escaped = (escapedMask & 1 << index) != 0;
+                int color = escaped ? lookup.color(phases[index]) : 0xFF000000;
                 alpha += color >>> 24;
-                red += toLinear(color >>> 16 & 0xff);
-                green += toLinear(color >>> 8 & 0xff);
-                blue += toLinear(color & 0xff);
+                if (escaped) {
+                    red += lookup.linearRed(phases[index]);
+                    green += lookup.linearGreen(phases[index]);
+                    blue += lookup.linearBlue(phases[index]);
+                }
             }
-            int count = iterations.length;
+            int count = phases.length;
             return ((int) ((alpha + count / 2) / count) << 24)
                     | (fromLinear(red / count) << 16)
                     | (fromLinear(green / count) << 8)
                     | fromLinear(blue / count);
         }
 
-        private static double toLinear(int channel) {
-            double srgb = channel / 255.0;
-            return srgb <= 0.04045
-                    ? srgb / 12.92
-                    : Math.pow((srgb + 0.055) / 1.055, 2.4);
-        }
-
         private static int fromLinear(double linear) {
+            int index = Math.clamp(
+                    (int) Math.round(linear * (LINEAR_TO_SRGB.length - 1)),
+                    0,
+                    LINEAR_TO_SRGB.length - 1);
+            return LINEAR_TO_SRGB[index];
+        }
+    }
+
+    private record Snapshot(int[] pixelIndices, Samples[] samples) {}
+
+    private static int[] createSrgbLookup() {
+        int[] lookup = new int[65_536];
+        for (int index = 0; index < lookup.length; index++) {
+            double linear = (double) index / (lookup.length - 1);
             double srgb = linear <= 0.0031308
                     ? linear * 12.92
                     : 1.055 * Math.pow(linear, 1.0 / 2.4) - 0.055;
-            return Math.clamp((int) Math.round(srgb * 255.0), 0, 255);
+            lookup[index] = Math.clamp((int) Math.round(srgb * 255.0), 0, 255);
         }
+        return lookup;
     }
 }
