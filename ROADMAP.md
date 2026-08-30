@@ -71,6 +71,7 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - [x] Combine distance candidates with the existing image-space edge detector before using distance estimation to schedule interactive or export supersampling; keep Burning Ship and Tricorn on the current detector because their maps are non-analytic.
 - [x] Treat raw image-space edge filtering as an optional fast display mode; by default, keep the transformed previous frame visible and build the replacement progressively from fully refined tiles.
 - Cache palette-independent subpixel samples for AA candidates so palette changes can recolor both the base frame and refined tiles without recalculating the fractal; define memory limits and eviction behavior.
+- Add an optional color-cycling animation that continuously advances the smooth-coloring offset over its seamless period-two loop without recalculating the fractal; pause it during navigation/rendering, use a throttled double-buffered recolor path, and apply it to refined pixels through the palette-independent AA cache.
 - Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
 - Add orbit traps and editable palette stops.
 - Add a render cache, resize reuse, and a separate high-resolution/off-screen export pipeline.
