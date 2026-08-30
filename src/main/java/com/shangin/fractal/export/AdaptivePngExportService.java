@@ -1,6 +1,7 @@
 package com.shangin.fractal.export;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
+import com.shangin.fractal.formula.DistanceSample;
 import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.render.FractalCalculator;
 import com.shangin.fractal.render.FractalColorizer;
@@ -236,7 +237,15 @@ public final class AdaptivePngExportService implements AutoCloseable {
             int x,
             int y
     ) {
-        if (isBaseEdge(baseData, baseColors, x, y)) {
+        if (isSupersamplingCandidate(
+                calculator,
+                grid,
+                maxIterations,
+                baseData,
+                baseColors,
+                x,
+                y
+        )) {
             return sampleGrid(
                     calculator,
                     coloring,
@@ -312,6 +321,37 @@ public final class AdaptivePngExportService implements AutoCloseable {
         }
 
         return false;
+    }
+
+    /**
+     * Combines the inexpensive image-space detector with an analytic exterior
+     * distance estimate when the selected formula provides one.
+     */
+    static boolean isSupersamplingCandidate(
+            FractalCalculator calculator,
+            RenderGrid grid,
+            int maxIterations,
+            FractalData data,
+            int[] colors,
+            int x,
+            int y
+    ) {
+        if (isBaseEdge(data, colors, x, y)) {
+            return true;
+        }
+
+        if (!calculator.supportsDistanceEstimation()) {
+            return false;
+        }
+
+        DistanceSample sample = calculator.calculateDistanceSample(
+                grid.realAt(x),
+                grid.imaginaryAt(y),
+                maxIterations
+        );
+        double pixelRadius = 0.5 * Math.hypot(grid.realStep(), grid.imaginaryStep());
+
+        return sample.hasDistance() && sample.distance() <= pixelRadius;
     }
 
     static int sampleGridColor(

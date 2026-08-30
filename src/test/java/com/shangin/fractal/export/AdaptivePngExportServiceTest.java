@@ -2,6 +2,8 @@ package com.shangin.fractal.export;
 
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.formula.DistanceEstimatingFormula;
+import com.shangin.fractal.formula.DistanceSample;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.render.FractalCalculator;
@@ -45,6 +47,40 @@ class AdaptivePngExportServiceTest {
         assertFalse(AdaptivePngExportService.isBaseEdge(data, colors, 0, 0));
         assertTrue(AdaptivePngExportService.isBaseEdge(data, colors, 1, 0));
         assertTrue(AdaptivePngExportService.isBaseEdge(data, colors, 2, 0));
+    }
+
+    @Test
+    void combinesImageEdgesWithAnalyticDistanceCandidates() {
+        FractalData data = new FractalData(1, 1, 100);
+        data.set(0, new FractalSample(10, true, 3.0, 0.0));
+        int[] colors = {0xFF202020};
+        RenderGrid grid = new RenderGrid(0.0, 0.0, 0.2, 0.2, 0, 0, 0);
+        FractalCalculator nearBoundary = new FractalCalculator(new FixedDistanceFormula(0.1));
+        FractalCalculator farFromBoundary = new FractalCalculator(new FixedDistanceFormula(0.2));
+
+        assertTrue(AdaptivePngExportService.isSupersamplingCandidate(
+                nearBoundary, grid, 100, data, colors, 0, 0
+        ));
+        assertFalse(AdaptivePngExportService.isSupersamplingCandidate(
+                farFromBoundary, grid, 100, data, colors, 0, 0
+        ));
+    }
+
+    @Test
+    void nonAnalyticFormulaUsesOnlyImageSpaceEdges() {
+        FractalData data = new FractalData(1, 1, 100);
+        data.set(0, new FractalSample(10, true, 3.0, 0.0));
+
+        assertFalse(AdaptivePngExportService.isSupersamplingCandidate(
+                new FractalCalculator((real, imaginary, iterations) ->
+                        new FractalSample(10, true, 3.0, 0.0)),
+                new RenderGrid(0.0, 0.0, 0.2, 0.2, 0, 0, 0),
+                100,
+                data,
+                new int[]{0xFF202020},
+                0,
+                0
+        ));
     }
 
     @Test
@@ -140,5 +176,21 @@ class AdaptivePngExportServiceTest {
         BufferedImage image = ImageIO.read(target.toFile());
         assertEquals(width, image.getWidth());
         assertEquals(height, image.getHeight());
+    }
+
+    private record FixedDistanceFormula(double distance) implements DistanceEstimatingFormula {
+        @Override
+        public FractalSample calculate(double real, double imaginary, int maxIterations) {
+            return new FractalSample(10, true, 3.0, 0.0);
+        }
+
+        @Override
+        public DistanceSample calculateDistance(
+                double real,
+                double imaginary,
+                int maxIterations
+        ) {
+            return new DistanceSample(calculate(real, imaginary, maxIterations), distance);
+        }
     }
 }

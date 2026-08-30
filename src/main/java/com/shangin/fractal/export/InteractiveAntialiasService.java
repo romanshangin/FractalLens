@@ -144,7 +144,15 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     throw new CancellationException();
                 }
 
-                if (!AdaptivePngExportService.isBaseEdge(data, baseColors, x, y)) {
+                if (!AdaptivePngExportService.isSupersamplingCandidate(
+                        calculator,
+                        grid,
+                        frame.request().maxIterations(),
+                        data,
+                        baseColors,
+                        x,
+                        y
+                )) {
                     continue;
                 }
 
