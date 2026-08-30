@@ -53,6 +53,7 @@ class InteractiveAntialiasServiceTest {
                     frame,
                     new SmoothPaletteColoring(PalettePreset.ICE.palette()),
                     SamplingPattern.REGULAR,
+                    RefinedPixelSnapshot.empty(48, 32),
                     Runnable::run,
                     (region, colors) -> {
                         tileArrivedBeforeCompletion.compareAndSet(
@@ -116,6 +117,7 @@ class InteractiveAntialiasServiceTest {
                     frame,
                     new SmoothPaletteColoring(PalettePreset.ICE.palette()),
                     SamplingPattern.REGULAR,
+                    RefinedPixelSnapshot.empty(32, 32),
                     callback -> {
                         callbacks.add(callback);
                         callbackQueued.countDown();
@@ -159,6 +161,7 @@ class InteractiveAntialiasServiceTest {
                     frame,
                     (iterations, smooth, escaped, maximum) -> 0xFF123456,
                     SamplingPattern.REGULAR,
+                    RefinedPixelSnapshot.empty(40, 40),
                     Runnable::run,
                     (region, colors) -> {
                         assertTrue(Arrays.stream(colors).allMatch(color -> color == 0xFF123456));
@@ -170,6 +173,118 @@ class InteractiveAntialiasServiceTest {
 
             assertTrue(completed.await(5, TimeUnit.SECONDS));
             assertEquals(4, publishedTiles.get());
+        }
+    }
+
+    @Test
+    void refinementShouldSkipAlreadyRefinedOverlap() throws Exception {
+        AtomicInteger sampleCalculations = new AtomicInteger();
+        int width = 40;
+        int height = 32;
+        FractalCalculator fractalCalculator = new FractalCalculator(
+                (real, imaginary, maximum) -> {
+                    sampleCalculations.incrementAndGet();
+                    return new FractalSample(1, true, 3.0, 0.0);
+                }
+        );
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                fractalCalculator,
+                FractalPreset.BURNING_SHIP.defaultViewport(),
+                width,
+                height,
+                20
+        ));
+        int[] baseColors = new int[width * height];
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int iterations = x & 1;
+                frame.fractalData().set(
+                        x,
+                        y,
+                        new FractalSample(iterations, true, 3.0, 0.0)
+                );
+                baseColors[y * width + x] = iterations == 0
+                        ? 0xFF000000
+                        : 0xFFFFFFFF;
+            }
+        }
+        frame.validity().markReady(new RenderRegion(0, 0, width, height));
+
+        ValidityMask refined = new ValidityMask(width, height);
+        refined.markReady(new RenderRegion(0, 0, 32, height));
+        RefinedPixelSnapshot reused = new RefinedPixelSnapshot(
+                width,
+                height,
+                baseColors,
+                refined
+        );
+
+        try (InteractiveAntialiasService service = new InteractiveAntialiasService()) {
+            CountDownLatch completed = new CountDownLatch(1);
+            AtomicInteger publishedTiles = new AtomicInteger();
+
+            service.refine(
+                    frame,
+                    (iterations, smooth, escaped, maximum) -> iterations == 0
+                            ? 0xFF000000
+                            : 0xFFFFFFFF,
+                    SamplingPattern.REGULAR,
+                    reused,
+                    Runnable::run,
+                    (region, colors) -> publishedTiles.incrementAndGet(),
+                    completed::countDown,
+                    exception -> fail(exception)
+            );
+
+            assertTrue(completed.await(5, TimeUnit.SECONDS));
+            assertEquals(1, publishedTiles.get());
+            assertEquals(8 * height * 16, sampleCalculations.get());
+        }
+    }
+
+    @Test
+    void fullyRefinedFrameShouldCompleteWithoutSamplingOrPublishing() throws Exception {
+        int width = 32;
+        int height = 16;
+        AtomicInteger sampleCalculations = new AtomicInteger();
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator((real, imaginary, maximum) -> {
+                    sampleCalculations.incrementAndGet();
+                    return new FractalSample(1, true, 3.0, 0.0);
+                }),
+                FractalPreset.BURNING_SHIP.defaultViewport(),
+                width,
+                height,
+                20
+        ));
+        frame.validity().markReady(new RenderRegion(0, 0, width, height));
+        ValidityMask refined = new ValidityMask(width, height);
+        refined.markReady(new RenderRegion(0, 0, width, height));
+
+        try (InteractiveAntialiasService service = new InteractiveAntialiasService()) {
+            CountDownLatch completed = new CountDownLatch(1);
+            AtomicInteger publishedTiles = new AtomicInteger();
+
+            service.refine(
+                    frame,
+                    (iterations, smooth, escaped, maximum) -> 0xFF123456,
+                    SamplingPattern.REGULAR,
+                    new RefinedPixelSnapshot(
+                            width,
+                            height,
+                            new int[width * height],
+                            refined
+                    ),
+                    Runnable::run,
+                    (region, colors) -> publishedTiles.incrementAndGet(),
+                    completed::countDown,
+                    exception -> fail(exception)
+            );
+
+            assertTrue(completed.await(5, TimeUnit.SECONDS));
+            assertEquals(0, publishedTiles.get());
+            assertEquals(0, sampleCalculations.get());
         }
     }
 }

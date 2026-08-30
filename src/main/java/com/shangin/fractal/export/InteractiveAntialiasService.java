@@ -6,6 +6,7 @@ import com.shangin.fractal.render.FractalData;
 import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.render.RenderRegion;
+import com.shangin.fractal.render.RefinedPixelSnapshot;
 import com.shangin.fractal.scene.SamplingPattern;
 
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             RenderFrame frame,
             ColoringStrategy coloring,
             SamplingPattern samplingPattern,
+            RefinedPixelSnapshot reusedPixels,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
             Runnable onSuccess,
@@ -49,6 +51,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(coloring);
         Objects.requireNonNull(samplingPattern);
+        Objects.requireNonNull(reusedPixels);
         Objects.requireNonNull(callbackExecutor);
         Objects.requireNonNull(onTileReady);
         Objects.requireNonNull(onSuccess);
@@ -56,6 +59,10 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
         if (!frame.isComplete()) {
             throw new IllegalArgumentException("Interactive AA requires a completed frame");
+        }
+        if (reusedPixels.width() != frame.fractalData().width()
+                || reusedPixels.height() != frame.fractalData().height()) {
+            throw new IllegalArgumentException("Refined pixel dimensions must match frame");
         }
 
         long refinementId = generation.incrementAndGet();
@@ -65,6 +72,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 frame,
                 coloring,
                 samplingPattern,
+                reusedPixels,
                 callbackExecutor,
                 onTileReady,
                 onSuccess,
@@ -77,6 +85,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             RenderFrame frame,
             ColoringStrategy coloring,
             SamplingPattern samplingPattern,
+            RefinedPixelSnapshot reusedPixels,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
             Runnable onSuccess,
@@ -94,6 +103,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         coloring,
                         samplingPattern,
                         baseColors,
+                        reusedPixels,
                         tile,
                         callbackExecutor,
                         onTileReady
@@ -130,6 +140,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             ColoringStrategy coloring,
             SamplingPattern samplingPattern,
             int[] baseColors,
+            RefinedPixelSnapshot reusedPixels,
             RenderRegion tile,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady
@@ -138,6 +149,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         RenderGrid grid = frame.renderGrid();
         FractalCalculator calculator = frame.request().calculator();
         int[] tileColors = new int[tile.width() * tile.height()];
+        boolean calculatedPixel = false;
 
         for (int y = tile.y(); y < tile.y() + tile.height(); y++) {
             if (shouldCancel(refinementId)) {
@@ -151,6 +163,13 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
                 int tileIndex = (y - tile.y()) * tile.width() + x - tile.x();
                 int frameIndex = y * data.width() + x;
+
+                if (reusedPixels.isRefined(x, y)) {
+                    tileColors[tileIndex] = reusedPixels.color(x, y);
+                    continue;
+                }
+
+                calculatedPixel = true;
                 tileColors[tileIndex] = baseColors[frameIndex];
 
                 if (!AdaptivePngExportService.isSupersamplingCandidate(
@@ -179,7 +198,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             }
         }
 
-        if (shouldCancel(refinementId)) {
+        if (!calculatedPixel || shouldCancel(refinementId)) {
             return;
         }
 

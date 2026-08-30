@@ -123,6 +123,57 @@ public final class ValidityMask {
         return ready.cardinality();
     }
 
+    public synchronized void clear() {
+        ready.clear();
+    }
+
+    public synchronized ValidityMask copy() {
+        ValidityMask copy = new ValidityMask(width, height);
+        copy.ready.or(ready);
+        return copy;
+    }
+
+    /** Replaces this mask with source pixels shifted into target coordinates. */
+    public void copyShiftedFrom(ValidityMask source, PixelShift shift) {
+        if (source.width != width || source.height != height) {
+            throw new IllegalArgumentException("Validity mask dimensions must match");
+        }
+
+        ValidityMask snapshot = source.copy();
+        clear();
+
+        int sourceXFrom = Math.max(0, -shift.dx());
+        int sourceXTo = Math.min(width, width - shift.dx());
+        int sourceYFrom = Math.max(0, -shift.dy());
+        int sourceYTo = Math.min(height, height - shift.dy());
+
+        for (int sourceY = sourceYFrom; sourceY < sourceYTo; sourceY++) {
+            int targetY = sourceY + shift.dy();
+            int runStart = -1;
+
+            for (int sourceX = sourceXFrom; sourceX < sourceXTo; sourceX++) {
+                int targetX = sourceX + shift.dx();
+                if (snapshot.isReady(sourceX, sourceY)) {
+                    if (runStart < 0) {
+                        runStart = targetX;
+                    }
+                } else if (runStart >= 0) {
+                    markReady(new RenderRegion(runStart, targetY, targetX - runStart, 1));
+                    runStart = -1;
+                }
+            }
+
+            if (runStart >= 0) {
+                markReady(new RenderRegion(
+                        runStart,
+                        targetY,
+                        sourceXTo + shift.dx() - runStart,
+                        1
+                ));
+            }
+        }
+    }
+
     private void validateRegion(RenderRegion region) {
         if (region.x() < 0
                 || region.y() < 0

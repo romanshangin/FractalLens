@@ -137,7 +137,8 @@ public final class FractalRenderController implements AutoCloseable {
                     sourceFrame,
                     targetFrame,
                     shift,
-                    coloring
+                    coloring,
+                    !refinedDisplay
             );
         }
 
@@ -198,6 +199,7 @@ public final class FractalRenderController implements AutoCloseable {
                                 completedFrame,
                                 coloring,
                                 scene.antialiasing().samplingPattern(),
+                                surface.refinedPixelSnapshot(completedFrame),
                                 Platform::runLater,
                                 (region, colors) -> surface.displayRefinedTile(
                                         completedFrame,
@@ -238,6 +240,7 @@ public final class FractalRenderController implements AutoCloseable {
                             completedFrame,
                             coloring,
                             scene.antialiasing().samplingPattern(),
+                            surface.refinedPixelSnapshot(completedFrame),
                             Platform::runLater,
                             (region, colors) -> surface.applyAntialiasing(
                                     completedFrame,

@@ -35,6 +35,8 @@ public final class FractalSurface extends Region {
 
     private SurfaceBuffer stagingFrame;
     private SurfaceBuffer displayedFrame;
+    private ValidityMask stagingRefinementValidity;
+    private ValidityMask displayedRefinementValidity;
     private RenderFrame stagingRenderFrame;
     private RenderFrame displayedRenderFrame;
     private FractalScene displayedScene;
@@ -72,10 +74,12 @@ public final class FractalSurface extends Region {
                             renderWidth,
                             renderHeight
                     );
+            stagingRefinementValidity = new ValidityMask(renderWidth, renderHeight);
         }
 
         if (stagingRenderFrame != renderFrame) {
             stagingFrame.clear();
+            stagingRefinementValidity.clear();
         }
 
         stagingRenderFrame = renderFrame;
@@ -203,12 +207,11 @@ public final class FractalSurface extends Region {
         }
     }
 
-    /** Clears raw colors and prepares a transparent overlay for refined tiles. */
+    /** Shows preserved refined pixels and prepares the overlay for new AA tiles. */
     public void beginRefinedRender(RenderFrame frame) {
         if (stagingFrame == null || stagingRenderFrame != frame) {
             return;
         }
-        stagingFrame.clear();
         progressivePreviewTransform.setToIdentity();
         progressiveImageView.setImage(stagingFrame.image());
     }
@@ -219,12 +222,15 @@ public final class FractalSurface extends Region {
     ) {
         SurfaceBuffer oldDisplayed =
                 displayedFrame;
+        ValidityMask oldDisplayedValidity = displayedRefinementValidity;
 
         displayedFrame =
                 stagingFrame;
+        displayedRefinementValidity = stagingRefinementValidity;
 
         stagingFrame =
                 oldDisplayed;
+        stagingRefinementValidity = oldDisplayedValidity;
 
         displayedRenderFrame = renderFrame;
         displayedScene = Objects.requireNonNull(scene);
@@ -253,6 +259,7 @@ public final class FractalSurface extends Region {
         renderWidth = newRenderWidth;
         renderHeight = newRenderHeight;
         stagingFrame = new SurfaceBuffer(renderWidth, renderHeight);
+        stagingRefinementValidity = new ValidityMask(renderWidth, renderHeight);
         stagingRenderFrame = null;
     }
 
@@ -286,6 +293,7 @@ public final class FractalSurface extends Region {
             return;
         }
         applyTile(displayedFrame, region, colors);
+        displayedRefinementValidity.markReady(region);
     }
 
     /** Publishes one quality-mode AA tile into the current staging frame. */
@@ -298,6 +306,32 @@ public final class FractalSurface extends Region {
             return;
         }
         applyTile(stagingFrame, region, colors);
+        stagingRefinementValidity.markReady(region);
+    }
+
+    /** Copies current refined colors and their validity for background AA reuse. */
+    public RefinedPixelSnapshot refinedPixelSnapshot(RenderFrame frame) {
+        if (stagingRenderFrame == frame
+                && stagingFrame != null
+                && stagingRefinementValidity != null) {
+            return new RefinedPixelSnapshot(
+                    stagingFrame.width(),
+                    stagingFrame.height(),
+                    stagingFrame.intBuffer().array(),
+                    stagingRefinementValidity
+            );
+        }
+        if (displayedRenderFrame == frame
+                && displayedFrame != null
+                && displayedRefinementValidity != null) {
+            return new RefinedPixelSnapshot(
+                    displayedFrame.width(),
+                    displayedFrame.height(),
+                    displayedFrame.intBuffer().array(),
+                    displayedRefinementValidity
+            );
+        }
+        return RefinedPixelSnapshot.empty(frame.request().width(), frame.request().height());
     }
 
     private static void applyTile(
@@ -427,12 +461,22 @@ public final class FractalSurface extends Region {
         }
 
         colorizer.color(displayedRenderFrame.fractalData(), displayedFrame.intBuffer(), coloring);
+        invalidateRefinement();
 
         if (displayedScene != null) {
             displayedScene = displayedScene.withColoring(settings);
         }
 
         displayedFrame.update();
+    }
+
+    public void invalidateRefinement() {
+        if (displayedRefinementValidity != null) {
+            displayedRefinementValidity.clear();
+        }
+        if (stagingRefinementValidity != null) {
+            stagingRefinementValidity.clear();
+        }
     }
 
     public void setPreviewBackground(Palette palette) {
@@ -582,7 +626,8 @@ public final class FractalSurface extends Region {
             RenderFrame sourceFrame,
             RenderFrame targetFrame,
             PixelShift shift,
-            ColoringStrategy coloring
+            ColoringStrategy coloring,
+            boolean includeRawReadyPixels
     ) {
         Objects.requireNonNull(coloring);
 
@@ -591,8 +636,10 @@ public final class FractalSurface extends Region {
         }
 
         if (!stagingFrame.shiftInPlace(shift)) {
+            stagingRefinementValidity.clear();
             return false;
         }
+        stagingRefinementValidity.copyShiftedFrom(stagingRefinementValidity, shift);
 
         stagingRenderFrame = targetFrame;
 
@@ -602,7 +649,9 @@ public final class FractalSurface extends Region {
          * valid sample so those rows are present in the shifted image before
          * the resumed renderer skips them.
          */
-        displayReadyPixels(targetFrame, coloring);
+        if (includeRawReadyPixels) {
+            displayReadyPixels(targetFrame, coloring);
+        }
 
         return true;
     }
@@ -645,6 +694,11 @@ public final class FractalSurface extends Region {
                 .updateBuffer(
                         ignored -> dirtyRegion
                 );
+
+        stagingRefinementValidity.copyShiftedFrom(
+                displayedRefinementValidity,
+                shift
+        );
 
         return true;
     }

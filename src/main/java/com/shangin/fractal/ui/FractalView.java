@@ -140,6 +140,7 @@ public class FractalView extends StackPane {
                 scene.antialiasing().renderMode()
         ));
         renderController.cancelCurrent();
+        fractalSurface.invalidateRefinement();
         recalculate();
     }
 
