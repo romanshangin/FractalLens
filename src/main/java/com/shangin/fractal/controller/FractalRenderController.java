@@ -203,7 +203,12 @@ public final class FractalRenderController implements AutoCloseable {
                             coloring,
                             scene.antialiasing().samplingPattern(),
                             Platform::runLater,
-                            colors -> surface.applyAntialiasing(completedFrame, colors),
+                            (region, colors) -> surface.applyAntialiasing(
+                                    completedFrame,
+                                    region,
+                                    colors
+                            ),
+                            () -> {},
                             Throwable::printStackTrace
                     );
 

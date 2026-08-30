@@ -259,25 +259,42 @@ public final class FractalSurface extends Region {
         return new CompletedRender(displayedScene, displayedRenderFrame);
     }
 
-    /** Replaces the visible base colors only when refinement belongs to it. */
-    public void applyAntialiasing(RenderFrame frame, int[] colors) {
+    /** Applies one refined tile only when it belongs to the visible frame. */
+    public void applyAntialiasing(
+            RenderFrame frame,
+            RenderRegion region,
+            int[] colors
+    ) {
+        Objects.requireNonNull(region);
         Objects.requireNonNull(colors);
 
         if (displayedRenderFrame != frame || displayedFrame == null) {
             return;
         }
-        if (colors.length != displayedFrame.width() * displayedFrame.height()) {
-            throw new IllegalArgumentException("AA color buffer dimensions do not match frame");
+        if (region.x() < 0
+                || region.y() < 0
+                || region.x() + region.width() > displayedFrame.width()
+                || region.y() + region.height() > displayedFrame.height()
+                || colors.length != region.width() * region.height()) {
+            throw new IllegalArgumentException("AA tile dimensions do not match frame");
         }
 
-        System.arraycopy(
-                colors,
-                0,
-                displayedFrame.intBuffer().array(),
-                0,
-                colors.length
-        );
-        displayedFrame.update();
+        int[] target = displayedFrame.intBuffer().array();
+        for (int row = 0; row < region.height(); row++) {
+            System.arraycopy(
+                    colors,
+                    row * region.width(),
+                    target,
+                    (region.y() + row) * displayedFrame.width() + region.x(),
+                    region.width()
+            );
+        }
+        displayedFrame.pixelBuffer().updateBuffer(ignored -> new Rectangle2D(
+                region.x(),
+                region.y(),
+                region.width(),
+                region.height()
+        ));
     }
 
     private void resetPreview() {

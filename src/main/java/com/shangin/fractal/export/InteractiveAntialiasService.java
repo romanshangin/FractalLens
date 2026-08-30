@@ -5,6 +5,7 @@ import com.shangin.fractal.render.FractalCalculator;
 import com.shangin.fractal.render.FractalData;
 import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderGrid;
+import com.shangin.fractal.render.RenderRegion;
 import com.shangin.fractal.scene.SamplingPattern;
 
 import java.util.ArrayList;
@@ -13,16 +14,18 @@ import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Runs a cancellable, edge-only antialiasing pass after the interactive base
- * frame is already visible. Navigation never waits for this refinement.
+ * Runs a cancellable, candidate-only antialiasing pass after the interactive
+ * base frame is visible and publishes refined tiles progressively. Navigation
+ * never waits for this refinement.
  */
 public final class InteractiveAntialiasService implements AutoCloseable {
 
     private static final int SAMPLE_GRID = 4;
-    private static final int ROWS_PER_TASK = 8;
+    private static final int TILE_SIZE = 32;
 
     private final ExecutorService coordinator = Executors.newSingleThreadExecutor(
             daemonThreadFactory("fractal-aa")
@@ -39,13 +42,15 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             ColoringStrategy coloring,
             SamplingPattern samplingPattern,
             Executor callbackExecutor,
-            Consumer<int[]> onSuccess,
+            BiConsumer<RenderRegion, int[]> onTileReady,
+            Runnable onSuccess,
             Consumer<Throwable> onError
     ) {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(coloring);
         Objects.requireNonNull(samplingPattern);
         Objects.requireNonNull(callbackExecutor);
+        Objects.requireNonNull(onTileReady);
         Objects.requireNonNull(onSuccess);
         Objects.requireNonNull(onError);
 
@@ -61,6 +66,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 coloring,
                 samplingPattern,
                 callbackExecutor,
+                onTileReady,
                 onSuccess,
                 onError
         ));
@@ -72,27 +78,25 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             ColoringStrategy coloring,
             SamplingPattern samplingPattern,
             Executor callbackExecutor,
-            Consumer<int[]> onSuccess,
+            BiConsumer<RenderRegion, int[]> onTileReady,
+            Runnable onSuccess,
             Consumer<Throwable> onError
     ) {
         try {
             FractalData data = frame.fractalData();
             int[] baseColors = AdaptivePngExportService.colorBaseFrame(data, coloring);
-            int[] refinedColors = baseColors.clone();
             List<Future<?>> tasks = new ArrayList<>();
 
-            for (int y = 0; y < data.height(); y += ROWS_PER_TASK) {
-                int yFrom = y;
-                int yTo = Math.min(y + ROWS_PER_TASK, data.height());
-                tasks.add(workers.submit(() -> refineRows(
+            for (RenderRegion tile : orderedTiles(frame)) {
+                tasks.add(workers.submit(() -> refineTile(
                         refinementId,
                         frame,
                         coloring,
                         samplingPattern,
                         baseColors,
-                        refinedColors,
-                        yFrom,
-                        yTo
+                        tile,
+                        callbackExecutor,
+                        onTileReady
                 )));
             }
 
@@ -106,7 +110,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
             callbackExecutor.execute(() -> {
                 if (isCurrent(refinementId)) {
-                    onSuccess.accept(refinedColors);
+                    onSuccess.run();
                 }
             });
         } catch (InterruptedException exception) {
@@ -120,29 +124,35 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         }
     }
 
-    private void refineRows(
+    private void refineTile(
             long refinementId,
             RenderFrame frame,
             ColoringStrategy coloring,
             SamplingPattern samplingPattern,
             int[] baseColors,
-            int[] refinedColors,
-            int yFrom,
-            int yTo
+            RenderRegion tile,
+            Executor callbackExecutor,
+            BiConsumer<RenderRegion, int[]> onTileReady
     ) {
         FractalData data = frame.fractalData();
         RenderGrid grid = frame.renderGrid();
         FractalCalculator calculator = frame.request().calculator();
+        int[] tileColors = new int[tile.width() * tile.height()];
+        boolean refined = false;
 
-        for (int y = yFrom; y < yTo; y++) {
+        for (int y = tile.y(); y < tile.y() + tile.height(); y++) {
             if (shouldCancel(refinementId)) {
                 throw new CancellationException();
             }
 
-            for (int x = 0; x < data.width(); x++) {
+            for (int x = tile.x(); x < tile.x() + tile.width(); x++) {
                 if ((x & 15) == 0 && shouldCancel(refinementId)) {
                     throw new CancellationException();
                 }
+
+                int tileIndex = (y - tile.y()) * tile.width() + x - tile.x();
+                int frameIndex = y * data.width() + x;
+                tileColors[tileIndex] = baseColors[frameIndex];
 
                 if (!AdaptivePngExportService.isSupersamplingCandidate(
                         calculator,
@@ -156,7 +166,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     continue;
                 }
 
-                refinedColors[y * data.width() + x] =
+                tileColors[tileIndex] =
                         AdaptivePngExportService.sampleGridColor(
                                 calculator,
                                 coloring,
@@ -167,8 +177,48 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                                 SAMPLE_GRID,
                                 samplingPattern
                         );
+                refined = true;
             }
         }
+
+        if (!refined || shouldCancel(refinementId)) {
+            return;
+        }
+
+        callbackExecutor.execute(() -> {
+            if (isCurrent(refinementId)) {
+                onTileReady.accept(tile, tileColors);
+            }
+        });
+    }
+
+    private static List<RenderRegion> orderedTiles(RenderFrame frame) {
+        List<RenderRegion> tiles = new ArrayList<>();
+
+        for (int y = 0; y < frame.fractalData().height(); y += TILE_SIZE) {
+            for (int x = 0; x < frame.fractalData().width(); x += TILE_SIZE) {
+                tiles.add(new RenderRegion(
+                        x,
+                        y,
+                        Math.min(TILE_SIZE, frame.fractalData().width() - x),
+                        Math.min(TILE_SIZE, frame.fractalData().height() - y)
+                ));
+            }
+        }
+
+        double priorityX = frame.fractalData().width() * frame.request().priority().x();
+        double priorityY = frame.fractalData().height() * frame.request().priority().y();
+        tiles.sort((first, second) -> Double.compare(
+                distanceSquared(first, priorityX, priorityY),
+                distanceSquared(second, priorityX, priorityY)
+        ));
+        return tiles;
+    }
+
+    private static double distanceSquared(RenderRegion tile, double x, double y) {
+        double dx = tile.x() + tile.width() / 2.0 - x;
+        double dy = tile.y() + tile.height() / 2.0 - y;
+        return dx * dx + dy * dy;
     }
 
     public synchronized void cancelCurrent() {
