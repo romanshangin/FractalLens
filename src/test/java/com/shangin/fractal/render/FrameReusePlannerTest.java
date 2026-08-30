@@ -408,4 +408,64 @@ class FrameReusePlannerTest {
         );
         assertFalse(selection.result().frame().isComplete());
     }
+
+    @Test
+    void panDuringIncompleteRenderShouldCalculateOnlyMissingTargetPixels() throws Exception {
+        AtomicInteger formulaCalls = new AtomicInteger();
+        FractalCalculator countingCalculator = new FractalCalculator(
+                (real, imaginary, maximum) -> {
+                    formulaCalls.incrementAndGet();
+                    return new FractalSample(1, true, 3.0, 0.0);
+                }
+        );
+        RenderRequest incompleteRequest = new RenderRequest(
+                countingCalculator,
+                sourceViewport,
+                WIDTH,
+                HEIGHT,
+                MAX_ITERATIONS
+        );
+        RenderFrame incomplete = RenderFrame.create(incompleteRequest);
+        RenderRegion calculatedRegion = new RenderRegion(10, 8, 70, 45);
+
+        for (int y = calculatedRegion.y();
+             y < calculatedRegion.y() + calculatedRegion.height();
+             y++) {
+            for (int x = calculatedRegion.x();
+                 x < calculatedRegion.x() + calculatedRegion.width();
+                 x++) {
+                incomplete.fractalData().set(
+                        x,
+                        y,
+                        new FractalSample(1, true, 3.0, 0.0)
+                );
+            }
+        }
+        incomplete.validity().markReady(calculatedRegion);
+
+        PixelShift shift = new PixelShift(3, -2);
+        RenderRequest pannedRequest = new RenderRequest(
+                countingCalculator,
+                sourceViewport.shiftedByPixels(
+                        shift.dx(),
+                        shift.dy(),
+                        WIDTH,
+                        HEIGHT
+                ),
+                WIDTH,
+                HEIGHT,
+                MAX_ITERATIONS
+        );
+        FrameReuseResult reuse = planner.plan(incomplete, pannedRequest);
+        int reusedPixels = reuse.reusedPixels();
+        formulaCalls.set(0);
+
+        try (ParallelFractalCalculator workers = new ParallelFractalCalculator(4)) {
+            workers.calculate(reuse.frame(), () -> false, ignored -> {});
+        }
+
+        assertEquals(calculatedRegion.width() * calculatedRegion.height(), reusedPixels);
+        assertEquals(WIDTH * HEIGHT - reusedPixels, formulaCalls.get());
+        assertTrue(reuse.frame().isComplete());
+    }
 }

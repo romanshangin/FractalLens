@@ -40,6 +40,7 @@ public final class FractalSurface extends Region {
     private SurfaceBuffer retainedProgressFrame;
     private ValidityMask stagingRefinementValidity;
     private ValidityMask displayedRefinementValidity;
+    private ValidityMask retainedProgressRefinementValidity;
     private RenderFrame stagingRenderFrame;
     private RenderFrame displayedRenderFrame;
     private RenderFrame retainedProgressRenderFrame;
@@ -62,19 +63,26 @@ public final class FractalSurface extends Region {
     }
 
     /** Prepares the staging buffer for a new progressive frame. */
-    public void beginProgressiveRender(RenderFrame renderFrame) {
+    public void beginProgressiveRender(
+            RenderFrame renderFrame,
+            RenderFrame plannerSourceFrame
+    ) {
         if (renderWidth < 2 || renderHeight < 2) {
             return;
         }
 
-        if (ProgressiveFrameRetention.shouldRetain(
+        if (ProgressiveFrameRetention.shouldReplaceRetained(
                 stagingRenderFrame,
                 renderFrame,
-                progressiveImageView.getImage() != null
+                progressiveImageView.getImage() != null,
+                plannerSourceFrame,
+                retainedProgressRenderFrame
         )) {
             retainVisibleProgress();
             stagingFrame = null;
             stagingRefinementValidity = null;
+        } else if (stagingRenderFrame != null && stagingRenderFrame != renderFrame) {
+            progressiveImageView.setImage(null);
         }
 
         if (stagingFrame == null
@@ -128,6 +136,7 @@ public final class FractalSurface extends Region {
     private void retainVisibleProgress() {
         retainedProgressFrame = stagingFrame;
         retainedProgressRenderFrame = stagingRenderFrame;
+        retainedProgressRefinementValidity = stagingRefinementValidity;
         retainedPreviewTransform.setToTransform(progressivePreviewTransform);
         retainedImageView.setImage(stagingFrame.image());
         progressiveImageView.setImage(null);
@@ -275,6 +284,7 @@ public final class FractalSurface extends Region {
         retainedImageView.setImage(null);
         retainedProgressFrame = null;
         retainedProgressRenderFrame = null;
+        retainedProgressRefinementValidity = null;
     }
 
     public void resizeBuffer(
@@ -698,34 +708,46 @@ public final class FractalSurface extends Region {
         return true;
     }
 
-    /**
-     * Copies shifted pixels from the displayed image when it represents the
-     * same source render frame used by the reuse planner.
-     */
+    /** Copies shifted refined pixels from a visible source selected by the planner. */
     public boolean reuseDisplayedPixels(
             RenderFrame sourceFrame,
             PixelShift shift
     ) {
-        if (displayedFrame == null
-                || stagingFrame == null) {
+        if (stagingFrame == null) {
             return false;
         }
 
-        /* The displayed image must represent the mathematical source frame. */
-        if (displayedRenderFrame != sourceFrame) {
+        ProgressiveFrameRetention.SourceSlot sourceSlot =
+                ProgressiveFrameRetention.reusableSource(
+                        sourceFrame,
+                        displayedRenderFrame,
+                        retainedProgressRenderFrame
+                );
+        SurfaceBuffer sourceSurface;
+        ValidityMask sourceValidity;
+
+        if (sourceSlot == ProgressiveFrameRetention.SourceSlot.DISPLAYED) {
+            sourceSurface = displayedFrame;
+            sourceValidity = displayedRefinementValidity;
+        } else if (sourceSlot == ProgressiveFrameRetention.SourceSlot.RETAINED) {
+            sourceSurface = retainedProgressFrame;
+            sourceValidity = retainedProgressRefinementValidity;
+        } else {
             return false;
         }
 
-        if (displayedFrame.width()
+        if (sourceSurface == null
+                || sourceValidity == null
+                || sourceSurface.width()
                 != stagingFrame.width()
-                || displayedFrame.height()
+                || sourceSurface.height()
                 != stagingFrame.height()) {
             return false;
         }
 
         Rectangle2D dirtyRegion =
                 stagingFrame.copyShiftedFrom(
-                        displayedFrame,
+                        sourceSurface,
                         shift);
 
         if (dirtyRegion == null) {
@@ -738,7 +760,7 @@ public final class FractalSurface extends Region {
                 );
 
         stagingRefinementValidity.copyShiftedFrom(
-                displayedRefinementValidity,
+                sourceValidity,
                 shift
         );
 

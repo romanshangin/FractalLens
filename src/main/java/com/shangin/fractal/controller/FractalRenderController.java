@@ -142,7 +142,7 @@ public final class FractalRenderController implements AutoCloseable {
             );
         }
 
-        surface.beginProgressiveRender(targetFrame);
+        surface.beginProgressiveRender(targetFrame, sourceFrame);
 
         if (!imageReused
                 && sourceFrame != null
