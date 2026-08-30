@@ -6,6 +6,7 @@ import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
@@ -60,6 +61,8 @@ public final class FractalRenderController implements AutoCloseable {
         }
 
         ColoringStrategy coloring = scene.coloring().createStrategy();
+        boolean refinedDisplay = scene.antialiasing().renderMode()
+                == InteractiveRenderMode.REFINED;
         Viewport viewport = scene.viewport();
 
         double zoomFactor =
@@ -162,6 +165,10 @@ public final class FractalRenderController implements AutoCloseable {
             );
         }
 
+        if (refinedDisplay) {
+            surface.hideProgressiveRender(activeFrame);
+        }
+
         /*
          * --------------------------------
          * CALCULATE MISSING
@@ -175,7 +182,7 @@ public final class FractalRenderController implements AutoCloseable {
                 Platform::runLater,
 
                 progress -> {
-                    if (!initialFramePending) {
+                    if (!refinedDisplay && !initialFramePending) {
                         surface.displayProgress(
                                 progress,
                                 coloring
@@ -184,6 +191,35 @@ public final class FractalRenderController implements AutoCloseable {
                 },
 
                 completedFrame -> {
+
+                    if (refinedDisplay) {
+                        surface.beginRefinedRender(completedFrame);
+                        antialiasService.refine(
+                                completedFrame,
+                                coloring,
+                                scene.antialiasing().samplingPattern(),
+                                Platform::runLater,
+                                (region, colors) -> surface.displayRefinedTile(
+                                        completedFrame,
+                                        region,
+                                        colors
+                                ),
+                                () -> {
+                                    surface.completeProgressiveRender(
+                                            completedFrame,
+                                            scene
+                                    );
+                                    initialFramePending = false;
+                                },
+                                error -> {
+                                    surface.displayReadyPixels(completedFrame, coloring);
+                                    surface.completeProgressiveRender(completedFrame, scene);
+                                    initialFramePending = false;
+                                    error.printStackTrace();
+                                }
+                        );
+                        return;
+                    }
 
                     if (initialFramePending) {
                         surface.displayReadyPixels(

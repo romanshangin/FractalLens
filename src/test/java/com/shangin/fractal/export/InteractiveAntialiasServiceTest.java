@@ -3,6 +3,7 @@ package com.shangin.fractal.export;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.SamplingPattern;
 import org.junit.jupiter.api.Test;
@@ -133,6 +134,42 @@ class InteractiveAntialiasServiceTest {
             }
 
             assertEquals(0, publishedTiles.get());
+        }
+    }
+
+    @Test
+    void qualityModeShouldPublishTilesWithoutRefinementCandidates() throws Exception {
+        FractalPreset preset = FractalPreset.BURNING_SHIP;
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator((real, imaginary, maxIterations) ->
+                        new FractalSample(1, true, 3.0, 0.0)),
+                preset.defaultViewport(),
+                40,
+                40,
+                20
+        ));
+
+        try (ParallelFractalCalculator calculator = new ParallelFractalCalculator(2);
+             InteractiveAntialiasService service = new InteractiveAntialiasService()) {
+            calculator.calculate(frame, () -> false, ignored -> {});
+            CountDownLatch completed = new CountDownLatch(1);
+            AtomicInteger publishedTiles = new AtomicInteger();
+
+            service.refine(
+                    frame,
+                    (iterations, smooth, escaped, maximum) -> 0xFF123456,
+                    SamplingPattern.REGULAR,
+                    Runnable::run,
+                    (region, colors) -> {
+                        assertTrue(Arrays.stream(colors).allMatch(color -> color == 0xFF123456));
+                        publishedTiles.incrementAndGet();
+                    },
+                    completed::countDown,
+                    exception -> fail(exception)
+            );
+
+            assertTrue(completed.await(5, TimeUnit.SECONDS));
+            assertEquals(4, publishedTiles.get());
         }
     }
 }

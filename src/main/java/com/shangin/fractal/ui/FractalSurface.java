@@ -196,6 +196,23 @@ public final class FractalSurface extends Region {
         promoteStagingFrame(renderFrame, scene);
     }
 
+    /** Keeps raw staging pixels hidden while quality-mode samples are calculated. */
+    public void hideProgressiveRender(RenderFrame frame) {
+        if (stagingRenderFrame == frame) {
+            progressiveImageView.setImage(null);
+        }
+    }
+
+    /** Clears raw colors and prepares a transparent overlay for refined tiles. */
+    public void beginRefinedRender(RenderFrame frame) {
+        if (stagingFrame == null || stagingRenderFrame != frame) {
+            return;
+        }
+        stagingFrame.clear();
+        progressivePreviewTransform.setToIdentity();
+        progressiveImageView.setImage(stagingFrame.image());
+    }
+
     private void promoteStagingFrame(
             RenderFrame renderFrame,
             FractalScene scene
@@ -265,31 +282,51 @@ public final class FractalSurface extends Region {
             RenderRegion region,
             int[] colors
     ) {
-        Objects.requireNonNull(region);
-        Objects.requireNonNull(colors);
-
         if (displayedRenderFrame != frame || displayedFrame == null) {
             return;
         }
+        applyTile(displayedFrame, region, colors);
+    }
+
+    /** Publishes one quality-mode AA tile into the current staging frame. */
+    public void displayRefinedTile(
+            RenderFrame frame,
+            RenderRegion region,
+            int[] colors
+    ) {
+        if (stagingRenderFrame != frame || stagingFrame == null) {
+            return;
+        }
+        applyTile(stagingFrame, region, colors);
+    }
+
+    private static void applyTile(
+            SurfaceBuffer buffer,
+            RenderRegion region,
+            int[] colors
+    ) {
+        Objects.requireNonNull(region);
+        Objects.requireNonNull(colors);
+
         if (region.x() < 0
                 || region.y() < 0
-                || region.x() + region.width() > displayedFrame.width()
-                || region.y() + region.height() > displayedFrame.height()
+                || region.x() + region.width() > buffer.width()
+                || region.y() + region.height() > buffer.height()
                 || colors.length != region.width() * region.height()) {
             throw new IllegalArgumentException("AA tile dimensions do not match frame");
         }
 
-        int[] target = displayedFrame.intBuffer().array();
+        int[] target = buffer.intBuffer().array();
         for (int row = 0; row < region.height(); row++) {
             System.arraycopy(
                     colors,
                     row * region.width(),
                     target,
-                    (region.y() + row) * displayedFrame.width() + region.x(),
+                    (region.y() + row) * buffer.width() + region.x(),
                     region.width()
             );
         }
-        displayedFrame.pixelBuffer().updateBuffer(ignored -> new Rectangle2D(
+        buffer.pixelBuffer().updateBuffer(ignored -> new Rectangle2D(
                 region.x(),
                 region.y(),
                 region.width(),

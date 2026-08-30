@@ -14,6 +14,7 @@ import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.SamplingPattern;
+import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.animation.PauseTransition;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
@@ -134,7 +135,19 @@ public class FractalView extends StackPane {
     }
 
     public void setSamplingPattern(SamplingPattern pattern) {
-        scene = scene.withAntialiasing(new AntialiasSettings(pattern));
+        scene = scene.withAntialiasing(new AntialiasSettings(
+                pattern,
+                scene.antialiasing().renderMode()
+        ));
+        renderController.cancelCurrent();
+        recalculate();
+    }
+
+    public void setInteractiveRenderMode(InteractiveRenderMode renderMode) {
+        scene = scene.withAntialiasing(new AntialiasSettings(
+                scene.antialiasing().samplingPattern(),
+                renderMode
+        ));
         renderController.cancelCurrent();
         recalculate();
     }

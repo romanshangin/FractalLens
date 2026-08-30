@@ -138,7 +138,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         RenderGrid grid = frame.renderGrid();
         FractalCalculator calculator = frame.request().calculator();
         int[] tileColors = new int[tile.width() * tile.height()];
-        boolean refined = false;
 
         for (int y = tile.y(); y < tile.y() + tile.height(); y++) {
             if (shouldCancel(refinementId)) {
@@ -177,11 +176,10 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                                 SAMPLE_GRID,
                                 samplingPattern
                         );
-                refined = true;
             }
         }
 
-        if (!refined || shouldCancel(refinementId)) {
+        if (shouldCancel(refinementId)) {
             return;
         }
 

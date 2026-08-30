@@ -4,6 +4,7 @@ import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.SamplingPattern;
+import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.geometry.Insets;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -35,6 +36,7 @@ public final class FractalInspector extends ScrollPane {
             Consumer<FractalPreset> onFractalChanged,
             Consumer<PalettePreset> onPaletteChanged,
             Consumer<SamplingPattern> onSamplingPatternChanged,
+            Consumer<InteractiveRenderMode> onRenderModeChanged,
             BiConsumer<Double, Double> onCenterChanged
     ) {
         ComboBox<FractalPreset> fractal = new ComboBox<>();
@@ -56,13 +58,20 @@ public final class FractalInspector extends ScrollPane {
         samplingPattern.setOnAction(event ->
                 onSamplingPatternChanged.accept(samplingPattern.getValue()));
 
+        ComboBox<InteractiveRenderMode> renderMode = new ComboBox<>();
+        renderMode.getItems().setAll(InteractiveRenderMode.values());
+        renderMode.setValue(InteractiveRenderMode.REFINED);
+        renderMode.setMaxWidth(Double.MAX_VALUE);
+        renderMode.setOnAction(event ->
+                onRenderModeChanged.accept(renderMode.getValue()));
+
         configureCoordinateCommit(onCenterChanged);
 
         VBox sections = new VBox(
                 8.0,
                 section("Fractal", singleControlGrid("Type", fractal)),
                 section("Navigation", navigationGrid()),
-                section("Appearance", appearanceGrid(palette, samplingPattern))
+                section("Appearance", appearanceGrid(palette, samplingPattern, renderMode))
         );
         sections.setPadding(new Insets(10));
         sections.setFillWidth(true);
@@ -93,13 +102,16 @@ public final class FractalInspector extends ScrollPane {
 
     private static GridPane appearanceGrid(
             ComboBox<PalettePreset> palette,
-            ComboBox<SamplingPattern> samplingPattern
+            ComboBox<SamplingPattern> samplingPattern,
+            ComboBox<InteractiveRenderMode> renderMode
     ) {
         GridPane grid = createGrid();
         grid.addRow(0, new Label("Palette"), palette);
         grid.addRow(1, new Label("AA pattern"), samplingPattern);
+        grid.addRow(2, new Label("Display"), renderMode);
         GridPane.setHgrow(palette, Priority.ALWAYS);
         GridPane.setHgrow(samplingPattern, Priority.ALWAYS);
+        GridPane.setHgrow(renderMode, Priority.ALWAYS);
         return grid;
     }
 

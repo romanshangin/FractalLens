@@ -69,7 +69,7 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - [x] Add deterministic jitter as an optional, reproducible interactive sampling pattern.
 - [x] Add and benchmark exterior distance estimates for Mandelbrot, Julia, and cubic Multibrot; measurements show a 1.4–2x base-pass cost versus roughly 16x for full 4x4 coverage, but exterior estimates alone miss interior-centered boundary pixels.
 - [x] Combine distance candidates with the existing image-space edge detector before using distance estimation to schedule interactive or export supersampling; keep Burning Ship and Tricorn on the current detector because their maps are non-analytic.
-- Treat image-space edge filtering as an optional fast display mode rather than the source of export-quality output.
+- [x] Treat raw image-space edge filtering as an optional fast display mode; by default, keep the transformed previous frame visible and build the replacement progressively from fully refined tiles.
 - Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
 - Add orbit traps and editable palette stops.
 - Add a render cache, resize reuse, and a separate high-resolution/off-screen export pipeline.
