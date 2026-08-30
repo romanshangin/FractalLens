@@ -7,6 +7,9 @@ import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.render.RenderRegion;
 import com.shangin.fractal.render.RefinedPixelSnapshot;
+import com.shangin.fractal.render.AntialiasSampleCache;
+import com.shangin.fractal.render.PixelShift;
+import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.scene.SamplingPattern;
 
 import java.util.ArrayList;
@@ -36,7 +39,17 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             daemonThreadFactory("fractal-aa-worker")
     );
     private final AtomicLong generation = new AtomicLong();
+    private final AntialiasSampleCache sampleCache;
+    private RenderFrame cachedFrame;
     private Future<?> currentRefinement;
+
+    public InteractiveAntialiasService() {
+        this(new AntialiasSampleCache());
+    }
+
+    InteractiveAntialiasService(AntialiasSampleCache sampleCache) {
+        this.sampleCache = Objects.requireNonNull(sampleCache);
+    }
 
     public synchronized void refine(
             RenderFrame frame,
@@ -67,6 +80,12 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
         long refinementId = generation.incrementAndGet();
         cancelCurrentFuture();
+        synchronized (this) {
+            if (cachedFrame != frame) {
+                sampleCache.clear();
+                cachedFrame = frame;
+            }
+        }
         currentRefinement = coordinator.submit(() -> runRefinement(
                 refinementId,
                 frame,
@@ -164,6 +183,13 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 int tileIndex = (y - tile.y()) * tile.width() + x - tile.x();
                 int frameIndex = y * data.width() + x;
 
+                Integer cachedColor = sampleCache.color(
+                        frameIndex, coloring, frame.request().maxIterations());
+                if (cachedColor != null) {
+                    tileColors[tileIndex] = cachedColor;
+                    continue;
+                }
+
                 if (reusedPixels.isRefined(x, y)) {
                     tileColors[tileIndex] = reusedPixels.color(x, y);
                     continue;
@@ -184,17 +210,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     continue;
                 }
 
-                tileColors[tileIndex] =
-                        AdaptivePngExportService.sampleGridColor(
-                                calculator,
-                                coloring,
-                                grid,
-                                frame.request().maxIterations(),
-                                x,
-                                y,
-                                SAMPLE_GRID,
-                                samplingPattern
-                        );
+                FractalSample[] samples = sampleGrid(
+                        calculator, grid, frame.request().maxIterations(), x, y, samplingPattern);
+                sampleCache.put(frameIndex, samples);
+                tileColors[tileIndex] = sampleCache.color(
+                        frameIndex, coloring, frame.request().maxIterations());
             }
         }
 
@@ -207,6 +227,82 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 onTileReady.accept(tile, tileColors);
             }
         });
+    }
+
+    /** Recolors the completed base frame and every cached AA candidate. */
+    public int[] recolorCached(RenderFrame frame, ColoringStrategy coloring) {
+        Objects.requireNonNull(frame);
+        Objects.requireNonNull(coloring);
+        int[] colors = AdaptivePngExportService.colorBaseFrame(frame.fractalData(), coloring);
+        synchronized (this) {
+            if (cachedFrame != frame) {
+                return colors;
+            }
+        }
+        for (int index = 0; index < colors.length; index++) {
+            Integer refined = sampleCache.color(index, coloring, frame.request().maxIterations());
+            if (refined != null) {
+                colors[index] = refined;
+            }
+        }
+        return colors;
+    }
+
+    /** Transfers cached AA samples along the exact pixel shift used for frame reuse. */
+    public synchronized void reuseFrame(RenderFrame source, RenderFrame target, PixelShift shift) {
+        if (cachedFrame != source
+                || source.fractalData().width() != target.fractalData().width()
+                || source.fractalData().height() != target.fractalData().height()) {
+            sampleCache.clear();
+        } else {
+            sampleCache.shift(source.fractalData().width(), source.fractalData().height(), shift);
+        }
+        cachedFrame = target;
+    }
+
+    private static FractalSample[] sampleGrid(
+            FractalCalculator calculator,
+            RenderGrid grid,
+            int maxIterations,
+            int pixelX,
+            int pixelY,
+            SamplingPattern pattern
+    ) {
+        FractalSample[] samples = new FractalSample[SAMPLE_GRID * SAMPLE_GRID];
+        double centerReal = grid.realAt(pixelX);
+        double centerImaginary = grid.imaginaryAt(pixelY);
+        int index = 0;
+        for (int sampleY = 0; sampleY < SAMPLE_GRID; sampleY++) {
+            for (int sampleX = 0; sampleX < SAMPLE_GRID; sampleX++) {
+                double offsetX = ((sampleX + sampleOffset(pattern, pixelX, pixelY, sampleX, sampleY, 0))
+                        / SAMPLE_GRID) - 0.5;
+                double offsetY = ((sampleY + sampleOffset(pattern, pixelX, pixelY, sampleX, sampleY, 1))
+                        / SAMPLE_GRID) - 0.5;
+                samples[index++] = calculator.calculateSample(
+                        centerReal + offsetX * grid.realStep(),
+                        centerImaginary - offsetY * grid.imaginaryStep(),
+                        maxIterations);
+            }
+        }
+        return samples;
+    }
+
+    private static double sampleOffset(
+            SamplingPattern pattern, int pixelX, int pixelY,
+            int sampleX, int sampleY, int axis
+    ) {
+        if (pattern == SamplingPattern.REGULAR) {
+            return 0.5;
+        }
+        int seed = pixelX * 0x1f123bb5 ^ pixelY * 0x5f356495
+                ^ sampleX * 0x68bc21eb ^ sampleY * 0x02e5be93 ^ axis * 0x7f4a7c15;
+        int mixed = seed;
+        mixed ^= mixed >>> 16;
+        mixed *= 0x7feb352d;
+        mixed ^= mixed >>> 15;
+        mixed *= 0x846ca68b;
+        mixed ^= mixed >>> 16;
+        return (mixed & 0xffffffffL) / 4294967296.0;
     }
 
     static List<RenderRegion> orderedTiles(

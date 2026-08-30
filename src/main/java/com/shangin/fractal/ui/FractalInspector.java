@@ -7,6 +7,7 @@ import com.shangin.fractal.scene.SamplingPattern;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.geometry.Insets;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
@@ -38,6 +39,7 @@ public final class FractalInspector extends ScrollPane {
             Consumer<PalettePreset> onPaletteChanged,
             Consumer<SamplingPattern> onSamplingPatternChanged,
             Consumer<InteractiveRenderMode> onRenderModeChanged,
+            Consumer<Boolean> onColorCyclingChanged,
             BiConsumer<Double, Double> onCenterChanged
     ) {
         ComboBox<FractalPreset> fractal = new ComboBox<>();
@@ -66,9 +68,13 @@ public final class FractalInspector extends ScrollPane {
         renderMode.setOnAction(event ->
                 onRenderModeChanged.accept(renderMode.getValue()));
 
+        CheckBox colorCycling = new CheckBox("Animate");
+        colorCycling.setTooltip(new Tooltip("Cycle the palette without recalculating the fractal"));
+        colorCycling.setOnAction(event -> onColorCyclingChanged.accept(colorCycling.isSelected()));
+
         configureCoordinateCommit(onCenterChanged);
 
-        appearanceControls = appearanceGrid(palette, samplingPattern, renderMode);
+        appearanceControls = appearanceGrid(palette, samplingPattern, renderMode, colorCycling);
 
         VBox sections = new VBox(
                 8.0,
@@ -106,15 +112,18 @@ public final class FractalInspector extends ScrollPane {
     private static GridPane appearanceGrid(
             ComboBox<PalettePreset> palette,
             ComboBox<SamplingPattern> samplingPattern,
-            ComboBox<InteractiveRenderMode> renderMode
+            ComboBox<InteractiveRenderMode> renderMode,
+            CheckBox colorCycling
     ) {
         GridPane grid = createGrid();
         grid.addRow(0, new Label("Palette"), palette);
         grid.addRow(1, new Label("AA pattern"), samplingPattern);
         grid.addRow(2, new Label("Display"), renderMode);
+        grid.addRow(3, new Label("Color cycle"), colorCycling);
         GridPane.setHgrow(palette, Priority.ALWAYS);
         GridPane.setHgrow(samplingPattern, Priority.ALWAYS);
         GridPane.setHgrow(renderMode, Priority.ALWAYS);
+        GridPane.setHgrow(colorCycling, Priority.ALWAYS);
         return grid;
     }
 

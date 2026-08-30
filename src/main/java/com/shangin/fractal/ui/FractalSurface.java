@@ -522,6 +522,23 @@ public final class FractalSurface extends Region {
         displayedFrame.update();
     }
 
+    /** Atomically publishes a background-computed palette frame. */
+    public void applyRecolor(
+            RenderFrame frame,
+            int[] colors,
+            ColoringSettings settings
+    ) {
+        if (displayedRenderFrame != frame || displayedFrame == null
+                || colors.length != displayedFrame.width() * displayedFrame.height()) {
+            return;
+        }
+        System.arraycopy(colors, 0, displayedFrame.intBuffer().array(), 0, colors.length);
+        if (displayedScene != null) {
+            displayedScene = displayedScene.withColoring(settings);
+        }
+        displayedFrame.update();
+    }
+
     public void invalidateRefinement() {
         if (displayedRefinementValidity != null) {
             displayedRefinementValidity.clear();

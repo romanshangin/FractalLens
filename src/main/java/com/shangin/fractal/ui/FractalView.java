@@ -16,6 +16,7 @@ import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.SamplingPattern;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.animation.PauseTransition;
+import javafx.animation.AnimationTimer;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
@@ -48,6 +49,21 @@ public class FractalView extends StackPane {
     private FractalScene scene;
     private RenderPriority renderPriority = RenderPriority.center();
     private Consumer<Viewport> viewportChangedHandler = ignored -> {};
+    private Consumer<Boolean> renderingChangedHandler = ignored -> {};
+    private boolean rendering;
+    private boolean colorCyclePaused;
+    private boolean colorCycling;
+    private long lastCycleTick;
+    private long lastRecolorTick;
+    private double colorCycleOffset;
+    private static final long RECOLOR_INTERVAL_NANOS = 33_333_333L;
+    private static final double COLOR_CYCLE_SECONDS = 12.0;
+    private final AnimationTimer colorCycleTimer = new AnimationTimer() {
+        @Override
+        public void handle(long now) {
+            advanceColorCycle(now);
+        }
+    };
 
     private Viewport panSourceViewport;
     private Viewport trackpadPanSourceViewport;
@@ -67,6 +83,8 @@ public class FractalView extends StackPane {
         getChildren().add(fractalSurface);
         interactionDebounce.setOnFinished(event -> finishInteraction());
         fractalSurface.setOnOutputScaleChanged(this::scheduleResize);
+        renderController.setOnRenderingChanged(this::renderingChanged);
+        colorCycleTimer.start();
     }
 
     public void setFractal(FractalPreset preset) {
@@ -126,12 +144,56 @@ public class FractalView extends StackPane {
     }
 
     public void setPalette(PalettePreset preset) {
-        ColoringSettings settings = new ColoringSettings(preset);
+        ColoringSettings settings = new ColoringSettings(
+                preset, scene.coloring().colorScale(), scene.coloring().offset());
         scene = scene.withColoring(settings);
+        colorCycleOffset = settings.offset();
         configurePalette(preset);
-        renderController.cancelCurrent();
-        fractalSurface.recolor(settings.createStrategy(), settings);
-        recalculate();
+        renderController.recolor(settings);
+    }
+
+    public void setColorCycling(boolean enabled) {
+        colorCycling = enabled;
+        colorCycleOffset = scene.coloring().offset();
+        lastCycleTick = 0L;
+    }
+
+    private void advanceColorCycle(long now) {
+        if (!colorCycling || rendering || colorCyclePaused || !fractalSurface.hasCompletedFrame()) {
+            lastCycleTick = 0L;
+            return;
+        }
+        if (lastCycleTick == 0L) {
+            lastCycleTick = now;
+            return;
+        }
+        double elapsedSeconds = (now - lastCycleTick) / 1_000_000_000.0;
+        lastCycleTick = now;
+        double offset = (colorCycleOffset
+                + elapsedSeconds * 2.0 / COLOR_CYCLE_SECONDS) % 2.0;
+        colorCycleOffset = offset;
+        ColoringSettings settings = new ColoringSettings(
+                scene.coloring().palette(), scene.coloring().colorScale(), offset);
+        if (now - lastRecolorTick >= RECOLOR_INTERVAL_NANOS) {
+            lastRecolorTick = now;
+            renderController.recolor(settings, () -> {
+                if (colorCycling && scene.coloring().palette() == settings.palette()) {
+                    scene = scene.withColoring(settings);
+                }
+            });
+        }
+    }
+
+    private void renderingChanged(boolean active) {
+        rendering = active;
+        if (active) {
+            lastCycleTick = 0L;
+            colorCycleOffset = scene.coloring().offset();
+            colorCyclePaused = true;
+        } else {
+            colorCyclePaused = false;
+        }
+        renderingChangedHandler.accept(active);
     }
 
     public void setSamplingPattern(SamplingPattern pattern) {
@@ -154,7 +216,7 @@ public class FractalView extends StackPane {
     }
 
     public void setOnRenderingChanged(Consumer<Boolean> handler) {
-        renderController.setOnRenderingChanged(handler);
+        renderingChangedHandler = java.util.Objects.requireNonNull(handler);
     }
 
     private void configureResize() {
@@ -254,9 +316,12 @@ public class FractalView extends StackPane {
             trackpadPanSourceViewport = camera.viewport();
             interactionDebounce.stop();
             renderController.cancelCurrent();
+            colorCyclePaused = true;
         }
 
         if (!camera.pan(event.getDeltaX(), event.getDeltaY(), width, height)) {
+            trackpadPanSourceViewport = null;
+            colorCyclePaused = false;
             return;
         }
 
@@ -370,6 +435,7 @@ public class FractalView extends StackPane {
 
     private void scheduleResize() {
         renderController.cancelCurrent();
+        colorCyclePaused = true;
         resizeDebounce.playFromStart();
     }
 
@@ -425,6 +491,7 @@ public class FractalView extends StackPane {
     }
 
     public void close() {
+        colorCycleTimer.stop();
         renderController.close();
     }
 
@@ -474,6 +541,7 @@ public class FractalView extends StackPane {
     private void cameraChanged() {
         fractalSurface.showPreview(camera.viewport());
         renderController.cancelCurrent();
+        colorCyclePaused = true;
         interactionDebounce.playFromStart();
     }
 
@@ -488,6 +556,7 @@ public class FractalView extends StackPane {
             lastDragX = event.getX();
             lastDragY = event.getY();
             panning = true;
+            colorCyclePaused = true;
             panChanged = false;
             event.consume();
         });
@@ -540,6 +609,9 @@ public class FractalView extends StackPane {
 
                 resetPriority();
                 recalculate();
+            } else {
+                colorCyclePaused = false;
+                lastCycleTick = 0L;
             }
             event.consume();
         });

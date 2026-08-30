@@ -6,6 +6,7 @@ import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
@@ -13,6 +14,11 @@ import javafx.application.Platform;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Coordinates render requests between the camera-facing UI and the background
@@ -32,6 +38,20 @@ public final class FractalRenderController implements AutoCloseable {
     private boolean initialFramePending = true;
     private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
     private final RenderActivityTracker renderActivity = new RenderActivityTracker();
+    private final ExecutorService recolorExecutor = new ThreadPoolExecutor(
+            1, 1, 0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingDeque<>(1),
+            runnable -> {
+                Thread thread = new Thread(runnable, "fractal-recolor");
+                thread.setDaemon(true);
+                return thread;
+            },
+            new ThreadPoolExecutor.DiscardOldestPolicy());
+    /** Changes only when recoloring must be invalidated (navigation/new render). */
+    private final AtomicLong recolorEpoch = new AtomicLong();
+    /** Monotonic animation frame id; newer requests do not invalidate work in flight. */
+    private final AtomicLong recolorSequence = new AtomicLong();
+    private final AtomicLong publishedRecolorSequence = new AtomicLong();
 
     public FractalRenderController(FractalSurface surface) {
         this.surface = Objects.requireNonNull(surface);
@@ -40,9 +60,39 @@ public final class FractalRenderController implements AutoCloseable {
     private DoubleConsumer zoomChangedHandler = ignored -> {};
 
     public void cancelCurrent() {
+        recolorEpoch.incrementAndGet();
         renderService.cancelCurrent();
         antialiasService.cancelCurrent();
         renderActivity.cancel();
+    }
+
+    /** Coalesced, double-buffered recolor of base and cached AA samples. */
+    public void recolor(ColoringSettings settings) {
+        recolor(settings, () -> {});
+    }
+
+    public void recolor(ColoringSettings settings, Runnable onApplied) {
+        Objects.requireNonNull(settings);
+        Objects.requireNonNull(onApplied);
+        RenderFrame frame = activeFrame;
+        if (frame == null || !frame.isComplete()) {
+            return;
+        }
+        long epoch = recolorEpoch.get();
+        long request = recolorSequence.incrementAndGet();
+        ColoringStrategy coloring = settings.createStrategy();
+        recolorExecutor.execute(() -> {
+            int[] ready = antialiasService.recolorCached(frame, coloring);
+            Platform.runLater(() -> {
+                if (epoch == recolorEpoch.get()
+                        && frame == activeFrame
+                        && request > publishedRecolorSequence.get()) {
+                    surface.applyRecolor(frame, ready, settings);
+                    publishedRecolorSequence.set(request);
+                    onApplied.run();
+                }
+            });
+        });
     }
 
     /** Starts a progressive render for the supplied viewport. */
@@ -55,6 +105,7 @@ public final class FractalRenderController implements AutoCloseable {
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
         long renderGeneration = renderActivity.begin();
+        recolorEpoch.incrementAndGet();
         antialiasService.cancelCurrent();
 
         if (calculatorPreset != scene.fractal()) {
@@ -116,6 +167,13 @@ public final class FractalRenderController implements AutoCloseable {
 
         activeFrame =
                 targetFrame;
+
+        if (sourceFrame != null && reuseResult.reused()) {
+            antialiasService.reuseFrame(
+                    sourceFrame,
+                    targetFrame,
+                    reuseResult.shift().orElseThrow());
+        }
 
         /* Keep the displaced zoom level so a reverse zoom can resume it. */
         if (sourceFrame != previousActiveFrame) {
@@ -286,6 +344,7 @@ public final class FractalRenderController implements AutoCloseable {
     public void close() {
         antialiasService.close();
         renderService.close();
+        recolorExecutor.shutdownNow();
         renderActivity.cancel();
     }
 }

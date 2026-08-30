@@ -36,6 +36,7 @@ public class MainView extends BorderPane {
                 fractalView::setPalette,
                 fractalView::setSamplingPattern,
                 fractalView::setInteractiveRenderMode,
+                fractalView::setColorCycling,
                 fractalView::setCenter
         );
         fractalView.setOnZoomChanged(
