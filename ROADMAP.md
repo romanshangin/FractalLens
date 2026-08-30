@@ -73,7 +73,7 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - [x] Cache palette-independent subpixel samples for AA candidates so palette changes can recolor both the base frame and refined tiles without recalculating the fractal; define memory limits and eviction behavior.
 - [x] Add an optional color-cycling animation that continuously advances the smooth-coloring offset over its seamless period-two loop without recalculating the fractal; pause it during navigation/rendering, use a throttled buffered recolor path, and apply it to refined pixels through the palette-independent AA cache.
 - Add an optional GPU palette-recoloring backend that uploads compact base/AA smooth phases once and advances the palette offset in a shader; retain the CPU path as a portable fallback and benchmark both paths on Retina displays.
-- Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
+- [x] Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
 - Add orbit traps and editable palette stops.
 - Add a render cache, resize reuse, and a separate high-resolution/off-screen export pipeline.
 

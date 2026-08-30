@@ -3,6 +3,8 @@ package com.shangin.fractal.scene;
 import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
+import com.shangin.fractal.coloring.HistogramPaletteColoring;
+import com.shangin.fractal.render.FractalData;
 
 import java.util.Objects;
 
@@ -10,7 +12,8 @@ import java.util.Objects;
 public record ColoringSettings(
         PalettePreset palette,
         double colorScale,
-        double offset
+        double offset,
+        boolean histogramColoring
 ) {
     public static final double DEFAULT_COLOR_SCALE = SmoothPaletteColoring.DEFAULT_COLOR_SCALE;
 
@@ -26,7 +29,11 @@ public record ColoringSettings(
     }
 
     public ColoringSettings(PalettePreset palette) {
-        this(palette, DEFAULT_COLOR_SCALE, 0.0);
+        this(palette, DEFAULT_COLOR_SCALE, 0.0, false);
+    }
+
+    public ColoringSettings(PalettePreset palette, double colorScale, double offset) {
+        this(palette, colorScale, offset, false);
     }
 
     public ColoringStrategy createStrategy() {
@@ -35,5 +42,12 @@ public record ColoringSettings(
                 colorScale,
                 offset
         );
+    }
+
+    /** Builds the optional second-pass mapping once the whole frame is available. */
+    public ColoringStrategy createStrategy(FractalData data) {
+        return histogramColoring
+                ? new HistogramPaletteColoring(palette.palette(), offset, data)
+                : createStrategy();
     }
 }

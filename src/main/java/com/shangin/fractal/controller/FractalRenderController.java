@@ -89,7 +89,7 @@ public final class FractalRenderController implements AutoCloseable {
         }
         long epoch = recolorEpoch.get();
         long request = recolorSequence.incrementAndGet();
-        ColoringStrategy coloring = settings.createStrategy();
+        ColoringStrategy coloring = settings.createStrategy(frame.fractalData());
         recolorExecutor.execute(() -> {
             if (!recolorBufferSlots.tryAcquire()) {
                 return;
@@ -289,11 +289,15 @@ public final class FractalRenderController implements AutoCloseable {
 
                 completedFrame -> {
 
+                    ColoringStrategy completedColoring =
+                            scene.coloring().createStrategy(completedFrame.fractalData());
+
                     if (refinedDisplay) {
+                        surface.displayReadyPixels(completedFrame, completedColoring);
                         surface.beginRefinedRender(completedFrame);
                         antialiasService.refine(
                                 completedFrame,
-                                coloring,
+                                completedColoring,
                                 scene.antialiasing().samplingPattern(),
                                 surface.refinedPixelSnapshot(completedFrame),
                                 Platform::runLater,
@@ -311,7 +315,7 @@ public final class FractalRenderController implements AutoCloseable {
                                     renderActivity.finish(renderGeneration);
                                 },
                                 error -> {
-                                    surface.displayReadyPixels(completedFrame, coloring);
+                                    surface.displayReadyPixels(completedFrame, completedColoring);
                                     surface.completeProgressiveRender(completedFrame, scene);
                                     initialFramePending = false;
                                     renderActivity.finish(renderGeneration);
@@ -324,7 +328,7 @@ public final class FractalRenderController implements AutoCloseable {
                     if (initialFramePending) {
                         surface.displayReadyPixels(
                                 completedFrame,
-                                coloring
+                                completedColoring
                         );
                         initialFramePending = false;
                     }
@@ -336,7 +340,7 @@ public final class FractalRenderController implements AutoCloseable {
 
                     antialiasService.refine(
                             completedFrame,
-                            coloring,
+                            completedColoring,
                             scene.antialiasing().samplingPattern(),
                             surface.refinedPixelSnapshot(completedFrame),
                             Platform::runLater,

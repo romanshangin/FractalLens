@@ -36,6 +36,7 @@ public class MainView extends BorderPane {
                 fractalView::setPalette,
                 fractalView::setSamplingPattern,
                 fractalView::setInteractiveRenderMode,
+                fractalView::setHistogramColoring,
                 fractalView::setColorCycling,
                 fractalView::setCenter
         );

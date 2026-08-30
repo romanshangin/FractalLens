@@ -149,18 +149,41 @@ public class FractalView extends StackPane {
 
     public void setPalette(PalettePreset preset) {
         ColoringSettings settings = new ColoringSettings(
-                preset, scene.coloring().colorScale(), scene.coloring().offset());
+                preset, scene.coloring().colorScale(), scene.coloring().offset(),
+                scene.coloring().histogramColoring());
         scene = scene.withColoring(settings);
         colorCycleOffset = settings.offset();
         configurePalette(preset);
         renderController.cancelRecolor();
-        renderController.recolor(settings);
+        if (settings.histogramColoring()) {
+            renderController.cancelCurrent();
+            fractalSurface.invalidateRefinement();
+            recalculate();
+        } else {
+            renderController.recolor(settings);
+        }
     }
 
     public void setColorCycling(boolean enabled) {
+        if (enabled && scene.coloring().histogramColoring()) {
+            colorCycling = false;
+            colorCyclingStoppedHandler.run();
+            return;
+        }
         colorCycling = enabled;
         colorCycleOffset = scene.coloring().offset();
         lastCycleTick = 0L;
+    }
+
+    public void setHistogramColoring(boolean enabled) {
+        stopColorCyclingForSceneChange();
+        ColoringSettings current = scene.coloring();
+        ColoringSettings settings = new ColoringSettings(
+                current.palette(), current.colorScale(), current.offset(), enabled);
+        scene = scene.withColoring(settings);
+        renderController.cancelCurrent();
+        fractalSurface.invalidateRefinement();
+        recalculate();
     }
 
     public void setOnColorCyclingStopped(Runnable handler) {
@@ -191,7 +214,8 @@ public class FractalView extends StackPane {
                 + elapsedSeconds * 2.0 / COLOR_CYCLE_SECONDS) % 2.0;
         colorCycleOffset = offset;
         ColoringSettings settings = new ColoringSettings(
-                scene.coloring().palette(), scene.coloring().colorScale(), offset);
+                scene.coloring().palette(), scene.coloring().colorScale(), offset,
+                scene.coloring().histogramColoring());
         if (now - lastRecolorTick >= RECOLOR_INTERVAL_NANOS) {
             lastRecolorTick = now;
             renderController.recolor(settings, () -> {
@@ -536,7 +560,7 @@ public class FractalView extends StackPane {
 
         exportService.export(
                 completed.frame(),
-                completed.scene().coloring().createStrategy(),
+                completed.scene().coloring().createStrategy(completed.frame().fractalData()),
                 path,
                 onSuccess,
                 onError

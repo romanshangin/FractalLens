@@ -40,6 +40,7 @@ public final class FractalInspector extends ScrollPane {
             Consumer<PalettePreset> onPaletteChanged,
             Consumer<SamplingPattern> onSamplingPatternChanged,
             Consumer<InteractiveRenderMode> onRenderModeChanged,
+            Consumer<Boolean> onHistogramColoringChanged,
             Consumer<Boolean> onColorCyclingChanged,
             BiConsumer<Double, Double> onCenterChanged
     ) {
@@ -72,9 +73,16 @@ public final class FractalInspector extends ScrollPane {
         colorCycling.setTooltip(new Tooltip("Cycle the palette without recalculating the fractal"));
         colorCycling.setOnAction(event -> onColorCyclingChanged.accept(colorCycling.isSelected()));
 
+        CheckBox histogramColoring = new CheckBox("Equalize");
+        histogramColoring.setTooltip(new Tooltip(
+                "Apply frame-wide two-pass histogram tonal mapping"));
+        histogramColoring.setOnAction(event ->
+                onHistogramColoringChanged.accept(histogramColoring.isSelected()));
+
         configureCoordinateCommit(onCenterChanged);
 
-        appearanceControls = appearanceGrid(palette, samplingPattern, renderMode, colorCycling);
+        appearanceControls = appearanceGrid(
+                palette, samplingPattern, renderMode, histogramColoring, colorCycling);
 
         VBox sections = new VBox(
                 8.0,
@@ -113,17 +121,20 @@ public final class FractalInspector extends ScrollPane {
             ComboBox<PalettePreset> palette,
             ComboBox<SamplingPattern> samplingPattern,
             ComboBox<InteractiveRenderMode> renderMode,
+            CheckBox histogramColoring,
             CheckBox colorCycling
     ) {
         GridPane grid = createGrid();
         grid.addRow(0, new Label("Palette"), palette);
-        grid.addRow(1, new Label("Color cycle"), colorCycling);
-        grid.addRow(2, new Label("AA pattern"), samplingPattern);
-        grid.addRow(3, new Label("Display"), renderMode);
+        grid.addRow(1, new Label("Histogram"), histogramColoring);
+        grid.addRow(2, new Label("Color cycle"), colorCycling);
+        grid.addRow(3, new Label("AA pattern"), samplingPattern);
+        grid.addRow(4, new Label("Display"), renderMode);
         GridPane.setHgrow(palette, Priority.ALWAYS);
         GridPane.setHgrow(samplingPattern, Priority.ALWAYS);
         GridPane.setHgrow(renderMode, Priority.ALWAYS);
         GridPane.setHgrow(colorCycling, Priority.ALWAYS);
+        GridPane.setHgrow(histogramColoring, Priority.ALWAYS);
         return grid;
     }
 
