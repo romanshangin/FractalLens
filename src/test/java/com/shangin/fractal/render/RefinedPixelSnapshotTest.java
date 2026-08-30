@@ -30,6 +30,8 @@ class RefinedPixelSnapshotTest {
         assertEquals(2, snapshot.color(1, 0));
         assertTrue(snapshot.isRefined(0, 0));
         assertFalse(snapshot.isRefined(1, 0));
+        assertTrue(snapshot.isRegionRefined(new RenderRegion(0, 0, 1, 1)));
+        assertFalse(snapshot.isRegionRefined(new RenderRegion(0, 0, 2, 1)));
     }
 
     @Test

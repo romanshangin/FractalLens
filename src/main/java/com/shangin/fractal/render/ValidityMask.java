@@ -133,6 +133,10 @@ public final class ValidityMask {
         return copy;
     }
 
+    synchronized BitSet readyBitsCopy() {
+        return (BitSet) ready.clone();
+    }
+
     /** Replaces this mask with source pixels shifted into target coordinates. */
     public void copyShiftedFrom(ValidityMask source, PixelShift shift) {
         if (source.width != width || source.height != height) {

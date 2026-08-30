@@ -24,6 +24,54 @@ import static org.junit.jupiter.api.Assertions.*;
 class InteractiveAntialiasServiceTest {
 
     @Test
+    void schedulerShouldExcludeFullyRefinedTilesBeforeSubmittingWorkers() {
+        int width = 96;
+        int height = 64;
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator(FractalPreset.MANDELBROT.createFormula()),
+                FractalPreset.MANDELBROT.defaultViewport(),
+                width,
+                height,
+                100
+        ));
+        ValidityMask almostComplete = new ValidityMask(width, height);
+        almostComplete.markReady(new RenderRegion(0, 0, 90, height));
+        RefinedPixelSnapshot snapshot = new RefinedPixelSnapshot(
+                width,
+                height,
+                new int[width * height],
+                almostComplete
+        );
+
+        List<RenderRegion> pending = InteractiveAntialiasService.orderedTiles(
+                frame,
+                snapshot
+        );
+
+        assertEquals(2, pending.size());
+        assertTrue(pending.stream().allMatch(tile -> tile.x() == 64));
+        assertEquals(
+                0,
+                InteractiveAntialiasService.orderedTiles(
+                        frame,
+                        new RefinedPixelSnapshot(
+                                width,
+                                height,
+                                new int[width * height],
+                                completeMask(width, height)
+                        )
+                ).size()
+        );
+        assertEquals(
+                6,
+                InteractiveAntialiasService.orderedTiles(
+                        frame,
+                        RefinedPixelSnapshot.empty(width, height)
+                ).size()
+        );
+    }
+
+    @Test
     void refinementShouldPublishTilesBeforeCompletingWithoutChangingSamples() throws Exception {
         FractalPreset preset = FractalPreset.MANDELBROT;
         RenderFrame frame = RenderFrame.create(new RenderRequest(
@@ -286,5 +334,11 @@ class InteractiveAntialiasServiceTest {
             assertEquals(0, publishedTiles.get());
             assertEquals(0, sampleCalculations.get());
         }
+    }
+
+    private static ValidityMask completeMask(int width, int height) {
+        ValidityMask mask = new ValidityMask(width, height);
+        mask.markReady(new RenderRegion(0, 0, width, height));
+        return mask;
     }
 }

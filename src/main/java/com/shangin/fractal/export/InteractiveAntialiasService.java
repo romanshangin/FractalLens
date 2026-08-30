@@ -96,7 +96,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             int[] baseColors = AdaptivePngExportService.colorBaseFrame(data, coloring);
             List<Future<?>> tasks = new ArrayList<>();
 
-            for (RenderRegion tile : orderedTiles(frame)) {
+            for (RenderRegion tile : orderedTiles(frame, reusedPixels)) {
                 tasks.add(workers.submit(() -> refineTile(
                         refinementId,
                         frame,
@@ -209,17 +209,23 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         });
     }
 
-    private static List<RenderRegion> orderedTiles(RenderFrame frame) {
+    static List<RenderRegion> orderedTiles(
+            RenderFrame frame,
+            RefinedPixelSnapshot reusedPixels
+    ) {
         List<RenderRegion> tiles = new ArrayList<>();
 
         for (int y = 0; y < frame.fractalData().height(); y += TILE_SIZE) {
             for (int x = 0; x < frame.fractalData().width(); x += TILE_SIZE) {
-                tiles.add(new RenderRegion(
+                RenderRegion tile = new RenderRegion(
                         x,
                         y,
                         Math.min(TILE_SIZE, frame.fractalData().width() - x),
                         Math.min(TILE_SIZE, frame.fractalData().height() - y)
-                ));
+                );
+                if (!reusedPixels.isRegionRefined(tile)) {
+                    tiles.add(tile);
+                }
             }
         }
 
