@@ -11,6 +11,7 @@ import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 
 /**
@@ -30,6 +31,7 @@ public final class FractalRenderController implements AutoCloseable {
     private RenderFrame retainedFrame;
     private boolean initialFramePending = true;
     private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
+    private final RenderActivityTracker renderActivity = new RenderActivityTracker();
 
     public FractalRenderController(FractalSurface surface) {
         this.surface = Objects.requireNonNull(surface);
@@ -40,6 +42,7 @@ public final class FractalRenderController implements AutoCloseable {
     public void cancelCurrent() {
         renderService.cancelCurrent();
         antialiasService.cancelCurrent();
+        renderActivity.cancel();
     }
 
     /** Starts a progressive render for the supplied viewport. */
@@ -51,6 +54,7 @@ public final class FractalRenderController implements AutoCloseable {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
+        long renderGeneration = renderActivity.begin();
         antialiasService.cancelCurrent();
 
         if (calculatorPreset != scene.fractal()) {
@@ -212,11 +216,13 @@ public final class FractalRenderController implements AutoCloseable {
                                             scene
                                     );
                                     initialFramePending = false;
+                                    renderActivity.finish(renderGeneration);
                                 },
                                 error -> {
                                     surface.displayReadyPixels(completedFrame, coloring);
                                     surface.completeProgressiveRender(completedFrame, scene);
                                     initialFramePending = false;
+                                    renderActivity.finish(renderGeneration);
                                     error.printStackTrace();
                                 }
                         );
@@ -247,14 +253,24 @@ public final class FractalRenderController implements AutoCloseable {
                                     region,
                                     colors
                             ),
-                            () -> {},
-                            Throwable::printStackTrace
+                            () -> renderActivity.finish(renderGeneration),
+                            error -> {
+                                renderActivity.finish(renderGeneration);
+                                error.printStackTrace();
+                            }
                     );
 
                 },
 
-                Throwable::printStackTrace
+                error -> {
+                    renderActivity.finish(renderGeneration);
+                    error.printStackTrace();
+                }
         );
+    }
+
+    public void setOnRenderingChanged(Consumer<Boolean> handler) {
+        renderActivity.setListener(handler);
     }
 
     public void setOnZoomChanged(
@@ -270,5 +286,6 @@ public final class FractalRenderController implements AutoCloseable {
     public void close() {
         antialiasService.close();
         renderService.close();
+        renderActivity.cancel();
     }
 }

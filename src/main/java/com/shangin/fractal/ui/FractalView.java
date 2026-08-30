@@ -153,6 +153,10 @@ public class FractalView extends StackPane {
         recalculate();
     }
 
+    public void setOnRenderingChanged(Consumer<Boolean> handler) {
+        renderController.setOnRenderingChanged(handler);
+    }
+
     private void configureResize() {
         resizeDebounce.setOnFinished(event -> resizeAndRender());
 

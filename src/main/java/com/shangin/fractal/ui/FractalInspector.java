@@ -27,6 +27,7 @@ public final class FractalInspector extends ScrollPane {
     private final TextField centerRealField = createCoordinateField();
     private final TextField centerImaginaryField = createCoordinateField();
     private final ZoomIndicator zoomIndicator = new ZoomIndicator();
+    private final GridPane appearanceControls;
     private double centerReal;
     private double centerImaginary;
 
@@ -67,11 +68,13 @@ public final class FractalInspector extends ScrollPane {
 
         configureCoordinateCommit(onCenterChanged);
 
+        appearanceControls = appearanceGrid(palette, samplingPattern, renderMode);
+
         VBox sections = new VBox(
                 8.0,
                 section("Fractal", singleControlGrid("Type", fractal)),
                 section("Navigation", navigationGrid()),
-                section("Appearance", appearanceGrid(palette, samplingPattern, renderMode))
+                section("Appearance", appearanceControls)
         );
         sections.setPadding(new Insets(10));
         sections.setFillWidth(true);
@@ -175,6 +178,10 @@ public final class FractalInspector extends ScrollPane {
 
     public void setZoom(double zoomFactor) {
         zoomIndicator.setZoom(zoomFactor);
+    }
+
+    public void setAppearanceDisabled(boolean disabled) {
+        appearanceControls.setDisable(disabled);
     }
 
     private void updateCoordinateText() {
