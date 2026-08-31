@@ -5,15 +5,25 @@ public record FractalSample(
         boolean escaped,
         double zr,
         double zi,
-        double smoothingPower)
+        double smoothingPower,
+        double orbitTrapDistance)
 {
     public FractalSample(int iterations, boolean escaped, double zr, double zi) {
-        this(iterations, escaped, zr, zi, 2.0);
+        this(iterations, escaped, zr, zi, 2.0, Double.NaN);
+    }
+
+    public FractalSample(
+            int iterations, boolean escaped, double zr, double zi, double smoothingPower
+    ) {
+        this(iterations, escaped, zr, zi, smoothingPower, Double.NaN);
     }
 
     public FractalSample {
         if (!Double.isFinite(smoothingPower) || smoothingPower <= 1.0) {
             throw new IllegalArgumentException("Smoothing power must be finite and greater than 1");
+        }
+        if (Double.isInfinite(orbitTrapDistance) || orbitTrapDistance < 0.0) {
+            throw new IllegalArgumentException("Orbit-trap distance must be non-negative or unavailable");
         }
     }
 

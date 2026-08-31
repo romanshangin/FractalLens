@@ -3,6 +3,7 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.coloring.ColoringStrategy;
 
 import java.nio.IntBuffer;
+import java.util.BitSet;
 
 /** Converts calculated fractal samples into packed ARGB pixels. */
 public class FractalColorizer {
@@ -17,7 +18,8 @@ public class FractalColorizer {
                     data.iterations(index),
                     data.smoothIterations(index),
                     data.escaped(index),
-                    data.maxIterations());
+                    data.maxIterations(),
+                    data.orbitTrapDistance(index));
 
             buffer.put(index, color);
         }
@@ -40,9 +42,46 @@ public class FractalColorizer {
                         data.iterations(index),
                         data.smoothIterations(index),
                         data.escaped(index),
-                        data.maxIterations());
+                        data.maxIterations(),
+                        data.orbitTrapDistance(index));
                 buffer.put(index, color);
             }
+        }
+    }
+
+    /**
+     * Colors every ready sample except pixels whose refined colors must remain
+     * untouched while a shifted frame is completed after a pan.
+     */
+    public void colorReadyPixels(
+            FractalData data,
+            IntBuffer buffer,
+            ColoringStrategy coloring,
+            ValidityMask ready,
+            ValidityMask preserve
+    ) {
+        if (ready.width() != data.width() || ready.height() != data.height()) {
+            throw new IllegalArgumentException("Ready mask dimensions do not match fractal data");
+        }
+        if (preserve != null
+                && (preserve.width() != data.width() || preserve.height() != data.height())) {
+            throw new IllegalArgumentException("Preserve mask dimensions do not match fractal data");
+        }
+
+        BitSet pixels = ready.readyBitsCopy();
+        if (preserve != null) {
+            pixels.andNot(preserve.readyBitsCopy());
+        }
+
+        for (int index = pixels.nextSetBit(0);
+             index >= 0;
+             index = pixels.nextSetBit(index + 1)) {
+            buffer.put(index, coloring.color(
+                    data.iterations(index),
+                    data.smoothIterations(index),
+                    data.escaped(index),
+                    data.maxIterations(),
+                    data.orbitTrapDistance(index)));
         }
     }
 }

@@ -4,6 +4,7 @@ import com.shangin.fractal.formula.DistanceEstimatingFormula;
 import com.shangin.fractal.formula.DistanceSample;
 import com.shangin.fractal.formula.FractalFormula;
 import com.shangin.fractal.formula.FractalSample;
+import com.shangin.fractal.coloring.OrbitTrap;
 
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -12,10 +13,16 @@ import java.util.function.Consumer;
 public class FractalCalculator {
 
     private final FractalFormula formula;
+    private final OrbitTrap orbitTrap;
     private static final int CANCELLATION_CHECK_INTERVAL = 8;
 
     public FractalCalculator(FractalFormula formula) {
+        this(formula, OrbitTrap.NONE);
+    }
+
+    public FractalCalculator(FractalFormula formula, OrbitTrap orbitTrap) {
         this.formula = formula;
+        this.orbitTrap = java.util.Objects.requireNonNull(orbitTrap);
     }
 
     /** Returns whether rows mirrored around the real axis share their samples. */
@@ -29,7 +36,7 @@ public class FractalCalculator {
             double imaginary,
             int maxIterations
     ) {
-        return formula.calculate(real, imaginary, maxIterations);
+        return formula.calculate(real, imaginary, maxIterations, orbitTrap);
     }
 
     public boolean supportsDistanceEstimation() {

@@ -1,5 +1,7 @@
 package com.shangin.fractal.formula;
 
+import com.shangin.fractal.coloring.OrbitTrap;
+
 public class JuliaFormula implements DistanceEstimatingFormula {
 
     private static final double ESCAPE_RADIUS_SQUARED = 4.0;
@@ -40,6 +42,29 @@ public class JuliaFormula implements DistanceEstimatingFormula {
         boolean escaped = iteration < maxIterations;
 
         return new FractalSample(iteration, escaped, zr, zi);
+    }
+
+    @Override
+    public FractalSample calculate(
+            double real, double imaginary, int maxIterations, OrbitTrap orbitTrap
+    ) {
+        if (orbitTrap == OrbitTrap.NONE) {
+            return calculate(real, imaginary, maxIterations);
+        }
+        double zr = real;
+        double zi = imaginary;
+        double trapDistance = Double.POSITIVE_INFINITY;
+        int iteration = 0;
+        while (zr * zr + zi * zi <= ESCAPE_RADIUS_SQUARED && iteration < maxIterations) {
+            double nextReal = zr * zr - zi * zi + cReal;
+            double nextImaginary = 2.0 * zr * zi + cImaginary;
+            zr = nextReal;
+            zi = nextImaginary;
+            trapDistance = Math.min(trapDistance, orbitTrap.distance(zr, zi));
+            iteration++;
+        }
+        return MandelbrotFormula.trappedSample(
+                iteration, iteration < maxIterations, zr, zi, 2.0, trapDistance);
     }
 
     @Override

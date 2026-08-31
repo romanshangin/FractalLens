@@ -1,6 +1,8 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.coloring.ColorStop;
+import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.SamplingPattern;
@@ -18,6 +20,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.util.Locale;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -38,6 +41,8 @@ public final class FractalInspector extends ScrollPane {
             PalettePreset initialPalette,
             Consumer<FractalPreset> onFractalChanged,
             Consumer<PalettePreset> onPaletteChanged,
+            Consumer<List<ColorStop>> onPaletteStopsChanged,
+            Consumer<OrbitTrap> onOrbitTrapChanged,
             Consumer<SamplingPattern> onSamplingPatternChanged,
             Consumer<InteractiveRenderMode> onRenderModeChanged,
             Consumer<Boolean> onHistogramColoringChanged,
@@ -54,7 +59,19 @@ public final class FractalInspector extends ScrollPane {
         palette.getItems().setAll(PalettePreset.values());
         palette.setValue(initialPalette);
         palette.setMaxWidth(Double.MAX_VALUE);
-        palette.setOnAction(event -> onPaletteChanged.accept(palette.getValue()));
+        PaletteStopEditor paletteStops = new PaletteStopEditor(
+                initialPalette.stops(), onPaletteStopsChanged);
+        palette.setOnAction(event -> {
+            PalettePreset selected = palette.getValue();
+            paletteStops.setStops(selected.stops());
+            onPaletteChanged.accept(selected);
+        });
+
+        ComboBox<OrbitTrap> orbitTrap = new ComboBox<>();
+        orbitTrap.getItems().setAll(OrbitTrap.values());
+        orbitTrap.setValue(OrbitTrap.NONE);
+        orbitTrap.setMaxWidth(Double.MAX_VALUE);
+        orbitTrap.setOnAction(event -> onOrbitTrapChanged.accept(orbitTrap.getValue()));
 
         ComboBox<SamplingPattern> samplingPattern = new ComboBox<>();
         samplingPattern.getItems().setAll(SamplingPattern.values());
@@ -82,7 +99,8 @@ public final class FractalInspector extends ScrollPane {
         configureCoordinateCommit(onCenterChanged);
 
         appearanceControls = appearanceGrid(
-                palette, samplingPattern, renderMode, histogramColoring, colorCycling);
+                palette, paletteStops, orbitTrap, samplingPattern, renderMode,
+                histogramColoring, colorCycling);
 
         VBox sections = new VBox(
                 8.0,
@@ -119,6 +137,8 @@ public final class FractalInspector extends ScrollPane {
 
     private static GridPane appearanceGrid(
             ComboBox<PalettePreset> palette,
+            PaletteStopEditor paletteStops,
+            ComboBox<OrbitTrap> orbitTrap,
             ComboBox<SamplingPattern> samplingPattern,
             ComboBox<InteractiveRenderMode> renderMode,
             CheckBox histogramColoring,
@@ -126,11 +146,16 @@ public final class FractalInspector extends ScrollPane {
     ) {
         GridPane grid = createGrid();
         grid.addRow(0, new Label("Palette"), palette);
-        grid.addRow(1, new Label("Histogram"), histogramColoring);
-        grid.addRow(2, new Label("Color cycle"), colorCycling);
-        grid.addRow(3, new Label("AA pattern"), samplingPattern);
-        grid.addRow(4, new Label("Display"), renderMode);
+        grid.add(new Label("Stops"), 0, 1);
+        grid.add(paletteStops, 1, 1);
+        grid.addRow(2, new Label("Orbit trap"), orbitTrap);
+        grid.addRow(3, new Label("Histogram"), histogramColoring);
+        grid.addRow(4, new Label("Color cycle"), colorCycling);
+        grid.addRow(5, new Label("AA pattern"), samplingPattern);
+        grid.addRow(6, new Label("Display"), renderMode);
         GridPane.setHgrow(palette, Priority.ALWAYS);
+        GridPane.setHgrow(paletteStops, Priority.ALWAYS);
+        GridPane.setHgrow(orbitTrap, Priority.ALWAYS);
         GridPane.setHgrow(samplingPattern, Priority.ALWAYS);
         GridPane.setHgrow(renderMode, Priority.ALWAYS);
         GridPane.setHgrow(colorCycling, Priority.ALWAYS);

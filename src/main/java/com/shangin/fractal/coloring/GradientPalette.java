@@ -2,10 +2,20 @@ package com.shangin.fractal.coloring;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class GradientPalette implements Palette {
 
     private static final int LOOKUP_SIZE = 65_536;
+    private static final int CACHE_LIMIT = 64;
+    private static final Map<List<ColorStop>, GradientPalette> CACHE =
+            new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<List<ColorStop>, GradientPalette> eldest) {
+                    return size() > CACHE_LIMIT;
+                }
+            };
 
     private final List<PerceptualStop> stops;
     private final int[] lookup;
@@ -21,6 +31,12 @@ public class GradientPalette implements Palette {
                 .toList();
 
         lookup = createLookup();
+    }
+
+    /** Reuses the expensive lookup table while the same immutable stops are recolored. */
+    public static synchronized GradientPalette cached(List<ColorStop> stops) {
+        List<ColorStop> key = List.copyOf(stops);
+        return CACHE.computeIfAbsent(key, GradientPalette::new);
     }
 
     @Override
@@ -49,6 +65,10 @@ public class GradientPalette implements Palette {
 
     private int calculateColor(double position) {
         double clamped = Math.clamp(position, 0.0, 1.0);
+
+        if (clamped <= stops.getFirst().position()) {
+            return stops.getFirst().argb();
+        }
 
         for (int i = 0; i < stops.size() - 1; i++) {
             PerceptualStop left = stops.get(i);

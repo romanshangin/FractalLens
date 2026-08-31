@@ -237,13 +237,6 @@ public final class FractalSurface extends Region {
         promoteStagingFrame(renderFrame, scene);
     }
 
-    /** Keeps raw staging pixels hidden while quality-mode samples are calculated. */
-    public void hideProgressiveRender(RenderFrame frame) {
-        if (stagingRenderFrame == frame) {
-            progressiveImageView.setImage(null);
-        }
-    }
-
     /** Shows preserved refined pixels and prepares the overlay for new AA tiles. */
     public void beginRefinedRender(RenderFrame frame) {
         if (stagingFrame == null || stagingRenderFrame != frame) {
@@ -630,6 +623,22 @@ public final class FractalSurface extends Region {
             RenderFrame frame,
             ColoringStrategy coloring
     ) {
+        displayReadyPixels(frame, coloring, false);
+    }
+
+    /** Colors ready base samples without overwriting shifted AA pixels. */
+    public void displayReadyPixelsPreservingRefinement(
+            RenderFrame frame,
+            ColoringStrategy coloring
+    ) {
+        displayReadyPixels(frame, coloring, true);
+    }
+
+    private void displayReadyPixels(
+            RenderFrame frame,
+            ColoringStrategy coloring,
+            boolean preserveRefinement
+    ) {
         if (stagingFrame == null || stagingRenderFrame != frame) {
             return;
         }
@@ -642,50 +651,13 @@ public final class FractalSurface extends Region {
             return;
         }
 
-        for (int y = 0; y < data.height(); y++) {
-
-            int runStart = -1;
-
-            for (int x = 0; x < data.width(); x++) {
-
-                if (validity.isReady(x, y)) {
-
-                    if (runStart < 0) {
-                        runStart = x;
-                    }
-
-                } else if (runStart >= 0) {
-
-                    colorizer.colorRegion(
-                            data,
-                            stagingFrame.intBuffer(),
-                            coloring,
-                            new RenderRegion(
-                                    runStart,
-                                    y,
-                                    x - runStart,
-                                    1
-                            )
-                    );
-
-                    runStart = -1;
-                }
-            }
-
-            if (runStart >= 0) {
-                colorizer.colorRegion(
-                        data,
-                        stagingFrame.intBuffer(),
-                        coloring,
-                        new RenderRegion(
-                                runStart,
-                                y,
-                                data.width() - runStart,
-                                1
-                        )
-                );
-            }
-        }
+        colorizer.colorReadyPixels(
+                data,
+                stagingFrame.intBuffer(),
+                coloring,
+                validity,
+                preserveRefinement ? stagingRefinementValidity : null
+        );
 
         stagingFrame.update();
     }

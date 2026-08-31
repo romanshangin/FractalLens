@@ -10,6 +10,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class GradientPaletteTest {
 
     @Test
+    void positionsBeforeFirstEditableStopUseFirstColor() {
+        GradientPalette palette = new GradientPalette(List.of(
+                new ColorStop(0.25, 0xFF112233),
+                new ColorStop(0.75, 0xFFEEEEEE)
+        ));
+
+        assertEquals(0xFF112233, palette.color(0.0));
+    }
+
+    @Test
     void preservesExactEndpointColors() {
         GradientPalette palette = grayscalePalette();
 

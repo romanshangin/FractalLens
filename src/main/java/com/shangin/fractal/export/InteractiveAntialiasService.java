@@ -287,7 +287,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         IntStream.range(0, data.size()).parallel().forEach(index ->
                 colors[index] = coloring.color(
                         data.iterations(index), data.smoothIterations(index),
-                        data.escaped(index), data.maxIterations()));
+                        data.escaped(index), data.maxIterations(),
+                        data.orbitTrapDistance(index)));
     }
 
     private BaseColorPhaseCache basePhases(

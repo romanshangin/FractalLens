@@ -1,5 +1,7 @@
 package com.shangin.fractal.formula;
 
+import com.shangin.fractal.coloring.OrbitTrap;
+
 /** Escape-time Multibrot formula z = z^power + c for an integer power. */
 public final class MultibrotFormula implements DistanceEstimatingFormula {
 
@@ -46,6 +48,28 @@ public final class MultibrotFormula implements DistanceEstimatingFormula {
         }
 
         return new FractalSample(iteration, iteration < maxIterations, zr, zi, power);
+    }
+
+    @Override
+    public FractalSample calculate(
+            double real, double imaginary, int maxIterations, OrbitTrap orbitTrap
+    ) {
+        if (orbitTrap == OrbitTrap.NONE) {
+            return calculate(real, imaginary, maxIterations);
+        }
+        double zr = 0.0;
+        double zi = 0.0;
+        double trapDistance = Double.POSITIVE_INFINITY;
+        int iteration = 0;
+        while (zr * zr + zi * zi <= ESCAPE_RADIUS_SQUARED && iteration < maxIterations) {
+            ComplexPower nextPower = complexPower(zr, zi, power);
+            zr = nextPower.real() + real;
+            zi = nextPower.imaginary() + imaginary;
+            trapDistance = Math.min(trapDistance, orbitTrap.distance(zr, zi));
+            iteration++;
+        }
+        return MandelbrotFormula.trappedSample(
+                iteration, iteration < maxIterations, zr, zi, power, trapDistance);
     }
 
     @Override

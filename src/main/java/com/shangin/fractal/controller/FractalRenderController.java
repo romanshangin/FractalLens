@@ -1,6 +1,7 @@
 package com.shangin.fractal.controller;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
+import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.math.Viewport;
@@ -35,6 +36,7 @@ public final class FractalRenderController implements AutoCloseable {
 
     private FractalCalculator calculator;
     private FractalPreset calculatorPreset;
+    private OrbitTrap calculatorOrbitTrap;
     private RenderFrame activeFrame;
     private RenderFrame retainedFrame;
     private boolean initialFramePending = true;
@@ -142,9 +144,12 @@ public final class FractalRenderController implements AutoCloseable {
         recolorEpoch.incrementAndGet();
         antialiasService.cancelCurrent();
 
-        if (calculatorPreset != scene.fractal()) {
+        if (calculatorPreset != scene.fractal()
+                || calculatorOrbitTrap != scene.coloring().orbitTrap()) {
             calculatorPreset = scene.fractal();
-            calculator = new FractalCalculator(scene.fractal().createFormula());
+            calculatorOrbitTrap = scene.coloring().orbitTrap();
+            calculator = new FractalCalculator(
+                    scene.fractal().createFormula(), calculatorOrbitTrap);
             activeFrame = null;
             retainedFrame = null;
         }
@@ -254,16 +259,12 @@ public final class FractalRenderController implements AutoCloseable {
         }
 
         /* Color reusable sample data when the displayed image cannot be shifted. */
-        if (!imageReused && !refinedDisplay) {
+        if (!imageReused) {
 
             surface.displayReadyPixels(
                     activeFrame,
                     coloring
             );
-        }
-
-        if (refinedDisplay) {
-            surface.hideProgressiveRender(activeFrame);
         }
 
         /*
@@ -279,12 +280,10 @@ public final class FractalRenderController implements AutoCloseable {
                 Platform::runLater,
 
                 progress -> {
-                    if (!refinedDisplay && !initialFramePending) {
-                        surface.displayProgress(
-                                progress,
-                                coloring
-                        );
-                    }
+                    surface.displayProgress(
+                            progress,
+                            coloring
+                    );
                 },
 
                 completedFrame -> {
@@ -293,7 +292,8 @@ public final class FractalRenderController implements AutoCloseable {
                             scene.coloring().createStrategy(completedFrame.fractalData());
 
                     if (refinedDisplay) {
-                        surface.displayReadyPixels(completedFrame, completedColoring);
+                        surface.displayReadyPixelsPreservingRefinement(
+                                completedFrame, completedColoring);
                         surface.beginRefinedRender(completedFrame);
                         antialiasService.refine(
                                 completedFrame,
@@ -315,7 +315,8 @@ public final class FractalRenderController implements AutoCloseable {
                                     renderActivity.finish(renderGeneration);
                                 },
                                 error -> {
-                                    surface.displayReadyPixels(completedFrame, completedColoring);
+                                    surface.displayReadyPixelsPreservingRefinement(
+                                            completedFrame, completedColoring);
                                     surface.completeProgressiveRender(completedFrame, scene);
                                     initialFramePending = false;
                                     renderActivity.finish(renderGeneration);

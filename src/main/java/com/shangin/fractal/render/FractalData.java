@@ -13,6 +13,7 @@ public class FractalData {
     private final int[] iterations;
     private final double[] smoothIterations;
     private final boolean[] escaped;
+    private final double[] orbitTrapDistances;
 
     public FractalData(
             int width,
@@ -28,6 +29,8 @@ public class FractalData {
         this.iterations = new int[size];
         this.smoothIterations = new double[size];
         this.escaped = new boolean[size];
+        this.orbitTrapDistances = new double[size];
+        java.util.Arrays.fill(orbitTrapDistances, Double.NaN);
     }
 
     public int width() {
@@ -58,6 +61,10 @@ public class FractalData {
         return escaped[index];
     }
 
+    public double orbitTrapDistance(int index) {
+        return orbitTrapDistances[index];
+    }
+
     public void set(
             int index,
             FractalSample sample
@@ -65,6 +72,7 @@ public class FractalData {
         iterations[index] = sample.iterations();
         smoothIterations[index] = sample.smoothIterations();
         escaped[index] = sample.escaped();
+        orbitTrapDistances[index] = sample.orbitTrapDistance();
     }
 
     public void set(
@@ -90,6 +98,7 @@ public class FractalData {
         iterations[targetIndex] = source.iterations[sourceIndex];
         smoothIterations[targetIndex] = source.smoothIterations[sourceIndex];
         escaped[targetIndex] = source.escaped[sourceIndex];
+        orbitTrapDistances[targetIndex] = source.orbitTrapDistances[sourceIndex];
     }
 
     /** Copies one horizontal sample span to another row. */
@@ -120,6 +129,7 @@ public class FractalData {
         System.arraycopy(source.iterations, sourceIndex, iterations, targetIndex, length);
         System.arraycopy(source.smoothIterations, sourceIndex, smoothIterations, targetIndex, length);
         System.arraycopy(source.escaped, sourceIndex, escaped, targetIndex, length);
+        System.arraycopy(source.orbitTrapDistances, sourceIndex, orbitTrapDistances, targetIndex, length);
     }
 
     /** Copies a rectangular sample region without reallocating either frame. */
@@ -190,6 +200,14 @@ public class FractalData {
                     source.escaped,
                     sourceIndex,
                     escaped,
+                    targetIndex,
+                    regionWidth
+            );
+
+            System.arraycopy(
+                    source.orbitTrapDistances,
+                    sourceIndex,
+                    orbitTrapDistances,
                     targetIndex,
                     regionWidth
             );

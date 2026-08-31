@@ -2,6 +2,9 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.Palette;
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.coloring.ColorStop;
+import com.shangin.fractal.coloring.GradientPalette;
+import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.export.ExportFileName;
@@ -23,6 +26,7 @@ import javafx.util.Duration;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
+import java.util.List;
 
 /**
  * Interactive fractal viewport that translates resize, scroll, and drag events
@@ -147,15 +151,19 @@ public class FractalView extends StackPane {
         fractalSurface.setPreviewBackground(palette);
     }
 
+    private void configurePalette(List<ColorStop> stops) {
+        fractalSurface.setPreviewBackground(GradientPalette.cached(stops));
+    }
+
     public void setPalette(PalettePreset preset) {
         ColoringSettings settings = new ColoringSettings(
-                preset, scene.coloring().colorScale(), scene.coloring().offset(),
-                scene.coloring().histogramColoring());
+                preset, preset.stops(), scene.coloring().colorScale(), scene.coloring().offset(),
+                scene.coloring().histogramColoring(), scene.coloring().orbitTrap());
         scene = scene.withColoring(settings);
         colorCycleOffset = settings.offset();
         configurePalette(preset);
         renderController.cancelRecolor();
-        if (settings.histogramColoring()) {
+        if (settings.histogramColoring() || settings.orbitTrap() != OrbitTrap.NONE) {
             renderController.cancelCurrent();
             fractalSurface.invalidateRefinement();
             recalculate();
@@ -164,10 +172,47 @@ public class FractalView extends StackPane {
         }
     }
 
+    public void setPaletteStops(List<ColorStop> stops) {
+        ColoringSettings current = scene.coloring();
+        ColoringSettings settings = new ColoringSettings(
+                current.palette(), stops, current.colorScale(), current.offset(),
+                current.histogramColoring(), current.orbitTrap());
+        scene = scene.withColoring(settings);
+        configurePalette(stops);
+        renderController.cancelRecolor();
+        if (settings.histogramColoring() || settings.orbitTrap() != OrbitTrap.NONE) {
+            renderController.cancelCurrent();
+            fractalSurface.invalidateRefinement();
+            recalculate();
+        } else {
+            renderController.recolor(settings);
+        }
+    }
+
+    public void setOrbitTrap(OrbitTrap orbitTrap) {
+        stopColorCyclingForSceneChange();
+        ColoringSettings current = scene.coloring();
+        scene = scene.withColoring(new ColoringSettings(
+                current.palette(), current.paletteStops(), current.colorScale(), current.offset(),
+                current.histogramColoring(), orbitTrap));
+        renderController.cancelCurrent();
+        fractalSurface.invalidateRefinement();
+        recalculate();
+    }
+
     public void setColorCycling(boolean enabled) {
-        if (enabled && scene.coloring().histogramColoring()) {
+        if (enabled && (scene.coloring().histogramColoring()
+                || scene.coloring().orbitTrap() != OrbitTrap.NONE)) {
             colorCycling = false;
+            renderController.cancelRecolor();
             colorCyclingStoppedHandler.run();
+            return;
+        }
+        if (!enabled) {
+            colorCycling = false;
+            lastCycleTick = 0L;
+            renderController.cancelRecolor();
+            colorCycleOffset = scene.coloring().offset();
             return;
         }
         colorCycling = enabled;
@@ -179,7 +224,8 @@ public class FractalView extends StackPane {
         stopColorCyclingForSceneChange();
         ColoringSettings current = scene.coloring();
         ColoringSettings settings = new ColoringSettings(
-                current.palette(), current.colorScale(), current.offset(), enabled);
+                current.palette(), current.paletteStops(), current.colorScale(), current.offset(),
+                enabled, current.orbitTrap());
         scene = scene.withColoring(settings);
         renderController.cancelCurrent();
         fractalSurface.invalidateRefinement();
@@ -196,6 +242,8 @@ public class FractalView extends StackPane {
         }
         colorCycling = false;
         lastCycleTick = 0L;
+        renderController.cancelRecolor();
+        colorCycleOffset = scene.coloring().offset();
         colorCyclingStoppedHandler.run();
     }
 
@@ -214,16 +262,28 @@ public class FractalView extends StackPane {
                 + elapsedSeconds * 2.0 / COLOR_CYCLE_SECONDS) % 2.0;
         colorCycleOffset = offset;
         ColoringSettings settings = new ColoringSettings(
-                scene.coloring().palette(), scene.coloring().colorScale(), offset,
-                scene.coloring().histogramColoring());
+                scene.coloring().palette(), scene.coloring().paletteStops(),
+                scene.coloring().colorScale(), offset,
+                scene.coloring().histogramColoring(), scene.coloring().orbitTrap());
         if (now - lastRecolorTick >= RECOLOR_INTERVAL_NANOS) {
             lastRecolorTick = now;
             renderController.recolor(settings, () -> {
-                if (colorCycling && scene.coloring().palette() == settings.palette()) {
+                if (hasSameAnimationBase(scene.coloring(), settings)) {
                     scene = scene.withColoring(settings);
                 }
             });
         }
+    }
+
+    private static boolean hasSameAnimationBase(
+            ColoringSettings current,
+            ColoringSettings applied
+    ) {
+        return current.palette() == applied.palette()
+                && current.paletteStops().equals(applied.paletteStops())
+                && Double.compare(current.colorScale(), applied.colorScale()) == 0
+                && current.histogramColoring() == applied.histogramColoring()
+                && current.orbitTrap() == applied.orbitTrap();
     }
 
     private void renderingChanged(boolean active) {

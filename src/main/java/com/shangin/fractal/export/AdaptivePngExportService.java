@@ -387,7 +387,8 @@ public final class AdaptivePngExportService implements AutoCloseable {
                     sample.iterations(),
                     sample.smoothIterations(),
                     sample.escaped(),
-                    maxIterations));
+                    maxIterations,
+                    sample.orbitTrapDistance()));
         }
         return accumulator.result().color();
     }
@@ -442,7 +443,8 @@ public final class AdaptivePngExportService implements AutoCloseable {
                         sample.iterations(),
                         sample.smoothIterations(),
                         sample.escaped(),
-                        maxIterations
+                        maxIterations,
+                        sample.orbitTrapDistance()
                 );
 
                 accumulator.add(color);
