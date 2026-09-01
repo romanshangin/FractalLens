@@ -58,7 +58,7 @@ public final class FractalCamera {
         viewportHeight = height;
     }
 
-    /** Zooms toward a logical screen point without imposing a backend precision limit. */
+    /** Zooms toward a logical screen point while retaining direct-render precision. */
     public boolean zoomIn(
             double x,
             double y,
@@ -68,9 +68,13 @@ public final class FractalCamera {
             int renderHeight
     ) {
         validateDimensions(renderWidth, renderHeight);
-        viewport = viewport.zoomAt(
+        Viewport requestedViewport = viewport.zoomAt(
                 BigDecimal.valueOf(x), BigDecimal.valueOf(y),
                 logicalWidth, logicalHeight, ZOOM_IN_FACTOR);
+        if (!hasSufficientRenderPrecision(requestedViewport, renderWidth, renderHeight)) {
+            return false;
+        }
+        viewport = requestedViewport;
         return true;
     }
 
@@ -135,14 +139,30 @@ public final class FractalCamera {
             return true;
         }
 
-        viewport = viewport.zoomAt(
+        Viewport requestedViewport = viewport.zoomAt(
                 BigDecimal.valueOf(x),
                 BigDecimal.valueOf(y),
                 logicalWidth,
                 logicalHeight,
                 exactFactor
         );
+        if (scaleFactor < 1.0
+                && !hasSufficientRenderPrecision(requestedViewport, renderWidth, renderHeight)) {
+            return false;
+        }
+        viewport = requestedViewport;
         return true;
+    }
+
+    private boolean hasSufficientRenderPrecision(
+            Viewport candidate,
+            int renderWidth,
+            int renderHeight
+    ) {
+        return candidate.hasSufficientPrecision(
+                renderWidth,
+                renderHeight,
+                preset.minimumUlpsPerPixel());
     }
 
     private void validateDimensions(

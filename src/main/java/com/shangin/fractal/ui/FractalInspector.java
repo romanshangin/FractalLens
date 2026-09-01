@@ -27,7 +27,7 @@ import java.util.function.Consumer;
 /** Left-side editor for scene and navigation parameters. */
 public final class FractalInspector extends ScrollPane {
 
-    private static final double INSPECTOR_WIDTH = 290.0;
+    private static final double INSPECTOR_WIDTH = 360.0;
     private final TextField centerRealField = createCoordinateField();
     private final TextField centerImaginaryField = createCoordinateField();
     private final ZoomIndicator zoomIndicator = new ZoomIndicator();
@@ -115,8 +115,8 @@ public final class FractalInspector extends ScrollPane {
         setFitToWidth(true);
         setHbarPolicy(ScrollBarPolicy.NEVER);
         setPrefWidth(INSPECTOR_WIDTH);
-        setMinWidth(240.0);
-        setMaxWidth(340.0);
+        setMinWidth(320.0);
+        setMaxWidth(420.0);
         setStyle("-fx-border-color: transparent -fx-box-border transparent transparent;");
     }
 
