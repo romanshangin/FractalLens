@@ -754,6 +754,10 @@ public class FractalView extends StackPane {
         );
     }
 
+    public void setOnDeepZoomChanged(Consumer<Boolean> handler) {
+        renderController.setOnDeepZoomChanged(handler);
+    }
+
     public void setOnViewportChanged(Consumer<Viewport> handler) {
         viewportChangedHandler = java.util.Objects.requireNonNull(handler);
         viewportChangedHandler.accept(camera.viewport());

@@ -61,6 +61,7 @@ public final class FractalRenderController implements AutoCloseable {
     }
 
     private Consumer<BigDecimal> zoomChangedHandler = ignored -> {};
+    private Consumer<Boolean> deepZoomChangedHandler = ignored -> {};
 
     public void cancelCurrent() {
         recolorEpoch.incrementAndGet();
@@ -153,6 +154,7 @@ public final class FractalRenderController implements AutoCloseable {
         Viewport viewport = scene.viewport();
 
         boolean deepZoom = DeepZoomRenderPolicy.isDeepZoom(scene, target);
+        deepZoomChangedHandler.accept(deepZoom);
         InteractiveRenderMode presentationMode =
                 DeepZoomRenderPolicy.presentationMode(scene, target);
         ColoringStrategy coloring = scene.coloring().createStrategy();
@@ -399,6 +401,10 @@ public final class FractalRenderController implements AutoCloseable {
                 Objects.requireNonNull(
                         handler
                 );
+    }
+
+    public void setOnDeepZoomChanged(Consumer<Boolean> handler) {
+        deepZoomChangedHandler = Objects.requireNonNull(handler);
     }
 
     @Override

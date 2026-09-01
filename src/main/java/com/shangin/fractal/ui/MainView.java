@@ -45,6 +45,7 @@ public class MainView extends BorderPane {
         fractalView.setOnZoomChanged(
                 inspector::setZoom
         );
+        fractalView.setOnDeepZoomChanged(toolbar::setDeepZoom);
         fractalView.setOnViewportChanged(inspector::setCenter);
         fractalView.setOnRenderingChanged(inspector::setAppearanceDisabled);
         fractalView.setOnColorCyclingStopped(
