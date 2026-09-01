@@ -19,10 +19,55 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class InteractiveAntialiasServiceTest {
+
+    @Test
+    void zoomOutShouldRefineNewlyExposedEdgesBeforeReprojectedCenter() {
+        int width = 128;
+        int height = 128;
+        RenderRegion approximateCenter = new RenderRegion(32, 32, 64, 64);
+        FractalPreset preset = FractalPreset.MANDELBROT;
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator(preset.createFormula()),
+                preset.defaultViewport().zoom(1.25),
+                width,
+                height,
+                100,
+                RenderPriority.center(),
+                Optional.of(approximateCenter)
+        ));
+
+        List<RenderRegion> tiles = InteractiveAntialiasService.orderedTiles(
+                frame,
+                RefinedPixelSnapshot.empty(width, height)
+        );
+
+        int firstCenterTile = -1;
+        for (int index = 0; index < tiles.size(); index++) {
+            RenderRegion tile = tiles.get(index);
+            boolean covered = tile.x() >= approximateCenter.x()
+                    && tile.x() + tile.width()
+                    <= approximateCenter.x() + approximateCenter.width()
+                    && tile.y() >= approximateCenter.y()
+                    && tile.y() + tile.height()
+                    <= approximateCenter.y() + approximateCenter.height();
+
+            if (covered && firstCenterTile < 0) {
+                firstCenterTile = index;
+            }
+            if (!covered && firstCenterTile >= 0) {
+                fail("An exposed AA tile was scheduled after the reprojected center");
+            }
+        }
+
+        assertEquals(12, firstCenterTile);
+        assertEquals(16, tiles.size());
+        assertEquals(new RenderRegion(0, 0, 32, 32), tiles.getFirst());
+    }
 
     @Test
     void deepPanShouldQueueAntialiasingOnlyForExposedEdgeTiles() {

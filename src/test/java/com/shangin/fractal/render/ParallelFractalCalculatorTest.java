@@ -140,6 +140,63 @@ class ParallelFractalCalculatorTest {
     }
 
     @Test
+    void zoomOutShouldFillEmptyScreenEdgesBeforeTheInnerPreviewBoundary() {
+        RenderRegion approximateCenter = new RenderRegion(48, 48, 160, 160);
+        RenderRequest request = new RenderRequest(
+                calculator,
+                viewport.zoom(2.0),
+                256,
+                256,
+                100,
+                RenderPriority.center(),
+                Optional.of(approximateCenter)
+        );
+
+        List<Tile> tiles = parallelCalculator.createOrderedTiles(request);
+        Tile first = tiles.getFirst();
+
+        assertEquals(0, first.xFrom());
+        assertEquals(0, first.yFrom());
+        assertEquals(32, first.xTo());
+        assertEquals(32, first.yTo());
+
+        Tile partiallyCoveredBoundary = tiles.stream()
+                .filter(tile -> tile.xFrom() == 32 && tile.yFrom() == 96)
+                .findFirst()
+                .orElseThrow();
+        assertTrue(tiles.indexOf(first) < tiles.indexOf(partiallyCoveredBoundary));
+    }
+
+    @Test
+    void singleWorkerShouldPublishAnEmptyCornerBeforeCenterDuringZoomOut()
+            throws InterruptedException {
+        RenderRegion approximateCenter = new RenderRegion(32, 32, 32, 32);
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator((real, imaginary, maximum) ->
+                        new FractalSample(1, true, 1.0, Double.NaN)),
+                viewport.zoom(2.0),
+                96,
+                96,
+                20,
+                RenderPriority.center(),
+                Optional.of(approximateCenter)
+        ));
+        List<RenderRegion> published = new CopyOnWriteArrayList<>();
+
+        try (ParallelFractalCalculator singleWorker =
+                     new ParallelFractalCalculator(1, 32)) {
+            singleWorker.calculate(frame, () -> false, published::add);
+        }
+
+        assertFalse(published.isEmpty());
+        assertEquals(new RenderRegion(0, 0, 32, 32), published.getFirst());
+        assertEquals(
+                new RenderRegion(32, 32, 32, 32),
+                published.getLast()
+        );
+    }
+
+    @Test
     void customTileSizeShouldControlGridPartitioning() {
         try (ParallelFractalCalculator customCalculator =
                      new ParallelFractalCalculator(1, 64)) {

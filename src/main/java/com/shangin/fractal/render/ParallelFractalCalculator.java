@@ -434,21 +434,47 @@ public final class ParallelFractalCalculator implements AutoCloseable {
          * then replace the approximate center with exact samples.
          */
         request.approximateCoverage().ifPresentOrElse(
-                coverage -> tiles.sort(
-                        Comparator.comparingInt(
-                                        (Tile tile) -> isFullyCovered(tile, coverage) ? 1 : 0)
-                                .thenComparing(byDistance)),
+                coverage -> tiles.sort((first, second) -> compareForZoomOut(
+                        first, second, coverage, priorityX, priorityY)),
                 () -> tiles.sort(byDistance)
         );
 
         return tiles;
     }
 
-    private static boolean isFullyCovered(Tile tile, RenderRegion coverage) {
-        return tile.xFrom() >= coverage.x()
-                && tile.xTo() <= coverage.x() + coverage.width()
-                && tile.yFrom() >= coverage.y()
-                && tile.yTo() <= coverage.y() + coverage.height();
+    private static int compareForZoomOut(
+            Tile first,
+            Tile second,
+            RenderRegion coverage,
+            double priorityX,
+            double priorityY
+    ) {
+        int firstUncovered = uncoveredArea(first, coverage);
+        int secondUncovered = uncoveredArea(second, coverage);
+
+        int byUncoveredArea = Integer.compare(secondUncovered, firstUncovered);
+        if (byUncoveredArea != 0) {
+            return byUncoveredArea;
+        }
+
+        double firstDistance = distanceSquared(first, priorityX, priorityY);
+        double secondDistance = distanceSquared(second, priorityX, priorityY);
+
+        /* Exposed tiles grow in from the screen edge; exact center tiles keep focal order. */
+        return firstUncovered > 0
+                ? Double.compare(secondDistance, firstDistance)
+                : Double.compare(firstDistance, secondDistance);
+    }
+
+    private static int uncoveredArea(Tile tile, RenderRegion coverage) {
+        int overlapWidth = Math.max(0, Math.min(
+                tile.xTo(), coverage.x() + coverage.width())
+                - Math.max(tile.xFrom(), coverage.x()));
+        int overlapHeight = Math.max(0, Math.min(
+                tile.yTo(), coverage.y() + coverage.height())
+                - Math.max(tile.yFrom(), coverage.y()));
+        int tileArea = (tile.xTo() - tile.xFrom()) * (tile.yTo() - tile.yFrom());
+        return tileArea - overlapWidth * overlapHeight;
     }
 
     @Override

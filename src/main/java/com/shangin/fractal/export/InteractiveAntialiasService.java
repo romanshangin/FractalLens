@@ -16,6 +16,7 @@ import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.scene.SamplingPattern;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.*;
@@ -391,11 +392,47 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
         double priorityX = frame.fractalData().width() * frame.request().priority().x();
         double priorityY = frame.fractalData().height() * frame.request().priority().y();
-        tiles.sort((first, second) -> Double.compare(
-                distanceSquared(first, priorityX, priorityY),
-                distanceSquared(second, priorityX, priorityY)
-        ));
+        Comparator<RenderRegion> byDistance = Comparator.comparingDouble(
+                tile -> distanceSquared(tile, priorityX, priorityY));
+
+        frame.request().approximateCoverage().ifPresentOrElse(
+                coverage -> tiles.sort((first, second) -> compareForZoomOut(
+                        first, second, coverage, priorityX, priorityY)),
+                () -> tiles.sort(byDistance)
+        );
         return tiles;
+    }
+
+    private static int compareForZoomOut(
+            RenderRegion first,
+            RenderRegion second,
+            RenderRegion coverage,
+            double priorityX,
+            double priorityY
+    ) {
+        int firstUncovered = uncoveredArea(first, coverage);
+        int secondUncovered = uncoveredArea(second, coverage);
+
+        int byUncoveredArea = Integer.compare(secondUncovered, firstUncovered);
+        if (byUncoveredArea != 0) {
+            return byUncoveredArea;
+        }
+
+        double firstDistance = distanceSquared(first, priorityX, priorityY);
+        double secondDistance = distanceSquared(second, priorityX, priorityY);
+        return firstUncovered > 0
+                ? Double.compare(secondDistance, firstDistance)
+                : Double.compare(firstDistance, secondDistance);
+    }
+
+    private static int uncoveredArea(RenderRegion tile, RenderRegion coverage) {
+        int overlapWidth = Math.max(0, Math.min(
+                tile.x() + tile.width(), coverage.x() + coverage.width())
+                - Math.max(tile.x(), coverage.x()));
+        int overlapHeight = Math.max(0, Math.min(
+                tile.y() + tile.height(), coverage.y() + coverage.height())
+                - Math.max(tile.y(), coverage.y()));
+        return tile.width() * tile.height() - overlapWidth * overlapHeight;
     }
 
     private static double distanceSquared(RenderRegion tile, double x, double y) {
