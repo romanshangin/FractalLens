@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -89,6 +90,61 @@ class MandelbrotPerturbationRenderBackendTest {
             assertTrue(frame.samplePlane().escaped(index));
             assertEquals(5, frame.samplePlane().iterations(index));
         }
+    }
+
+    @Test
+    void boundsExecutorTasksWhileReportingTileAndIterationDiagnostics() throws Exception {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("0.5", "0", "1e-80"), 65, 65, 500);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+        AtomicBoolean publishedBeforeCompletion = new AtomicBoolean();
+
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(3, diagnostics::set)) {
+            backend.render(frame, () -> false, region -> {
+                if (!frame.isComplete()) {
+                    publishedBeforeCompletion.set(true);
+                }
+            }, null);
+        }
+
+        DeepZoomTimingStats stats = diagnostics.get();
+        assertNotNull(stats);
+        assertEquals(3, stats.workerTaskCount());
+        assertEquals(9, stats.queuedTileCount());
+        assertEquals(9, stats.completedTileCount());
+        assertEquals(0, stats.cancelledTileCount());
+        assertEquals(65L * 65L, stats.calculatedPixelCount());
+        assertEquals(5.0, stats.averageIterationsPerPixel());
+        assertTrue(stats.referenceOrbitMs() >= 0.0);
+        assertTrue(stats.coordinatePreparationMs() >= 0.0);
+        assertTrue(stats.timeToFirstRegionMs() >= 0.0);
+        assertTrue(publishedBeforeCompletion.get());
+    }
+
+    @Test
+    void cancellationDropsTheRemainingGenerationLocalTileQueue() throws Exception {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("0.5", "0", "1e-80"), 129, 129, 500);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicBoolean cancelled = new AtomicBoolean();
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(2, diagnostics::set)) {
+            backend.render(frame, cancelled::get, ignored -> cancelled.set(true), null);
+        }
+
+        DeepZoomTimingStats stats = diagnostics.get();
+        assertNotNull(stats);
+        assertEquals(2, stats.workerTaskCount());
+        assertEquals(25, stats.queuedTileCount());
+        assertTrue(stats.cancelledTileCount() > 0);
+        assertTrue(stats.completedTileCount() < stats.queuedTileCount());
+        assertFalse(frame.isComplete());
     }
 
     private static RenderJob job(FractalPreset preset, OrbitTrap trap, Viewport viewport) {

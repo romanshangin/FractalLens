@@ -15,6 +15,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
@@ -34,15 +36,27 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     private static final double INTERIOR_SAFETY_MARGIN = 1e-12;
 
     private final ExecutorService workers;
+    private final int workerCount;
+    private final Consumer<DeepZoomTimingStats> diagnosticsCompleted;
 
     public MandelbrotPerturbationRenderBackend() {
-        this(Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+        this(Math.max(1, Runtime.getRuntime().availableProcessors() - 1), ignored -> {});
     }
 
     MandelbrotPerturbationRenderBackend(int workerCount) {
+        this(workerCount, ignored -> {});
+    }
+
+    /** Creates an instrumented backend for benchmarks and render diagnostics. */
+    public MandelbrotPerturbationRenderBackend(
+            int workerCount,
+            Consumer<DeepZoomTimingStats> diagnosticsCompleted
+    ) {
         if (workerCount < 1) {
             throw new IllegalArgumentException("Worker count must be at least 1");
         }
+        this.workerCount = workerCount;
+        this.diagnosticsCompleted = Objects.requireNonNull(diagnosticsCompleted);
         AtomicInteger sequence = new AtomicInteger();
         workers = Executors.newFixedThreadPool(workerCount, runnable -> {
             Thread thread = new Thread(runnable,
@@ -77,70 +91,198 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         }
 
         long started = System.nanoTime();
+        long referenceStarted = System.nanoTime();
         ReferenceOrbit reference = ReferenceOrbit.create(frame.job(), cancelled);
+        double referenceOrbitMs = elapsedMs(referenceStarted);
         if (reference == null) {
             return frame;
         }
 
         PreciseRenderGrid grid = frame.job().preciseGrid();
-        List<RenderRegion> tiles = orderedTiles(frame.job());
-        List<Callable<Void>> tasks = new ArrayList<>();
-        for (RenderRegion tile : tiles) {
-            List<RenderRegion> missing = frame.validity().missingRowSpans(tile);
-            for (RenderRegion span : missing) {
-                tasks.add(() -> {
-                    if (cancelled.getAsBoolean()) {
+        long coordinatesStarted = System.nanoTime();
+        CoordinateDeltas deltas = CoordinateDeltas.create(
+                grid, reference, frame.job().width(), frame.job().height(), cancelled);
+        double coordinatePreparationMs = elapsedMs(coordinatesStarted);
+        if (deltas == null) {
+            return frame;
+        }
+
+        List<RenderRegion> queuedTiles = orderedTiles(frame.job()).stream()
+                .filter(tile -> !frame.validity().isRegionReady(tile))
+                .toList();
+        java.util.concurrent.ConcurrentLinkedQueue<RenderRegion> tileQueue =
+                new java.util.concurrent.ConcurrentLinkedQueue<>(queuedTiles);
+        int workerTaskCount = Math.min(workerCount, queuedTiles.size());
+        AtomicInteger completedTiles = new AtomicInteger();
+        AtomicLong firstRegionNanos = new AtomicLong(-1L);
+        LongAdder calculatedPixels = new LongAdder();
+        LongAdder executedIterations = new LongAdder();
+        java.util.concurrent.ConcurrentLinkedQueue<Long> tileTimes =
+                new java.util.concurrent.ConcurrentLinkedQueue<>();
+        List<Callable<Void>> workerTasks = new ArrayList<>(workerTaskCount);
+
+        for (int worker = 0; worker < workerTaskCount; worker++) {
+            workerTasks.add(() -> {
+                RenderRegion tile;
+                while (!cancelled.getAsBoolean() && (tile = tileQueue.poll()) != null) {
+                    long tileStarted = System.nanoTime();
+                    boolean complete = calculateTile(
+                            frame, deltas, reference, tile, cancelled,
+                            region -> {
+                                firstRegionNanos.compareAndSet(-1L, System.nanoTime());
+                                regionCompleted.accept(region);
+                            },
+                            calculatedPixels, executedIterations);
+                    if (!complete) {
                         return null;
                     }
-                    calculateSpan(frame, grid, reference, span, cancelled);
-                    if (!cancelled.getAsBoolean()) {
-                        frame.validity().markReady(span);
-                        regionCompleted.accept(span);
-                    }
-                    return null;
-                });
-            }
+                    completedTiles.incrementAndGet();
+                    tileTimes.add(System.nanoTime() - tileStarted);
+                }
+                return null;
+            });
         }
-        for (Future<Void> future : workers.invokeAll(tasks)) {
-            if (cancelled.getAsBoolean()) {
-                return frame;
+
+        try {
+            for (Future<Void> future : workers.invokeAll(workerTasks)) {
+                try {
+                    future.get();
+                } catch (java.util.concurrent.ExecutionException exception) {
+                    throw new IllegalStateException(
+                            "Perturbation tile calculation failed", exception.getCause());
+                }
             }
-            try {
-                future.get();
-            } catch (java.util.concurrent.ExecutionException exception) {
-                throw new IllegalStateException("Perturbation tile calculation failed", exception.getCause());
-            }
+        } finally {
+            int completed = completedTiles.get();
+            long pixels = calculatedPixels.sum();
+            long first = firstRegionNanos.get();
+            diagnosticsCompleted.accept(new DeepZoomTimingStats(
+                    referenceOrbitMs,
+                    coordinatePreparationMs,
+                    first < 0L ? -1.0 : (first - started) / 1_000_000.0,
+                    workerTaskCount,
+                    queuedTiles.size(),
+                    completed,
+                    queuedTiles.size() - completed,
+                    pixels,
+                    pixels == 0L ? 0.0 : (double) executedIterations.sum() / pixels));
+        }
+
+        if (cancelled.getAsBoolean()) {
+            return frame;
         }
         if (timingCompleted != null) {
-            double elapsedMs = (System.nanoTime() - started) / 1_000_000.0;
-            timingCompleted.accept(new TileTimingStats(tasks.size(), elapsedMs, elapsedMs, elapsedMs));
+            timingCompleted.accept(createTimingStats(tileTimes));
         }
         return frame;
     }
 
-    private static void calculateSpan(
-            RenderFrame frame, PreciseRenderGrid grid, ReferenceOrbit reference,
-            RenderRegion span, BooleanSupplier cancelled
+    private static boolean calculateTile(
+            RenderFrame frame,
+            CoordinateDeltas deltas,
+            ReferenceOrbit reference,
+            RenderRegion tile,
+            BooleanSupplier cancelled,
+            Consumer<RenderRegion> regionCompleted,
+            LongAdder calculatedPixels,
+            LongAdder executedIterations
+    ) {
+        for (RenderRegion span : frame.validity().missingRowSpans(tile)) {
+            SpanCalculation calculation = calculateSpan(
+                    frame, deltas, reference, span, cancelled);
+            calculatedPixels.add(calculation.pixelCount());
+            executedIterations.add(calculation.executedIterations());
+            if (!calculation.complete()) {
+                return false;
+            }
+            frame.validity().markReady(span);
+            regionCompleted.accept(span);
+        }
+        return true;
+    }
+
+    private static SpanCalculation calculateSpan(
+            RenderFrame frame,
+            CoordinateDeltas deltas,
+            ReferenceOrbit reference,
+            RenderRegion span,
+            BooleanSupplier cancelled
     ) {
         SamplePlane samples = frame.samplePlane();
+        long pixelCount = 0L;
+        long executedIterations = 0L;
         for (int y = span.y(); y < span.y() + span.height() && !cancelled.getAsBoolean(); y++) {
-            BigDecimal imaginary = grid.imaginaryAt(y);
-            double deltaImaginary = imaginary.subtract(reference.cImaginary(), grid.mathContext()).doubleValue();
+            double deltaImaginary = deltas.imaginary()[y];
             for (int x = span.x(); x < span.x() + span.width(); x++) {
                 if (cancelled.getAsBoolean()) {
-                    return;
+                    return new SpanCalculation(pixelCount, executedIterations, false);
                 }
-                double deltaReal = grid.realAt(x).subtract(reference.cReal(), grid.mathContext()).doubleValue();
+                double deltaReal = deltas.real()[x];
                 double cReal = reference.cRealAsDouble() + deltaReal;
                 double cImaginary = reference.cImaginaryAsDouble() + deltaImaginary;
                 if (isSafelyInsideKnownInterior(cReal, cImaginary)) {
                     samples.set(x, y, new FractalSample(frame.job().maxIterations(), false, 0.0, 0.0));
                 } else {
-                    samples.set(x, y, perturb(reference, deltaReal, deltaImaginary,
-                            frame.job().maxIterations()));
+                    FractalSample sample = perturb(
+                            reference, deltaReal, deltaImaginary, frame.job().maxIterations());
+                    samples.set(x, y, sample);
+                    executedIterations += sample.iterations();
                 }
+                pixelCount++;
             }
         }
+        return new SpanCalculation(pixelCount, executedIterations, !cancelled.getAsBoolean());
+    }
+
+    private record SpanCalculation(long pixelCount, long executedIterations, boolean complete) {}
+
+    private record CoordinateDeltas(double[] real, double[] imaginary) {
+        static CoordinateDeltas create(
+                PreciseRenderGrid grid,
+                ReferenceOrbit reference,
+                int width,
+                int height,
+                BooleanSupplier cancelled
+        ) {
+            double[] real = new double[width];
+            double[] imaginary = new double[height];
+            for (int x = 0; x < width; x++) {
+                if (cancelled.getAsBoolean()) {
+                    return null;
+                }
+                real[x] = grid.realAt(x)
+                        .subtract(reference.cReal(), grid.mathContext()).doubleValue();
+            }
+            for (int y = 0; y < height; y++) {
+                if (cancelled.getAsBoolean()) {
+                    return null;
+                }
+                imaginary[y] = grid.imaginaryAt(y)
+                        .subtract(reference.cImaginary(), grid.mathContext()).doubleValue();
+            }
+            return new CoordinateDeltas(real, imaginary);
+        }
+    }
+
+    private static TileTimingStats createTimingStats(
+            java.util.concurrent.ConcurrentLinkedQueue<Long> timings
+    ) {
+        if (timings.isEmpty()) {
+            return new TileTimingStats(0, 0.0, 0.0, 0.0);
+        }
+        List<Long> sorted = new ArrayList<>(timings);
+        sorted.sort(Long::compare);
+        int size = sorted.size();
+        int middle = size / 2;
+        double median = size % 2 == 0
+                ? (sorted.get(middle - 1).doubleValue() + sorted.get(middle)) / 2.0
+                : sorted.get(middle);
+        return new TileTimingStats(size, sorted.getFirst() / 1_000_000.0,
+                median / 1_000_000.0, sorted.getLast() / 1_000_000.0);
+    }
+
+    private static double elapsedMs(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000.0;
     }
 
     /**
