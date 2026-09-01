@@ -6,6 +6,7 @@ import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.geometry.Insets;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.image.ImageView;
@@ -67,8 +68,11 @@ public final class FractalSurface extends Region {
     /** Prepares the staging buffer for a new progressive frame. */
     public void beginProgressiveRender(
             RenderFrame renderFrame,
-            RenderFrame plannerSourceFrame
+            RenderFrame plannerSourceFrame,
+            InteractiveRenderMode renderMode
     ) {
+        Objects.requireNonNull(renderMode);
+
         if (renderWidth < 2 || renderHeight < 2) {
             return;
         }
@@ -110,7 +114,9 @@ public final class FractalSurface extends Region {
         progressivePreviewTransform.setToIdentity();
 
         progressiveImageView.setImage(
-                stagingFrame.image()
+                InteractiveRenderPresentation.showsBaseProgress(renderMode)
+                        ? stagingFrame.image()
+                        : null
         );
     }
 
@@ -161,8 +167,15 @@ public final class FractalSurface extends Region {
     /** Colors and publishes regions completed by the background renderer. */
     public void displayProgress(
             RenderProgressBatch progress,
-            ColoringStrategy coloring
+            ColoringStrategy coloring,
+            InteractiveRenderMode renderMode
     ) {
+        Objects.requireNonNull(renderMode);
+
+        if (!InteractiveRenderPresentation.showsBaseProgress(renderMode)) {
+            return;
+        }
+
         if (stagingFrame == null) {
             return;
         }
@@ -244,6 +257,8 @@ public final class FractalSurface extends Region {
         if (stagingFrame == null || stagingRenderFrame != frame) {
             return;
         }
+        /* Never expose raw base-pass colors through the refined display path. */
+        stagingFrame.clearExcept(stagingRefinementValidity);
         progressivePreviewTransform.setToIdentity();
         progressiveImageView.setImage(stagingFrame.image());
     }

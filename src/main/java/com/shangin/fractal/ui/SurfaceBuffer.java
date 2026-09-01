@@ -1,6 +1,7 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.render.PixelShift;
+import com.shangin.fractal.render.ValidityMask;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.image.PixelBuffer;
 import javafx.scene.image.PixelFormat;
@@ -37,6 +38,20 @@ public class SurfaceBuffer {
 
     public void clear() {
         Arrays.fill(intBuffer.array(), 0);
+
+        pixelBuffer.updateBuffer(pixelBuffer -> null);
+    }
+
+    /** Clears provisional colors while keeping pixels confirmed by the supplied mask. */
+    void clearExcept(ValidityMask validity) {
+        Objects.requireNonNull(validity);
+
+        if (validity.width() != width || validity.height() != height) {
+            throw new IllegalArgumentException("Validity dimensions must match the surface");
+        }
+
+        RefinedPixelRetention.clearUnconfirmed(
+                intBuffer.array(), width, height, validity);
 
         pixelBuffer.updateBuffer(pixelBuffer -> null);
     }

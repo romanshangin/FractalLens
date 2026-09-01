@@ -257,7 +257,11 @@ public final class FractalRenderController implements AutoCloseable {
             );
         }
 
-        surface.beginProgressiveRender(targetFrame, sourceFrame);
+        surface.beginProgressiveRender(
+                targetFrame,
+                sourceFrame,
+                scene.antialiasing().renderMode()
+        );
 
         if (!imageReused
                 && sourceFrame != null
@@ -273,7 +277,7 @@ public final class FractalRenderController implements AutoCloseable {
         }
 
         /* Color reusable sample data when the displayed image cannot be shifted. */
-        if (!imageReused) {
+        if (!imageReused && !refinedDisplay) {
 
             surface.displayReadyPixels(
                     activeFrame,
@@ -296,7 +300,8 @@ public final class FractalRenderController implements AutoCloseable {
                 progress -> {
                     surface.displayProgress(
                             progress,
-                            coloring
+                            coloring,
+                            scene.antialiasing().renderMode()
                     );
                 },
 
@@ -308,8 +313,6 @@ public final class FractalRenderController implements AutoCloseable {
                             scene.coloring().createStrategy(completedFrame.fractalData());
 
                     if (refinedDisplay) {
-                        surface.displayReadyPixelsPreservingRefinement(
-                                completedFrame, completedColoring);
                         surface.beginRefinedRender(completedFrame);
                         antialiasService.refine(
                                 completedFrame,
