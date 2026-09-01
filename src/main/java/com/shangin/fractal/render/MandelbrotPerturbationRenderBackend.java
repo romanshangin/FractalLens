@@ -30,6 +30,8 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
 
     private static final int TILE_SIZE = 32;
     private static final BigDecimal FOUR = BigDecimal.valueOf(4);
+    /* A wide safety margin prevents a double shortcut from classifying a boundary pixel. */
+    private static final double INTERIOR_SAFETY_MARGIN = 1e-12;
 
     private final ExecutorService workers;
 
@@ -123,16 +125,38 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         SamplePlane samples = frame.samplePlane();
         for (int y = span.y(); y < span.y() + span.height() && !cancelled.getAsBoolean(); y++) {
             BigDecimal imaginary = grid.imaginaryAt(y);
+            double deltaImaginary = imaginary.subtract(reference.cImaginary(), grid.mathContext()).doubleValue();
             for (int x = span.x(); x < span.x() + span.width(); x++) {
                 if (cancelled.getAsBoolean()) {
                     return;
                 }
                 double deltaReal = grid.realAt(x).subtract(reference.cReal(), grid.mathContext()).doubleValue();
-                double deltaImaginary = imaginary.subtract(reference.cImaginary(), grid.mathContext()).doubleValue();
-                samples.set(x, y, perturb(reference, deltaReal, deltaImaginary,
-                        frame.job().maxIterations()));
+                double cReal = reference.cRealAsDouble() + deltaReal;
+                double cImaginary = reference.cImaginaryAsDouble() + deltaImaginary;
+                if (isSafelyInsideKnownInterior(cReal, cImaginary)) {
+                    samples.set(x, y, new FractalSample(frame.job().maxIterations(), false, 0.0, 0.0));
+                } else {
+                    samples.set(x, y, perturb(reference, deltaReal, deltaImaginary,
+                            frame.job().maxIterations()));
+                }
             }
         }
+    }
+
+    /**
+     * Exact cardioid/bulb tests are used only well inside their boundaries.
+     * The margin keeps this performance shortcut from deciding ambiguous deep
+     * boundary points using a rounded coordinate.
+     */
+    static boolean isSafelyInsideKnownInterior(double real, double imaginary) {
+        double imaginarySquared = imaginary * imaginary;
+        double cardioidX = real - 0.25;
+        double q = cardioidX * cardioidX + imaginarySquared;
+        if (q * (q + cardioidX) - 0.25 * imaginarySquared < -INTERIOR_SAFETY_MARGIN) {
+            return true;
+        }
+        double bulbX = real + 1.0;
+        return bulbX * bulbX + imaginarySquared < 0.0625 - INTERIOR_SAFETY_MARGIN;
     }
 
     private static FractalSample perturb(
@@ -226,5 +250,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
 
         double realAt(int iteration) { return real[iteration]; }
         double imaginaryAt(int iteration) { return imaginary[iteration]; }
+        double cRealAsDouble() { return cReal.doubleValue(); }
+        double cImaginaryAsDouble() { return cImaginary.doubleValue(); }
     }
 }
