@@ -4,7 +4,7 @@ import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.coloring.SmoothColorLookup;
 import com.shangin.fractal.render.FractalCalculator;
-import com.shangin.fractal.render.FractalData;
+import com.shangin.fractal.render.SamplePlane;
 import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.render.RenderRegion;
@@ -82,8 +82,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         if (!frame.isComplete()) {
             throw new IllegalArgumentException("Interactive AA requires a completed frame");
         }
-        if (reusedPixels.width() != frame.fractalData().width()
-                || reusedPixels.height() != frame.fractalData().height()) {
+        if (reusedPixels.width() != frame.samplePlane().width()
+                || reusedPixels.height() != frame.samplePlane().height()) {
             throw new IllegalArgumentException("Refined pixel dimensions must match frame");
         }
 
@@ -122,7 +122,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             Consumer<Throwable> onError
     ) {
         try {
-            FractalData data = frame.fractalData();
+            SamplePlane data = frame.samplePlane();
             int[] baseColors = AdaptivePngExportService.colorBaseFrame(data, coloring);
             SmoothColorLookup lookup = coloring instanceof SmoothPaletteColoring smooth
                     ? new SmoothColorLookup(smooth)
@@ -180,9 +180,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady
     ) {
-        FractalData data = frame.fractalData();
+        SamplePlane data = frame.samplePlane();
         RenderGrid grid = frame.renderGrid();
-        FractalCalculator calculator = frame.request().calculator();
+        FractalCalculator calculator = frame.job().formula().createDirectCalculator();
         int[] tileColors = new int[tile.width() * tile.height()];
         boolean calculatedPixel = false;
 
@@ -252,7 +252,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     public int[] recolorCached(RenderFrame frame, ColoringStrategy coloring) {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(coloring);
-        int[] colors = new int[frame.fractalData().size()];
+        int[] colors = new int[frame.samplePlane().size()];
         recolorCachedInto(frame, coloring, colors);
         return colors;
     }
@@ -266,7 +266,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(coloring);
         Objects.requireNonNull(colors);
-        FractalData data = frame.fractalData();
+        SamplePlane data = frame.samplePlane();
         if (colors.length != data.size()) {
             throw new IllegalArgumentException("Recolor buffer dimensions do not match frame");
         }
@@ -303,7 +303,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 return basePhaseCache;
             }
         }
-        BaseColorPhaseCache created = BaseColorPhaseCache.create(frame.fractalData(), coloring);
+        BaseColorPhaseCache created = BaseColorPhaseCache.create(frame.samplePlane(), coloring);
         synchronized (this) {
             basePhaseFrame = frame;
             basePhaseCache = created;
@@ -314,11 +314,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     /** Transfers cached AA samples along the exact pixel shift used for frame reuse. */
     public synchronized void reuseFrame(RenderFrame source, RenderFrame target, PixelShift shift) {
         if (cachedFrame != source
-                || source.fractalData().width() != target.fractalData().width()
-                || source.fractalData().height() != target.fractalData().height()) {
+                || source.samplePlane().width() != target.samplePlane().width()
+                || source.samplePlane().height() != target.samplePlane().height()) {
             sampleCache.clear();
         } else {
-            sampleCache.shift(source.fractalData().width(), source.fractalData().height(), shift);
+            sampleCache.shift(source.samplePlane().width(), source.samplePlane().height(), shift);
         }
         cachedFrame = target;
         basePhaseFrame = null;
@@ -376,13 +376,13 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     ) {
         List<RenderRegion> tiles = new ArrayList<>();
 
-        for (int y = 0; y < frame.fractalData().height(); y += TILE_SIZE) {
-            for (int x = 0; x < frame.fractalData().width(); x += TILE_SIZE) {
+        for (int y = 0; y < frame.samplePlane().height(); y += TILE_SIZE) {
+            for (int x = 0; x < frame.samplePlane().width(); x += TILE_SIZE) {
                 RenderRegion tile = new RenderRegion(
                         x,
                         y,
-                        Math.min(TILE_SIZE, frame.fractalData().width() - x),
-                        Math.min(TILE_SIZE, frame.fractalData().height() - y)
+                        Math.min(TILE_SIZE, frame.samplePlane().width() - x),
+                        Math.min(TILE_SIZE, frame.samplePlane().height() - y)
                 );
                 if (!reusedPixels.isRegionRefined(tile)) {
                     tiles.add(tile);
@@ -390,8 +390,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             }
         }
 
-        double priorityX = frame.fractalData().width() * frame.request().priority().x();
-        double priorityY = frame.fractalData().height() * frame.request().priority().y();
+        double priorityX = frame.samplePlane().width() * frame.request().priority().x();
+        double priorityY = frame.samplePlane().height() * frame.request().priority().y();
         Comparator<RenderRegion> byDistance = Comparator.comparingDouble(
                 tile -> distanceSquared(tile, priorityX, priorityY));
 

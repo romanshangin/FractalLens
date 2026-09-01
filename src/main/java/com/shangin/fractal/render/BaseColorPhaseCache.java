@@ -19,7 +19,7 @@ public final class BaseColorPhaseCache {
     }
 
     public static BaseColorPhaseCache create(
-            FractalData data,
+            SamplePlane data,
             SmoothPaletteColoring coloring
     ) {
         short[] phases = new short[data.size()];

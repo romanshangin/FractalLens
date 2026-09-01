@@ -8,33 +8,33 @@ import java.util.Objects;
  */
 public final class RenderFrame {
 
-    private final RenderRequest request;
+    private final RenderJob request;
     private final RenderGrid renderGrid;
-    private final FractalData fractalData;
+    private final SamplePlane samplePlane;
     private final ValidityMask validity;
 
     private RenderFrame(
-            RenderRequest request,
+            RenderJob request,
             RenderGrid renderGrid,
-            FractalData fractalData,
+            SamplePlane samplePlane,
             ValidityMask validity
     ) {
         this.request = Objects.requireNonNull(request);
         this.renderGrid = renderGrid;
-        this.fractalData = Objects.requireNonNull(fractalData);
+        this.samplePlane = Objects.requireNonNull(samplePlane);
         this.validity = Objects.requireNonNull(validity);
 
-        if (fractalData.width() != request.width() || fractalData.height() != request.height()) {
-            throw new IllegalArgumentException("FractalData dimensions do not match RenderRequest");
+        if (samplePlane.width() != request.width() || samplePlane.height() != request.height()) {
+            throw new IllegalArgumentException("SamplePlane dimensions do not match RenderJob");
         }
 
         if (validity.width() != request.width() || validity.height() != request.height()) {
-            throw new IllegalArgumentException("ValidityMask dimensions do not match RenderRequest");
+            throw new IllegalArgumentException("ValidityMask dimensions do not match RenderJob");
         }
     }
 
     /** Creates an empty frame using a grid derived from the request viewport. */
-    public static RenderFrame create(RenderRequest request) {
+    public static RenderFrame create(RenderJob request) {
         Objects.requireNonNull(request);
 
         return create(
@@ -46,7 +46,7 @@ public final class RenderFrame {
     }
 
     public static RenderFrame create(
-            RenderRequest request,
+            RenderJob request,
             RenderGrid grid
     ) {
         Objects.requireNonNull(request);
@@ -71,7 +71,28 @@ public final class RenderFrame {
         );
     }
 
-    public RenderRequest request() {
+    /** Creates a frame over backend-provided sample storage. */
+    public static RenderFrame create(
+            RenderJob request,
+            RenderGrid grid,
+            SamplePlane samplePlane
+    ) {
+        Objects.requireNonNull(request);
+        Objects.requireNonNull(grid);
+        Objects.requireNonNull(samplePlane);
+        return new RenderFrame(
+                request,
+                grid,
+                samplePlane,
+                new ValidityMask(request.width(), request.height())
+        );
+    }
+
+    public RenderJob request() {
+        return request;
+    }
+
+    public RenderJob job() {
         return request;
     }
 
@@ -80,7 +101,15 @@ public final class RenderFrame {
     }
 
     public FractalData fractalData() {
+        if (!(samplePlane instanceof FractalData fractalData)) {
+            throw new IllegalStateException(
+                    "This sample plane is not backed by direct CPU arrays");
+        }
         return fractalData;
+    }
+
+    public SamplePlane samplePlane() {
+        return samplePlane;
     }
 
     public ValidityMask validity() {

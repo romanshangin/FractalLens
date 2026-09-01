@@ -250,11 +250,13 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             Consumer<RenderRegion> regionCompleted,
             ConcurrentLinkedQueue<Long> tileTimesNanos
     ) {
-        RenderRequest renderRequest =
+        RenderJob renderRequest =
                 renderFrame.request();
 
-        FractalData fractalData =
-                renderFrame.fractalData();
+        SamplePlane fractalData = renderFrame.samplePlane();
+
+        FractalCalculator directCalculator =
+                renderRequest.formula().createDirectCalculator();
 
         RenderGrid renderGrid =
                 renderFrame.renderGrid();
@@ -262,7 +264,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         boolean useConjugateSymmetry =
                 fractalData.height() > 1
                         && renderFrame.validity().readyPixelCount() == 0
-                        && renderRequest.calculator().hasConjugateSymmetry()
+                        && directCalculator.hasConjugateSymmetry()
                         && renderGrid.isConjugateSymmetric(renderRequest.height());
 
         boolean hasReusablePixels =
@@ -315,9 +317,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                 boolean completed = true;
 
                 for (RenderRegion missingSpan : missingSpans) {
-                    completed = renderRequest
-                            .calculator()
-                            .calculateTile(
+                    completed = directCalculator.calculateTile(
                                     fractalData,
                                     renderGrid,
                                     missingSpan.x(),
@@ -401,13 +401,13 @@ public final class ParallelFractalCalculator implements AutoCloseable {
     }
 
     List<Tile> createOrderedTiles(
-            RenderRequest request
+            RenderJob request
     ) {
         return createOrderedTiles(request, request.height());
     }
 
     private List<Tile> createOrderedTiles(
-            RenderRequest request,
+            RenderJob request,
             int renderedHeight
     ) {
         List<Tile> tiles = new ArrayList<>();

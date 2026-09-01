@@ -8,7 +8,7 @@ import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.coloring.GradientPalette;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.OrbitTrapColoring;
-import com.shangin.fractal.render.FractalData;
+import com.shangin.fractal.render.SamplePlane;
 
 import java.util.Objects;
 
@@ -69,7 +69,7 @@ public record ColoringSettings(
     }
 
     /** Builds the optional second-pass mapping once the whole frame is available. */
-    public ColoringStrategy createStrategy(FractalData data) {
+    public ColoringStrategy createStrategy(SamplePlane data) {
         return orbitTrap == OrbitTrap.NONE && histogramColoring
                 ? new HistogramPaletteColoring(createPalette(), offset, data)
                 : createStrategy();

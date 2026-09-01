@@ -55,7 +55,7 @@ public final class RenderFrameCache {
     }
 
     /** Finds an exact scene/view/target match and promotes it to most-recently used. */
-    public Optional<RenderFrame> findExact(RenderRequest request) {
+    public Optional<RenderFrame> findExact(RenderJob request) {
         Objects.requireNonNull(request);
 
         Iterator<Entry> iterator = entries.iterator();
@@ -93,7 +93,7 @@ public final class RenderFrameCache {
         );
     }
 
-    private void removeMatching(RenderRequest request) {
+    private void removeMatching(RenderJob request) {
         Iterator<Entry> iterator = entries.iterator();
         while (iterator.hasNext()) {
             Entry entry = iterator.next();
@@ -104,8 +104,8 @@ public final class RenderFrameCache {
         }
     }
 
-    private static boolean sameCalculatedFrame(RenderRequest cached, RenderRequest requested) {
-        return cached.calculator() == requested.calculator()
+    private static boolean sameCalculatedFrame(RenderJob cached, RenderJob requested) {
+        return cached.formula().equals(requested.formula())
                 && cached.viewport().equals(requested.viewport())
                 && cached.width() == requested.width()
                 && cached.height() == requested.height()

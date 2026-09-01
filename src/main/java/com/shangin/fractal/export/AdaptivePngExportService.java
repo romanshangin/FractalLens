@@ -5,7 +5,7 @@ import com.shangin.fractal.formula.DistanceSample;
 import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.render.FractalCalculator;
 import com.shangin.fractal.render.FractalColorizer;
-import com.shangin.fractal.render.FractalData;
+import com.shangin.fractal.render.SamplePlane;
 import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.scene.SamplingPattern;
@@ -86,7 +86,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
             Consumer<Throwable> onError
     ) {
         try {
-            FractalData data = sourceFrame.fractalData();
+            SamplePlane data = sourceFrame.samplePlane();
 
             if (!sourceFrame.isComplete()) {
                 throw new IllegalArgumentException("Adaptive export requires a completed frame");
@@ -126,7 +126,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
         }
     }
 
-    static int[] colorBaseFrame(FractalData data, ColoringStrategy coloring) {
+    static int[] colorBaseFrame(SamplePlane data, ColoringStrategy coloring) {
         int[] colors = new int[data.size()];
         COLORIZER.color(data, IntBuffer.wrap(colors), coloring);
         return colors;
@@ -139,7 +139,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
             int[] baseColors,
             int[] output
     ) {
-        int height = frame.fractalData().height();
+        int height = frame.samplePlane().height();
         List<Future<?>> tasks = new ArrayList<>((height + ROWS_PER_TASK - 1) / ROWS_PER_TASK);
 
         for (int yFrom = 0; yFrom < height; yFrom += ROWS_PER_TASK) {
@@ -169,9 +169,9 @@ public final class AdaptivePngExportService implements AutoCloseable {
             int yFrom,
             int yTo
     ) {
-        FractalData data = frame.fractalData();
+        SamplePlane data = frame.samplePlane();
         RenderGrid grid = frame.renderGrid();
-        FractalCalculator calculator = frame.request().calculator();
+        FractalCalculator calculator = frame.job().formula().createDirectCalculator();
 
         for (int y = yFrom; y < yTo; y++) {
             if (shouldCancel(exportId)) {
@@ -232,7 +232,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
             ColoringStrategy coloring,
             RenderGrid grid,
             int maxIterations,
-            FractalData baseData,
+            SamplePlane baseData,
             int[] baseColors,
             int x,
             int y
@@ -297,7 +297,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
     }
 
     static boolean isBaseEdge(
-            FractalData data,
+            SamplePlane data,
             int[] colors,
             int x,
             int y
@@ -331,7 +331,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
             FractalCalculator calculator,
             RenderGrid grid,
             int maxIterations,
-            FractalData data,
+            SamplePlane data,
             int[] colors,
             int x,
             int y

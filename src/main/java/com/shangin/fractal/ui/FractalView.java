@@ -620,7 +620,7 @@ public class FractalView extends StackPane {
 
         exportService.export(
                 completed.frame(),
-                completed.scene().coloring().createStrategy(completed.frame().fractalData()),
+                completed.scene().coloring().createStrategy(completed.frame().samplePlane()),
                 path,
                 onSuccess,
                 onError

@@ -9,7 +9,7 @@ import java.util.BitSet;
 public class FractalColorizer {
 
     public void color(
-            FractalData data,
+            SamplePlane data,
             IntBuffer buffer,
             ColoringStrategy coloring
     ) {
@@ -26,7 +26,7 @@ public class FractalColorizer {
     }
 
     public void colorRegion(
-            FractalData data,
+            SamplePlane data,
             IntBuffer buffer,
             ColoringStrategy coloring,
             RenderRegion region
@@ -54,7 +54,7 @@ public class FractalColorizer {
      * untouched while a shifted frame is completed after a pan.
      */
     public void colorReadyPixels(
-            FractalData data,
+            SamplePlane data,
             IntBuffer buffer,
             ColoringStrategy coloring,
             ValidityMask ready,

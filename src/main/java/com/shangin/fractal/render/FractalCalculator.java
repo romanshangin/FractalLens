@@ -14,6 +14,7 @@ public class FractalCalculator {
 
     private final FractalFormula formula;
     private final OrbitTrap orbitTrap;
+    private final FormulaDefinition formulaDefinition;
     private static final int CANCELLATION_CHECK_INTERVAL = 8;
 
     public FractalCalculator(FractalFormula formula) {
@@ -21,8 +22,21 @@ public class FractalCalculator {
     }
 
     public FractalCalculator(FractalFormula formula, OrbitTrap orbitTrap) {
+        this(formula, orbitTrap, FormulaDefinition.custom(formula, orbitTrap));
+    }
+
+    FractalCalculator(
+            FractalFormula formula,
+            OrbitTrap orbitTrap,
+            FormulaDefinition formulaDefinition
+    ) {
         this.formula = formula;
         this.orbitTrap = java.util.Objects.requireNonNull(orbitTrap);
+        this.formulaDefinition = java.util.Objects.requireNonNull(formulaDefinition);
+    }
+
+    FormulaDefinition formulaDefinition() {
+        return formulaDefinition;
     }
 
     /** Returns whether rows mirrored around the real axis share their samples. */
@@ -79,7 +93,7 @@ public class FractalCalculator {
     }
 
     boolean calculateTile(
-            FractalData fractalData,
+            SamplePlane fractalData,
             RenderGrid renderGrid,
             int xFrom,
             int xTo,
@@ -103,7 +117,7 @@ public class FractalCalculator {
     }
 
     boolean calculateTile(
-            FractalData fractalData,
+            SamplePlane fractalData,
             RenderGrid renderGrid,
             int xFrom,
             int xTo,

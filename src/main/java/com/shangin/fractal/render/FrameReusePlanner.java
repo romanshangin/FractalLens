@@ -20,7 +20,7 @@ public final class FrameReusePlanner {
      */
     public RenderFrame createFrame(
             RenderFrame sourceFrame,
-            RenderRequest targetRequest
+            RenderJob targetRequest
     ) {
         return plan(
                 sourceFrame,
@@ -33,7 +33,7 @@ public final class FrameReusePlanner {
      */
     public FrameReuseResult plan(
             RenderFrame sourceFrame,
-            RenderRequest targetRequest
+            RenderJob targetRequest
     ) {
         Objects.requireNonNull(
                 targetRequest,
@@ -54,7 +54,7 @@ public final class FrameReusePlanner {
     public FrameReuseSelection plan(
             RenderFrame activeFrame,
             RenderFrame retainedFrame,
-            RenderRequest targetRequest
+            RenderJob targetRequest
     ) {
         Objects.requireNonNull(targetRequest, "Target request must not be null");
 
@@ -82,7 +82,7 @@ public final class FrameReusePlanner {
 
     private Optional<FrameReuseResult> planCandidate(
             RenderFrame sourceFrame,
-            RenderRequest targetRequest
+            RenderJob targetRequest
     ) {
         if (sourceFrame == null || !canReuse(sourceFrame, targetRequest)) {
             return Optional.empty();
@@ -205,9 +205,9 @@ public final class FrameReusePlanner {
                 sourceYFrom + shift.dy();
 
         /* Every source pixel is valid because this path requires a complete frame. */
-        targetFrame.fractalData()
+        targetFrame.samplePlane()
                 .copyRegionFrom(
-                        sourceFrame.fractalData(),
+                        sourceFrame.samplePlane(),
                         sourceXFrom,
                         sourceYFrom,
                         targetXFrom,
@@ -235,9 +235,9 @@ public final class FrameReusePlanner {
 
     private boolean canReuse(
             RenderFrame sourceFrame,
-            RenderRequest targetRequest
+            RenderJob targetRequest
     ) {
-        RenderRequest sourceRequest =
+        RenderJob sourceRequest =
                 sourceFrame.request();
 
         /* Reuse across different render dimensions is not supported yet. */
@@ -257,9 +257,8 @@ public final class FrameReusePlanner {
             return false;
         }
 
-        /* Calculator identity prevents reuse across formulas or formula parameters. */
-        if (sourceRequest.calculator()
-                != targetRequest.calculator()) {
+        /* Formula identity and parameters prevent incompatible sample reuse. */
+        if (!sourceRequest.formula().equals(targetRequest.formula())) {
             return false;
         }
 
@@ -272,7 +271,7 @@ public final class FrameReusePlanner {
 
     private Optional<PixelShift> calculatePixelShift(
             RenderFrame sourceFrame,
-            RenderRequest targetRequest
+            RenderJob targetRequest
     ) {
         Viewport sourceViewport =
                 sourceFrame.request()
@@ -434,11 +433,9 @@ public final class FrameReusePlanner {
             return 0;
         }
 
-        FractalData sourceData =
-                sourceFrame.fractalData();
+        SamplePlane sourceData = sourceFrame.samplePlane();
 
-        FractalData targetData =
-                targetFrame.fractalData();
+        SamplePlane targetData = targetFrame.samplePlane();
 
         ValidityMask sourceValidity =
                 sourceFrame.validity();

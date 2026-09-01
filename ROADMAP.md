@@ -90,12 +90,12 @@ existing behavior is covered by tests.
 ### 7.1. Establish the backend boundary without changing output
 
 - [x] Add a conservative Julia-specific double-precision guard so unstable orbit blocks are not presented as real detail before a deep-zoom backend exists.
-- Introduce backend-neutral `RenderJob`, `RenderBackend`, and `SamplePlane`
+- [x] Introduce backend-neutral `RenderJob`, `RenderBackend`, and `SamplePlane`
   contracts so calculation lifecycle, progressive regions, cancellation, and
   sample storage are not tied to `ParallelFractalCalculator` or CPU arrays.
-- Move formula identity and immutable formula parameters into the render job
+- [x] Move formula identity and immutable formula parameters into the render job
   instead of using a concrete `FractalCalculator` as the backend contract.
-- Adapt the existing direct `double` renderer as the first CPU backend and
+- [x] Adapt the existing direct `double` renderer as the first CPU backend and
   verify that rendering, pan reuse, antialiasing, recoloring, caching, and
   export retain their current behavior.
 

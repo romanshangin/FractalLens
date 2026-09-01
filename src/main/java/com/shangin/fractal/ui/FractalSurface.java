@@ -186,7 +186,7 @@ public final class FractalSurface extends Region {
             return;
         }
 
-        FractalData data = renderFrame.fractalData();
+        SamplePlane data = renderFrame.samplePlane();
 
         if (data.width() != stagingFrame.width() || data.height() != stagingFrame.height()) {
             return;
@@ -545,7 +545,7 @@ public final class FractalSurface extends Region {
             return;
         }
 
-        colorizer.color(displayedRenderFrame.fractalData(), displayedFrame.intBuffer(), coloring);
+        colorizer.color(displayedRenderFrame.samplePlane(), displayedFrame.intBuffer(), coloring);
         invalidateRefinement();
 
         if (displayedScene != null) {
@@ -683,7 +683,7 @@ public final class FractalSurface extends Region {
             return;
         }
 
-        FractalData data = frame.fractalData();
+        SamplePlane data = frame.samplePlane();
         ValidityMask validity = frame.validity();
 
         if (data.width() != stagingFrame.width()

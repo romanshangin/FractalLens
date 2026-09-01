@@ -5,7 +5,7 @@ import com.shangin.fractal.formula.FractalSample;
 import java.util.Objects;
 
 /** Structure-of-arrays storage for the calculated sample values of one frame. */
-public class FractalData {
+public class FractalData implements SamplePlane {
     private final int width;
     private final int height;
     private final int maxIterations;
@@ -83,8 +83,22 @@ public class FractalData {
         set(y * width + x, sample);
     }
 
+    @Override
+    public void setValues(
+            int index,
+            int iterations,
+            double smoothIterations,
+            boolean escaped,
+            double orbitTrapDistance
+    ) {
+        this.iterations[index] = iterations;
+        this.smoothIterations[index] = smoothIterations;
+        this.escaped[index] = escaped;
+        this.orbitTrapDistances[index] = orbitTrapDistance;
+    }
+
     public void copyPixelFrom(
-            FractalData source,
+            SamplePlane source,
             int sourceX,
             int sourceY,
             int targetX,
@@ -92,18 +106,24 @@ public class FractalData {
     ) {
         Objects.requireNonNull(source);
 
-        int sourceIndex = sourceY * source.width + sourceX;
+        if (!(source instanceof FractalData sourceData)) {
+            SamplePlane.super.copyPixelFrom(
+                    source, sourceX, sourceY, targetX, targetY);
+            return;
+        }
+
+        int sourceIndex = sourceY * sourceData.width + sourceX;
         int targetIndex = targetY * width + targetX;
 
-        iterations[targetIndex] = source.iterations[sourceIndex];
-        smoothIterations[targetIndex] = source.smoothIterations[sourceIndex];
-        escaped[targetIndex] = source.escaped[sourceIndex];
-        orbitTrapDistances[targetIndex] = source.orbitTrapDistances[sourceIndex];
+        iterations[targetIndex] = sourceData.iterations[sourceIndex];
+        smoothIterations[targetIndex] = sourceData.smoothIterations[sourceIndex];
+        escaped[targetIndex] = sourceData.escaped[sourceIndex];
+        orbitTrapDistances[targetIndex] = sourceData.orbitTrapDistances[sourceIndex];
     }
 
     /** Copies one horizontal sample span to another row. */
     public void copyRowFrom(
-            FractalData source,
+            SamplePlane source,
             int sourceY,
             int targetY,
             int xFrom,
@@ -111,9 +131,9 @@ public class FractalData {
     ) {
         Objects.requireNonNull(source);
 
-        if (source.width != width
+        if (source.width() != width
                 || sourceY < 0
-                || sourceY >= source.height
+                || sourceY >= source.height()
                 || targetY < 0
                 || targetY >= height
                 || xFrom < 0
@@ -123,18 +143,23 @@ public class FractalData {
         }
 
         int length = xTo - xFrom;
-        int sourceIndex = sourceY * source.width + xFrom;
+        if (!(source instanceof FractalData sourceData)) {
+            SamplePlane.super.copyRowFrom(source, sourceY, targetY, xFrom, xTo);
+            return;
+        }
+
+        int sourceIndex = sourceY * sourceData.width + xFrom;
         int targetIndex = targetY * width + xFrom;
 
-        System.arraycopy(source.iterations, sourceIndex, iterations, targetIndex, length);
-        System.arraycopy(source.smoothIterations, sourceIndex, smoothIterations, targetIndex, length);
-        System.arraycopy(source.escaped, sourceIndex, escaped, targetIndex, length);
-        System.arraycopy(source.orbitTrapDistances, sourceIndex, orbitTrapDistances, targetIndex, length);
+        System.arraycopy(sourceData.iterations, sourceIndex, iterations, targetIndex, length);
+        System.arraycopy(sourceData.smoothIterations, sourceIndex, smoothIterations, targetIndex, length);
+        System.arraycopy(sourceData.escaped, sourceIndex, escaped, targetIndex, length);
+        System.arraycopy(sourceData.orbitTrapDistances, sourceIndex, orbitTrapDistances, targetIndex, length);
     }
 
     /** Copies a rectangular sample region without reallocating either frame. */
     public void copyRegionFrom(
-            FractalData source,
+            SamplePlane source,
             int sourceX,
             int sourceY,
             int targetX,
@@ -150,10 +175,16 @@ public class FractalData {
             );
         }
 
+        if (!(source instanceof FractalData sourceData)) {
+            SamplePlane.super.copyRegionFrom(source, sourceX, sourceY,
+                    targetX, targetY, regionWidth, regionHeight);
+            return;
+        }
+
         if (sourceX < 0
                 || sourceY < 0
-                || sourceX + regionWidth > source.width
-                || sourceY + regionHeight > source.height) {
+                || sourceX + regionWidth > sourceData.width
+                || sourceY + regionHeight > sourceData.height) {
 
             throw new IllegalArgumentException(
                     "Source region is outside source data"
@@ -173,7 +204,7 @@ public class FractalData {
         for (int row = 0; row < regionHeight; row++) {
 
             int sourceIndex =
-                    (sourceY + row) * source.width
+                    (sourceY + row) * sourceData.width
                             + sourceX;
 
             int targetIndex =
@@ -181,7 +212,7 @@ public class FractalData {
                             + targetX;
 
             System.arraycopy(
-                    source.iterations,
+                    sourceData.iterations,
                     sourceIndex,
                     iterations,
                     targetIndex,
@@ -189,7 +220,7 @@ public class FractalData {
             );
 
             System.arraycopy(
-                    source.smoothIterations,
+                    sourceData.smoothIterations,
                     sourceIndex,
                     smoothIterations,
                     targetIndex,
@@ -197,7 +228,7 @@ public class FractalData {
             );
 
             System.arraycopy(
-                    source.escaped,
+                    sourceData.escaped,
                     sourceIndex,
                     escaped,
                     targetIndex,
@@ -205,7 +236,7 @@ public class FractalData {
             );
 
             System.arraycopy(
-                    source.orbitTrapDistances,
+                    sourceData.orbitTrapDistances,
                     sourceIndex,
                     orbitTrapDistances,
                     targetIndex,

@@ -17,7 +17,7 @@ import java.util.function.LongConsumer;
 public final class FractalRenderService implements AutoCloseable {
 
     private final ExecutorService coordinator;
-    private final ParallelFractalCalculator parallelCalculator;
+    private final RenderBackend backend;
     private final AtomicLong generation = new AtomicLong();
     private Future<?> currentRender;
 
@@ -26,9 +26,13 @@ public final class FractalRenderService implements AutoCloseable {
     private final ScheduledExecutorService progressScheduler;
 
     public FractalRenderService() {
+        this(new DirectDoubleRenderBackend());
+    }
+
+    public FractalRenderService(RenderBackend backend) {
         coordinator = Executors.newSingleThreadExecutor(daemonThreadFactory("fractal-render"));
         progressScheduler = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory("fractal-progress"));
-        parallelCalculator = new ParallelFractalCalculator();
+        this.backend = Objects.requireNonNull(backend);
     }
 
     private static ThreadFactory daemonThreadFactory(String prefix) {
@@ -147,18 +151,11 @@ public final class FractalRenderService implements AutoCloseable {
             RenderFrame resultFrame;
 
             if (onTileTimingComplete == null) {
-                resultFrame = parallelCalculator.calculate(
-                        frame,
-                        () -> shouldCancel(renderId),
-                        progressBatcher::add
-                );
+                resultFrame = backend.render(frame, () -> shouldCancel(renderId),
+                        progressBatcher::add, null);
             } else {
-                resultFrame = parallelCalculator.calculate(
-                        frame,
-                        () -> shouldCancel(renderId),
-                        progressBatcher::add,
-                        onTileTimingComplete
-                );
+                resultFrame = backend.render(frame, () -> shouldCancel(renderId),
+                        progressBatcher::add, onTileTimingComplete);
             }
 
             if (shouldCancel(renderId)) {
@@ -226,7 +223,7 @@ public final class FractalRenderService implements AutoCloseable {
         coordinator.shutdownNow();
         progressScheduler.shutdownNow();
 
-        parallelCalculator.close();
+        backend.close();
     }
 
     private final class ProgressBatcher {

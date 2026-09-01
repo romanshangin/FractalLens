@@ -1,6 +1,6 @@
 package com.shangin.fractal.coloring;
 
-import com.shangin.fractal.render.FractalData;
+import com.shangin.fractal.render.SamplePlane;
 
 import java.util.Objects;
 
@@ -20,11 +20,11 @@ public final class HistogramPaletteColoring implements ColoringStrategy {
     private final double scale;
     private final double[] cumulative;
 
-    public HistogramPaletteColoring(Palette palette, double offset, FractalData data) {
+    public HistogramPaletteColoring(Palette palette, double offset, SamplePlane data) {
         this(palette, offset, data, DEFAULT_BIN_COUNT);
     }
 
-    HistogramPaletteColoring(Palette palette, double offset, FractalData data, int binCount) {
+    HistogramPaletteColoring(Palette palette, double offset, SamplePlane data, int binCount) {
         this.palette = Objects.requireNonNull(palette);
         this.offset = offset;
         Objects.requireNonNull(data);

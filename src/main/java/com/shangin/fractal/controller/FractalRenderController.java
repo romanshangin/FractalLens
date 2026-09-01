@@ -1,8 +1,6 @@
 package com.shangin.fractal.controller;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
-import com.shangin.fractal.coloring.OrbitTrap;
-import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
@@ -34,9 +32,7 @@ public final class FractalRenderController implements AutoCloseable {
     private final InteractiveAntialiasService antialiasService =
             new InteractiveAntialiasService();
 
-    private FractalCalculator calculator;
-    private FractalPreset calculatorPreset;
-    private OrbitTrap calculatorOrbitTrap;
+    private FormulaDefinition formulaDefinition;
     private RenderFrame activeFrame;
     private RenderFrame retainedFrame;
     private boolean initialFramePending = true;
@@ -92,12 +88,12 @@ public final class FractalRenderController implements AutoCloseable {
         }
         long epoch = recolorEpoch.get();
         long request = recolorSequence.incrementAndGet();
-        ColoringStrategy coloring = settings.createStrategy(frame.fractalData());
+        ColoringStrategy coloring = settings.createStrategy(frame.samplePlane());
         recolorExecutor.execute(() -> {
             if (!recolorBufferSlots.tryAcquire()) {
                 return;
             }
-            int[] ready = acquireRecolorBuffer(frame.fractalData().size());
+            int[] ready = acquireRecolorBuffer(frame.samplePlane().size());
             try {
                 antialiasService.recolorCachedInto(frame, coloring, ready);
             } catch (RuntimeException error) {
@@ -145,12 +141,10 @@ public final class FractalRenderController implements AutoCloseable {
         recolorEpoch.incrementAndGet();
         antialiasService.cancelCurrent();
 
-        if (calculatorPreset != scene.fractal()
-                || calculatorOrbitTrap != scene.coloring().orbitTrap()) {
-            calculatorPreset = scene.fractal();
-            calculatorOrbitTrap = scene.coloring().orbitTrap();
-            calculator = new FractalCalculator(
-                    scene.fractal().createFormula(), calculatorOrbitTrap);
+        FormulaDefinition requestedFormula = FormulaDefinition.forPreset(
+                scene.fractal(), scene.coloring().orbitTrap());
+        if (!requestedFormula.equals(formulaDefinition)) {
+            formulaDefinition = requestedFormula;
             activeFrame = null;
             retainedFrame = null;
             frameCache.clear();
@@ -175,9 +169,9 @@ public final class FractalRenderController implements AutoCloseable {
                         viewport.scale()
                 );
 
-        RenderRequest renderRequest =
-                new RenderRequest(
-                        calculator,
+        RenderJob renderRequest =
+                new RenderJob(
+                        formulaDefinition,
                         viewport,
                         target.width(),
                         target.height(),
@@ -310,7 +304,7 @@ public final class FractalRenderController implements AutoCloseable {
                     frameCache.put(completedFrame);
 
                     ColoringStrategy completedColoring =
-                            scene.coloring().createStrategy(completedFrame.fractalData());
+                            scene.coloring().createStrategy(completedFrame.samplePlane());
 
                     if (refinedDisplay) {
                         surface.beginRefinedRender(completedFrame);
