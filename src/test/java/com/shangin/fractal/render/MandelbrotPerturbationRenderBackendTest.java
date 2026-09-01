@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.math.BigDecimal;
+import java.math.MathContext;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -146,6 +148,63 @@ class MandelbrotPerturbationRenderBackendTest {
         assertTrue(stats.completedTileCount() < stats.queuedTileCount());
         assertFalse(frame.isComplete());
     }
+
+    @Test
+    void matchesHighPrecisionControlPointsNearReportedDeepViewport() throws Exception {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-0.8317528516858322713653476366999",
+                        "0.207813754242134522471317257011028", "1.6e-13"),
+                33, 25, 2_700);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(2, diagnostics::set)) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+
+        PreciseRenderGrid grid = job.preciseGrid();
+        for (int[] point : List.of(
+                new int[]{0, 0}, new int[]{32, 0}, new int[]{16, 12},
+                new int[]{0, 24}, new int[]{32, 24})) {
+            int index = point[1] * job.width() + point[0];
+            HighPrecisionSample expected = highPrecisionSample(
+                    grid.realAt(point[0]), grid.imaginaryAt(point[1]),
+                    grid.mathContext(), job.maxIterations());
+            assertEquals(expected.iterations(), frame.samplePlane().iterations(index),
+                    "iteration mismatch at " + point[0] + "," + point[1]);
+            assertEquals(expected.escaped(), frame.samplePlane().escaped(index),
+                    "escape mismatch at " + point[0] + "," + point[1]);
+        }
+        assertNotNull(diagnostics.get());
+        assertTrue(diagnostics.get().highPrecisionFallbackPixelCount() > 0);
+    }
+
+    private static HighPrecisionSample highPrecisionSample(
+            BigDecimal cReal,
+            BigDecimal cImaginary,
+            MathContext context,
+            int maxIterations
+    ) {
+        BigDecimal zr = BigDecimal.ZERO;
+        BigDecimal zi = BigDecimal.ZERO;
+        BigDecimal four = BigDecimal.valueOf(4);
+        for (int iteration = 1; iteration <= maxIterations; iteration++) {
+            BigDecimal nextReal = zr.multiply(zr, context)
+                    .subtract(zi.multiply(zi, context), context).add(cReal, context);
+            BigDecimal nextImaginary = zr.multiply(zi, context)
+                    .multiply(BigDecimal.valueOf(2), context).add(cImaginary, context);
+            zr = nextReal;
+            zi = nextImaginary;
+            if (zr.multiply(zr, context).add(zi.multiply(zi, context)).compareTo(four) > 0) {
+                return new HighPrecisionSample(iteration, true);
+            }
+        }
+        return new HighPrecisionSample(maxIterations, false);
+    }
+
+    private record HighPrecisionSample(int iterations, boolean escaped) {}
 
     private static RenderJob job(FractalPreset preset, OrbitTrap trap, Viewport viewport) {
         return new RenderJob(FormulaDefinition.forPreset(preset, trap), viewport,

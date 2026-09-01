@@ -10,6 +10,7 @@ public record DeepZoomTimingStats(
         int completedTileCount,
         int cancelledTileCount,
         long calculatedPixelCount,
+        long highPrecisionFallbackPixelCount,
         double averageIterationsPerPixel
 ) {
     public DeepZoomTimingStats {
@@ -17,6 +18,7 @@ public record DeepZoomTimingStats(
                 || timeToFirstRegionMs < -1.0 || workerTaskCount < 0
                 || queuedTileCount < 0 || completedTileCount < 0
                 || cancelledTileCount < 0 || calculatedPixelCount < 0
+                || highPrecisionFallbackPixelCount < 0
                 || averageIterationsPerPixel < 0.0) {
             throw new IllegalArgumentException("Deep-zoom diagnostics cannot be negative");
         }
