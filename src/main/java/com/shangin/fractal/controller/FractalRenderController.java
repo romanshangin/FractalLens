@@ -299,7 +299,7 @@ public final class FractalRenderController implements AutoCloseable {
 
                 progress -> {
                     surface.displayProgress(
-                            progress,
+                            progress.outsideApproximateCoverage(),
                             coloring,
                             scene.antialiasing().renderMode()
                     );
@@ -345,7 +345,8 @@ public final class FractalRenderController implements AutoCloseable {
                         return;
                     }
 
-                    if (initialFramePending) {
+                    if (initialFramePending
+                            || completedFrame.request().approximateCoverage().isPresent()) {
                         surface.displayReadyPixels(
                                 completedFrame,
                                 completedColoring
