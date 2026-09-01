@@ -28,7 +28,7 @@ public final class FractalRenderService implements AutoCloseable {
     public FractalRenderService() {
         this(new PrecisionSelectingRenderBackend(
                 new DirectDoubleRenderBackend(),
-                new PendingDeepZoomBackend()));
+                new MandelbrotPerturbationRenderBackend()));
     }
 
     public FractalRenderService(RenderBackend backend) {

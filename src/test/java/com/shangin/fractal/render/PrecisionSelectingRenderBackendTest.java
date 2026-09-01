@@ -9,6 +9,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PrecisionSelectingRenderBackendTest {
 
@@ -27,6 +28,22 @@ class PrecisionSelectingRenderBackendTest {
         try {
             assertSame(direct, selector.select(normal));
             assertSame(deep, selector.select(deepJob));
+        } finally {
+            selector.close();
+        }
+    }
+
+    @Test
+    void deepBackendDoesNotClaimJuliaJobs() {
+        DirectDoubleRenderBackend direct = new DirectDoubleRenderBackend();
+        MandelbrotPerturbationRenderBackend deep = new MandelbrotPerturbationRenderBackend(1);
+        PrecisionSelectingRenderBackend selector = new PrecisionSelectingRenderBackend(direct, deep);
+        RenderJob deepJulia = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.JULIA, OrbitTrap.NONE),
+                new Viewport("0.1", "0.2", "1e-80"), 320, 240, 300);
+
+        try {
+            assertThrows(IllegalArgumentException.class, () -> selector.select(deepJulia));
         } finally {
             selector.close();
         }
