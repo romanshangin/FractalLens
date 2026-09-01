@@ -19,7 +19,7 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
-import java.util.Locale;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -33,8 +33,8 @@ public final class FractalInspector extends ScrollPane {
     private final ZoomIndicator zoomIndicator = new ZoomIndicator();
     private final CheckBox colorCycling = new CheckBox("Animate");
     private final GridPane appearanceControls;
-    private double centerReal;
-    private double centerImaginary;
+    private BigDecimal centerReal = BigDecimal.ZERO;
+    private BigDecimal centerImaginary = BigDecimal.ZERO;
 
     public FractalInspector(
             FractalPreset initialFractal,
@@ -47,7 +47,7 @@ public final class FractalInspector extends ScrollPane {
             Consumer<InteractiveRenderMode> onRenderModeChanged,
             Consumer<Boolean> onHistogramColoringChanged,
             Consumer<Boolean> onColorCyclingChanged,
-            BiConsumer<Double, Double> onCenterChanged
+            BiConsumer<BigDecimal, BigDecimal> onCenterChanged
     ) {
         ComboBox<FractalPreset> fractal = new ComboBox<>();
         fractal.getItems().setAll(FractalPreset.values());
@@ -189,11 +189,11 @@ public final class FractalInspector extends ScrollPane {
         return field;
     }
 
-    private void configureCoordinateCommit(BiConsumer<Double, Double> onCenterChanged) {
+    private void configureCoordinateCommit(BiConsumer<BigDecimal, BigDecimal> onCenterChanged) {
         Runnable commit = () -> {
             try {
-                double real = parseCoordinate(centerRealField.getText());
-                double imaginary = parseCoordinate(centerImaginaryField.getText());
+                BigDecimal real = parseCoordinate(centerRealField.getText());
+                BigDecimal imaginary = parseCoordinate(centerImaginaryField.getText());
                 onCenterChanged.accept(real, imaginary);
             } catch (NumberFormatException exception) {
                 updateCoordinateText();
@@ -204,24 +204,20 @@ public final class FractalInspector extends ScrollPane {
         centerImaginaryField.setOnAction(event -> commit.run());
     }
 
-    private static double parseCoordinate(String text) {
-        double coordinate = Double.parseDouble(text.trim());
-        if (!Double.isFinite(coordinate)) {
-            throw new NumberFormatException("Coordinates must be finite");
-        }
-        return coordinate;
+    private static BigDecimal parseCoordinate(String text) {
+        return new BigDecimal(text.trim());
     }
 
     public void setCenter(Viewport viewport) {
-        centerReal = viewport.centerReal();
-        centerImaginary = viewport.centerImaginary();
+        centerReal = viewport.center().real();
+        centerImaginary = viewport.center().imaginary();
 
         if (!centerRealField.isFocused() && !centerImaginaryField.isFocused()) {
             updateCoordinateText();
         }
     }
 
-    public void setZoom(double zoomFactor) {
+    public void setZoom(BigDecimal zoomFactor) {
         zoomIndicator.setZoom(zoomFactor);
     }
 
@@ -238,7 +234,7 @@ public final class FractalInspector extends ScrollPane {
         centerImaginaryField.setText(formatCoordinate(centerImaginary));
     }
 
-    static String formatCoordinate(double coordinate) {
-        return String.format(Locale.ROOT, "%.15g", coordinate);
+    static String formatCoordinate(BigDecimal coordinate) {
+        return coordinate.toString();
     }
 }

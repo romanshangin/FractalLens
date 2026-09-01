@@ -2,6 +2,8 @@ package com.shangin.fractal.render;
 
 import com.shangin.fractal.math.Viewport;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -263,10 +265,8 @@ public final class FrameReusePlanner {
         }
 
         /* Partial pan reuse currently requires an unchanged viewport scale. */
-        return Double.compare(
-                sourceRequest.viewport().scale(),
-                targetRequest.viewport().scale()
-        ) == 0;
+        return sourceRequest.viewport().scaleExact().compareTo(
+                targetRequest.viewport().scaleExact()) == 0;
     }
 
     private Optional<PixelShift> calculatePixelShift(
@@ -282,6 +282,22 @@ public final class FrameReusePlanner {
 
         RenderGrid grid =
                 sourceFrame.renderGrid();
+
+        PreciseRenderGrid preciseGrid = grid.preciseGrid();
+        if (preciseGrid != null) {
+            BigDecimal rawShiftX = sourceViewport.center().real()
+                    .subtract(targetViewport.center().real(), sourceViewport.mathContext())
+                    .divide(preciseGrid.realStep(), sourceViewport.mathContext());
+            BigDecimal rawShiftY = targetViewport.center().imaginary()
+                    .subtract(sourceViewport.center().imaginary(), sourceViewport.mathContext())
+                    .divide(preciseGrid.imaginaryStep(), sourceViewport.mathContext());
+            Optional<Integer> preciseX = toIntegerShift(rawShiftX);
+            Optional<Integer> preciseY = toIntegerShift(rawShiftY);
+            if (preciseX.isPresent() && preciseY.isPresent()) {
+                return Optional.of(new PixelShift(preciseX.get(), preciseY.get()));
+            }
+            return Optional.empty();
+        }
 
         /*
          * PixelShift uses target = source + shift. Moving the target viewport
@@ -330,6 +346,19 @@ public final class FrameReusePlanner {
                         shiftY.get()
                 )
         );
+    }
+
+    private Optional<Integer> toIntegerShift(BigDecimal value) {
+        BigDecimal rounded = value.setScale(0, RoundingMode.HALF_UP);
+        BigDecimal difference = value.subtract(rounded).abs();
+        if (difference.compareTo(BigDecimal.valueOf(INTEGER_SHIFT_EPSILON)) > 0) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(rounded.intValueExact());
+        } catch (ArithmeticException exception) {
+            return Optional.empty();
+        }
     }
 
     private Optional<Integer> toIntegerShift(

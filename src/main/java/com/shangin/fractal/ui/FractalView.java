@@ -24,8 +24,8 @@ import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
 import java.nio.file.Path;
+import java.math.BigDecimal;
 import java.util.function.Consumer;
-import java.util.function.DoubleConsumer;
 import java.util.List;
 
 /**
@@ -136,6 +136,26 @@ public class FractalView extends StackPane {
         }
 
         if (!camera.setCenter(centerReal, centerImaginary, width, height)) {
+            viewportChangedHandler.accept(camera.viewport());
+            return;
+        }
+
+        stopColorCyclingForSceneChange();
+        resetPriority();
+        cameraChanged();
+    }
+
+    public void setCenter(BigDecimal centerReal, BigDecimal centerImaginary) {
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+
+        if (width < 2 || height < 2) {
+            return;
+        }
+
+        if (!camera.setCenter(
+                new com.shangin.fractal.math.PreciseComplex(centerReal, centerImaginary),
+                width, height)) {
             viewportChangedHandler.accept(camera.viewport());
             return;
         }
@@ -727,7 +747,7 @@ public class FractalView extends StackPane {
     }
 
     public void setOnZoomChanged(
-            DoubleConsumer handler
+            Consumer<BigDecimal> handler
     ) {
         renderController.setOnZoomChanged(
                 handler

@@ -81,16 +81,16 @@ class InteractiveAntialiasServiceTest {
         int renderHeight = 64;
         camera.resize(logicalWidth, logicalHeight);
 
-        while (camera.zoomBy(
-                logicalWidth / 2.0,
-                logicalHeight / 2.0,
-                0.8,
-                logicalWidth,
-                logicalHeight,
-                renderWidth,
-                renderHeight
-        )) {
-            // Exercise the same precision boundary as the interactive camera.
+        for (int zoom = 0; zoom < 120; zoom++) {
+            assertTrue(camera.zoomBy(
+                    logicalWidth / 2.0,
+                    logicalHeight / 2.0,
+                    0.8,
+                    logicalWidth,
+                    logicalHeight,
+                    renderWidth,
+                    renderHeight
+            ));
         }
 
         var sourceViewport = camera.viewport();

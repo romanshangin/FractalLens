@@ -9,7 +9,7 @@ public enum FractalPreset {
     MANDELBROT(
             "Mandelbrot",
             MandelbrotFormula::new,
-            new Viewport(-0.75, 0.0, 2.4),
+            new Viewport("-0.75", "0", "2.4"),
             3.5,
             2.4,
             16.0),
@@ -17,7 +17,7 @@ public enum FractalPreset {
     JULIA(
             "Julia",
             () -> new JuliaFormula(-0.8, 0.156),
-            new Viewport(0.0, 0.0, 2.4),
+            new Viewport("0", "0", "2.4"),
             3.0,
             2.4,
             256.0),
@@ -25,7 +25,7 @@ public enum FractalPreset {
     MULTIBROT_CUBIC(
             "Multibrot (z³)",
             () -> new MultibrotFormula(3),
-            new Viewport(0.0, 0.0, 2.4),
+            new Viewport("0", "0", "2.4"),
             3.0,
             2.4,
             16.0),
@@ -33,7 +33,7 @@ public enum FractalPreset {
     BURNING_SHIP(
             "Burning Ship",
             BurningShipFormula::new,
-            new Viewport(-0.5, 0.5, 2.5),
+            new Viewport("-0.5", "0.5", "2.5"),
             3.5,
             2.5,
             16.0),
@@ -41,7 +41,7 @@ public enum FractalPreset {
     TRICORN(
             "Tricorn",
             TricornFormula::new,
-            new Viewport(0.0, 0.0, 2.5),
+            new Viewport("0", "0", "2.5"),
             3.5,
             2.5,
             16.0);

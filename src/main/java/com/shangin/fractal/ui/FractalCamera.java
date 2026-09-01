@@ -1,8 +1,11 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.math.Viewport;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.Objects;
 
 /**
@@ -11,8 +14,8 @@ import java.util.Objects;
  */
 public final class FractalCamera {
 
-    private static final double ZOOM_IN_FACTOR = 0.8;
-    private static final double ZOOM_OUT_FACTOR = 1.25;
+    private static final BigDecimal ZOOM_IN_FACTOR = new BigDecimal("0.8");
+    private static final BigDecimal ZOOM_OUT_FACTOR = new BigDecimal("1.25");
 
     private Viewport viewport;
     private FractalPreset preset;
@@ -55,7 +58,7 @@ public final class FractalCamera {
         viewportHeight = height;
     }
 
-    /** Zooms toward a logical screen point if double precision remains sufficient. */
+    /** Zooms toward a logical screen point without imposing a backend precision limit. */
     public boolean zoomIn(
             double x,
             double y,
@@ -64,17 +67,10 @@ public final class FractalCamera {
             int renderWidth,
             int renderHeight
     ) {
-        Viewport candidate = viewport.zoomAt(x, y, logicalWidth, logicalHeight, ZOOM_IN_FACTOR);
-
-        if (!candidate.hasSufficientPrecision(
-                renderWidth,
-                renderHeight,
-                preset.minimumUlpsPerPixel()
-        )) {
-            return false;
-        }
-
-        viewport = candidate;
+        validateDimensions(renderWidth, renderHeight);
+        viewport = viewport.zoomAt(
+                BigDecimal.valueOf(x), BigDecimal.valueOf(y),
+                logicalWidth, logicalHeight, ZOOM_IN_FACTOR);
         return true;
     }
 
@@ -86,18 +82,21 @@ public final class FractalCamera {
     ) {
         Viewport defaultViewport = defaultViewport(logicalWidth, logicalHeight);
 
-        if (viewport.scale() >= defaultViewport.scale()) {
+        if (viewport.scaleExact().compareTo(defaultViewport.scaleExact()) >= 0) {
             return false;
         }
 
-        double requestedScale = viewport.scale() * ZOOM_OUT_FACTOR;
+        BigDecimal requestedScale = viewport.scaleExact().multiply(
+                ZOOM_OUT_FACTOR, viewport.mathContext());
 
-        if (requestedScale >= defaultViewport.scale()) {
+        if (requestedScale.compareTo(defaultViewport.scaleExact()) >= 0) {
             viewport = defaultViewport;
             return true;
         }
 
-        viewport = viewport.zoomAt(x, y, logicalWidth, logicalHeight, ZOOM_OUT_FACTOR);
+        viewport = viewport.zoomAt(
+                BigDecimal.valueOf(x), BigDecimal.valueOf(y),
+                logicalWidth, logicalHeight, ZOOM_OUT_FACTOR);
         return true;
     }
 
@@ -123,9 +122,12 @@ public final class FractalCamera {
         }
 
         Viewport defaultViewport = defaultViewport(logicalWidth, logicalHeight);
-        double requestedScale = viewport.scale() * scaleFactor;
+        BigDecimal exactFactor = BigDecimal.valueOf(scaleFactor);
+        BigDecimal requestedScale = viewport.scaleExact().multiply(
+                exactFactor, viewport.mathContext());
 
-        if (scaleFactor > 1.0 && requestedScale >= defaultViewport.scale()) {
+        if (scaleFactor > 1.0
+                && requestedScale.compareTo(defaultViewport.scaleExact()) >= 0) {
             if (viewport.equals(defaultViewport)) {
                 return false;
             }
@@ -133,23 +135,13 @@ public final class FractalCamera {
             return true;
         }
 
-        Viewport candidate = viewport.zoomAt(
-                x,
-                y,
+        viewport = viewport.zoomAt(
+                BigDecimal.valueOf(x),
+                BigDecimal.valueOf(y),
                 logicalWidth,
                 logicalHeight,
-                scaleFactor
+                exactFactor
         );
-
-        if (!candidate.hasSufficientPrecision(
-                renderWidth,
-                renderHeight,
-                preset.minimumUlpsPerPixel()
-        )) {
-            return false;
-        }
-
-        viewport = candidate;
         return true;
     }
 
@@ -179,11 +171,13 @@ public final class FractalCamera {
         Viewport oldDefault = defaultViewport(viewportWidth, viewportHeight);
         Viewport newDefault = defaultViewport(width, height);
 
-        double relativeScale = viewport.scale() / oldDefault.scale();
-        relativeScale = Math.min(1.0, relativeScale);
-        double newScale = newDefault.scale() * relativeScale;
+        MathContext context = viewport.mathContext();
+        BigDecimal relativeScale = viewport.scaleExact()
+                .divide(oldDefault.scaleExact(), context)
+                .min(BigDecimal.ONE);
+        BigDecimal newScale = newDefault.scaleExact().multiply(relativeScale, context);
 
-        viewport = new Viewport(viewport.centerReal(), viewport.centerImaginary(), newScale);
+        viewport = new Viewport(viewport.center(), newScale);
         viewportWidth = width;
         viewportHeight = height;
     }
@@ -197,29 +191,36 @@ public final class FractalCamera {
     ) {
         Viewport defaultViewport = defaultViewport(width, height);
 
-        double deltaReal = -deltaX * viewport.visibleWidth(width, height) / (width - 1.0);
-        double deltaImaginary = deltaY * viewport.visibleHeight() / (height - 1.0);
+        MathContext context = viewport.mathContext();
+        BigDecimal deltaReal = viewport.visibleWidthExact(width, height)
+                .multiply(BigDecimal.valueOf(-deltaX), context)
+                .divide(BigDecimal.valueOf(width - 1L), context);
+        BigDecimal deltaImaginary = viewport.visibleHeightExact()
+                .multiply(BigDecimal.valueOf(deltaY), context)
+                .divide(BigDecimal.valueOf(height - 1L), context);
 
-        double requestedCenterReal = viewport.centerReal() + deltaReal;
-        double requestedCenterImaginary = viewport.centerImaginary() + deltaImaginary;
+        BigDecimal requestedCenterReal = viewport.center().real().add(deltaReal, context);
+        BigDecimal requestedCenterImaginary = viewport.center().imaginary().add(deltaImaginary, context);
 
-        double halfWidth = viewport.visibleWidth(width, height) / 2.0;
-        double halfHeight = viewport.visibleHeight() / 2.0;
+        BigDecimal halfWidth = viewport.visibleWidthExact(width, height)
+                .divide(BigDecimal.valueOf(2), context);
+        BigDecimal halfHeight = viewport.visibleHeightExact()
+                .divide(BigDecimal.valueOf(2), context);
 
-        double minCenterReal = defaultViewport.minReal(width, height) + halfWidth;
-        double maxCenterReal = defaultViewport.maxReal(width, height) - halfWidth;
+        BigDecimal minCenterReal = defaultViewport.minRealExact(width, height).add(halfWidth, context);
+        BigDecimal maxCenterReal = defaultViewport.maxRealExact(width, height).subtract(halfWidth, context);
+        BigDecimal minCenterImaginary = defaultViewport.minImaginaryExact().add(halfHeight, context);
+        BigDecimal maxCenterImaginary = defaultViewport.maxImaginaryExact().subtract(halfHeight, context);
 
-        double minCenterImaginary = defaultViewport.minImaginary() + halfHeight;
-        double maxCenterImaginary = defaultViewport.maxImaginary() - halfHeight;
+        BigDecimal newCenterReal = requestedCenterReal.max(minCenterReal).min(maxCenterReal);
+        BigDecimal newCenterImaginary = requestedCenterImaginary.max(minCenterImaginary).min(maxCenterImaginary);
 
-        double newCenterReal = Math.clamp(requestedCenterReal, minCenterReal, maxCenterReal);
-        double newCenterImaginary = Math.clamp(requestedCenterImaginary, minCenterImaginary, maxCenterImaginary);
-
-        if (newCenterReal == viewport.centerReal() && newCenterImaginary == viewport.centerImaginary()) {
+        PreciseComplex newCenter = new PreciseComplex(newCenterReal, newCenterImaginary);
+        if (newCenter.equals(viewport.center())) {
             return false;
         }
 
-        viewport = new Viewport(newCenterReal, newCenterImaginary, viewport.scale());
+        viewport = new Viewport(newCenter, viewport.scaleExact());
 
         return true;
     }
@@ -237,12 +238,21 @@ public final class FractalCamera {
             throw new IllegalArgumentException("Center coordinates must be finite");
         }
 
-        if (centerReal == viewport.centerReal()
-                && centerImaginary == viewport.centerImaginary()) {
+        return setCenter(PreciseComplex.of(centerReal, centerImaginary), width, height);
+    }
+
+    public boolean setCenter(
+            PreciseComplex center,
+            int width,
+            int height
+    ) {
+        validateDimensions(width, height);
+        Objects.requireNonNull(center);
+        if (center.equals(viewport.center())) {
             return false;
         }
 
-        viewport = new Viewport(centerReal, centerImaginary, viewport.scale());
+        viewport = new Viewport(center, viewport.scaleExact());
         return true;
     }
 

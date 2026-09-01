@@ -167,7 +167,7 @@ class FractalCameraTest {
     }
 
     @Test
-    void juliaShouldStopBeforeOrbitDetailBecomesNumericallyBlocky() {
+    void navigationShouldContinueAfterDoublePrecisionBecomesInsufficient() {
         FractalCamera camera = new FractalCamera(FractalPreset.JULIA);
         int logicalWidth = 1000;
         int logicalHeight = 700;
@@ -184,8 +184,8 @@ class FractalCameraTest {
                 renderHeight
         ));
 
-        int acceptedZooms = 0;
-        while (camera.zoomBy(
+        for (int zoom = 0; zoom < 200; zoom++) {
+            assertTrue(camera.zoomBy(
                 logicalWidth / 2.0,
                 logicalHeight / 2.0,
                 0.8,
@@ -193,17 +193,15 @@ class FractalCameraTest {
                 logicalHeight,
                 renderWidth,
                 renderHeight
-        )) {
-            acceptedZooms++;
-            assertTrue(acceptedZooms < 200, "Julia precision guard did not stop zooming");
+            ));
         }
 
-        assertTrue(camera.viewport().hasSufficientPrecision(
+        assertFalse(camera.viewport().hasSufficientPrecision(
                 renderWidth,
                 renderHeight,
                 FractalPreset.JULIA.minimumUlpsPerPixel()
         ));
-        assertTrue(acceptedZooms > 20);
+        assertTrue(camera.viewport().scaleExact().signum() > 0);
     }
 
     @Test
@@ -216,16 +214,16 @@ class FractalCameraTest {
         int renderHeight = 480;
         camera.resize(logicalWidth, logicalHeight);
 
-        while (camera.zoomBy(
-                logicalWidth / 2.0,
-                logicalHeight / 2.0,
-                0.8,
-                logicalWidth,
-                logicalHeight,
-                renderWidth,
-                renderHeight
-        )) {
-            // Stop only when the production precision guard rejects the next zoom.
+        for (int zoom = 0; zoom < 120; zoom++) {
+            assertTrue(camera.zoomBy(
+                    logicalWidth / 2.0,
+                    logicalHeight / 2.0,
+                    0.8,
+                    logicalWidth,
+                    logicalHeight,
+                    renderWidth,
+                    renderHeight
+            ));
         }
 
         Viewport sourceViewport = camera.viewport();

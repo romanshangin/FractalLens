@@ -2,6 +2,8 @@ package com.shangin.fractal.render;
 
 import com.shangin.fractal.math.Viewport;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Optional;
 
 public final class PixelShiftCalculator {
@@ -17,19 +19,11 @@ public final class PixelShiftCalculator {
             int width,
             int height
     ) {
-        double shiftX = target.xAt(
-                source.realAt(
-                        0.0,
-                        width,
-                        height),
-                width,
-                height);
+        BigDecimal shiftX = target.xAtExact(
+                source.realAtExact(BigDecimal.ZERO, width, height), width, height);
 
-        double shiftY = target.yAt(
-                source.imaginaryAt(
-                        0.0,
-                        height),
-                height);
+        BigDecimal shiftY = target.yAtExact(
+                source.imaginaryAtExact(BigDecimal.ZERO, height), height);
 
         int integerX = nearestInteger(shiftX);
 
@@ -55,18 +49,17 @@ public final class PixelShiftCalculator {
         return Optional.of(shift);
     }
 
-    private static int nearestInteger(double value) {
-        long rounded = Math.round(value);
-
-        if (rounded < Integer.MIN_VALUE || rounded > Integer.MAX_VALUE) {
+    private static int nearestInteger(BigDecimal value) {
+        BigDecimal rounded = value.setScale(0, RoundingMode.HALF_UP);
+        if (value.subtract(rounded).abs()
+                .compareTo(BigDecimal.valueOf(INTEGER_EPSILON)) > 0) {
             return Integer.MIN_VALUE;
         }
-
-        if (Math.abs(value - rounded) > INTEGER_EPSILON) {
+        try {
+            return rounded.intValueExact();
+        } catch (ArithmeticException exception) {
             return Integer.MIN_VALUE;
         }
-
-        return (int) rounded;
     }
 
     private static boolean coordinatesMatchExactly(
@@ -92,11 +85,12 @@ public final class PixelShiftCalculator {
 
             int targetX = sourceX + shift.dx();
 
-            double sourceReal = source.realAt(sourceX, width, height);
+            BigDecimal sourceReal = source.realAtExact(
+                    BigDecimal.valueOf(sourceX), width, height);
+            BigDecimal targetReal = target.realAtExact(
+                    BigDecimal.valueOf(targetX), width, height);
 
-            double targetReal = target.realAt(targetX, width, height);
-
-            if (Double.doubleToLongBits(sourceReal) != Double.doubleToLongBits(targetReal)) {
+            if (sourceReal.compareTo(targetReal) != 0) {
                 return false;
             }
         }
@@ -105,11 +99,12 @@ public final class PixelShiftCalculator {
 
             int targetY = sourceY + shift.dy();
 
-            double sourceImaginary = source.imaginaryAt(sourceY, height);
+            BigDecimal sourceImaginary = source.imaginaryAtExact(
+                    BigDecimal.valueOf(sourceY), height);
+            BigDecimal targetImaginary = target.imaginaryAtExact(
+                    BigDecimal.valueOf(targetY), height);
 
-            double targetImaginary = target.imaginaryAt(targetY, height);
-
-            if (Double.doubleToLongBits(sourceImaginary) != Double.doubleToLongBits(targetImaginary)) {
+            if (sourceImaginary.compareTo(targetImaginary) != 0) {
                 return false;
             }
         }

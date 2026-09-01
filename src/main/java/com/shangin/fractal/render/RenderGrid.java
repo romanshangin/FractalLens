@@ -11,8 +11,22 @@ public record RenderGrid(
         double imaginaryStep,
         long offsetX,
         long offsetY,
-        int conjugateHeight
+        int conjugateHeight,
+        PreciseRenderGrid preciseGrid
 ) {
+    public RenderGrid(
+            double originReal,
+            double originImaginary,
+            double realStep,
+            double imaginaryStep,
+            long offsetX,
+            long offsetY,
+            int conjugateHeight
+    ) {
+        this(originReal, originImaginary, realStep, imaginaryStep,
+                offsetX, offsetY, conjugateHeight, null);
+    }
+
     public static RenderGrid from(
             Viewport viewport,
             int width,
@@ -20,18 +34,17 @@ public record RenderGrid(
     ) {
         Objects.requireNonNull(viewport);
 
+        PreciseRenderGrid precise = PreciseRenderGrid.from(viewport, width, height);
+
         return new RenderGrid(
-                viewport.minReal(
-                        width,
-                        height),
-                viewport.maxImaginary(),
-                viewport.realUnitsPerPixel(
-                        width,
-                        height),
-                viewport.imaginaryUnitsPerPixel(height),
+                precise.originReal().doubleValue(),
+                precise.originImaginary().doubleValue(),
+                precise.realStep().doubleValue(),
+                precise.imaginaryStep().doubleValue(),
                 0,
                 0,
-                viewport.centerImaginary() == 0.0 ? height : 0);
+                precise.conjugateHeight(),
+                precise);
     }
 
     public double realAt(int x) {
@@ -92,6 +105,7 @@ public record RenderGrid(
                 imaginaryStep,
                 offsetX - shift.dx(),
                 offsetY - shift.dy(),
-                conjugateHeight);
+                conjugateHeight,
+                preciseGrid == null ? null : preciseGrid.shifted(shift));
     }
 }
