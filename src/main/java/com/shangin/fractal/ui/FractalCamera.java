@@ -58,7 +58,7 @@ public final class FractalCamera {
         viewportHeight = height;
     }
 
-    /** Zooms toward a logical screen point while retaining direct-render precision. */
+    /** Zooms toward a logical screen point, entering Mandelbrot deep zoom when needed. */
     public boolean zoomIn(
             double x,
             double y,
@@ -71,7 +71,7 @@ public final class FractalCamera {
         Viewport requestedViewport = viewport.zoomAt(
                 BigDecimal.valueOf(x), BigDecimal.valueOf(y),
                 logicalWidth, logicalHeight, ZOOM_IN_FACTOR);
-        if (!hasSufficientRenderPrecision(requestedViewport, renderWidth, renderHeight)) {
+        if (mustRemainInDirectPrecision(requestedViewport, renderWidth, renderHeight)) {
             return false;
         }
         viewport = requestedViewport;
@@ -147,19 +147,21 @@ public final class FractalCamera {
                 exactFactor
         );
         if (scaleFactor < 1.0
-                && !hasSufficientRenderPrecision(requestedViewport, renderWidth, renderHeight)) {
+                && mustRemainInDirectPrecision(requestedViewport, renderWidth, renderHeight)) {
             return false;
         }
         viewport = requestedViewport;
         return true;
     }
 
-    private boolean hasSufficientRenderPrecision(
+    /** Mandelbrot has a dedicated perturbation backend; other formulas remain direct-only. */
+    private boolean mustRemainInDirectPrecision(
             Viewport candidate,
             int renderWidth,
             int renderHeight
     ) {
-        return candidate.hasSufficientPrecision(
+        return preset != FractalPreset.MANDELBROT
+                && !candidate.hasSufficientPrecision(
                 renderWidth,
                 renderHeight,
                 preset.minimumUlpsPerPixel());

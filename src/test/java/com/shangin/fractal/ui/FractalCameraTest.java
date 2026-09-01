@@ -214,6 +214,34 @@ class FractalCameraTest {
     }
 
     @Test
+    void mandelbrotZoomContinuesIntoDeepZoomPrecision() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        int logicalWidth = 1000;
+        int logicalHeight = 700;
+        int renderWidth = 2000;
+        int renderHeight = 1400;
+        camera.resize(logicalWidth, logicalHeight);
+
+        for (int zoom = 0; zoom < 200; zoom++) {
+            assertTrue(camera.zoomBy(
+                    logicalWidth / 2.0,
+                    logicalHeight / 2.0,
+                    0.8,
+                    logicalWidth,
+                    logicalHeight,
+                    renderWidth,
+                    renderHeight
+            ));
+        }
+
+        assertFalse(camera.viewport().hasSufficientPrecision(
+                renderWidth,
+                renderHeight,
+                FractalPreset.MANDELBROT.minimumUlpsPerPixel()
+        ));
+    }
+
+    @Test
     void snappedPanAtDeepestSupportedZoomShouldCalculateOnlyExposedPixels() throws Exception {
         FractalPreset preset = FractalPreset.MANDELBROT;
         FractalCamera camera = new FractalCamera(preset);
