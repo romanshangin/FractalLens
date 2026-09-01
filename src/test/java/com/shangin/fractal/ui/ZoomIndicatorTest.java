@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ZoomIndicatorTest {
 
     @Test
-    void retainsTwelveSignificantFractionDigitsForDeepZoom() {
-        assertEquals("1.134049123457e+13",
-                ZoomFormat.format(new BigDecimal("11340491234567")));
+    void retainsAllAvailableDigitsWithoutScientificNotation() {
+        assertEquals("11340491234567.123456789",
+                ZoomFormat.format(new BigDecimal("1.1340491234567123456789e+13")));
     }
 }

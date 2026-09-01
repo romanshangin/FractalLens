@@ -150,10 +150,13 @@ public final class FractalRenderController implements AutoCloseable {
             frameCache.clear();
         }
 
-        ColoringStrategy coloring = scene.coloring().createStrategy();
-        boolean refinedDisplay = scene.antialiasing().renderMode()
-                == InteractiveRenderMode.REFINED;
         Viewport viewport = scene.viewport();
+
+        boolean deepZoom = DeepZoomRenderPolicy.isDeepZoom(scene, target);
+        InteractiveRenderMode presentationMode =
+                DeepZoomRenderPolicy.presentationMode(scene, target);
+        ColoringStrategy coloring = scene.coloring().createStrategy();
+        boolean refinedDisplay = presentationMode == InteractiveRenderMode.REFINED;
 
         BigDecimal zoomFactor = defaultViewport.scaleExact()
                 .divide(viewport.scaleExact(), viewport.mathContext());
@@ -253,7 +256,7 @@ public final class FractalRenderController implements AutoCloseable {
         surface.beginProgressiveRender(
                 targetFrame,
                 sourceFrame,
-                scene.antialiasing().renderMode()
+                presentationMode
         );
 
         if (!imageReused
@@ -294,7 +297,7 @@ public final class FractalRenderController implements AutoCloseable {
                     surface.displayProgress(
                             progress.outsideApproximateCoverage(),
                             coloring,
-                            scene.antialiasing().renderMode()
+                            presentationMode
                     );
                 },
 
@@ -351,6 +354,12 @@ public final class FractalRenderController implements AutoCloseable {
                             completedFrame,
                             scene
                     );
+
+                    /* The current AA calculator converts subpixel coordinates to double. */
+                    if (deepZoom) {
+                        renderActivity.finish(renderGeneration);
+                        return;
+                    }
 
                     antialiasService.refine(
                             completedFrame,

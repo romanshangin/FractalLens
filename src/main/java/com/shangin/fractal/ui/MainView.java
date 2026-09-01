@@ -46,7 +46,7 @@ public class MainView extends BorderPane {
                 inspector::setZoom
         );
         fractalView.setOnViewportChanged(inspector::setCenter);
-        // Rendering is cancellable; keep inspector controls responsive during deep zoom work.
+        fractalView.setOnRenderingChanged(inspector::setAppearanceDisabled);
         fractalView.setOnColorCyclingStopped(
                 () -> inspector.setColorCyclingSelected(false));
 
