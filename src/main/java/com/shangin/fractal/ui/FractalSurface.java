@@ -20,6 +20,7 @@ import javafx.stage.Window;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * JavaFX surface that owns display buffers, applies interaction previews, and
@@ -46,6 +47,7 @@ public final class FractalSurface extends Region {
     private RenderFrame retainedProgressRenderFrame;
     private FractalScene displayedScene;
     private Viewport displayedViewport;
+    private Viewport previewTargetViewport;
 
     private Runnable renderScaleChangedHandler = () -> {};
 
@@ -406,6 +408,7 @@ public final class FractalSurface extends Region {
         previewTransform.setToIdentity();
         retainedPreviewTransform.setToIdentity();
         progressivePreviewTransform.setToIdentity();
+        previewTargetViewport = null;
     }
 
     public void setOutputScale(
@@ -438,6 +441,8 @@ public final class FractalSurface extends Region {
             return;
         }
 
+        previewTargetViewport = targetViewport;
+
         applyPreviewTransform(
                 previewTransform,
                 displayedViewport,
@@ -465,6 +470,26 @@ public final class FractalSurface extends Region {
                     height
             );
         }
+    }
+
+    /** Returns the display-only area covered by a scaled zoom-out preview. */
+    public Optional<RenderRegion> approximatePreviewCoverage(Viewport targetViewport) {
+        Objects.requireNonNull(targetViewport);
+
+        if (!targetViewport.equals(previewTargetViewport)
+                || displayedViewport == null
+                || displayedFrame == null
+                || renderWidth < 2
+                || renderHeight < 2) {
+            return Optional.empty();
+        }
+
+        return FrameReprojection.approximateCoverage(
+                displayedViewport,
+                targetViewport,
+                renderWidth,
+                renderHeight
+        );
     }
 
     private static void applyPreviewTransform(

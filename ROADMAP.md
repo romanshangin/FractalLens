@@ -75,7 +75,7 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - Add an optional GPU palette-recoloring backend that uploads compact base/AA smooth phases once and advances the palette offset in a shader; retain the CPU path as a portable fallback and benchmark both paths on Retina displays.
 - [x] Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
 - [x] Add orbit traps and editable palette stops.
-- Add a render cache, resize reuse, and a separate high-resolution/off-screen export pipeline.
+- Add a render cache and resize reuse; during zoom out, keep the scale-aware previous-frame reprojection as approximate display coverage, calculate newly exposed regions first, and progressively replace the preview with exact samples. Add a separate high-resolution/off-screen export pipeline.
 
 ## 7. Implement deep zoom
 

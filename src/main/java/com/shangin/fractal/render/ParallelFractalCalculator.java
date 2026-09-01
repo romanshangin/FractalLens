@@ -425,14 +425,30 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         double priorityX = request.width() * request.priority().x();
         double priorityY = request.height() * request.priority().y();
 
-        tiles.sort(Comparator.comparingDouble(
-                tile ->
-                        distanceSquared(
-                                tile,
-                                priorityX,
-                                priorityY)));
+        Comparator<Tile> byDistance = Comparator.comparingDouble(
+                tile -> distanceSquared(tile, priorityX, priorityY));
+
+        /*
+         * A zoomed-out previous frame already gives the center an approximate
+         * image. Calculate newly exposed or boundary-crossing tiles first,
+         * then replace the approximate center with exact samples.
+         */
+        request.approximateCoverage().ifPresentOrElse(
+                coverage -> tiles.sort(
+                        Comparator.comparingInt(
+                                        (Tile tile) -> isFullyCovered(tile, coverage) ? 1 : 0)
+                                .thenComparing(byDistance)),
+                () -> tiles.sort(byDistance)
+        );
 
         return tiles;
+    }
+
+    private static boolean isFullyCovered(Tile tile, RenderRegion coverage) {
+        return tile.xFrom() >= coverage.x()
+                && tile.xTo() <= coverage.x() + coverage.width()
+                && tile.yFrom() >= coverage.y()
+                && tile.yTo() <= coverage.y() + coverage.height();
     }
 
     @Override

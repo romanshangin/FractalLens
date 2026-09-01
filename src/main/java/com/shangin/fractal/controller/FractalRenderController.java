@@ -41,6 +41,7 @@ public final class FractalRenderController implements AutoCloseable {
     private RenderFrame retainedFrame;
     private boolean initialFramePending = true;
     private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
+    private final RenderFrameCache frameCache = new RenderFrameCache();
     private final RenderActivityTracker renderActivity = new RenderActivityTracker();
     private final ExecutorService recolorExecutor = new ThreadPoolExecutor(
             1, 1, 0L, TimeUnit.MILLISECONDS,
@@ -152,6 +153,7 @@ public final class FractalRenderController implements AutoCloseable {
                     scene.fractal().createFormula(), calculatorOrbitTrap);
             activeFrame = null;
             retainedFrame = null;
+            frameCache.clear();
         }
 
         ColoringStrategy coloring = scene.coloring().createStrategy();
@@ -180,7 +182,8 @@ public final class FractalRenderController implements AutoCloseable {
                         target.width(),
                         target.height(),
                         maxIterations,
-                        target.priority()
+                        target.priority(),
+                        surface.approximatePreviewCoverage(viewport)
                 );
 
         RenderFrame previousActiveFrame = activeFrame;
@@ -197,6 +200,17 @@ public final class FractalRenderController implements AutoCloseable {
                         retainedFrame,
                         renderRequest
                 );
+
+        if (!reuseSelection.result().reused()) {
+            RenderFrame cachedFrame = frameCache.findExact(renderRequest).orElse(null);
+            if (cachedFrame != null) {
+                reuseSelection = frameReusePlanner.plan(
+                        cachedFrame,
+                        null,
+                        renderRequest
+                );
+            }
+        }
 
         RenderFrame sourceFrame = reuseSelection.sourceFrame();
         FrameReuseResult reuseResult = reuseSelection.result();
@@ -287,6 +301,8 @@ public final class FractalRenderController implements AutoCloseable {
                 },
 
                 completedFrame -> {
+
+                    frameCache.put(completedFrame);
 
                     ColoringStrategy completedColoring =
                             scene.coloring().createStrategy(completedFrame.fractalData());

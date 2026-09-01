@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -102,6 +103,40 @@ class ParallelFractalCalculatorTest {
         assertTrue(topLeftFirst.xFrom() < bottomRightFirst.xFrom());
 
         assertTrue(topLeftFirst.yFrom() < bottomRightFirst.yFrom());
+    }
+
+    @Test
+    void zoomOutShouldScheduleTilesOutsideApproximateCoverageFirst() {
+        RenderRegion approximateCenter = new RenderRegion(64, 64, 128, 128);
+        RenderRequest request = new RenderRequest(
+                calculator,
+                viewport.zoom(2.0),
+                256,
+                256,
+                100,
+                RenderPriority.center(),
+                Optional.of(approximateCenter)
+        );
+
+        List<Tile> tiles = parallelCalculator.createOrderedTiles(request);
+        int firstFullyCovered = -1;
+
+        for (int index = 0; index < tiles.size(); index++) {
+            Tile tile = tiles.get(index);
+            boolean fullyCovered = tile.xFrom() >= approximateCenter.x()
+                    && tile.xTo() <= approximateCenter.x() + approximateCenter.width()
+                    && tile.yFrom() >= approximateCenter.y()
+                    && tile.yTo() <= approximateCenter.y() + approximateCenter.height();
+
+            if (fullyCovered && firstFullyCovered < 0) {
+                firstFullyCovered = index;
+            }
+            if (!fullyCovered && firstFullyCovered >= 0) {
+                fail("A newly exposed tile was scheduled after approximate coverage");
+            }
+        }
+
+        assertTrue(firstFullyCovered > 0);
     }
 
     @Test
