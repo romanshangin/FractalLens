@@ -68,4 +68,9 @@ public class RenderJob {
     public int maxIterations() { return maxIterations; }
     public RenderPriority priority() { return priority; }
     public Optional<RenderRegion> approximateCoverage() { return approximateCoverage; }
+
+    /** Derives a backend-neutral grid without converting coordinates to doubles. */
+    public PreciseRenderGrid preciseGrid() {
+        return PreciseRenderGrid.from(viewport, width, height);
+    }
 }

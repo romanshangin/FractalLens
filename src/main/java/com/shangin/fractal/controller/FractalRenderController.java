@@ -11,8 +11,8 @@ import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
 import java.util.Objects;
+import java.math.BigDecimal;
 import java.util.function.Consumer;
-import java.util.function.DoubleConsumer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -60,7 +60,7 @@ public final class FractalRenderController implements AutoCloseable {
         this.surface = Objects.requireNonNull(surface);
     }
 
-    private DoubleConsumer zoomChangedHandler = ignored -> {};
+    private Consumer<BigDecimal> zoomChangedHandler = ignored -> {};
 
     public void cancelCurrent() {
         recolorEpoch.incrementAndGet();
@@ -155,9 +155,8 @@ public final class FractalRenderController implements AutoCloseable {
                 == InteractiveRenderMode.REFINED;
         Viewport viewport = scene.viewport();
 
-        double zoomFactor =
-                defaultViewport.scale()
-                        / viewport.scale();
+        BigDecimal zoomFactor = defaultViewport.scaleExact()
+                .divide(viewport.scaleExact(), viewport.mathContext());
 
         zoomChangedHandler.accept(
                 zoomFactor
@@ -165,8 +164,8 @@ public final class FractalRenderController implements AutoCloseable {
 
         int maxIterations =
                 scene.iterations().maxIterations(
-                        defaultViewport.scale(),
-                        viewport.scale()
+                        defaultViewport.scaleExact(),
+                        viewport.scaleExact()
                 );
 
         RenderJob renderRequest =
@@ -385,7 +384,7 @@ public final class FractalRenderController implements AutoCloseable {
     }
 
     public void setOnZoomChanged(
-            DoubleConsumer handler
+            Consumer<BigDecimal> handler
     ) {
         zoomChangedHandler =
                 Objects.requireNonNull(

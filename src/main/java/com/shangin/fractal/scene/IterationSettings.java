@@ -2,6 +2,8 @@ package com.shangin.fractal.scene;
 
 import com.shangin.fractal.config.AdaptiveIterationPolicy;
 
+import java.math.BigDecimal;
+
 /** Immutable iteration policy parameters belonging to a fractal scene. */
 public record IterationSettings(
         int baseIterations,
@@ -24,6 +26,11 @@ public record IterationSettings(
     }
 
     public int maxIterations(double defaultScale, double currentScale) {
+        return new AdaptiveIterationPolicy(iterationsPerZoomLevel)
+                .maxIterations(baseIterations, defaultScale, currentScale);
+    }
+
+    public int maxIterations(BigDecimal defaultScale, BigDecimal currentScale) {
         return new AdaptiveIterationPolicy(iterationsPerZoomLevel)
                 .maxIterations(baseIterations, defaultScale, currentScale);
     }

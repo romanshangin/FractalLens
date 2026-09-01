@@ -101,11 +101,11 @@ existing behavior is covered by tests.
 
 ### 7.2. Make coordinates and navigation precision-independent
 
-- Introduce an arbitrary-precision complex coordinate type with precision derived from the current scale.
-- Store the viewport center and scale without `double` precision loss, and update zoom, pan, resize, display, serialization, and preset handling accordingly.
-- Derive backend-specific render grids from the precise viewport without
+- [x] Introduce an arbitrary-precision complex coordinate type with precision derived from the current scale.
+- [x] Store the viewport center and scale without `double` precision loss, and update zoom, pan, resize, display, serialization, and preset handling accordingly.
+- [x] Derive backend-specific render grids from the precise viewport without
   forcing deep coordinates through a lossy `double` conversion.
-- Add capability-based backend selection that keeps the direct `double` CPU
+- [x] Add capability-based backend selection that keeps the direct `double` CPU
   backend for normal zoom levels and selects a separate deep-zoom backend only
   when hardware precision becomes insufficient.
 

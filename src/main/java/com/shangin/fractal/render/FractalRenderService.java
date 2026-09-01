@@ -26,7 +26,9 @@ public final class FractalRenderService implements AutoCloseable {
     private final ScheduledExecutorService progressScheduler;
 
     public FractalRenderService() {
-        this(new DirectDoubleRenderBackend());
+        this(new PrecisionSelectingRenderBackend(
+                new DirectDoubleRenderBackend(),
+                new PendingDeepZoomBackend()));
     }
 
     public FractalRenderService(RenderBackend backend) {

@@ -5,6 +5,7 @@ import com.shangin.fractal.math.Viewport;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -96,6 +97,21 @@ public class RenderGridTest {
                 width,
                 height
         );
+    }
+
+    @Test
+    void preciseGridShouldKeepAdjacentDeepPixelsDistinct() {
+        Viewport viewport = new Viewport(
+                "-0.7436438870371510000000000000000000000001",
+                "0.1318259042053300000000000000000000000002",
+                "1e-80");
+
+        PreciseRenderGrid grid = PreciseRenderGrid.from(viewport, 1920, 1080);
+
+        BigDecimal first = grid.realAt(1000);
+        BigDecimal next = grid.realAt(1001);
+        assertTrue(first.compareTo(next) < 0);
+        assertEquals(first.doubleValue(), next.doubleValue());
     }
 
     private static void assertCoordinatesMatchExactly(

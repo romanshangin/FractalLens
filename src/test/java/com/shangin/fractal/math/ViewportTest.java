@@ -3,7 +3,11 @@ package com.shangin.fractal.math;
 import com.shangin.fractal.formula.FractalPreset;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ViewportTest {
     private static final double DELTA = 1e-10;
@@ -186,5 +190,40 @@ public class ViewportTest {
                     1e-9
             );
         }
+    }
+
+    @Test
+    void deepPixelShiftShouldRemainVisibleInExactCoordinates() {
+        Viewport viewport = new Viewport(
+                "-0.7436438870371510000000000000000000000001",
+                "0.1318259042053300000000000000000000000002",
+                "1e-80");
+
+        Viewport shifted = viewport.shiftedByPixels(1, -1, 1920, 1080);
+
+        assertEquals(viewport.centerReal(), shifted.centerReal());
+        assertNotEquals(viewport.center().real(), shifted.center().real());
+        assertNotEquals(viewport.center().imaginary(), shifted.center().imaginary());
+        assertTrue(shifted.scaleExact().signum() > 0);
+    }
+
+    @Test
+    void zoomAroundCursorShouldPreserveExactCoordinateBelowDoublePrecision() {
+        Viewport viewport = new Viewport(
+                "-0.7436438870371510000000000000000000000001",
+                "0.1318259042053300000000000000000000000002",
+                "1e-70");
+        BigDecimal x = new BigDecimal("731.25");
+        BigDecimal y = new BigDecimal("411.75");
+        BigDecimal realBefore = viewport.realAtExact(x, 1200, 800);
+        BigDecimal imaginaryBefore = viewport.imaginaryAtExact(y, 800);
+
+        Viewport zoomed = viewport.zoomAt(x, y, 1200, 800, new BigDecimal("0.8"));
+
+        BigDecimal tolerance = viewport.scaleExact().movePointLeft(15);
+        assertTrue(realBefore.subtract(zoomed.realAtExact(x, 1200, 800)).abs()
+                .compareTo(tolerance) < 0);
+        assertTrue(imaginaryBefore.subtract(zoomed.imaginaryAtExact(y, 800)).abs()
+                .compareTo(tolerance) < 0);
     }
 }
