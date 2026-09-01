@@ -140,7 +140,7 @@ class ParallelFractalCalculatorTest {
     }
 
     @Test
-    void zoomOutShouldFillEmptyScreenEdgesBeforeTheInnerPreviewBoundary() {
+    void zoomOutShouldGrowFromThePreviewBoundaryTowardTheScreenEdge() {
         RenderRegion approximateCenter = new RenderRegion(48, 48, 160, 160);
         RenderRequest request = new RenderRequest(
                 calculator,
@@ -155,20 +155,20 @@ class ParallelFractalCalculatorTest {
         List<Tile> tiles = parallelCalculator.createOrderedTiles(request);
         Tile first = tiles.getFirst();
 
-        assertEquals(0, first.xFrom());
-        assertEquals(0, first.yFrom());
-        assertEquals(32, first.xTo());
-        assertEquals(32, first.yTo());
+        assertEquals(96, first.xFrom());
+        assertEquals(32, first.yFrom());
+        assertEquals(128, first.xTo());
+        assertEquals(64, first.yTo());
 
-        Tile partiallyCoveredBoundary = tiles.stream()
-                .filter(tile -> tile.xFrom() == 32 && tile.yFrom() == 96)
+        Tile screenCorner = tiles.stream()
+                .filter(tile -> tile.xFrom() == 0 && tile.yFrom() == 0)
                 .findFirst()
                 .orElseThrow();
-        assertTrue(tiles.indexOf(first) < tiles.indexOf(partiallyCoveredBoundary));
+        assertTrue(tiles.indexOf(first) < tiles.indexOf(screenCorner));
     }
 
     @Test
-    void singleWorkerShouldPublishAnEmptyCornerBeforeCenterDuringZoomOut()
+    void singleWorkerShouldPublishThePreviewBoundaryBeforeScreenCornerAndCenter()
             throws InterruptedException {
         RenderRegion approximateCenter = new RenderRegion(32, 32, 32, 32);
         RenderFrame frame = RenderFrame.create(new RenderRequest(
@@ -189,11 +189,34 @@ class ParallelFractalCalculatorTest {
         }
 
         assertFalse(published.isEmpty());
-        assertEquals(new RenderRegion(0, 0, 32, 32), published.getFirst());
+        assertEquals(new RenderRegion(32, 0, 32, 32), published.getFirst());
+        assertTrue(published.indexOf(new RenderRegion(32, 0, 32, 32))
+                < published.indexOf(new RenderRegion(0, 0, 32, 32)));
         assertEquals(
                 new RenderRegion(32, 32, 32, 32),
                 published.getLast()
         );
+    }
+
+    @Test
+    void cursorAnchoredZoomOutShouldStillGrowFromTheOffCenterPreviewEdges() {
+        RenderRegion anchoredPreview = new RenderRegion(0, 0, 160, 160);
+        RenderRequest request = new RenderRequest(
+                calculator,
+                viewport.zoom(2.0),
+                256,
+                256,
+                100,
+                new RenderPriority(0.0, 0.0),
+                Optional.of(anchoredPreview)
+        );
+
+        List<Tile> tiles = parallelCalculator.createOrderedTiles(request);
+        Tile touchingPreviewEdge = new Tile(160, 192, 0, 32);
+        Tile farScreenCorner = new Tile(224, 256, 224, 256);
+
+        assertEquals(touchingPreviewEdge, tiles.getFirst());
+        assertTrue(tiles.indexOf(touchingPreviewEdge) < tiles.indexOf(farScreenCorner));
     }
 
     @Test

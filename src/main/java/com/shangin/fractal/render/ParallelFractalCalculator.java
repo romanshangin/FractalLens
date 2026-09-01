@@ -452,18 +452,25 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         int firstUncovered = uncoveredArea(first, coverage);
         int secondUncovered = uncoveredArea(second, coverage);
 
-        int byUncoveredArea = Integer.compare(secondUncovered, firstUncovered);
-        if (byUncoveredArea != 0) {
-            return byUncoveredArea;
+        boolean firstExposed = firstUncovered > 0;
+        boolean secondExposed = secondUncovered > 0;
+        if (firstExposed != secondExposed) {
+            return firstExposed ? -1 : 1;
         }
 
         double firstDistance = distanceSquared(first, priorityX, priorityY);
         double secondDistance = distanceSquared(second, priorityX, priorityY);
 
-        /* Exposed tiles grow in from the screen edge; exact center tiles keep focal order. */
-        return firstUncovered > 0
-                ? Double.compare(secondDistance, firstDistance)
-                : Double.compare(firstDistance, secondDistance);
+        if (firstExposed) {
+            int byPreviewEdge = Double.compare(
+                    distanceToCoverageSquared(first, coverage),
+                    distanceToCoverageSquared(second, coverage));
+            if (byPreviewEdge != 0) {
+                return byPreviewEdge;
+            }
+        }
+
+        return Double.compare(firstDistance, secondDistance);
     }
 
     private static int uncoveredArea(Tile tile, RenderRegion coverage) {
@@ -475,6 +482,21 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                 - Math.max(tile.yFrom(), coverage.y()));
         int tileArea = (tile.xTo() - tile.xFrom()) * (tile.yTo() - tile.yFrom());
         return tileArea - overlapWidth * overlapHeight;
+    }
+
+    private static double distanceToCoverageSquared(
+            Tile tile,
+            RenderRegion coverage
+    ) {
+        int coverageRight = coverage.x() + coverage.width();
+        int coverageBottom = coverage.y() + coverage.height();
+        int dx = Math.max(0, Math.max(
+                coverage.x() - tile.xTo(),
+                tile.xFrom() - coverageRight));
+        int dy = Math.max(0, Math.max(
+                coverage.y() - tile.yTo(),
+                tile.yFrom() - coverageBottom));
+        return (double) dx * dx + (double) dy * dy;
     }
 
     @Override

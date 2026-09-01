@@ -66,7 +66,9 @@ class InteractiveAntialiasServiceTest {
 
         assertEquals(12, firstCenterTile);
         assertEquals(16, tiles.size());
-        assertEquals(new RenderRegion(0, 0, 32, 32), tiles.getFirst());
+        assertEquals(new RenderRegion(32, 0, 32, 32), tiles.getFirst());
+        assertTrue(tiles.indexOf(new RenderRegion(32, 0, 32, 32))
+                < tiles.indexOf(new RenderRegion(0, 0, 32, 32)));
     }
 
     @Test

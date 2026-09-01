@@ -413,16 +413,25 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         int firstUncovered = uncoveredArea(first, coverage);
         int secondUncovered = uncoveredArea(second, coverage);
 
-        int byUncoveredArea = Integer.compare(secondUncovered, firstUncovered);
-        if (byUncoveredArea != 0) {
-            return byUncoveredArea;
+        boolean firstExposed = firstUncovered > 0;
+        boolean secondExposed = secondUncovered > 0;
+        if (firstExposed != secondExposed) {
+            return firstExposed ? -1 : 1;
         }
 
         double firstDistance = distanceSquared(first, priorityX, priorityY);
         double secondDistance = distanceSquared(second, priorityX, priorityY);
-        return firstUncovered > 0
-                ? Double.compare(secondDistance, firstDistance)
-                : Double.compare(firstDistance, secondDistance);
+
+        if (firstExposed) {
+            int byPreviewEdge = Double.compare(
+                    distanceToCoverageSquared(first, coverage),
+                    distanceToCoverageSquared(second, coverage));
+            if (byPreviewEdge != 0) {
+                return byPreviewEdge;
+            }
+        }
+
+        return Double.compare(firstDistance, secondDistance);
     }
 
     private static int uncoveredArea(RenderRegion tile, RenderRegion coverage) {
@@ -433,6 +442,23 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 tile.y() + tile.height(), coverage.y() + coverage.height())
                 - Math.max(tile.y(), coverage.y()));
         return tile.width() * tile.height() - overlapWidth * overlapHeight;
+    }
+
+    private static double distanceToCoverageSquared(
+            RenderRegion tile,
+            RenderRegion coverage
+    ) {
+        int tileRight = tile.x() + tile.width();
+        int tileBottom = tile.y() + tile.height();
+        int coverageRight = coverage.x() + coverage.width();
+        int coverageBottom = coverage.y() + coverage.height();
+        int dx = Math.max(0, Math.max(
+                coverage.x() - tileRight,
+                tile.x() - coverageRight));
+        int dy = Math.max(0, Math.max(
+                coverage.y() - tileBottom,
+                tile.y() - coverageBottom));
+        return (double) dx * dx + (double) dy * dy;
     }
 
     private static double distanceSquared(RenderRegion tile, double x, double y) {
