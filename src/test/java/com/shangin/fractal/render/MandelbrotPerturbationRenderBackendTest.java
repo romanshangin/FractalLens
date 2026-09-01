@@ -178,7 +178,8 @@ class MandelbrotPerturbationRenderBackendTest {
                     "escape mismatch at " + point[0] + "," + point[1]);
         }
         assertNotNull(diagnostics.get());
-        assertTrue(diagnostics.get().highPrecisionFallbackPixelCount() > 0);
+        assertTrue(diagnostics.get().additionalReferenceOrbitCount() > 0);
+        assertEquals(0, diagnostics.get().highPrecisionFallbackPixelCount());
     }
 
     private static HighPrecisionSample highPrecisionSample(
