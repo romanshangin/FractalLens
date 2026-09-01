@@ -72,10 +72,12 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - [x] Treat raw image-space edge filtering as an optional fast display mode; keep the transformed previous frame visible while base tiles arrive, then progressively replace them with refined tiles.
 - [x] Cache palette-independent subpixel samples for AA candidates so palette changes can recolor both the base frame and refined tiles without recalculating the fractal; define memory limits and eviction behavior.
 - [x] Add an optional color-cycling animation that continuously advances the smooth-coloring offset over its seamless period-two loop without recalculating the fractal; pause it during navigation/rendering, use a throttled buffered recolor path, and apply it to refined pixels through the palette-independent AA cache.
-- Add an optional GPU palette-recoloring backend that uploads compact base/AA smooth phases once and advances the palette offset in a shader; retain the CPU path as a portable fallback and benchmark both paths on Retina displays.
 - [x] Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
 - [x] Add orbit traps and editable palette stops.
-- Add a render cache and resize reuse; during zoom out, keep the scale-aware previous-frame reprojection as approximate display coverage, calculate newly exposed regions first, and progressively replace the preview with exact samples. Add a separate high-resolution/off-screen export pipeline.
+- [x] Add a memory-bounded LRU render cache for exact reverse-navigation reuse.
+- [x] During zoom out, keep the scale-aware previous-frame reprojection as approximate display coverage, grow newly exposed base and AA tiles outward from its edges, and atomically replace the preview center with exact samples.
+- Add resize reuse.
+- Add a separate high-resolution/off-screen export pipeline.
 
 ## 7. Implement deep zoom
 
@@ -93,6 +95,10 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - Support multiple numeric backends after the first implementation is correct and measured, then investigate series approximation as a later optimization.
 
 This phase should remain separate from the current pan-reuse optimization.
+
+## 8. Add GPU rendering
+
+- Add an optional GPU palette-recoloring backend that uploads compact base/AA smooth phases once and advances the palette offset in a shader; retain the CPU path as a portable fallback and benchmark both paths on Retina displays.
 
 ## Target milestone
 
