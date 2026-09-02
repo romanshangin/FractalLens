@@ -44,6 +44,21 @@ public final class BaseColorPhaseCache {
         return Double.compare(colorScale, coloring.colorScale()) == 0;
     }
 
+    public int size() { return phases.length; }
+
+    public int gpuWordCount() { return (phases.length + 1) / 2 + (phases.length + 31) / 32; }
+
+    /** Packed uint words avoid requiring native 16-bit or 64-bit shader storage. */
+    public void writeGpuWords(java.nio.IntBuffer target) {
+        for (int i = 0; i < phases.length; i += 2) {
+            target.put(Short.toUnsignedInt(phases[i])
+                    | (i + 1 < phases.length ? Short.toUnsignedInt(phases[i + 1]) << 16 : 0));
+        }
+        for (int i = 0; i < (phases.length + 31) / 32; i++) {
+            target.put((int) (escaped[i / 2] >>> ((i & 1) * 32)));
+        }
+    }
+
     public void recolorInto(int[] colors, SmoothColorLookup lookup) {
         IntStream.range(0, escaped.length).parallel().forEach(wordIndex -> {
             int from = wordIndex * Long.SIZE;

@@ -112,6 +112,19 @@ class ManagedGpuRuntimeTest {
     }
 
     @Test
+    void cannotDestroyResourcesFromInsideTheOperationUsingThem() throws Exception {
+        FakeSession session = new FakeSession();
+        try (GpuRuntime runtime = open(session)) {
+            runtime.runOrFallback(FLOAT32, () -> {
+                assertThrows(IllegalStateException.class, runtime::close);
+                assertEquals(0, session.closes);
+                return "gpu";
+            }, () -> fail("fallback"));
+        }
+        assertEquals(1, session.closes);
+    }
+
+    @Test
     void closeWaitsForAnActiveOperationBeforeDestroyingItsResources() throws Exception {
         FakeSession session = new FakeSession();
         CountDownLatch entered = new CountDownLatch(1);

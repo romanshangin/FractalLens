@@ -2,6 +2,8 @@ package com.shangin.fractal.export;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
+import com.shangin.fractal.gpu.PaletteRecolorBackend;
+import com.shangin.fractal.gpu.PaletteRecolorTiming;
 import com.shangin.fractal.coloring.SmoothColorLookup;
 import com.shangin.fractal.render.FractalCalculator;
 import com.shangin.fractal.render.SamplePlane;
@@ -338,12 +340,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             SmoothColorLookup lookup = recolorLookup.get();
             lookup.update(smooth);
             phases.recolorInto(colors, lookup);
-            synchronized (this) {
-                if (cachedFrame != frame) {
-                    return;
-                }
-            }
-            sampleCache.recolorInto(colors, lookup);
+            aaSnapshot(frame, smooth).recolorInto(colors, lookup);
             return;
         }
 
@@ -352,6 +349,35 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         data.iterations(index), data.smoothIterations(index),
                         data.escaped(index), data.maxIterations(),
                         data.orbitTrapDistance(index)));
+    }
+
+    /** Same base + AA operation through the optional GPU backend, with complete CPU timing. */
+    public PaletteRecolorTiming recolorCachedInto(
+            RenderFrame frame,
+            ColoringStrategy coloring,
+            int[] colors,
+            PaletteRecolorBackend backend
+    ) throws InterruptedException {
+        Objects.requireNonNull(backend);
+        Objects.requireNonNull(frame);
+        Objects.requireNonNull(coloring);
+        Objects.requireNonNull(colors);
+        long started = System.nanoTime();
+        if (!(coloring instanceof SmoothPaletteColoring smooth)) {
+            recolorCachedInto(frame, coloring, colors);
+            long elapsed = System.nanoTime() - started;
+            return PaletteRecolorTiming.cpu(0, elapsed, elapsed);
+        }
+        BaseColorPhaseCache phases = basePhases(frame, smooth);
+        AntialiasSampleCache.Snapshot aa = aaSnapshot(frame, smooth);
+        long prepared = System.nanoTime();
+        PaletteRecolorTiming timing = backend.recolor(phases, aa, smooth, colors);
+        return timing.withPreparation(prepared - started, System.nanoTime() - started);
+    }
+
+    private synchronized AntialiasSampleCache.Snapshot aaSnapshot(
+            RenderFrame frame, SmoothPaletteColoring coloring) {
+        return cachedFrame == frame ? sampleCache.snapshotFor(coloring) : AntialiasSampleCache.Snapshot.EMPTY;
     }
 
     private BaseColorPhaseCache basePhases(

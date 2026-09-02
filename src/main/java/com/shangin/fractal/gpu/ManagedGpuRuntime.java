@@ -11,8 +11,9 @@ final class ManagedGpuRuntime implements GpuRuntime {
     private final List<GpuDevice> devices;
     private final GpuDevice selectedDevice;
     private GpuSession session;
+    private boolean executing;
     private GpuRuntimeState state = GpuRuntimeState.AVAILABLE;
-    private String detail = "Compute device ready; rendering kernels are not enabled yet.";
+    private String detail = "Compute device ready; palette kernel is opt-in.";
 
     private ManagedGpuRuntime(GpuPlatform platform, GpuSession session) {
         this.platform = platform;
@@ -46,7 +47,22 @@ final class ManagedGpuRuntime implements GpuRuntime {
     }
 
     @Override
+    public PaletteRecolorTiming recolorPalette(Supplier<PaletteRecolorRequest> request,
+                                               GpuWork<PaletteRecolorTiming> cpu)
+            throws InterruptedException {
+        return runOrFallback(GpuNumericCapability.FLOAT32,
+                () -> {
+                    long started = System.nanoTime();
+                    PaletteRecolorRequest prepared = request.get();
+                    long ready = System.nanoTime();
+                    PaletteRecolorTiming timing = session.recolorPalette(prepared);
+                    return timing.withPreparation(ready - started, System.nanoTime() - started);
+                }, cpu);
+    }
+
+    @Override
     public synchronized boolean checkHealth() {
+        requireOutsideOperation();
         if (state != GpuRuntimeState.AVAILABLE) {
             return false;
         }
@@ -66,12 +82,18 @@ final class ManagedGpuRuntime implements GpuRuntime {
         Objects.requireNonNull(gpu);
         Objects.requireNonNull(cpu);
         synchronized (this) {
+            requireOutsideOperation();
             if (Thread.currentThread().isInterrupted()) {
                 throw new InterruptedException("GPU operation cancelled");
             }
             if (isUsableFor(required)) {
                 try {
-                    return gpu.run();
+                    executing = true;
+                    try {
+                        return gpu.run();
+                    } finally {
+                        executing = false;
+                    }
                 } catch (GpuException failure) {
                     disable(failure);
                 }
@@ -85,6 +107,7 @@ final class ManagedGpuRuntime implements GpuRuntime {
 
     @Override
     public synchronized void handleDeviceLoss(Throwable cause) {
+        requireOutsideOperation();
         if (state == GpuRuntimeState.AVAILABLE) {
             disable(new GpuException("GPU device lost: " + describe(cause), true));
         }
@@ -98,10 +121,20 @@ final class ManagedGpuRuntime implements GpuRuntime {
 
     @Override
     public synchronized void close() {
+        requireOutsideOperation();
         if (state != GpuRuntimeState.CLOSED) {
             boolean lost = state == GpuRuntimeState.DEVICE_LOST;
+            if (state == GpuRuntimeState.AVAILABLE) {
+                detail = "GPU runtime closed.";
+            }
             state = GpuRuntimeState.CLOSED;
             release(lost);
+        }
+    }
+
+    private void requireOutsideOperation() {
+        if (executing) {
+            throw new IllegalStateException("GPU work must not re-enter lifecycle or execution methods");
         }
     }
 

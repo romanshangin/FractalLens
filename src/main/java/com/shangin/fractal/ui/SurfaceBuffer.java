@@ -62,6 +62,15 @@ public class SurfaceBuffer {
         );
     }
 
+    /** Shared publication boundary used by the application and the palette benchmark. */
+    public void publish(int[] colors) {
+        if (colors.length != intBuffer.capacity()) {
+            throw new IllegalArgumentException("Publication dimensions differ");
+        }
+        System.arraycopy(colors, 0, intBuffer.array(), 0, colors.length);
+        update();
+    }
+
     IntBuffer intBuffer() {
         return intBuffer;
     }

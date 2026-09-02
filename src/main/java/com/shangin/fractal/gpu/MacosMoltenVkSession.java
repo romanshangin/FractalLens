@@ -24,6 +24,8 @@ final class MacosMoltenVkSession implements GpuSession {
     private VkInstance instance;
     private VkDevice device;
     private VkQueue queue;
+    private VkPhysicalDevice physical;
+    private VulkanPaletteKernel paletteKernel;
     private List<GpuDevice> devices = List.of();
     private GpuDevice selectedDevice;
 
@@ -87,6 +89,7 @@ final class MacosMoltenVkSession implements GpuSession {
     }
 
     private void createDevice(Candidate selected) {
+        physical = selected.physical();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkDeviceQueueCreateInfo.Buffer queues = VkDeviceQueueCreateInfo.calloc(1, stack);
             queues.get(0).sType$Default()
@@ -222,6 +225,21 @@ final class MacosMoltenVkSession implements GpuSession {
     }
 
     @Override
+    public PaletteRecolorTiming recolorPalette(PaletteRecolorRequest request) throws InterruptedException {
+        long started = System.nanoTime();
+        try {
+            if (paletteKernel == null) {
+                paletteKernel = VulkanPaletteKernel.open(device, physical, queue, selectedDevice.computeQueueFamily());
+            }
+            long ready = System.nanoTime();
+            PaletteRecolorTiming timing = paletteKernel.recolor(request);
+            return timing.withPreparation(ready - started, System.nanoTime() - started);
+        } catch (LinkageError failure) {
+            throw new GpuException("Palette native dependency unavailable: " + failure.getMessage(), false);
+        }
+    }
+
+    @Override
     public void close(boolean deviceLost) {
         try {
             if (device != null && !deviceLost) {
@@ -230,6 +248,10 @@ final class MacosMoltenVkSession implements GpuSession {
         } finally {
             try {
                 if (device != null) {
+                    if (paletteKernel != null) {
+                        paletteKernel.close();
+                        paletteKernel = null;
+                    }
                     vkDestroyDevice(device, null);
                     device = null;
                     queue = null;

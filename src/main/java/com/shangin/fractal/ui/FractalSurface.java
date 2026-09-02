@@ -571,11 +571,10 @@ public final class FractalSurface extends Region {
                 || colors.length != displayedFrame.width() * displayedFrame.height()) {
             return;
         }
-        System.arraycopy(colors, 0, displayedFrame.intBuffer().array(), 0, colors.length);
+        displayedFrame.publish(colors);
         if (displayedScene != null) {
             displayedScene = displayedScene.withColoring(settings);
         }
-        displayedFrame.update();
     }
 
     public void invalidateRefinement() {

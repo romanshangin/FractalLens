@@ -7,5 +7,8 @@ interface GpuSession {
     List<GpuDevice> devices();
     GpuDevice selectedDevice();
     void checkHealth();
+    default PaletteRecolorTiming recolorPalette(PaletteRecolorRequest request) throws InterruptedException {
+        throw new GpuException("Palette kernel unavailable", false);
+    }
     void close(boolean deviceLost);
 }

@@ -41,11 +41,16 @@ public class GradientPalette implements Palette {
 
     @Override
     public int color(double position) {
-        double clamped = Math.clamp(position, 0.0, 1.0);
-        int index = (int) Math.round(clamped * (LOOKUP_SIZE - 1));
-
-        return lookup[index];
+        return lookup[lookupIndex(position)];
     }
+
+    public static int lookupIndex(double position) {
+        double clamped = Math.clamp(position, 0.0, 1.0);
+        return (int) Math.round(clamped * (LOOKUP_SIZE - 1));
+    }
+
+    /** Copies the offset-independent palette only when GPU residency changes. */
+    public void writeLookup(java.nio.IntBuffer destination) { destination.put(lookup); }
 
     private int[] createLookup() {
         int[] colors = new int[LOOKUP_SIZE];

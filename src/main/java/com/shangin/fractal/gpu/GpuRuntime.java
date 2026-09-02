@@ -20,9 +20,22 @@ public interface GpuRuntime extends AutoCloseable {
      * supply the CPU operation matching the job's precision or coloring mode.
      * GPU work must finish its native accesses before returning, and must not
      * publish partial output that would make retrying on CPU unsafe.
+     * It must report failures by throwing GpuException, without re-entering
+     * runtime execution, health, or lifecycle methods.
      */
     <T> T runOrFallback(GpuNumericCapability required, GpuWork<T> gpu, GpuWork<T> cpu)
             throws InterruptedException;
+
+    /**
+     * Recolors only palette-independent cached data.  Implementations without a
+     * native compute kernel run the supplied CPU operation unchanged.
+     */
+    default PaletteRecolorTiming recolorPalette(java.util.function.Supplier<PaletteRecolorRequest> request,
+                                               GpuWork<PaletteRecolorTiming> cpu)
+            throws InterruptedException {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Recolor cancelled");
+        return cpu.run();
+    }
 
     default boolean isUsableFor(GpuNumericCapability capability) {
         return capabilityReport().supports(capability);

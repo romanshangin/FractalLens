@@ -2,6 +2,8 @@ package com.shangin.fractal.controller;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.export.InteractiveAntialiasService;
+import com.shangin.fractal.gpu.PaletteRecolorBackend;
+import com.shangin.fractal.gpu.PaletteRecolorTiming;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.FractalScene;
@@ -19,6 +21,7 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Semaphore;
 
@@ -32,6 +35,7 @@ public final class FractalRenderController implements AutoCloseable {
     private final FractalRenderService renderService = new FractalRenderService();
     private final InteractiveAntialiasService antialiasService =
             new InteractiveAntialiasService();
+    private final PaletteRecolorBackend paletteRecolorBackend;
 
     private FormulaDefinition formulaDefinition;
     private RenderFrame activeFrame;
@@ -59,9 +63,12 @@ public final class FractalRenderController implements AutoCloseable {
     private final AtomicLong publishedRecolorSequence = new AtomicLong();
     private final Semaphore recolorBufferSlots = new Semaphore(2);
     private final ConcurrentLinkedDeque<int[]> recolorBuffers = new ConcurrentLinkedDeque<>();
+    private final AtomicReference<PaletteRecolorTiming> lastPaletteRecolorTiming =
+            new AtomicReference<>();
 
     public FractalRenderController(FractalSurface surface) {
         this.surface = Objects.requireNonNull(surface);
+        this.paletteRecolorBackend = renderService.paletteRecolorBackend();
     }
 
     private Consumer<BigDecimal> zoomChangedHandler = ignored -> {};
@@ -95,23 +102,35 @@ public final class FractalRenderController implements AutoCloseable {
         long request = recolorSequence.incrementAndGet();
         ColoringStrategy coloring = settings.createStrategy(frame.samplePlane());
         recolorExecutor.execute(() -> {
+            if (epoch != recolorEpoch.get() || Thread.currentThread().isInterrupted()) return;
             if (!recolorBufferSlots.tryAcquire()) {
                 return;
             }
             int[] ready = acquireRecolorBuffer(frame.samplePlane().size());
+            PaletteRecolorTiming timing;
             try {
-                antialiasService.recolorCachedInto(frame, coloring, ready);
+                timing = antialiasService.recolorCachedInto(
+                        frame, coloring, ready, paletteRecolorBackend);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                recolorBuffers.offerFirst(ready);
+                recolorBufferSlots.release();
+                return;
             } catch (RuntimeException error) {
                 recolorBuffers.offerFirst(ready);
                 recolorBufferSlots.release();
                 throw error;
             }
+            long queued = System.nanoTime();
             Platform.runLater(() -> {
                 try {
                     if (epoch == recolorEpoch.get()
                             && frame == activeFrame
                             && request > publishedRecolorSequence.get()) {
+                        long presentationStarted = System.nanoTime();
                         surface.applyRecolor(frame, ready, settings);
+                        lastPaletteRecolorTiming.set(timing.withPublication(
+                                presentationStarted - queued, System.nanoTime() - presentationStarted));
                         publishedRecolorSequence.set(request);
                         onApplied.run();
                     }
@@ -121,6 +140,11 @@ public final class FractalRenderController implements AutoCloseable {
                 }
             });
         });
+    }
+
+    /** Most recent palette operation, split for GPU/CPU and JavaFX presentation benchmarking. */
+    public PaletteRecolorTiming lastPaletteRecolorTiming() {
+        return lastPaletteRecolorTiming.get();
     }
 
     private int[] acquireRecolorBuffer(int size) {
@@ -479,9 +503,10 @@ public final class FractalRenderController implements AutoCloseable {
 
     @Override
     public void close() {
+        recolorEpoch.incrementAndGet();
+        recolorExecutor.shutdownNow();
         antialiasService.close();
         renderService.close();
-        recolorExecutor.shutdownNow();
         renderActivity.cancel();
     }
 }

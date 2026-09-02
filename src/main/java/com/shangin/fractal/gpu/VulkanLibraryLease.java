@@ -13,6 +13,11 @@ final class VulkanLibraryLease implements AutoCloseable {
     }
 
     static synchronized VulkanLibraryLease acquire() {
+        // Configure before VK/MemoryUtil initialization, including IDE and headless launches.
+        // Java 25+ is required by the project; FFM avoids deprecated sun.misc.Unsafe calls.
+        if (Configuration.MEMORY_BACKEND.get() == null) {
+            Configuration.MEMORY_BACKEND.set("ffm");
+        }
         Configuration.VULKAN_EXPLICIT_INIT.set(true);
         if (users == 0) {
             try {

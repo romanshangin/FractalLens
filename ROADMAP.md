@@ -174,19 +174,30 @@ with both platforms required throughout the GPU work.
 - [x] Isolate native dependencies and GPU resource ownership behind a dedicated
   runtime so the render controller and JavaFX surface do not depend on a
   specific graphics API.
-- [x] Add the initial runtime API, capability-report model, device-loss state,
-  and shutdown integration; macOS currently checks only for the LWJGL class.
-- [ ] Add Vulkan physical-device discovery, native capability reporting,
-  device-loss handling, native resource cleanup, and automatic fallback to the
-  matching CPU backend. These remain part of 8.1; rendering currently stays on CPU.
+- [x] Implement the macOS runtime: architecture-specific LWJGL/MoltenVK natives,
+  Vulkan instance and physical-device discovery, numeric/compute capability
+  reporting, and a selected logical device with a compute queue.
+- [x] Add synchronized runtime ownership, reference-counted loader lifetime,
+  native cleanup, device-loss handling, and a guarded CPU fallback operation
+  that preserves the caller's precision policy and cancellation.
+- [x] Validate startup, simultaneous runtimes, shutdown/reopen, simulated device
+  loss, missing-native failures, and direct/deep CPU fallback on Apple M3 Pro.
+  See `GPU_RUNTIME.md` for commands and limits of this macOS-first validation.
+- [ ] Implement and validate the native Windows runtime; validate the packaged
+  macOS x64 path on an Intel/AMD Mac. Apple Silicon is ready for the 8.2 experiment.
 
 ### 8.2. Validate integration with palette recoloring
 
-- Add an optional GPU palette-recoloring backend that uploads compact base/AA
+- [x] Add an optional GPU palette-recoloring backend that uploads compact base/AA
   smooth phases once and advances the palette offset in a shader; retain the
   CPU path as a portable fallback and benchmark both paths on Retina displays.
-- Present the recolored result through the existing JavaFX buffer boundary and
+- [x] Present the recolored result through the existing JavaFX buffer boundary and
   measure upload, dispatch, readback, and presentation costs separately.
+- [x] Validate the macOS/Apple Silicon prototype against the parallel CPU
+  baseline, including palette/AA/frame invalidation and fallback. Run a paired
+  Retina benchmark with warmup and saved samples (`PALETTE_BENCHMARK_RESULTS.md`).
+  GPU remains opt-in: measured gains do not justify replacing CPU by default.
+  Windows and Intel Mac validation remain in 8.1.
 
 ### 8.3. Build a limited Mandelbrot base-pass spike
 

@@ -85,11 +85,12 @@ public final class AntialiasSampleCache {
      * the per-pixel animation loop, and each worker writes a distinct pixel.
      */
     public void recolorInto(int[] colors, SmoothColorLookup lookup) {
-        Snapshot snapshot = snapshot();
-        IntStream.range(0, snapshot.pixelIndices().length).parallel().forEach(index -> {
-            colors[snapshot.pixelIndices()[index]] =
-                    snapshot.samples()[index].color(lookup);
-        });
+        snapshot().recolorInto(colors, lookup);
+    }
+
+    public synchronized Snapshot snapshotFor(SmoothPaletteColoring coloring) {
+        return Double.compare(cachedColorScale, coloring.colorScale()) == 0
+                ? snapshot() : Snapshot.EMPTY;
     }
 
     public synchronized boolean contains(int pixelIndex) {
@@ -203,7 +204,53 @@ public final class AntialiasSampleCache {
         }
     }
 
-    private record Snapshot(int[] pixelIndices, Samples[] samples) {}
+    /** Immutable generation of the cache, shared by CPU and GPU recoloring. */
+    public static final class Snapshot {
+        public static final Snapshot EMPTY = new Snapshot(new int[0], new Samples[0]);
+        private final int[] pixelIndices;
+        private final Samples[] samples;
+        private final int words;
+        private final int maxPixel;
+
+        private Snapshot(int[] pixelIndices, Samples[] samples) {
+            this.pixelIndices = pixelIndices;
+            this.samples = samples;
+            int count = Math.multiplyExact(pixelIndices.length, 4);
+            int max = -1;
+            for (int i = 0; i < samples.length; i++) {
+                count = Math.addExact(count, (samples[i].phases.length + 1) / 2);
+                max = Math.max(max, pixelIndices[i]);
+            }
+            words = count;
+            maxPixel = max;
+        }
+
+        public int size() { return pixelIndices.length; }
+        public int gpuWordCount() { return words; }
+        public int maxPixelIndex() { return maxPixel; }
+
+        public void recolorInto(int[] colors, SmoothColorLookup lookup) {
+            IntStream.range(0, samples.length).parallel().forEach(i ->
+                    colors[pixelIndices[i]] = samples[i].color(lookup));
+        }
+
+        /** Four metadata words per pixel, followed by packed pairs of 16-bit phases. */
+        public void writeGpuWords(java.nio.IntBuffer target) {
+            int offset = samples.length * 4;
+            for (int i = 0; i < samples.length; i++) {
+                target.put(pixelIndices[i]).put(offset).put(samples[i].phases.length)
+                        .put(samples[i].escapedMask);
+                offset += (samples[i].phases.length + 1) / 2;
+            }
+            for (Samples sample : samples) {
+                for (int i = 0; i < sample.phases.length; i += 2) {
+                    target.put(Short.toUnsignedInt(sample.phases[i])
+                            | (i + 1 < sample.phases.length
+                            ? Short.toUnsignedInt(sample.phases[i + 1]) << 16 : 0));
+                }
+            }
+        }
+    }
 
     private static int[] createSrgbLookup() {
         int[] lookup = new int[65_536];

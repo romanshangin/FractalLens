@@ -3,6 +3,7 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.gpu.GpuCapabilityReport;
 import com.shangin.fractal.gpu.GpuRuntime;
 import com.shangin.fractal.gpu.GpuRuntimeFactory;
+import com.shangin.fractal.gpu.PaletteRecolorBackend;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -67,6 +68,11 @@ public final class FractalRenderService implements AutoCloseable {
     /** Safe diagnostic snapshot for UI/logging; contains no native handles. */
     public GpuCapabilityReport gpuCapabilityReport() {
         return gpuRuntime.capabilityReport();
+    }
+
+    /** Shares the runtime-owned palette backend without exposing native handles. */
+    public PaletteRecolorBackend paletteRecolorBackend() {
+        return new PaletteRecolorBackend(gpuRuntime);
     }
 
     private static ThreadFactory daemonThreadFactory(String prefix) {

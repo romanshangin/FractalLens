@@ -45,14 +45,20 @@ public class SmoothPaletteColoring implements ColoringStrategy {
 
     /** Colors a cached base phase using this strategy's current offset. */
     public int colorFromBasePhase(double basePhase) {
+        return palette.color(palettePositionFromBasePhase(basePhase));
+    }
+
+    public double palettePositionFromBasePhase(double basePhase) {
         double phase = basePhase + offset;
         double wrapped = phase - Math.floor(phase / 2.0) * 2.0;
-        double position = wrapped <= 1.0
+        return wrapped <= 1.0
                 ? wrapped
                 : 2.0 - wrapped;
-
-        return palette.color(position);
     }
+
+    public Palette palette() { return palette; }
+
+    public double offset() { return offset; }
 
     public double colorScale() {
         return colorScale;

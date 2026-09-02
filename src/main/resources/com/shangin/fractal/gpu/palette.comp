@@ -1,0 +1,70 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Base { uint base[]; };
+layout(std430, binding = 1) readonly buffer Antialias { uint aa[]; };
+layout(std430, binding = 2) readonly buffer Tables { uint tables[]; };
+layout(std430, binding = 3) writeonly buffer Output { uint colors[]; };
+layout(push_constant) uniform Parameters {
+    uint pixelCount;
+    uint aaCount;
+    uint pass;
+    uint whole;
+    int ascendingBias;
+    uint ascendingLast;
+    int descendingBias;
+    uint descendingLast;
+} p;
+
+uint colorFor(uint phase) {
+    uint x = (phase + p.whole) & 65535u;
+    int index;
+    if (x < 32768u) {
+        index = int(2u * x) + p.ascendingBias - (x > p.ascendingLast ? 1 : 0);
+    } else {
+        uint t = 65535u - x;
+        index = int(2u * t) + p.descendingBias - (t > p.descendingLast ? 1 : 0);
+    }
+    return tables[clamp(index, 0, 65535)];
+}
+
+float linearChannel(uint channel) {
+    return uintBitsToFloat(tables[65536u + channel]);
+}
+
+uint srgb(float value) {
+    uint index = uint(clamp(floor(value * 65535.0 + 0.5), 0.0, 65535.0));
+    return tables[65536u + 256u + index];
+}
+
+void main() {
+    uint i = (gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x) * 64u
+            + gl_LocalInvocationID.x;
+    if (p.pass == 0u) {
+        if (i >= p.pixelCount) return;
+        uint escaped = base[(p.pixelCount + 1u) / 2u + i / 32u];
+        uint phase = (base[i / 2u] >> ((i & 1u) * 16u)) & 65535u;
+        colors[i] = (escaped & (1u << (i & 31u))) == 0u ? 0xff000000u : colorFor(phase);
+    } else {
+        if (i >= p.aaCount) return;
+        uint pixel = aa[4u * i];
+        uint offset = aa[4u * i + 1u];
+        uint count = aa[4u * i + 2u];
+        uint escaped = aa[4u * i + 3u];
+        precise vec3 sum = vec3(0.0);
+        uint alpha = 0u;
+        for (uint s = 0u; s < count; s++) {
+            if ((escaped & (1u << s)) == 0u) {
+                alpha += 255u;
+            } else {
+                uint phase = (aa[offset + s / 2u] >> ((s & 1u) * 16u)) & 65535u;
+                uint color = colorFor(phase);
+                alpha += color >> 24u;
+                sum += vec3(linearChannel((color >> 16u) & 255u),
+                            linearChannel((color >> 8u) & 255u), linearChannel(color & 255u));
+            }
+        }
+        vec3 average = sum / float(count);
+        colors[pixel] = ((alpha + count / 2u) / count << 24u)
+                | (srgb(average.r) << 16u) | (srgb(average.g) << 8u) | srgb(average.b);
+    }
+}
