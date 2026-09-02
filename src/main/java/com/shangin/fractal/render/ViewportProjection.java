@@ -14,6 +14,7 @@ public record ViewportProjection(
         double translateX,
         double translateY
 ) {
+    /** Maps sample centers between equally sized render grids. */
     public static ViewportProjection between(
             Viewport source,
             Viewport target,
@@ -45,6 +46,65 @@ public record ViewportProjection(
                 .subtract(source.maxImaginaryExact(), context)
                 .divide(target.visibleHeightExact(), context)
                 .multiply(BigDecimal.valueOf(height - 1L), context);
+
+        return new ViewportProjection(
+                scaleX.doubleValue(),
+                scaleY.doubleValue(),
+                translateX.doubleValue(),
+                translateY.doubleValue());
+    }
+
+    /**
+     * Maps the outer bounds of a source raster onto a target viewport.
+     *
+     * <p>An {@code ImageView} occupies the full display rectangle, while the
+     * fractal samples inside it are indexed from {@code 0} to {@code size - 1}.
+     * Using the sample-center transform for the view itself leaves a fractional
+     * pixel offset after scaling. This transform deliberately maps raster
+     * bounds instead.</p>
+     */
+    public static ViewportProjection betweenImageBounds(
+            Viewport source,
+            Viewport target,
+            int sourceWidth,
+            int sourceHeight,
+            int targetWidth,
+            int targetHeight,
+            double displayWidth,
+            double displayHeight
+    ) {
+        Objects.requireNonNull(source);
+        Objects.requireNonNull(target);
+        if (sourceWidth < 2 || sourceHeight < 2
+                || targetWidth < 2 || targetHeight < 2) {
+            throw new IllegalArgumentException("Dimensions must be at least 2");
+        }
+        if (!Double.isFinite(displayWidth) || displayWidth <= 0.0
+                || !Double.isFinite(displayHeight) || displayHeight <= 0.0) {
+            throw new IllegalArgumentException("Display dimensions must be positive and finite");
+        }
+
+        int precision = Math.max(
+                source.mathContext().getPrecision(),
+                target.mathContext().getPrecision()) + 8;
+        MathContext context = new MathContext(precision, RoundingMode.HALF_EVEN);
+
+        BigDecimal sourceVisibleWidth = source.visibleWidthExact(
+                sourceWidth, sourceHeight);
+        BigDecimal targetVisibleWidth = target.visibleWidthExact(
+                targetWidth, targetHeight);
+        BigDecimal scaleX = sourceVisibleWidth.divide(targetVisibleWidth, context);
+        BigDecimal scaleY = source.visibleHeightExact()
+                .divide(target.visibleHeightExact(), context);
+
+        BigDecimal translateX = source.minRealExact(sourceWidth, sourceHeight)
+                .subtract(target.minRealExact(targetWidth, targetHeight), context)
+                .divide(targetVisibleWidth, context)
+                .multiply(BigDecimal.valueOf(displayWidth), context);
+        BigDecimal translateY = target.maxImaginaryExact()
+                .subtract(source.maxImaginaryExact(), context)
+                .divide(target.visibleHeightExact(), context)
+                .multiply(BigDecimal.valueOf(displayHeight), context);
 
         return new ViewportProjection(
                 scaleX.doubleValue(),

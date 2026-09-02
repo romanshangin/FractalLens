@@ -449,10 +449,10 @@ public final class FractalSurface extends Region {
             return;
         }
 
-        int width = (int) getWidth();
-        int height = (int) getHeight();
+        double width = getWidth();
+        double height = getHeight();
 
-        if (width < 2 || height < 2) {
+        if (width < 2 || height < 2 || renderWidth < 2 || renderHeight < 2) {
             return;
         }
 
@@ -462,6 +462,10 @@ public final class FractalSurface extends Region {
                 previewTransform,
                 displayedViewport,
                 targetViewport,
+                displayedFrame.width(),
+                displayedFrame.height(),
+                renderWidth,
+                renderHeight,
                 width,
                 height
         );
@@ -471,6 +475,10 @@ public final class FractalSurface extends Region {
                     progressivePreviewTransform,
                     stagingRenderFrame.request().viewport(),
                     targetViewport,
+                    stagingRenderFrame.request().width(),
+                    stagingRenderFrame.request().height(),
+                    renderWidth,
+                    renderHeight,
                     width,
                     height
             );
@@ -481,6 +489,10 @@ public final class FractalSurface extends Region {
                     retainedPreviewTransform,
                     retainedProgressRenderFrame.request().viewport(),
                     targetViewport,
+                    retainedProgressRenderFrame.request().width(),
+                    retainedProgressRenderFrame.request().height(),
+                    renderWidth,
+                    renderHeight,
                     width,
                     height
             );
@@ -511,11 +523,18 @@ public final class FractalSurface extends Region {
             Affine transform,
             Viewport source,
             Viewport targetViewport,
-            int width,
-            int height
+            int sourceWidth,
+            int sourceHeight,
+            int targetWidth,
+            int targetHeight,
+            double displayWidth,
+            double displayHeight
     ) {
-        ViewportProjection projection = ViewportProjection.between(
-                source, targetViewport, width, height);
+        ViewportProjection projection = ViewportProjection.betweenImageBounds(
+                source, targetViewport,
+                sourceWidth, sourceHeight,
+                targetWidth, targetHeight,
+                displayWidth, displayHeight);
 
         transform.setToIdentity();
         transform.setMxx(projection.scaleX());
