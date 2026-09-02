@@ -139,6 +139,20 @@ existing behavior is covered by tests.
   recurrence because safe skips improve throughput by only 1-3%, while the
   tested longer skip is still below 7% and exceeds the smooth-color tolerance
   in the shallower benchmark case.
+- [x] Add modified in-loop rebasing for the standard double perturbation path;
+  reset the reference index near Mandelbrot's critical point while retaining
+  glitch detection and multi-reference recovery as safety fallbacks. Keep the
+  scaled-exponent path unchanged until rebasing can preserve its separate
+  exponent without a lossy conversion through `double`.
+- [x] Add conservative bivariate linear approximation (BLA) blocks to the
+  standard double perturbation path and precise AA sampler. Use double-scale
+  validity radii, generation-local delta bounds, scalar escape tails, and
+  existing rebasing/fallbacks; verify against scalar and arbitrary-precision
+  controls and measure both shallow and deeper CPU workloads.
+- [x] Reduce interaction-to-progress latency: use a 30 ms wheel debounce,
+  flush pending renders at pinch completion, and publish the first ready
+  batch without the regular 16 ms batching delay. Retain batching for later
+  progress and test cancellation, replacement, and completion ordering.
 
 This phase should remain separate from the current pan-reuse optimization.
 

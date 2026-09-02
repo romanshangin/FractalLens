@@ -71,6 +71,7 @@ class FractalRenderServiceTest {
 
         int renderedPixels = regions.stream().mapToInt(region -> region.width() * region.height()).sum();
 
+        assertEquals(WIDTH * HEIGHT, renderedPixels, "Progress must publish every pixel exactly once");
         assertTrue(renderFrame.isComplete());
 
         assertEquals(

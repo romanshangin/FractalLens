@@ -38,6 +38,8 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     /* A wide safety margin prevents a double shortcut from classifying a boundary pixel. */
     private static final double INTERIOR_SAFETY_MARGIN = 1e-12;
     private static final double GLITCH_RELATIVE_THRESHOLD = 1e-6;
+    /* Power of two so polling in the hot loop uses a cheap mask. */
+    private static final int CANCELLATION_CHECK_INTERVAL = 32;
     private static final int MAX_ADDITIONAL_REFERENCES = 64;
     static final long DEFAULT_REFERENCE_CACHE_BYTES = 32L * 1024L * 1024L;
 
@@ -45,6 +47,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     private final int workerCount;
     private final Consumer<DeepZoomTimingStats> diagnosticsCompleted;
     private final ReferenceOrbitCache referenceCache;
+    private final boolean blaEnabled;
 
     public MandelbrotPerturbationRenderBackend() {
         this(Math.max(1, Runtime.getRuntime().availableProcessors() - 1), ignored -> {});
@@ -67,6 +70,15 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             Consumer<DeepZoomTimingStats> diagnosticsCompleted,
             long referenceCacheBytes
     ) {
+        this(workerCount, diagnosticsCompleted, referenceCacheBytes, true);
+    }
+
+    MandelbrotPerturbationRenderBackend(
+            int workerCount,
+            Consumer<DeepZoomTimingStats> diagnosticsCompleted,
+            long referenceCacheBytes,
+            boolean blaEnabled
+    ) {
         if (workerCount < 1) {
             throw new IllegalArgumentException("Worker count must be at least 1");
         }
@@ -76,6 +88,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         this.workerCount = workerCount;
         this.diagnosticsCompleted = Objects.requireNonNull(diagnosticsCompleted);
         this.referenceCache = new ReferenceOrbitCache(referenceCacheBytes);
+        this.blaEnabled = blaEnabled;
         AtomicInteger sequence = new AtomicInteger();
         workers = Executors.newFixedThreadPool(workerCount, runnable -> {
             Thread thread = new Thread(runnable,
@@ -120,9 +133,6 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         if (reference == null) {
             return frame;
         }
-        ReferencePool referencePool = new ReferencePool(
-                frame.job(), grid.mathContext(), reference);
-
         long coordinatesStarted = System.nanoTime();
         CoordinateDeltas deltas = CoordinateDeltas.create(
                 grid, reference, frame.job().width(), frame.job().height(), cancelled);
@@ -130,6 +140,16 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         if (deltas == null) {
             return frame;
         }
+        long blaStarted = System.nanoTime();
+        MandelbrotBlaTable bla = blaEnabled ? MandelbrotBlaTable.create(
+                reference.real(), reference.imaginary(), reference.lastBoundedIteration(),
+                deltas.maximumDeltaMagnitude(), cancelled) : null;
+        double blaPreparationMs = elapsedMs(blaStarted);
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+            return frame;
+        }
+        ReferencePool referencePool = new ReferencePool(
+                frame.job(), grid.mathContext(), reference, bla);
 
         List<RenderRegion> queuedTiles = orderedTiles(frame.job()).stream()
                 .filter(tile -> !frame.validity().isRegionReady(tile))
@@ -185,6 +205,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             diagnosticsCompleted.accept(new DeepZoomTimingStats(
                     referenceOrbitMs,
                     coordinatePreparationMs,
+                    blaPreparationMs,
                     first < 0L ? -1.0 : (first - started) / 1_000_000.0,
                     workerTaskCount,
                     queuedTiles.size(),
@@ -192,8 +213,11 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                     queuedTiles.size() - completed,
                     pixels,
                     highPrecisionFallbackPixels.sum(),
+                    referencePool.modifiedRebaseCount(),
+                    referencePool.blaStepCount(),
+                    referencePool.blaSkippedIterationCount(),
                     referencePool.additionalReferenceCount(),
-                    referencePool.rebasingOrbitMs(),
+                    referencePool.additionalReferenceOrbitMs(),
                     pixels == 0L ? 0.0 : (double) executedIterations.sum() / pixels));
         }
 
@@ -259,6 +283,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                             deltas.scaledDelta(x, y),
                             frame.job().maxIterations(),
                             cancelled);
+                    referencePool.recordWork(result);
                     executedIterations += result.executedIterations();
                     FractalSample sample = result.sample();
                     if (!result.reliable()) {
@@ -287,6 +312,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                             deltaImaginary,
                             frame.job().maxIterations(),
                             cancelled);
+                    referencePool.recordWork(result);
                     executedIterations += result.executedIterations();
                     FractalSample sample = result.sample();
                     if (!result.reliable()) {
@@ -386,6 +412,13 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             return realNeedsHighPrecision[x] || imaginaryNeedsHighPrecision[y];
         }
 
+        double maximumDeltaMagnitude() {
+            double maximumReal = Math.max(Math.abs(real[0]), Math.abs(real[real.length - 1]));
+            double maximumImaginary = Math.max(
+                    Math.abs(imaginary[0]), Math.abs(imaginary[imaginary.length - 1]));
+            return Math.nextUp(Math.hypot(maximumReal, maximumImaginary));
+        }
+
         ScaledComplex scaledDelta(int x, int y) {
             ScaledValue realValue = scaledReal[x] == null
                     ? ScaledValue.fromDouble(real[x]) : scaledReal[x];
@@ -454,22 +487,39 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
 
     private static PerturbationResult perturb(
             ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, int maxIterations,
+            MandelbrotBlaTable bla,
             BooleanSupplier cancelled
     ) {
+        return bla == null || !bla.supportsDelta(deltaCReal, deltaCImaginary)
+                ? perturbScalar(reference, deltaCReal, deltaCImaginary, maxIterations, cancelled)
+                : perturbWithBla(reference, deltaCReal, deltaCImaginary, maxIterations, bla, cancelled);
+    }
+
+    private static PerturbationResult perturbScalar(
+            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, int maxIterations,
+            BooleanSupplier cancelled
+    ) {
+        double[] referenceReals = reference.real();
+        double[] referenceImaginaries = reference.imaginary();
+        double[] glitchThresholds = reference.glitchThresholds();
+        int referenceLimit = reference.lastValidIteration();
         double deltaReal = 0.0;
         double deltaImaginary = 0.0;
         double zr = 0.0;
         double zi = 0.0;
         int iteration = 0;
+        int referenceIteration = 0;
+        int modifiedRebases = 0;
         while (iteration < maxIterations) {
-            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
-                return new PerturbationResult(null, iteration, false);
+            if ((iteration & (CANCELLATION_CHECK_INTERVAL - 1)) == 0
+                    && (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted())) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
             }
-            if (iteration >= reference.lastValidIteration()) {
-                return new PerturbationResult(null, iteration, false);
+            if (referenceIteration >= referenceLimit) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
             }
-            double referenceReal = reference.realAt(iteration);
-            double referenceImaginary = reference.imaginaryAt(iteration);
+            double referenceReal = referenceReals[referenceIteration];
+            double referenceImaginary = referenceImaginaries[referenceIteration];
             double nextDeltaReal = 2.0 * (referenceReal * deltaReal - referenceImaginary * deltaImaginary)
                     + deltaReal * deltaReal - deltaImaginary * deltaImaginary + deltaCReal;
             double nextDeltaImaginary = 2.0 * (referenceReal * deltaImaginary + referenceImaginary * deltaReal)
@@ -477,23 +527,157 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             deltaReal = nextDeltaReal;
             deltaImaginary = nextDeltaImaginary;
             iteration++;
-            zr = reference.realAt(iteration) + deltaReal;
-            zi = reference.imaginaryAt(iteration) + deltaImaginary;
+            referenceIteration++;
+            zr = referenceReals[referenceIteration] + deltaReal;
+            zi = referenceImaginaries[referenceIteration] + deltaImaginary;
             double magnitudeSquared = zr * zr + zi * zi;
-            double referenceMagnitudeSquared = reference.realAt(iteration)
-                    * reference.realAt(iteration)
-                    + reference.imaginaryAt(iteration) * reference.imaginaryAt(iteration);
-            if (!Double.isFinite(magnitudeSquared)
-                    || magnitudeSquared < GLITCH_RELATIVE_THRESHOLD * referenceMagnitudeSquared) {
-                return new PerturbationResult(null, iteration, false);
+            if (!Double.isFinite(magnitudeSquared)) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
             }
             if (magnitudeSquared > 4.0) {
+                if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+                    return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
+                }
                 return new PerturbationResult(
-                        new FractalSample(iteration, true, zr, zi), iteration, true);
+                        new FractalSample(iteration, true, zr, zi), iteration, true,
+                        modifiedRebases, 0, 0);
+            }
+            double deltaMagnitudeSquared = deltaReal * deltaReal
+                    + deltaImaginary * deltaImaginary;
+            if (magnitudeSquared < deltaMagnitudeSquared) {
+                deltaReal = zr;
+                deltaImaginary = zi;
+                referenceIteration = 0;
+                modifiedRebases++;
+            } else if (magnitudeSquared < glitchThresholds[referenceIteration]) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
             }
         }
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+            return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
+        }
         return new PerturbationResult(
-                new FractalSample(iteration, false, zr, zi), iteration, true);
+                new FractalSample(iteration, false, zr, zi), iteration, true,
+                modifiedRebases, 0, 0);
+    }
+
+    private static PerturbationResult perturbWithBla(
+            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, int maxIterations,
+            MandelbrotBlaTable bla,
+            BooleanSupplier cancelled
+    ) {
+        double[] referenceReals = reference.real();
+        double[] referenceImaginaries = reference.imaginary();
+        double[] glitchThresholds = reference.glitchThresholds();
+        int referenceLimit = reference.lastValidIteration();
+        double deltaReal = 0.0;
+        double deltaImaginary = 0.0;
+        double zr = 0.0;
+        double zi = 0.0;
+        int iteration = 0;
+        int referenceIteration = 0;
+        int modifiedRebases = 0;
+        int blaSteps = 0;
+        int blaSkippedIterations = 0;
+        int workSteps = 0;
+        orbit:
+        while (iteration < maxIterations) {
+            if ((workSteps++ & (CANCELLATION_CHECK_INTERVAL - 1)) == 0
+                    && (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted())) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases,
+                        blaSteps, blaSkippedIterations);
+            }
+            if (referenceIteration >= referenceLimit) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases,
+                        blaSteps, blaSkippedIterations);
+            }
+            double currentDeltaMagnitudeSquared = deltaReal * deltaReal
+                    + deltaImaginary * deltaImaginary;
+            MandelbrotBlaTable.Step block = bla.lookup(referenceIteration,
+                    currentDeltaMagnitudeSquared, maxIterations - iteration);
+            while (block != null) {
+                double nextDeltaReal = block.aReal() * deltaReal
+                        - block.aImaginary() * deltaImaginary
+                        + block.bReal() * deltaCReal - block.bImaginary() * deltaCImaginary;
+                double nextDeltaImaginary = block.aReal() * deltaImaginary
+                        + block.aImaginary() * deltaReal
+                        + block.bReal() * deltaCImaginary + block.bImaginary() * deltaCReal;
+                int nextReferenceIteration = referenceIteration + block.length();
+                double nextZr = referenceReals[nextReferenceIteration] + nextDeltaReal;
+                double nextZi = referenceImaginaries[nextReferenceIteration] + nextDeltaImaginary;
+                double magnitudeSquared = nextZr * nextZr + nextZi * nextZi;
+                double deltaMagnitudeSquared = nextDeltaReal * nextDeltaReal
+                        + nextDeltaImaginary * nextDeltaImaginary;
+                // Never report an escape at the end of a skipped block. Try a
+                // shorter block, then scalar steps near escape, preserving the
+                // exact iteration and orbit values used by smooth coloring.
+                if (Double.isFinite(magnitudeSquared) && magnitudeSquared <= 4.0
+                        && (magnitudeSquared >= glitchThresholds[nextReferenceIteration]
+                            || magnitudeSquared < deltaMagnitudeSquared)) {
+                    deltaReal = nextDeltaReal;
+                    deltaImaginary = nextDeltaImaginary;
+                    zr = nextZr;
+                    zi = nextZi;
+                    iteration += block.length();
+                    referenceIteration = nextReferenceIteration;
+                    blaSteps++;
+                    blaSkippedIterations += block.length();
+                    if (magnitudeSquared < deltaMagnitudeSquared) {
+                        deltaReal = zr;
+                        deltaImaginary = zi;
+                        referenceIteration = 0;
+                        modifiedRebases++;
+                    }
+                    continue orbit;
+                }
+                block = bla.lookup(referenceIteration, currentDeltaMagnitudeSquared,
+                        block.length() - 1);
+            }
+            double referenceReal = referenceReals[referenceIteration];
+            double referenceImaginary = referenceImaginaries[referenceIteration];
+            double nextDeltaReal = 2.0 * (referenceReal * deltaReal - referenceImaginary * deltaImaginary)
+                    + deltaReal * deltaReal - deltaImaginary * deltaImaginary + deltaCReal;
+            double nextDeltaImaginary = 2.0 * (referenceReal * deltaImaginary + referenceImaginary * deltaReal)
+                    + 2.0 * deltaReal * deltaImaginary + deltaCImaginary;
+            deltaReal = nextDeltaReal;
+            deltaImaginary = nextDeltaImaginary;
+            iteration++;
+            referenceIteration++;
+            zr = referenceReals[referenceIteration] + deltaReal;
+            zi = referenceImaginaries[referenceIteration] + deltaImaginary;
+            double magnitudeSquared = zr * zr + zi * zi;
+            if (!Double.isFinite(magnitudeSquared)) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases,
+                        blaSteps, blaSkippedIterations);
+            }
+            if (magnitudeSquared > 4.0) {
+                if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+                    return new PerturbationResult(null, iteration, false, modifiedRebases,
+                            blaSteps, blaSkippedIterations);
+                }
+                return new PerturbationResult(
+                        new FractalSample(iteration, true, zr, zi), iteration, true,
+                        modifiedRebases, blaSteps, blaSkippedIterations);
+            }
+            double deltaMagnitudeSquared = deltaReal * deltaReal
+                    + deltaImaginary * deltaImaginary;
+            if (magnitudeSquared < deltaMagnitudeSquared) {
+                deltaReal = zr;
+                deltaImaginary = zi;
+                referenceIteration = 0;
+                modifiedRebases++;
+            } else if (magnitudeSquared < glitchThresholds[referenceIteration]) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases,
+                        blaSteps, blaSkippedIterations);
+            }
+        }
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+            return new PerturbationResult(null, iteration, false, modifiedRebases,
+                    blaSteps, blaSkippedIterations);
+        }
+        return new PerturbationResult(
+                new FractalSample(iteration, false, zr, zi), iteration, true,
+                modifiedRebases, blaSteps, blaSkippedIterations);
     }
 
     /** Perturbation recurrence with a separate binary exponent for sub-double deltas. */
@@ -503,40 +687,46 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             int maxIterations,
             BooleanSupplier cancelled
     ) {
+        double[] referenceReals = reference.real();
+        double[] referenceImaginaries = reference.imaginary();
+        double[] glitchThresholds = reference.glitchThresholds();
+        int iterationLimit = Math.min(maxIterations, reference.lastValidIteration());
         ScaledComplex delta = ScaledComplex.zero();
         double zr = 0.0;
         double zi = 0.0;
         int iteration = 0;
-        while (iteration < maxIterations) {
-            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
-                return new PerturbationResult(null, iteration, false);
+        while (iteration < iterationLimit) {
+            if ((iteration & (CANCELLATION_CHECK_INTERVAL - 1)) == 0
+                    && (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted())) {
+                return new PerturbationResult(null, iteration, false, 0, 0, 0);
             }
-            if (iteration >= reference.lastValidIteration()) {
-                return new PerturbationResult(null, iteration, false);
-            }
-            double referenceReal = reference.realAt(iteration);
-            double referenceImaginary = reference.imaginaryAt(iteration);
+            double referenceReal = referenceReals[iteration];
+            double referenceImaginary = referenceImaginaries[iteration];
             delta.advance(referenceReal, referenceImaginary, deltaC);
             iteration++;
             double deltaReal = delta.realAsDouble();
             double deltaImaginary = delta.imaginaryAsDouble();
-            zr = reference.realAt(iteration) + deltaReal;
-            zi = reference.imaginaryAt(iteration) + deltaImaginary;
+            zr = referenceReals[iteration] + deltaReal;
+            zi = referenceImaginaries[iteration] + deltaImaginary;
             if (delta.magnitudeEscapes(reference, iteration)) {
+                if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+                    return new PerturbationResult(null, iteration, false, 0, 0, 0);
+                }
                 return new PerturbationResult(
-                        new FractalSample(iteration, true, zr, zi), iteration, true);
+                        new FractalSample(iteration, true, zr, zi), iteration, true, 0, 0, 0);
             }
             double magnitudeSquared = zr * zr + zi * zi;
-            double referenceMagnitudeSquared = reference.realAt(iteration)
-                    * reference.realAt(iteration)
-                    + reference.imaginaryAt(iteration) * reference.imaginaryAt(iteration);
             if (!Double.isFinite(magnitudeSquared)
-                    || magnitudeSquared < GLITCH_RELATIVE_THRESHOLD * referenceMagnitudeSquared) {
-                return new PerturbationResult(null, iteration, false);
+                    || magnitudeSquared < glitchThresholds[iteration]) {
+                return new PerturbationResult(null, iteration, false, 0, 0, 0);
             }
         }
+        if (iteration < maxIterations
+                || cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+            return new PerturbationResult(null, iteration, false, 0, 0, 0);
+        }
         return new PerturbationResult(
-                new FractalSample(iteration, false, zr, zi), iteration, true);
+                new FractalSample(iteration, false, zr, zi), iteration, true, 0, 0, 0);
     }
 
     /** Finite nonzero number represented as mantissa * 2^exponent. */
@@ -719,7 +909,10 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     private record PerturbationResult(
             FractalSample sample,
             int executedIterations,
-            boolean reliable
+            boolean reliable,
+            int modifiedRebaseCount,
+            int blaStepCount,
+            int blaSkippedIterationCount
     ) {}
 
     /**
@@ -742,10 +935,26 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         if (primary == null) {
             return Optional.empty();
         }
+        double maximumReal = Math.max(
+                grid.realAt(0).subtract(primary.cReal(), grid.mathContext()).abs().doubleValue(),
+                grid.realAt(job.width() - 1).subtract(
+                        primary.cReal(), grid.mathContext()).abs().doubleValue())
+                + grid.realStep().doubleValue();
+        double maximumImaginary = Math.max(
+                grid.imaginaryAt(0).subtract(primary.cImaginary(), grid.mathContext()).abs().doubleValue(),
+                grid.imaginaryAt(job.height() - 1).subtract(
+                        primary.cImaginary(), grid.mathContext()).abs().doubleValue())
+                + grid.imaginaryStep().doubleValue();
+        MandelbrotBlaTable bla = MandelbrotBlaTable.create(
+                primary.real(), primary.imaginary(), primary.lastBoundedIteration(),
+                Math.nextUp(Math.hypot(maximumReal, maximumImaginary)), cancelled);
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+            return Optional.empty();
+        }
         return Optional.of(new PreciseSampler(
                 job,
                 grid.mathContext(),
-                new ReferencePool(job, grid.mathContext(), primary)));
+                new ReferencePool(job, grid.mathContext(), primary, bla)));
     }
 
     /** Shared-reference arbitrary-coordinate sampler used by deep antialiasing. */
@@ -805,15 +1014,21 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         private final java.util.concurrent.CopyOnWriteArrayList<ReferenceOrbit> references =
                 new java.util.concurrent.CopyOnWriteArrayList<>();
         private final AtomicInteger reservedAdditionalReferences = new AtomicInteger();
-        private final LongAdder rebasingNanos = new LongAdder();
+        private final LongAdder additionalReferenceNanos = new LongAdder();
+        private final LongAdder modifiedRebases = new LongAdder();
+        private final LongAdder blaSteps = new LongAdder();
+        private final LongAdder blaSkippedIterations = new LongAdder();
+        private final MandelbrotBlaTable primaryBla;
 
         private ReferencePool(
                 RenderJob job,
                 MathContext mathContext,
-                ReferenceOrbit primary
+                ReferenceOrbit primary,
+                MandelbrotBlaTable primaryBla
         ) {
             this.job = job;
             this.mathContext = mathContext;
+            this.primaryBla = primaryBla;
             references.add(primary);
         }
 
@@ -830,9 +1045,12 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 BooleanSupplier cancelled
         ) {
             int executed = 0;
+            int modifiedRebases = 0;
             PerturbationResult primaryResult = perturb(
-                    primary(), primaryDeltaReal, primaryDeltaImaginary, maxIterations, cancelled);
+                    primary(), primaryDeltaReal, primaryDeltaImaginary, maxIterations,
+                    primaryBla, cancelled);
             executed += primaryResult.executedIterations();
+            modifiedRebases += primaryResult.modifiedRebaseCount();
             if (primaryResult.reliable()) {
                 return primaryResult;
             }
@@ -840,31 +1058,37 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             for (ReferenceCandidate nearest : orderedAdditionalReferences(cReal, cImaginary)) {
                 PerturbationResult result = perturb(
                         nearest.reference(), nearest.deltaReal(),
-                        nearest.deltaImaginary(), maxIterations, cancelled);
+                        nearest.deltaImaginary(), maxIterations, null, cancelled);
                 executed += result.executedIterations();
+                modifiedRebases += result.modifiedRebaseCount();
                 if (result.reliable()) {
-                    return new PerturbationResult(result.sample(), executed, true);
+                    return new PerturbationResult(
+                            result.sample(), executed, true, modifiedRebases,
+                            primaryResult.blaStepCount(), primaryResult.blaSkippedIterationCount());
                 }
             }
 
             if (cancelled.getAsBoolean() || !reserveAdditionalReference()) {
-                return new PerturbationResult(null, executed, false);
+                return new PerturbationResult(null, executed, false, modifiedRebases,
+                        primaryResult.blaStepCount(), primaryResult.blaSkippedIterationCount());
             }
 
             /* Do not serialize high-precision orbit construction across workers. */
             long started = System.nanoTime();
             ReferenceOrbit additional = ReferenceOrbit.create(
                     job, cReal, cImaginary, mathContext, cancelled);
-            rebasingNanos.add(System.nanoTime() - started);
+            additionalReferenceNanos.add(System.nanoTime() - started);
             if (additional == null) {
-                return new PerturbationResult(null, executed, false);
+                return new PerturbationResult(null, executed, false, modifiedRebases,
+                        primaryResult.blaStepCount(), primaryResult.blaSkippedIterationCount());
             }
             references.add(additional);
             PerturbationResult result = perturb(
-                    additional, 0.0, 0.0, maxIterations, cancelled);
+                    additional, 0.0, 0.0, maxIterations, null, cancelled);
             return new PerturbationResult(
                     result.sample(), executed + result.executedIterations(),
-                    result.reliable());
+                    result.reliable(), modifiedRebases + result.modifiedRebaseCount(),
+                    primaryResult.blaStepCount(), primaryResult.blaSkippedIterationCount());
         }
 
         private boolean reserveAdditionalReference() {
@@ -910,8 +1134,22 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             return references.size() - 1;
         }
 
-        double rebasingOrbitMs() {
-            return rebasingNanos.sum() / 1_000_000.0;
+        void recordWork(PerturbationResult result) {
+            modifiedRebases.add(result.modifiedRebaseCount());
+            blaSteps.add(result.blaStepCount());
+            blaSkippedIterations.add(result.blaSkippedIterationCount());
+        }
+
+        long modifiedRebaseCount() {
+            return modifiedRebases.sum();
+        }
+
+        long blaStepCount() { return blaSteps.sum(); }
+
+        long blaSkippedIterationCount() { return blaSkippedIterations.sum(); }
+
+        double additionalReferenceOrbitMs() {
+            return additionalReferenceNanos.sum() / 1_000_000.0;
         }
     }
 
@@ -1024,6 +1262,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             BigDecimal cImaginary,
             double[] real,
             double[] imaginary,
+            double[] glitchThresholds,
             ScaledValue[] escapeMargins,
             int lastValidIteration
     ) {
@@ -1051,6 +1290,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         ) {
             double[] real = new double[job.maxIterations() + 1];
             double[] imaginary = new double[job.maxIterations() + 1];
+            double[] glitchThresholds = new double[job.maxIterations() + 1];
             ScaledValue[] escapeMargins = new ScaledValue[job.maxIterations() + 1];
             escapeMargins[0] = ScaledValue.fromDouble(-4.0);
             BigDecimal zr = BigDecimal.ZERO;
@@ -1068,6 +1308,12 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 zi = nextImaginary;
                 real[iteration + 1] = zr.doubleValue();
                 imaginary[iteration + 1] = zi.doubleValue();
+                double referenceReal = real[iteration + 1];
+                double referenceImaginary = imaginary[iteration + 1];
+                double referenceMagnitudeSquared = referenceReal * referenceReal
+                        + referenceImaginary * referenceImaginary;
+                glitchThresholds[iteration + 1] = GLITCH_RELATIVE_THRESHOLD
+                        * referenceMagnitudeSquared;
                 BigDecimal magnitudeSquared = zr.multiply(zr, context)
                         .add(zi.multiply(zi, context), context);
                 escapeMargins[iteration + 1] = ScaledValue.fromBigDecimal(
@@ -1079,16 +1325,21 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             }
             return new ReferenceOrbit(
                     cReal, cImaginary, real, imaginary,
-                    escapeMargins, lastValidIteration);
+                    glitchThresholds, escapeMargins, lastValidIteration);
         }
 
         double realAt(int iteration) { return real[iteration]; }
         double imaginaryAt(int iteration) { return imaginary[iteration]; }
         ScaledValue escapeMarginAt(int iteration) { return escapeMargins[iteration]; }
+        int lastBoundedIteration() {
+            return escapeMargins[lastValidIteration].mantissa() > 0.0
+                    ? lastValidIteration - 1 : lastValidIteration;
+        }
         double cRealAsDouble() { return cReal.doubleValue(); }
         double cImaginaryAsDouble() { return cImaginary.doubleValue(); }
         long retainedBytes() {
-            return ((long) real.length + imaginary.length) * Double.BYTES
+            return ((long) real.length + imaginary.length + glitchThresholds.length)
+                    * Double.BYTES
                     + (long) escapeMargins.length * (Double.BYTES + Long.BYTES);
         }
     }

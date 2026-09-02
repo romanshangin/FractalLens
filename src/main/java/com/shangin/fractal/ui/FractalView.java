@@ -38,10 +38,18 @@ public class FractalView extends StackPane {
     private static final Duration RESIZE_DELAY = Duration.millis(200);
     private final PauseTransition resizeDebounce = new PauseTransition(RESIZE_DELAY);
 
-    //  zoom interactions
-    private static final Duration INTERACTION_DELAY = Duration.millis(75);
+    // Coalesce wheel events, but flush immediately when a pinch gesture finishes.
     private static final double SWIPE_PAN_FRACTION = 0.2;
-    private final PauseTransition interactionDebounce = new PauseTransition(INTERACTION_DELAY);
+    private final PauseTransition interactionDebounce = new PauseTransition();
+    private final InteractionRenderDebouncer interactionRender = new InteractionRenderDebouncer(
+            delayMs -> {
+                interactionDebounce.stop();
+                interactionDebounce.setDuration(Duration.millis(delayMs));
+                interactionDebounce.playFromStart();
+            },
+            interactionDebounce::stop,
+            this::finishInteraction
+    );
     private double lastDragX;
     private double lastDragY;
     private boolean panning;
@@ -86,7 +94,7 @@ public class FractalView extends StackPane {
         configurePan();
         configureTrackpadGestures();
         getChildren().add(fractalSurface);
-        interactionDebounce.setOnFinished(event -> finishInteraction());
+        interactionDebounce.setOnFinished(event -> interactionRender.finish());
         fractalSurface.setOnOutputScaleChanged(this::scheduleResize);
         renderController.setOnRenderingChanged(this::renderingChanged);
         colorCycleTimer.start();
@@ -101,7 +109,7 @@ public class FractalView extends StackPane {
         }
 
         stopColorCyclingForSceneChange();
-        interactionDebounce.stop();
+        interactionRender.cancel();
         renderController.cancelCurrent();
         camera.setPreset(preset, width, height);
         scene = scene.withFractal(preset, camera.viewport());
@@ -118,7 +126,7 @@ public class FractalView extends StackPane {
         }
 
         stopColorCyclingForSceneChange();
-        interactionDebounce.stop();
+        interactionRender.cancel();
         renderController.cancelCurrent();
         camera.reset(width, height);
         scene = scene.withViewport(camera.viewport());
@@ -444,7 +452,7 @@ public class FractalView extends StackPane {
 
         if (trackpadPanSourceViewport == null) {
             trackpadPanSourceViewport = camera.viewport();
-            interactionDebounce.stop();
+            interactionRender.cancel();
             renderController.cancelCurrent();
             colorCyclePaused = true;
         }
@@ -458,7 +466,7 @@ public class FractalView extends StackPane {
         stopColorCyclingForSceneChange();
         resetPriority();
         fractalSurface.showPreview(camera.viewport());
-        interactionDebounce.playFromStart();
+        interactionRender.requestPanRender();
     }
 
     private void finishInteraction() {
@@ -475,6 +483,16 @@ public class FractalView extends StackPane {
     }
 
     private void configureTrackpadGestures() {
+        setOnZoomStarted(event -> {
+            interactionRender.zoomStarted();
+            event.consume();
+        });
+
+        setOnZoomFinished(event -> {
+            interactionRender.zoomFinished();
+            event.consume();
+        });
+
         setOnZoom(event -> {
             double surfaceWidth = fractalSurface.getWidth();
             double surfaceHeight = fractalSurface.getHeight();
@@ -553,7 +571,7 @@ public class FractalView extends StackPane {
         }
 
         stopColorCyclingForSceneChange();
-        interactionDebounce.stop();
+        interactionRender.cancel();
         renderController.cancelCurrent();
         fractalSurface.showPreview(camera.viewport());
         camera.snapToRenderGrid(
@@ -624,6 +642,8 @@ public class FractalView extends StackPane {
     }
 
     public void close() {
+        interactionRender.cancel();
+        resizeDebounce.stop();
         colorCycleTimer.stop();
         renderController.close();
     }
@@ -676,7 +696,7 @@ public class FractalView extends StackPane {
         fractalSurface.showPreview(camera.viewport());
         renderController.cancelCurrent();
         colorCyclePaused = true;
-        interactionDebounce.playFromStart();
+        interactionRender.requestZoomRender();
     }
 
     private void configurePan() {
@@ -686,7 +706,7 @@ public class FractalView extends StackPane {
             }
             panSourceViewport = camera.viewport();
 
-            interactionDebounce.stop();
+            interactionRender.cancel();
             lastDragX = event.getX();
             lastDragY = event.getY();
             panning = true;
