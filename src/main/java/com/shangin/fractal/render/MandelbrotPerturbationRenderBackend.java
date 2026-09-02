@@ -253,7 +253,31 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 double deltaReal = deltas.real()[x];
                 double cReal = referencePool.primary().cRealAsDouble() + deltaReal;
                 double cImaginary = referencePool.primary().cImaginaryAsDouble() + deltaImaginary;
-                if (isSafelyInsideKnownInterior(cReal, cImaginary)) {
+                if (deltas.requiresHighPrecision(x, y)) {
+                    PerturbationResult result = perturbScaled(
+                            referencePool.primary(),
+                            deltas.scaledDelta(x, y),
+                            frame.job().maxIterations(),
+                            cancelled);
+                    executedIterations += result.executedIterations();
+                    FractalSample sample = result.sample();
+                    if (!result.reliable()) {
+                        sample = calculateHighPrecision(
+                                deltas.realCoordinates()[x],
+                                deltas.imaginaryCoordinates()[y],
+                                deltas.mathContext(),
+                                frame.job().maxIterations(),
+                                cancelled);
+                        if (sample == null) {
+                            return new SpanCalculation(
+                                    pixelCount, executedIterations,
+                                    highPrecisionFallbackCount, false);
+                        }
+                        executedIterations += sample.iterations();
+                        highPrecisionFallbackCount++;
+                    }
+                    samples.set(x, y, sample);
+                } else if (isSafelyInsideKnownInterior(cReal, cImaginary)) {
                     samples.set(x, y, new FractalSample(frame.job().maxIterations(), false, 0.0, 0.0));
                 } else {
                     PerturbationResult result = referencePool.calculate(
@@ -302,6 +326,10 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             double[] imaginary,
             BigDecimal[] realCoordinates,
             BigDecimal[] imaginaryCoordinates,
+            boolean[] realNeedsHighPrecision,
+            boolean[] imaginaryNeedsHighPrecision,
+            ScaledValue[] scaledReal,
+            ScaledValue[] scaledImaginary,
             MathContext mathContext
     ) {
         static CoordinateDeltas create(
@@ -315,25 +343,75 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             double[] imaginary = new double[height];
             BigDecimal[] realCoordinates = new BigDecimal[width];
             BigDecimal[] imaginaryCoordinates = new BigDecimal[height];
+            boolean[] realNeedsHighPrecision = new boolean[width];
+            boolean[] imaginaryNeedsHighPrecision = new boolean[height];
+            ScaledValue[] scaledReal = new ScaledValue[width];
+            ScaledValue[] scaledImaginary = new ScaledValue[height];
             for (int x = 0; x < width; x++) {
                 if (cancelled.getAsBoolean()) {
                     return null;
                 }
                 realCoordinates[x] = grid.realAt(x);
-                real[x] = realCoordinates[x].subtract(
-                        reference.cReal(), grid.mathContext()).doubleValue();
+                BigDecimal exactDelta = realCoordinates[x].subtract(
+                        reference.cReal(), grid.mathContext());
+                real[x] = exactDelta.doubleValue();
+                realNeedsHighPrecision[x] = losesPixelResolution(
+                        exactDelta, real[x], grid.realStep());
+                if (realNeedsHighPrecision[x]) {
+                    scaledReal[x] = ScaledValue.fromBigDecimal(exactDelta);
+                }
             }
             for (int y = 0; y < height; y++) {
                 if (cancelled.getAsBoolean()) {
                     return null;
                 }
                 imaginaryCoordinates[y] = grid.imaginaryAt(y);
-                imaginary[y] = imaginaryCoordinates[y].subtract(
-                        reference.cImaginary(), grid.mathContext()).doubleValue();
+                BigDecimal exactDelta = imaginaryCoordinates[y].subtract(
+                        reference.cImaginary(), grid.mathContext());
+                imaginary[y] = exactDelta.doubleValue();
+                imaginaryNeedsHighPrecision[y] = losesPixelResolution(
+                        exactDelta, imaginary[y], grid.imaginaryStep());
+                if (imaginaryNeedsHighPrecision[y]) {
+                    scaledImaginary[y] = ScaledValue.fromBigDecimal(exactDelta);
+                }
             }
             return new CoordinateDeltas(
                     real, imaginary, realCoordinates, imaginaryCoordinates,
+                    realNeedsHighPrecision, imaginaryNeedsHighPrecision,
+                    scaledReal, scaledImaginary,
                     grid.mathContext());
+        }
+
+        boolean requiresHighPrecision(int x, int y) {
+            return realNeedsHighPrecision[x] || imaginaryNeedsHighPrecision[y];
+        }
+
+        ScaledComplex scaledDelta(int x, int y) {
+            ScaledValue realValue = scaledReal[x] == null
+                    ? ScaledValue.fromDouble(real[x]) : scaledReal[x];
+            ScaledValue imaginaryValue = scaledImaginary[y] == null
+                    ? ScaledValue.fromDouble(imaginary[y]) : scaledImaginary[y];
+            return ScaledComplex.from(realValue, imaginaryValue);
+        }
+
+        private static boolean losesPixelResolution(
+                BigDecimal exactDelta,
+                double approximateDelta,
+                BigDecimal pixelStep
+        ) {
+            if (!Double.isFinite(approximateDelta)) {
+                return true;
+            }
+            if (exactDelta.signum() == 0) {
+                return false;
+            }
+            if (approximateDelta == 0.0) {
+                return true;
+            }
+            double approximateStep = pixelStep.doubleValue();
+            return !(approximateStep > 0.0)
+                    || !Double.isFinite(approximateStep)
+                    || Math.ulp(approximateDelta) * 16.0 > approximateStep;
         }
     }
 
@@ -416,6 +494,226 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         }
         return new PerturbationResult(
                 new FractalSample(iteration, false, zr, zi), iteration, true);
+    }
+
+    /** Perturbation recurrence with a separate binary exponent for sub-double deltas. */
+    private static PerturbationResult perturbScaled(
+            ReferenceOrbit reference,
+            ScaledComplex deltaC,
+            int maxIterations,
+            BooleanSupplier cancelled
+    ) {
+        ScaledComplex delta = ScaledComplex.zero();
+        double zr = 0.0;
+        double zi = 0.0;
+        int iteration = 0;
+        while (iteration < maxIterations) {
+            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+                return new PerturbationResult(null, iteration, false);
+            }
+            if (iteration >= reference.lastValidIteration()) {
+                return new PerturbationResult(null, iteration, false);
+            }
+            double referenceReal = reference.realAt(iteration);
+            double referenceImaginary = reference.imaginaryAt(iteration);
+            delta.advance(referenceReal, referenceImaginary, deltaC);
+            iteration++;
+            double deltaReal = delta.realAsDouble();
+            double deltaImaginary = delta.imaginaryAsDouble();
+            zr = reference.realAt(iteration) + deltaReal;
+            zi = reference.imaginaryAt(iteration) + deltaImaginary;
+            if (delta.magnitudeEscapes(reference, iteration)) {
+                return new PerturbationResult(
+                        new FractalSample(iteration, true, zr, zi), iteration, true);
+            }
+            double magnitudeSquared = zr * zr + zi * zi;
+            double referenceMagnitudeSquared = reference.realAt(iteration)
+                    * reference.realAt(iteration)
+                    + reference.imaginaryAt(iteration) * reference.imaginaryAt(iteration);
+            if (!Double.isFinite(magnitudeSquared)
+                    || magnitudeSquared < GLITCH_RELATIVE_THRESHOLD * referenceMagnitudeSquared) {
+                return new PerturbationResult(null, iteration, false);
+            }
+        }
+        return new PerturbationResult(
+                new FractalSample(iteration, false, zr, zi), iteration, true);
+    }
+
+    /** Finite nonzero number represented as mantissa * 2^exponent. */
+    private record ScaledValue(double mantissa, long exponent) {
+        private static final double LOG2_10 = 3.32192809488736234787;
+        private static final ScaledValue ZERO = new ScaledValue(0.0, 0L);
+
+        static ScaledValue fromDouble(double value) {
+            if (value == 0.0) {
+                return ZERO;
+            }
+            int exponent = Math.getExponent(value);
+            double mantissa = Math.scalb(value, -exponent);
+            if (Math.abs(mantissa) < 1.0) {
+                int adjustment = Math.getExponent(mantissa);
+                mantissa = Math.scalb(mantissa, -adjustment);
+                exponent += adjustment;
+            }
+            return new ScaledValue(mantissa, exponent);
+        }
+
+        static ScaledValue fromBigDecimal(BigDecimal value) {
+            if (value.signum() == 0) {
+                return ZERO;
+            }
+            int decimalExponent = value.precision() - value.scale() - 1;
+            double normalizedDecimal = value.movePointLeft(decimalExponent).doubleValue();
+            double rawBinaryExponent = decimalExponent * LOG2_10;
+            long binaryExponent = (long) Math.floor(rawBinaryExponent);
+            double mantissa = normalizedDecimal
+                    * Math.pow(2.0, rawBinaryExponent - binaryExponent);
+            int adjustment = Math.getExponent(mantissa);
+            return new ScaledValue(
+                    Math.scalb(mantissa, -adjustment), binaryExponent + adjustment);
+        }
+
+        boolean isZero() {
+            return mantissa == 0.0;
+        }
+    }
+
+    /** Mutable complex value whose components share one binary exponent. */
+    private static final class ScaledComplex {
+        private double real;
+        private double imaginary;
+        private long exponent;
+
+        private ScaledComplex(double real, double imaginary, long exponent) {
+            this.real = real;
+            this.imaginary = imaginary;
+            this.exponent = exponent;
+            normalize();
+        }
+
+        static ScaledComplex zero() {
+            return new ScaledComplex(0.0, 0.0, 0L);
+        }
+
+        static ScaledComplex from(ScaledValue real, ScaledValue imaginary) {
+            if (real.isZero() && imaginary.isZero()) {
+                return zero();
+            }
+            long exponent = real.isZero() ? imaginary.exponent()
+                    : imaginary.isZero() ? real.exponent()
+                    : Math.max(real.exponent(), imaginary.exponent());
+            return new ScaledComplex(
+                    align(real.mantissa(), real.exponent(), exponent),
+                    align(imaginary.mantissa(), imaginary.exponent(), exponent),
+                    exponent);
+        }
+
+        void advance(double referenceReal, double referenceImaginary, ScaledComplex deltaC) {
+            double linearReal = 2.0 * (referenceReal * real - referenceImaginary * imaginary);
+            double linearImaginary = 2.0 * (referenceReal * imaginary + referenceImaginary * real);
+            double quadraticReal = real * real - imaginary * imaginary;
+            double quadraticImaginary = 2.0 * real * imaginary;
+            long linearExponent = exponent;
+            long quadraticExponent = exponent * 2L;
+            long commonExponent = largestExponent(
+                    linearReal, linearImaginary, linearExponent,
+                    quadraticReal, quadraticImaginary, quadraticExponent,
+                    deltaC.real, deltaC.imaginary, deltaC.exponent);
+            real = align(linearReal, linearExponent, commonExponent)
+                    + align(quadraticReal, quadraticExponent, commonExponent)
+                    + align(deltaC.real, deltaC.exponent, commonExponent);
+            imaginary = align(linearImaginary, linearExponent, commonExponent)
+                    + align(quadraticImaginary, quadraticExponent, commonExponent)
+                    + align(deltaC.imaginary, deltaC.exponent, commonExponent);
+            exponent = commonExponent;
+            normalize();
+        }
+
+        boolean magnitudeEscapes(ReferenceOrbit reference, int iteration) {
+            ScaledValue referenceMargin = reference.escapeMarginAt(iteration);
+            double referenceReal = reference.realAt(iteration);
+            double referenceImaginary = reference.imaginaryAt(iteration);
+            double linear = 2.0 * (referenceReal * real + referenceImaginary * imaginary);
+            double quadratic = real * real + imaginary * imaginary;
+            long quadraticExponent = exponent * 2L;
+            long commonExponent = referenceMargin.isZero() ? Long.MIN_VALUE
+                    : referenceMargin.exponent();
+            if (linear != 0.0) {
+                commonExponent = Math.max(commonExponent, exponent);
+            }
+            if (quadratic != 0.0) {
+                commonExponent = Math.max(commonExponent, quadraticExponent);
+            }
+            if (commonExponent == Long.MIN_VALUE) {
+                return false;
+            }
+            double sum = align(referenceMargin.mantissa(), referenceMargin.exponent(), commonExponent)
+                    + align(linear, exponent, commonExponent)
+                    + align(quadratic, quadraticExponent, commonExponent);
+            return sum > 0.0;
+        }
+
+        double realAsDouble() {
+            return asDouble(real, exponent);
+        }
+
+        double imaginaryAsDouble() {
+            return asDouble(imaginary, exponent);
+        }
+
+        private void normalize() {
+            double largest = Math.max(Math.abs(real), Math.abs(imaginary));
+            if (largest == 0.0) {
+                exponent = 0L;
+                return;
+            }
+            int adjustment = Math.getExponent(largest);
+            real = Math.scalb(real, -adjustment);
+            imaginary = Math.scalb(imaginary, -adjustment);
+            exponent += adjustment;
+        }
+
+        private static long largestExponent(
+                double firstReal, double firstImaginary, long firstExponent,
+                double secondReal, double secondImaginary, long secondExponent,
+                double thirdReal, double thirdImaginary, long thirdExponent
+        ) {
+            long largest = Long.MIN_VALUE;
+            if (firstReal != 0.0 || firstImaginary != 0.0) {
+                largest = firstExponent;
+            }
+            if (secondReal != 0.0 || secondImaginary != 0.0) {
+                largest = Math.max(largest, secondExponent);
+            }
+            if (thirdReal != 0.0 || thirdImaginary != 0.0) {
+                largest = Math.max(largest, thirdExponent);
+            }
+            return largest == Long.MIN_VALUE ? 0L : largest;
+        }
+
+        private static double align(double mantissa, long exponent, long targetExponent) {
+            if (mantissa == 0.0) {
+                return 0.0;
+            }
+            long shift = exponent - targetExponent;
+            if (shift < -1074L) {
+                return 0.0;
+            }
+            if (shift > 1023L) {
+                return Math.copySign(Double.POSITIVE_INFINITY, mantissa);
+            }
+            return Math.scalb(mantissa, (int) shift);
+        }
+
+        private static double asDouble(double mantissa, long exponent) {
+            if (mantissa == 0.0 || exponent < -1074L) {
+                return Math.copySign(0.0, mantissa);
+            }
+            if (exponent > 1023L) {
+                return Math.copySign(Double.POSITIVE_INFINITY, mantissa);
+            }
+            return Math.scalb(mantissa, (int) exponent);
+        }
     }
 
     private record PerturbationResult(
@@ -726,6 +1024,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             BigDecimal cImaginary,
             double[] real,
             double[] imaginary,
+            ScaledValue[] escapeMargins,
             int lastValidIteration
     ) {
         static ReferenceOrbit create(
@@ -752,6 +1051,8 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         ) {
             double[] real = new double[job.maxIterations() + 1];
             double[] imaginary = new double[job.maxIterations() + 1];
+            ScaledValue[] escapeMargins = new ScaledValue[job.maxIterations() + 1];
+            escapeMargins[0] = ScaledValue.fromDouble(-4.0);
             BigDecimal zr = BigDecimal.ZERO;
             BigDecimal zi = BigDecimal.ZERO;
             int lastValidIteration = 0;
@@ -767,20 +1068,29 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 zi = nextImaginary;
                 real[iteration + 1] = zr.doubleValue();
                 imaginary[iteration + 1] = zi.doubleValue();
+                BigDecimal magnitudeSquared = zr.multiply(zr, context)
+                        .add(zi.multiply(zi, context), context);
+                escapeMargins[iteration + 1] = ScaledValue.fromBigDecimal(
+                        magnitudeSquared.subtract(FOUR, context));
                 lastValidIteration = iteration + 1;
-                if (zr.multiply(zr, context).add(zi.multiply(zi, context)).compareTo(FOUR) > 0) {
+                if (magnitudeSquared.compareTo(FOUR) > 0) {
                     break;
                 }
             }
             return new ReferenceOrbit(
-                    cReal, cImaginary, real, imaginary, lastValidIteration);
+                    cReal, cImaginary, real, imaginary,
+                    escapeMargins, lastValidIteration);
         }
 
         double realAt(int iteration) { return real[iteration]; }
         double imaginaryAt(int iteration) { return imaginary[iteration]; }
+        ScaledValue escapeMarginAt(int iteration) { return escapeMargins[iteration]; }
         double cRealAsDouble() { return cReal.doubleValue(); }
         double cImaginaryAsDouble() { return cImaginary.doubleValue(); }
-        long retainedBytes() { return ((long) real.length + imaginary.length) * Double.BYTES; }
+        long retainedBytes() {
+            return ((long) real.length + imaginary.length) * Double.BYTES
+                    + (long) escapeMargins.length * (Double.BYTES + Long.BYTES);
+        }
     }
 
     /**

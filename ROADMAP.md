@@ -130,10 +130,15 @@ existing behavior is covered by tests.
 - [x] Treat a correct, verified, and measured Mandelbrot deep-zoom backend with a
   direct CPU fallback as the completion boundary before starting GPU work.
 
-### 7.6. Defer secondary deep-zoom optimizations until after GPU evaluation
+### 7.6. [x] Evaluate secondary deep-zoom optimizations
 
-- After the first GPU evaluation, support additional numeric backends and
-  investigate series approximation as later deep-zoom optimizations.
+- [x] Add a scaled-exponent perturbation path when a pixel delta can no longer
+  retain a safe fraction of one pixel step in `double`; reserve direct
+  arbitrary-precision iteration for the remaining unreliable pixels.
+- [x] Investigate cubic series approximation; retain the current perturbation
+  recurrence because safe skips improve throughput by only 1-3%, while the
+  tested longer skip is still below 7% and exceeds the smooth-color tolerance
+  in the shallower benchmark case.
 
 This phase should remain separate from the current pan-reuse optimization.
 

@@ -96,6 +96,30 @@ class MandelbrotPerturbationRenderBackendTest {
     }
 
     @Test
+    void fallsBackToHighPrecisionWhenPerturbationDeltasUnderflow() throws Exception {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("2", "0", "1e-400"), 5, 3, 5);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(1, diagnostics::set)) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+
+        int centerRow = job.width();
+        assertEquals(2, frame.samplePlane().iterations(centerRow + 2),
+                "the exact c=2 boundary point escapes on the second iteration");
+        assertEquals(1, frame.samplePlane().iterations(centerRow + 3),
+                "a positive sub-double delta must not collapse back to c=2");
+        assertEquals(1, frame.samplePlane().iterations(centerRow + 4),
+                "the right edge must retain its precise coordinate");
+        assertEquals(0, diagnostics.get().highPrecisionFallbackPixelCount(),
+                "scaled perturbation should avoid per-pixel BigDecimal iteration");
+    }
+
+    @Test
     void boundsExecutorTasksWhileReportingTileAndIterationDiagnostics() throws Exception {
         RenderJob job = new RenderJob(
                 FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
@@ -157,7 +181,7 @@ class MandelbrotPerturbationRenderBackendTest {
                 33, 25, 500);
         RenderJob second = new RenderJob(formula, new Viewport("0.6", "0", "1e-80"),
                 33, 25, 500);
-        long orbitBytes = 2L * (first.maxIterations() + 1) * Double.BYTES;
+        long orbitBytes = 4L * (first.maxIterations() + 1) * Double.BYTES;
 
         try (MandelbrotPerturbationRenderBackend backend =
                      new MandelbrotPerturbationRenderBackend(1, ignored -> {}, orbitBytes)) {

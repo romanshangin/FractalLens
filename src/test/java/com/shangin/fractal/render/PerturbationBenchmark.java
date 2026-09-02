@@ -25,6 +25,8 @@ public final class PerturbationBenchmark {
     private static final int RUNS = Integer.getInteger("perturbation.runs", 3);
     private static final double CENTER_REAL = -0.743643887037151;
     private static final double CENTER_IMAGINARY = 0.13182590420533;
+    private static final String PRODUCTION_DEEP_SCALE =
+            System.getProperty("perturbation.deepScale", "1.6e-13");
 
     private PerturbationBenchmark() {}
 
@@ -148,7 +150,7 @@ public final class PerturbationBenchmark {
         RenderJob job = new RenderJob(
                 FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
                 new Viewport("-0.8317528516858322713653476366999",
-                        "0.207813754242134522471317257011028", "1.6e-13"),
+                        "0.207813754242134522471317257011028", PRODUCTION_DEEP_SCALE),
                 WIDTH, HEIGHT, MAX_ITERATIONS);
         AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
         AtomicReference<TileTimingStats> tileTimings = new AtomicReference<>();
