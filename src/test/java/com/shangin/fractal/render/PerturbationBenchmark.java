@@ -1,7 +1,12 @@
 package com.shangin.fractal.render;
 
+import com.shangin.fractal.coloring.OrbitTrap;
+import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.math.Viewport;
+
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Compares direct Mandelbrot iteration with a shared reference-orbit recurrence. */
 public final class PerturbationBenchmark {
@@ -27,6 +32,8 @@ public final class PerturbationBenchmark {
         for (double zoom : new double[]{10_000.0, 1_000_000.0, 100_000_000.0}) {
             benchmark(zoom);
         }
+
+        benchmarkProductionDeepStartup();
     }
 
     private static void benchmark(double zoom) {
@@ -127,6 +134,43 @@ public final class PerturbationBenchmark {
             }
         }
         return mismatches;
+    }
+
+    private static void benchmarkProductionDeepStartup() {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-0.8317528516858322713653476366999",
+                        "0.207813754242134522471317257011028", "1.6e-13"),
+                WIDTH, HEIGHT, MAX_ITERATIONS);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+        AtomicReference<TileTimingStats> tileTimings = new AtomicReference<>();
+        long started = System.nanoTime();
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(
+                             Math.max(1, Runtime.getRuntime().availableProcessors() - 1),
+                             diagnostics::set)) {
+            backend.render(frame, () -> false, ignored -> {}, tileTimings::set);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Production deep benchmark interrupted", exception);
+        }
+        double totalMs = toMs(System.nanoTime() - started);
+        DeepZoomTimingStats stats = diagnostics.get();
+        TileTimingStats tiles = tileTimings.get();
+        System.out.printf("%nProduction deep startup (%dx%d, %,d iterations)%n",
+                WIDTH, HEIGHT, MAX_ITERATIONS);
+        System.out.printf(
+                "total=%.2fms reference=%.2fms coordinates=%.2fms first-region=%.2fms%n",
+                totalMs, stats.referenceOrbitMs(), stats.coordinatePreparationMs(),
+                stats.timeToFirstRegionMs());
+        System.out.printf(
+                "references=%d rebasing-cpu=%.2fms fallbacks=%d avg-iterations=%.1f%n",
+                stats.additionalReferenceOrbitCount(), stats.rebasingOrbitMs(),
+                stats.highPrecisionFallbackPixelCount(), stats.averageIterationsPerPixel());
+        System.out.printf(
+                "tiles=%d tile-min/median/max=%.2f/%.2f/%.2fms%n",
+                tiles.tileCount(), tiles.minMs(), tiles.medianMs(), tiles.maxMs());
     }
 
     private static double toMs(long nanos) {

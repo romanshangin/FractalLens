@@ -3,6 +3,7 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.math.Viewport;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,5 +50,19 @@ class FrameReprojectionTest {
                 100,
                 100
         ).isEmpty());
+    }
+
+    @Test
+    void deepCursorAnchoredZoomOutShouldKeepCoverageAroundItsExactAnchor() {
+        Viewport source = new Viewport(
+                "-0.8317528516858322713653476366999",
+                "0.207813754242134522471317257011028",
+                "1.6e-13");
+        Viewport target = source.zoomAt(
+                BigDecimal.valueOf(250), BigDecimal.valueOf(300),
+                1000, 800, new BigDecimal("1.25"));
+
+        assertEquals(Optional.of(new RenderRegion(50, 60, 800, 640)),
+                FrameReprojection.approximateCoverage(source, target, 1000, 800));
     }
 }

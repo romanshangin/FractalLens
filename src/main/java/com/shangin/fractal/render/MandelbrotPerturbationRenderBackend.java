@@ -35,7 +35,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     /* A wide safety margin prevents a double shortcut from classifying a boundary pixel. */
     private static final double INTERIOR_SAFETY_MARGIN = 1e-12;
     private static final double GLITCH_RELATIVE_THRESHOLD = 1e-6;
-    private static final int MAX_ADDITIONAL_REFERENCES = 16;
+    private static final int MAX_ADDITIONAL_REFERENCES = 64;
 
     private final ExecutorService workers;
     private final int workerCount;
@@ -409,7 +409,8 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         private final MathContext mathContext;
         private final java.util.concurrent.CopyOnWriteArrayList<ReferenceOrbit> references =
                 new java.util.concurrent.CopyOnWriteArrayList<>();
-        private long rebasingNanos;
+        private final AtomicInteger reservedAdditionalReferences = new AtomicInteger();
+        private final LongAdder rebasingNanos = new LongAdder();
 
         private ReferencePool(
                 RenderJob job,
@@ -441,67 +442,81 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 return primaryResult;
             }
 
-            int observedReferenceCount = references.size();
-            for (int index = 1; index < observedReferenceCount; index++) {
-                PerturbationResult result = perturbFrom(
-                        references.get(index), cReal, cImaginary, maxIterations);
+            for (ReferenceCandidate nearest : orderedAdditionalReferences(cReal, cImaginary)) {
+                PerturbationResult result = perturb(
+                        nearest.reference(), nearest.deltaReal(),
+                        nearest.deltaImaginary(), maxIterations);
                 executed += result.executedIterations();
                 if (result.reliable()) {
                     return new PerturbationResult(result.sample(), executed, true);
                 }
             }
 
-            synchronized (this) {
-                /* Another worker may have added a suitable reference while we waited. */
-                for (int index = observedReferenceCount; index < references.size(); index++) {
-                    PerturbationResult result = perturbFrom(
-                            references.get(index), cReal, cImaginary, maxIterations);
-                    executed += result.executedIterations();
-                    if (result.reliable()) {
-                        return new PerturbationResult(result.sample(), executed, true);
-                    }
-                }
+            if (cancelled.getAsBoolean() || !reserveAdditionalReference()) {
+                return new PerturbationResult(null, executed, false);
+            }
 
-                if (cancelled.getAsBoolean()
-                        || references.size() > MAX_ADDITIONAL_REFERENCES) {
-                    return new PerturbationResult(null, executed, false);
-                }
+            /* Do not serialize high-precision orbit construction across workers. */
+            long started = System.nanoTime();
+            ReferenceOrbit additional = ReferenceOrbit.create(
+                    job, cReal, cImaginary, mathContext, cancelled);
+            rebasingNanos.add(System.nanoTime() - started);
+            if (additional == null) {
+                return new PerturbationResult(null, executed, false);
+            }
+            references.add(additional);
+            PerturbationResult result = perturb(
+                    additional, 0.0, 0.0, maxIterations);
+            return new PerturbationResult(
+                    result.sample(), executed + result.executedIterations(),
+                    result.reliable());
+        }
 
-                long started = System.nanoTime();
-                ReferenceOrbit additional = ReferenceOrbit.create(
-                        job, cReal, cImaginary, mathContext, cancelled);
-                rebasingNanos += System.nanoTime() - started;
-                if (additional == null) {
-                    return new PerturbationResult(null, executed, false);
+        private boolean reserveAdditionalReference() {
+            while (true) {
+                int reserved = reservedAdditionalReferences.get();
+                if (reserved >= MAX_ADDITIONAL_REFERENCES) {
+                    return false;
                 }
-                references.add(additional);
-                PerturbationResult result = perturb(
-                        additional, 0.0, 0.0, maxIterations);
-                return new PerturbationResult(
-                        result.sample(), executed + result.executedIterations(),
-                        result.reliable());
+                if (reservedAdditionalReferences.compareAndSet(reserved, reserved + 1)) {
+                    return true;
+                }
             }
         }
 
-        private PerturbationResult perturbFrom(
-                ReferenceOrbit reference,
+        private List<ReferenceCandidate> orderedAdditionalReferences(
                 BigDecimal cReal,
-                BigDecimal cImaginary,
-                int maxIterations
+                BigDecimal cImaginary
         ) {
-            double deltaReal = cReal.subtract(
-                    reference.cReal(), mathContext).doubleValue();
-            double deltaImaginary = cImaginary.subtract(
-                    reference.cImaginary(), mathContext).doubleValue();
-            return perturb(reference, deltaReal, deltaImaginary, maxIterations);
+            List<ReferenceCandidate> candidates = new ArrayList<>(
+                    Math.max(0, references.size() - 1));
+            for (int index = 1; index < references.size(); index++) {
+                ReferenceOrbit reference = references.get(index);
+                double deltaReal = cReal.subtract(
+                        reference.cReal(), mathContext).doubleValue();
+                double deltaImaginary = cImaginary.subtract(
+                        reference.cImaginary(), mathContext).doubleValue();
+                double distance = deltaReal * deltaReal + deltaImaginary * deltaImaginary;
+                candidates.add(new ReferenceCandidate(
+                        reference, deltaReal, deltaImaginary, distance));
+            }
+            candidates.sort(Comparator.comparingDouble(ReferenceCandidate::distanceSquared));
+            return candidates;
         }
+
+        private record ReferenceCandidate(
+                ReferenceOrbit reference,
+                double deltaReal,
+                double deltaImaginary,
+                double distanceSquared
+        ) {}
 
         int additionalReferenceCount() {
             return references.size() - 1;
         }
 
-        synchronized double rebasingOrbitMs() {
-            return rebasingNanos / 1_000_000.0;
+        double rebasingOrbitMs() {
+            return rebasingNanos.sum() / 1_000_000.0;
         }
     }
 

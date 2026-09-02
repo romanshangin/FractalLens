@@ -28,14 +28,16 @@ public final class FrameReprojection {
         }
 
         /* Scaling an older image is useful as coverage only while zooming out. */
-        if (target.scale() <= source.scale()) {
+        if (target.scaleExact().compareTo(source.scaleExact()) <= 0) {
             return Optional.empty();
         }
 
-        double left = target.xAt(source.minReal(width, height), width, height);
-        double right = target.xAt(source.maxReal(width, height), width, height);
-        double top = target.yAt(source.maxImaginary(), height);
-        double bottom = target.yAt(source.minImaginary(), height);
+        ViewportProjection projection = ViewportProjection.between(
+                source, target, width, height);
+        double left = projection.translateX();
+        double right = left + projection.scaleX() * (width - 1.0);
+        double top = projection.translateY();
+        double bottom = top + projection.scaleY() * (height - 1.0);
 
         int xFrom = clamp((int) Math.ceil(Math.min(left, right)), 0, width);
         int xTo = clamp((int) Math.floor(Math.max(left, right)) + 1, 0, width);

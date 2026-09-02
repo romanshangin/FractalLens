@@ -514,27 +514,14 @@ public final class FractalSurface extends Region {
             int width,
             int height
     ) {
-        double scaleX = source.visibleWidth(width, height)
-                        / targetViewport.visibleWidth(width, height);
-
-        double scaleY = source.visibleHeight()
-                        / targetViewport.visibleHeight();
-
-        double translateX = (source.minReal(width, height)
-                        - targetViewport.minReal(width, height))
-                        / targetViewport.visibleWidth(width, height)
-                        * (width - 1.0);
-
-        double translateY = (targetViewport.maxImaginary()
-                        - source.maxImaginary())
-                        / targetViewport.visibleHeight()
-                        * (height - 1.0);
+        ViewportProjection projection = ViewportProjection.between(
+                source, targetViewport, width, height);
 
         transform.setToIdentity();
-        transform.setMxx(scaleX);
-        transform.setMyy(scaleY);
-        transform.setTx(translateX);
-        transform.setTy(translateY);
+        transform.setMxx(projection.scaleX());
+        transform.setMyy(projection.scaleY());
+        transform.setTx(projection.translateX());
+        transform.setTy(projection.translateY());
     }
 
     public void recolor(
