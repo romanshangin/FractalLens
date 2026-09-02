@@ -1,11 +1,18 @@
 package com.shangin.fractal.render;
 
 import com.shangin.fractal.coloring.OrbitTrap;
+import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.coloring.SmoothPaletteColoring;
+import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.scene.SamplingPattern;
 
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Compares direct Mandelbrot iteration with a shared reference-orbit recurrence. */
@@ -171,6 +178,40 @@ public final class PerturbationBenchmark {
         System.out.printf(
                 "tiles=%d tile-min/median/max=%.2f/%.2f/%.2fms%n",
                 tiles.tileCount(), tiles.minMs(), tiles.medianMs(), tiles.maxMs());
+
+        benchmarkDeepAntialias(frame);
+    }
+
+    private static void benchmarkDeepAntialias(RenderFrame frame) {
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        AtomicInteger publishedTiles = new AtomicInteger();
+        long started = System.nanoTime();
+        try (InteractiveAntialiasService service = new InteractiveAntialiasService()) {
+            service.refineDeep(
+                    frame,
+                    new SmoothPaletteColoring(PalettePreset.ICE.palette()),
+                    SamplingPattern.REGULAR,
+                    RefinedPixelSnapshot.empty(frame.job().width(), frame.job().height()),
+                    Runnable::run,
+                    (region, colors) -> publishedTiles.incrementAndGet(),
+                    completed::countDown,
+                    exception -> {
+                        error.set(exception);
+                        completed.countDown();
+                    });
+            if (!completed.await(60, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Deep AA benchmark timed out");
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Deep AA benchmark interrupted", exception);
+        }
+        if (error.get() != null) {
+            throw new IllegalStateException("Deep AA benchmark failed", error.get());
+        }
+        System.out.printf("deep-aa=%.2fms published-tiles=%d%n",
+                toMs(System.nanoTime() - started), publishedTiles.get());
     }
 
     private static double toMs(long nanos) {

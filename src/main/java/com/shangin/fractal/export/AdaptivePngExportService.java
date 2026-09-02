@@ -474,7 +474,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
         return unitNoise(mix(seed));
     }
 
-    private static double colorContrast(int first, int second) {
+    static double colorContrast(int first, int second) {
         return Math.max(
                 Math.max(
                         Math.abs(linearChannel(first, 16) - linearChannel(second, 16)),

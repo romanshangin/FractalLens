@@ -5,7 +5,7 @@ import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 
-/** Keeps double-only refinement out of Mandelbrot deep-zoom renders. */
+/** Selects the progressive presentation used while Mandelbrot deep zoom renders. */
 final class DeepZoomRenderPolicy {
 
     private DeepZoomRenderPolicy() {

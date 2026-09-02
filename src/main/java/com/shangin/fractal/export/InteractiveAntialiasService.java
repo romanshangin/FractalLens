@@ -12,9 +12,12 @@ import com.shangin.fractal.render.RefinedPixelSnapshot;
 import com.shangin.fractal.render.AntialiasSampleCache;
 import com.shangin.fractal.render.PixelShift;
 import com.shangin.fractal.render.BaseColorPhaseCache;
+import com.shangin.fractal.render.MandelbrotPerturbationRenderBackend;
+import com.shangin.fractal.render.PreciseRenderGrid;
 import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.scene.SamplingPattern;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -34,6 +37,9 @@ import java.util.stream.IntStream;
 public final class InteractiveAntialiasService implements AutoCloseable {
 
     private static final int SAMPLE_GRID = 4;
+    private static final int DEEP_LOW_SAMPLE_GRID = 2;
+    private static final int DEEP_HIGH_SAMPLE_GRID = 4;
+    private static final double DEEP_COLOR_EDGE_THRESHOLD = 0.20;
     private static final int TILE_SIZE = 32;
 
     private final ExecutorService coordinator = Executors.newSingleThreadExecutor(
@@ -60,7 +66,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         this.sampleCache = Objects.requireNonNull(sampleCache);
     }
 
-    public synchronized void refine(
+    public void refine(
             RenderFrame frame,
             ColoringStrategy coloring,
             SamplingPattern samplingPattern,
@@ -69,6 +75,38 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             BiConsumer<RenderRegion, int[]> onTileReady,
             Runnable onSuccess,
             Consumer<Throwable> onError
+    ) {
+        startRefinement(
+                frame, coloring, samplingPattern, reusedPixels,
+                callbackExecutor, onTileReady, onSuccess, onError, false);
+    }
+
+    /** Runs candidate-only AA without converting deep subpixel coordinates to doubles. */
+    public void refineDeep(
+            RenderFrame frame,
+            ColoringStrategy coloring,
+            SamplingPattern samplingPattern,
+            RefinedPixelSnapshot reusedPixels,
+            Executor callbackExecutor,
+            BiConsumer<RenderRegion, int[]> onTileReady,
+            Runnable onSuccess,
+            Consumer<Throwable> onError
+    ) {
+        startRefinement(
+                frame, coloring, samplingPattern, reusedPixels,
+                callbackExecutor, onTileReady, onSuccess, onError, true);
+    }
+
+    private synchronized void startRefinement(
+            RenderFrame frame,
+            ColoringStrategy coloring,
+            SamplingPattern samplingPattern,
+            RefinedPixelSnapshot reusedPixels,
+            Executor callbackExecutor,
+            BiConsumer<RenderRegion, int[]> onTileReady,
+            Runnable onSuccess,
+            Consumer<Throwable> onError,
+            boolean deepZoom
     ) {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(coloring);
@@ -106,7 +144,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 callbackExecutor,
                 onTileReady,
                 onSuccess,
-                onError
+                onError,
+                deepZoom
         ));
     }
 
@@ -119,13 +158,19 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
             Runnable onSuccess,
-            Consumer<Throwable> onError
+            Consumer<Throwable> onError,
+            boolean deepZoom
     ) {
         try {
             SamplePlane data = frame.samplePlane();
             int[] baseColors = AdaptivePngExportService.colorBaseFrame(data, coloring);
             SmoothColorLookup lookup = coloring instanceof SmoothPaletteColoring smooth
                     ? new SmoothColorLookup(smooth)
+                    : null;
+            MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler = deepZoom
+                    ? MandelbrotPerturbationRenderBackend.createPreciseSampler(
+                    frame.job(), () -> shouldCancel(refinementId)).orElseThrow(
+                    () -> new CancellationException("Deep AA reference orbit was cancelled"))
                     : null;
             List<Future<?>> tasks = new ArrayList<>();
 
@@ -140,7 +185,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         lookup,
                         tile,
                         callbackExecutor,
-                        onTileReady
+                        onTileReady,
+                        preciseSampler
                 )));
             }
 
@@ -178,11 +224,14 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             SmoothColorLookup lookup,
             RenderRegion tile,
             Executor callbackExecutor,
-            BiConsumer<RenderRegion, int[]> onTileReady
+            BiConsumer<RenderRegion, int[]> onTileReady,
+            MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler
     ) {
         SamplePlane data = frame.samplePlane();
         RenderGrid grid = frame.renderGrid();
-        FractalCalculator calculator = frame.job().formula().createDirectCalculator();
+        FractalCalculator calculator = preciseSampler == null
+                ? frame.job().formula().createDirectCalculator()
+                : null;
         int[] tileColors = new int[tile.width() * tile.height()];
         boolean calculatedPixel = false;
 
@@ -212,23 +261,36 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     continue;
                 }
 
-                calculatedPixel = true;
+                if (preciseSampler == null) {
+                    calculatedPixel = true;
+                }
                 tileColors[tileIndex] = baseColors[frameIndex];
 
-                if (!AdaptivePngExportService.isSupersamplingCandidate(
-                        calculator,
-                        grid,
-                        frame.request().maxIterations(),
-                        data,
-                        baseColors,
-                        x,
-                        y
-                )) {
+                boolean candidate = preciseSampler == null
+                        ? AdaptivePngExportService.isSupersamplingCandidate(
+                        calculator, grid, frame.request().maxIterations(),
+                        data, baseColors, x, y)
+                        : isDeepSupersamplingCandidate(
+                        data, baseColors, x, y);
+                if (!candidate) {
                     continue;
                 }
 
-                FractalSample[] samples = sampleGrid(
-                        calculator, grid, frame.request().maxIterations(), x, y, samplingPattern);
+                if (preciseSampler != null) {
+                    calculatedPixel = true;
+                }
+
+                FractalSample[] samples = preciseSampler == null
+                        ? sampleGrid(
+                        calculator, grid, frame.request().maxIterations(),
+                        x, y, samplingPattern)
+                        : sampleDeepGrid(
+                        preciseSampler, grid.preciseGrid(), data,
+                        x, y, samplingPattern,
+                        () -> shouldCancel(refinementId));
+                if (samples == null) {
+                    throw new CancellationException();
+                }
                 if (coloring instanceof SmoothPaletteColoring smooth) {
                     sampleCache.put(frameIndex, samples, smooth);
                 }
@@ -323,6 +385,103 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         cachedFrame = target;
         basePhaseFrame = null;
         basePhaseCache = null;
+    }
+
+    private static FractalSample[] sampleDeepGrid(
+            MandelbrotPerturbationRenderBackend.PreciseSampler sampler,
+            PreciseRenderGrid grid,
+            SamplePlane data,
+            int pixelX,
+            int pixelY,
+            SamplingPattern pattern,
+            java.util.function.BooleanSupplier cancelled
+    ) {
+        if (grid == null) {
+            throw new IllegalArgumentException("Deep AA requires a precise render grid");
+        }
+        int sampleGridSize = deepSampleGridSize(data, pixelX, pixelY);
+        FractalSample[] samples = new FractalSample[sampleGridSize * sampleGridSize];
+        BigDecimal centerReal = grid.realAt(pixelX);
+        BigDecimal centerImaginary = grid.imaginaryAt(pixelY);
+        int index = 0;
+        for (int sampleY = 0; sampleY < sampleGridSize; sampleY++) {
+            for (int sampleX = 0; sampleX < sampleGridSize; sampleX++) {
+                if (cancelled.getAsBoolean()) {
+                    return null;
+                }
+                double offsetX = ((sampleX + sampleOffset(
+                        pattern, pixelX, pixelY, sampleX, sampleY, 0))
+                        / sampleGridSize) - 0.5;
+                double offsetY = ((sampleY + sampleOffset(
+                        pattern, pixelX, pixelY, sampleX, sampleY, 1))
+                        / sampleGridSize) - 0.5;
+                BigDecimal real = centerReal.add(
+                        grid.realStep().multiply(
+                                BigDecimal.valueOf(offsetX), grid.mathContext()),
+                        grid.mathContext());
+                BigDecimal imaginary = centerImaginary.subtract(
+                        grid.imaginaryStep().multiply(
+                                BigDecimal.valueOf(offsetY), grid.mathContext()),
+                        grid.mathContext());
+                FractalSample sample = sampler.sample(real, imaginary, cancelled);
+                if (sample == null) {
+                    return null;
+                }
+                samples[index++] = sample;
+            }
+        }
+        return samples;
+    }
+
+    /** Uses 4x4 only across the set boundary; palette-only edges use 2x2. */
+    static int deepSampleGridSize(
+            SamplePlane data,
+            int x,
+            int y
+    ) {
+        int width = data.width();
+        boolean centerEscaped = data.escaped(y * width + x);
+        for (int neighborY = Math.max(0, y - 1);
+             neighborY <= Math.min(data.height() - 1, y + 1);
+             neighborY++) {
+            for (int neighborX = Math.max(0, x - 1);
+                 neighborX <= Math.min(width - 1, x + 1);
+                 neighborX++) {
+                int neighborIndex = neighborY * width + neighborX;
+                if (centerEscaped != data.escaped(neighborIndex)) {
+                    return DEEP_HIGH_SAMPLE_GRID;
+                }
+            }
+        }
+        return DEEP_LOW_SAMPLE_GRID;
+    }
+
+    /** Deep AA focuses on set boundaries and visually strong palette outliers. */
+    static boolean isDeepSupersamplingCandidate(
+            SamplePlane data,
+            int[] colors,
+            int x,
+            int y
+    ) {
+        int width = data.width();
+        int centerIndex = y * width + x;
+        boolean centerEscaped = data.escaped(centerIndex);
+        for (int neighborY = Math.max(0, y - 1);
+             neighborY <= Math.min(data.height() - 1, y + 1);
+             neighborY++) {
+            for (int neighborX = Math.max(0, x - 1);
+                 neighborX <= Math.min(width - 1, x + 1);
+                 neighborX++) {
+                int neighborIndex = neighborY * width + neighborX;
+                if (centerEscaped != data.escaped(neighborIndex)
+                        || AdaptivePngExportService.colorContrast(
+                        colors[centerIndex], colors[neighborIndex])
+                        > DEEP_COLOR_EDGE_THRESHOLD) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static FractalSample[] sampleGrid(

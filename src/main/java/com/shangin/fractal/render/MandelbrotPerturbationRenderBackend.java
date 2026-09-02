@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -402,6 +403,82 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             int executedIterations,
             boolean reliable
     ) {}
+
+    /**
+     * Creates a thread-safe point sampler that keeps one shared perturbation
+     * reference pool for a follow-up deep-zoom pass such as antialiasing.
+     */
+    public static Optional<PreciseSampler> createPreciseSampler(
+            RenderJob job,
+            BooleanSupplier cancelled
+    ) {
+        Objects.requireNonNull(job);
+        Objects.requireNonNull(cancelled);
+        if (job.formula().preset() != FractalPreset.MANDELBROT
+                || job.formula().orbitTrap() != OrbitTrap.NONE) {
+            throw new IllegalArgumentException(
+                    "Precise perturbation sampling supports Mandelbrot without orbit traps only");
+        }
+        PreciseRenderGrid grid = job.preciseGrid();
+        ReferenceOrbit primary = ReferenceOrbit.create(job, grid, cancelled);
+        if (primary == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new PreciseSampler(
+                job,
+                grid.mathContext(),
+                new ReferencePool(job, grid.mathContext(), primary)));
+    }
+
+    /** Shared-reference arbitrary-coordinate sampler used by deep antialiasing. */
+    public static final class PreciseSampler {
+        private final RenderJob job;
+        private final MathContext mathContext;
+        private final ReferencePool referencePool;
+
+        private PreciseSampler(
+                RenderJob job,
+                MathContext mathContext,
+                ReferencePool referencePool
+        ) {
+            this.job = job;
+            this.mathContext = mathContext;
+            this.referencePool = referencePool;
+        }
+
+        /** Returns {@code null} only when the supplied generation is cancelled. */
+        public FractalSample sample(
+                BigDecimal cReal,
+                BigDecimal cImaginary,
+                BooleanSupplier cancelled
+        ) {
+            Objects.requireNonNull(cReal);
+            Objects.requireNonNull(cImaginary);
+            Objects.requireNonNull(cancelled);
+            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+                return null;
+            }
+
+            ReferenceOrbit primary = referencePool.primary();
+            double deltaReal = cReal.subtract(primary.cReal(), mathContext).doubleValue();
+            double deltaImaginary = cImaginary.subtract(
+                    primary.cImaginary(), mathContext).doubleValue();
+            double real = primary.cRealAsDouble() + deltaReal;
+            double imaginary = primary.cImaginaryAsDouble() + deltaImaginary;
+            if (isSafelyInsideKnownInterior(real, imaginary)) {
+                return new FractalSample(job.maxIterations(), false, 0.0, 0.0);
+            }
+
+            PerturbationResult result = referencePool.calculate(
+                    cReal, cImaginary, deltaReal, deltaImaginary,
+                    job.maxIterations(), cancelled);
+            if (result.reliable()) {
+                return result.sample();
+            }
+            return calculateHighPrecision(
+                    cReal, cImaginary, mathContext, job.maxIterations(), cancelled);
+        }
+    }
 
     /** Shared bounded set of references used to recover perturbation glitches. */
     private static final class ReferencePool {

@@ -2,6 +2,7 @@ package com.shangin.fractal.render;
 
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.math.Viewport;
 import org.junit.jupiter.api.Test;
 
@@ -180,6 +181,41 @@ class MandelbrotPerturbationRenderBackendTest {
         assertNotNull(diagnostics.get());
         assertTrue(diagnostics.get().additionalReferenceOrbitCount() > 0);
         assertEquals(0, diagnostics.get().highPrecisionFallbackPixelCount());
+    }
+
+    @Test
+    void preciseSamplerMatchesHighPrecisionAtDeepSubpixelCoordinates() {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-0.8317528516858322713653476366999",
+                        "0.207813754242134522471317257011028", "1.6e-13"),
+                33, 25, 2_700);
+        PreciseRenderGrid grid = job.preciseGrid();
+        MandelbrotPerturbationRenderBackend.PreciseSampler sampler =
+                MandelbrotPerturbationRenderBackend.createPreciseSampler(
+                        job, () -> false).orElseThrow();
+
+        for (int[] point : List.of(
+                new int[]{8, 6}, new int[]{16, 12}, new int[]{24, 18})) {
+            BigDecimal cReal = grid.realAt(point[0]).add(
+                    grid.realStep().multiply(
+                            new BigDecimal("0.25"), grid.mathContext()),
+                    grid.mathContext());
+            BigDecimal cImaginary = grid.imaginaryAt(point[1]).subtract(
+                    grid.imaginaryStep().multiply(
+                            new BigDecimal("0.25"), grid.mathContext()),
+                    grid.mathContext());
+
+            FractalSample actual = sampler.sample(cReal, cImaginary, () -> false);
+            HighPrecisionSample expected = highPrecisionSample(
+                    cReal, cImaginary, grid.mathContext(), job.maxIterations());
+
+            assertNotNull(actual);
+            assertEquals(expected.iterations(), actual.iterations(),
+                    "iteration mismatch at subpixel " + point[0] + "," + point[1]);
+            assertEquals(expected.escaped(), actual.escaped(),
+                    "escape mismatch at subpixel " + point[0] + "," + point[1]);
+        }
     }
 
     private static HighPrecisionSample highPrecisionSample(

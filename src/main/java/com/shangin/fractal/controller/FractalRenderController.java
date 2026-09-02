@@ -357,9 +357,24 @@ public final class FractalRenderController implements AutoCloseable {
                             scene
                     );
 
-                    /* The current AA calculator converts subpixel coordinates to double. */
                     if (deepZoom) {
-                        renderActivity.finish(renderGeneration);
+                        antialiasService.refineDeep(
+                                completedFrame,
+                                completedColoring,
+                                scene.antialiasing().samplingPattern(),
+                                surface.refinedPixelSnapshot(completedFrame),
+                                Platform::runLater,
+                                (region, colors) -> surface.applyAntialiasing(
+                                        completedFrame,
+                                        region,
+                                        colors
+                                ),
+                                () -> renderActivity.finish(renderGeneration),
+                                error -> {
+                                    renderActivity.finish(renderGeneration);
+                                    error.printStackTrace();
+                                }
+                        );
                         return;
                     }
 

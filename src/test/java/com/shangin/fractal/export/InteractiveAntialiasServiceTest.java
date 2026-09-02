@@ -26,6 +26,44 @@ import static org.junit.jupiter.api.Assertions.*;
 class InteractiveAntialiasServiceTest {
 
     @Test
+    void deepGridSizeUsesFourByFourOnlyAcrossSetBoundary() {
+        FractalData data = new FractalData(3, 3, 20);
+        for (int index = 0; index < data.size(); index++) {
+            data.set(index, new FractalSample(10, true, 3.0, 0.0));
+        }
+
+        assertEquals(2, InteractiveAntialiasService.deepSampleGridSize(
+                data, 1, 1));
+
+        data.set(0, new FractalSample(20, false, 0.0, 0.0));
+        assertEquals(4, InteractiveAntialiasService.deepSampleGridSize(
+                data, 1, 1));
+    }
+
+    @Test
+    void deepCandidatesIgnoreGentleGradientsButKeepWhiteOutliersAndSetEdges() {
+        FractalData data = new FractalData(3, 3, 20);
+        int[] colors = new int[9];
+        Arrays.fill(colors, 0xFF000000);
+        for (int index = 0; index < data.size(); index++) {
+            data.set(index, new FractalSample(10, true, 3.0, 0.0));
+        }
+
+        colors[4] = 0xFF555555;
+        assertFalse(InteractiveAntialiasService.isDeepSupersamplingCandidate(
+                data, colors, 1, 1));
+
+        colors[4] = 0xFFFFFFFF;
+        assertTrue(InteractiveAntialiasService.isDeepSupersamplingCandidate(
+                data, colors, 1, 1));
+
+        Arrays.fill(colors, 0xFF000000);
+        data.set(0, new FractalSample(20, false, 0.0, 0.0));
+        assertTrue(InteractiveAntialiasService.isDeepSupersamplingCandidate(
+                data, colors, 1, 1));
+    }
+
+    @Test
     void zoomOutShouldRefineNewlyExposedEdgesBeforeReprojectedCenter() {
         int width = 128;
         int height = 128;
@@ -269,6 +307,91 @@ class InteractiveAntialiasServiceTest {
     }
 
     @Test
+    void deepRefinementPublishesPreciseCandidateTiles() throws Exception {
+        RenderFrame frame = renderDeepFrame();
+        RenderJob job = frame.job();
+
+        SmoothPaletteColoring coloring = new SmoothPaletteColoring(
+                PalettePreset.ICE.palette());
+        int[] baseColors = AdaptivePngExportService.colorBaseFrame(
+                frame.samplePlane(), coloring);
+        int[] refinedColors = baseColors.clone();
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        AtomicInteger publishedTiles = new AtomicInteger();
+
+        try (InteractiveAntialiasService service = new InteractiveAntialiasService()) {
+            service.refineDeep(
+                    frame,
+                    coloring,
+                    SamplingPattern.REGULAR,
+                    RefinedPixelSnapshot.empty(job.width(), job.height()),
+                    Runnable::run,
+                    (region, colors) -> {
+                        publishedTiles.incrementAndGet();
+                        for (int row = 0; row < region.height(); row++) {
+                            System.arraycopy(
+                                    colors,
+                                    row * region.width(),
+                                    refinedColors,
+                                    (region.y() + row) * job.width() + region.x(),
+                                    region.width());
+                        }
+                    },
+                    completed::countDown,
+                    exception -> {
+                        error.set(exception);
+                        completed.countDown();
+                    }
+            );
+
+            assertTrue(completed.await(15, TimeUnit.SECONDS));
+            assertNull(error.get());
+            assertTrue(publishedTiles.get() > 0);
+            assertFalse(Arrays.equals(baseColors, refinedColors));
+            int[] recolored = service.recolorCached(frame, coloring);
+            for (int index = 0; index < recolored.length; index++) {
+                assertTrue(colorsDifferByAtMostOne(refinedColors[index], recolored[index]),
+                        "cached deep-AA color drift at pixel " + index);
+            }
+        }
+    }
+
+    @Test
+    void cancellingDeepRefinementSuppressesQueuedCallbacks() throws Exception {
+        RenderFrame frame = renderDeepFrame();
+        ConcurrentLinkedQueue<Runnable> callbacks = new ConcurrentLinkedQueue<>();
+        CountDownLatch callbackQueued = new CountDownLatch(1);
+        AtomicInteger publishedTiles = new AtomicInteger();
+
+        try (InteractiveAntialiasService service = new InteractiveAntialiasService()) {
+            service.refineDeep(
+                    frame,
+                    new SmoothPaletteColoring(PalettePreset.ICE.palette()),
+                    SamplingPattern.REGULAR,
+                    RefinedPixelSnapshot.empty(
+                            frame.job().width(), frame.job().height()),
+                    callback -> {
+                        callbacks.add(callback);
+                        callbackQueued.countDown();
+                    },
+                    (region, colors) -> publishedTiles.incrementAndGet(),
+                    () -> {},
+                    exception -> fail(exception)
+            );
+
+            assertTrue(callbackQueued.await(15, TimeUnit.SECONDS));
+            service.cancelCurrent();
+
+            Runnable callback;
+            while ((callback = callbacks.poll()) != null) {
+                callback.run();
+            }
+            assertEquals(0, publishedTiles.get());
+        }
+    }
+
+    @Test
     void cancellationShouldSuppressQueuedTileCallbacks() throws Exception {
         FractalPreset preset = FractalPreset.MANDELBROT;
         RenderFrame frame = RenderFrame.create(new RenderRequest(
@@ -465,5 +588,33 @@ class InteractiveAntialiasServiceTest {
         ValidityMask mask = new ValidityMask(width, height);
         mask.markReady(new RenderRegion(0, 0, width, height));
         return mask;
+    }
+
+    private static RenderFrame renderDeepFrame() throws InterruptedException {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT,
+                        com.shangin.fractal.coloring.OrbitTrap.NONE),
+                new com.shangin.fractal.math.Viewport(
+                        "-0.8317528516858322713653476366999",
+                        "0.207813754242134522471317257011028",
+                        "1.6e-13"),
+                24, 18, 2_700);
+        RenderFrame frame = RenderFrame.create(job);
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(2, ignored -> {})) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+        return frame;
+    }
+
+    private static boolean colorsDifferByAtMostOne(int first, int second) {
+        for (int shift : new int[]{24, 16, 8, 0}) {
+            int firstChannel = (first >>> shift) & 0xFF;
+            int secondChannel = (second >>> shift) & 0xFF;
+            if (Math.abs(firstChannel - secondChannel) > 1) {
+                return false;
+            }
+        }
+        return true;
     }
 }
