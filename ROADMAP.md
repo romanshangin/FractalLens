@@ -123,11 +123,11 @@ existing behavior is covered by tests.
 - [x] Cache reference orbits across compatible renders only after their ownership,
   precision, and invalidation rules are explicit.
 
-### 7.5. Pass the correctness and performance gate
+### 7.5. [x] Pass the correctness and performance gate
 
-- Verify deep-zoom output against direct arbitrary-precision reference renders, including boundary points, long-running interior points, glitches, pan/zoom transitions, and cancellation.
-- Benchmark the backend-selection threshold, reference-orbit overhead, cache effectiveness, time to first visible tile, and total render time.
-- Treat a correct, verified, and measured Mandelbrot deep-zoom backend with a
+- [x] Verify deep-zoom output against direct arbitrary-precision reference renders, including boundary points, long-running interior points, glitches, pan/zoom transitions, and cancellation.
+- [x] Benchmark the backend-selection threshold, reference-orbit overhead, cache effectiveness, time to first visible tile, and total render time.
+- [x] Treat a correct, verified, and measured Mandelbrot deep-zoom backend with a
   direct CPU fallback as the completion boundary before starting GPU work.
 
 ### 7.6. Defer secondary deep-zoom optimizations until after GPU evaluation

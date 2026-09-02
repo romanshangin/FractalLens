@@ -268,3 +268,32 @@ reference orbit. Reference caching and series approximation can then reduce
 the amortized cost further. Production integration is therefore deferred to
 the deep-zoom phase; the current scalar kernel remains unchanged. The prototype
 can be repeated with `mvn -Pperturbation-benchmark verify -DskipTests`.
+
+## Deep-zoom correctness and performance gate
+
+Completed on 2026-09-01 on the local arm64 Java 26.0.1 runtime. `mvn test`
+completed successfully with 254 tests. The deep-zoom coverage verifies the
+Mandelbrot perturbation output against arbitrary-precision control samples,
+including a known boundary viewport, deep subpixel positions, a forced
+additional-reference (glitch) path, long-running interior points, and a render
+grid whose pixels cannot be represented by `double`. It also checks pan/zoom
+tile ordering, cancellation before publication and while tiles are queued, and
+the bounded exact-match reference-orbit cache.
+
+The dedicated profile was run at 480x270, 964 maximum iterations, one warmup,
+and three measured runs. The production deep scene was all-escaping at the
+iteration cap, so it isolates backend startup and tile delivery rather than
+claiming a general throughput gain:
+
+| Run | Total | Reference orbit | Coordinate setup | First region | Cached reference |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cold | 175.22 ms | 15.64 ms | 2.57 ms | 49.34 ms | 1 / 15,440 B |
+| Cached repeat | 98.21 ms | 1.87 ms | 1.18 ms | 3.57 ms | 1 / 15,440 B |
+
+The cold run completed 135 tiles with a 8.14 ms median tile time; the cached
+repeat's median was 7.36 ms. No high-precision pixel fallbacks or additional
+references were needed for that benchmark scene. The selector chose
+`DirectDoubleRenderBackend` for a conventional viewport and
+`MandelbrotPerturbationRenderBackend` once the grid exceeded the double-
+precision capability. Numbers are machine-dependent; rerun the profile for a
+performance decision on a different runtime.

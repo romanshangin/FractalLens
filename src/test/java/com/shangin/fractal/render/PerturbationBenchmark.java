@@ -41,6 +41,7 @@ public final class PerturbationBenchmark {
         }
 
         benchmarkProductionDeepStartup();
+        benchmarkBackendSelectionThreshold();
     }
 
     private static void benchmark(double zoom) {
@@ -149,37 +150,73 @@ public final class PerturbationBenchmark {
                 new Viewport("-0.8317528516858322713653476366999",
                         "0.207813754242134522471317257011028", "1.6e-13"),
                 WIDTH, HEIGHT, MAX_ITERATIONS);
-        RenderFrame frame = RenderFrame.create(job);
         AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
         AtomicReference<TileTimingStats> tileTimings = new AtomicReference<>();
-        long started = System.nanoTime();
         try (MandelbrotPerturbationRenderBackend backend =
                      new MandelbrotPerturbationRenderBackend(
                              Math.max(1, Runtime.getRuntime().availableProcessors() - 1),
                              diagnostics::set)) {
-            backend.render(frame, () -> false, ignored -> {}, tileTimings::set);
+            System.out.printf("%nProduction deep startup (%dx%d, %,d iterations)%n",
+                    WIDTH, HEIGHT, MAX_ITERATIONS);
+            renderAndReport("cold", backend, job, diagnostics, tileTimings);
+            RenderFrame cached = renderAndReport("cached", backend, job, diagnostics, tileTimings);
+            benchmarkDeepAntialias(cached);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Production deep benchmark interrupted", exception);
         }
+    }
+
+    private static RenderFrame renderAndReport(
+            String label,
+            MandelbrotPerturbationRenderBackend backend,
+            RenderJob job,
+            AtomicReference<DeepZoomTimingStats> diagnostics,
+            AtomicReference<TileTimingStats> tileTimings
+    ) throws InterruptedException {
+        RenderFrame frame = RenderFrame.create(job);
+        diagnostics.set(null);
+        tileTimings.set(null);
+        long started = System.nanoTime();
+        backend.render(frame, () -> false, ignored -> {}, tileTimings::set);
         double totalMs = toMs(System.nanoTime() - started);
         DeepZoomTimingStats stats = diagnostics.get();
         TileTimingStats tiles = tileTimings.get();
-        System.out.printf("%nProduction deep startup (%dx%d, %,d iterations)%n",
-                WIDTH, HEIGHT, MAX_ITERATIONS);
         System.out.printf(
-                "total=%.2fms reference=%.2fms coordinates=%.2fms first-region=%.2fms%n",
-                totalMs, stats.referenceOrbitMs(), stats.coordinatePreparationMs(),
+                "%s total=%.2fms reference=%.2fms coordinates=%.2fms first-region=%.2fms%n",
+                label, totalMs, stats.referenceOrbitMs(), stats.coordinatePreparationMs(),
                 stats.timeToFirstRegionMs());
         System.out.printf(
-                "references=%d rebasing-cpu=%.2fms fallbacks=%d avg-iterations=%.1f%n",
+                "%s references=%d rebasing-cpu=%.2fms fallbacks=%d avg-iterations=%.1f cache=%d/%dB%n",
+                label,
                 stats.additionalReferenceOrbitCount(), stats.rebasingOrbitMs(),
-                stats.highPrecisionFallbackPixelCount(), stats.averageIterationsPerPixel());
+                stats.highPrecisionFallbackPixelCount(), stats.averageIterationsPerPixel(),
+                backend.cachedReferenceCount(), backend.cachedReferenceBytes());
         System.out.printf(
-                "tiles=%d tile-min/median/max=%.2f/%.2f/%.2fms%n",
+                "%s tiles=%d tile-min/median/max=%.2f/%.2f/%.2fms%n",
+                label,
                 tiles.tileCount(), tiles.minMs(), tiles.medianMs(), tiles.maxMs());
+        return frame;
+    }
 
-        benchmarkDeepAntialias(frame);
+    private static void benchmarkBackendSelectionThreshold() {
+        RenderJob normal = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport(-0.75, 0.0, 2.4), WIDTH, HEIGHT, MAX_ITERATIONS);
+        RenderJob deep = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-0.7436438870371510000000000000000000001",
+                        "0.1318259042053300000000000000000000002", "1e-80"),
+                WIDTH, HEIGHT, MAX_ITERATIONS);
+        DirectDoubleRenderBackend direct = new DirectDoubleRenderBackend();
+        MandelbrotPerturbationRenderBackend perturbation =
+                new MandelbrotPerturbationRenderBackend(1);
+        try (PrecisionSelectingRenderBackend selector =
+                     new PrecisionSelectingRenderBackend(direct, perturbation)) {
+            System.out.printf("%nbackend-selection normal=%s deep=%s%n",
+                    selector.select(normal).getClass().getSimpleName(),
+                    selector.select(deep).getClass().getSimpleName());
+        }
     }
 
     private static void benchmarkDeepAntialias(RenderFrame frame) {

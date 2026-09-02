@@ -30,3 +30,20 @@ mvn -Pformula-benchmark verify -DskipTests \
 Record the environment and complete result table before and after every kernel
 optimization. Performance changes should also retain the formula correctness
 tests and bit-for-bit sample comparisons where the optimization permits them.
+
+## Deep-zoom gate
+
+Run the Mandelbrot deep-zoom gate with:
+
+```shell
+mvn test
+mvn -Pperturbation-benchmark verify -DskipTests
+```
+
+The test suite checks the perturbation backend against direct arbitrary-
+precision samples at deep control points, verifies glitch rebasing and precise
+subpixel sampling, and covers reference-orbit cancellation, bounded cache
+eviction, deep backend selection, and progressive tile delivery. The benchmark
+reports cold and cached reference-orbit startup separately, time to the first
+visible region, total render time, tile timings, and the backend selected on
+each side of the hardware-double precision threshold.
