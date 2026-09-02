@@ -339,6 +339,12 @@ public class FractalView extends StackPane {
         recalculate();
     }
 
+    /** Enables precise AA for the current and subsequent Mandelbrot deep frames. */
+    public void setDeepAntialiasing(boolean enabled) {
+        stopColorCyclingForSceneChange();
+        renderController.setDeepAntialiasingEnabled(enabled);
+    }
+
     public void setOnRenderingChanged(Consumer<Boolean> handler) {
         renderingChangedHandler = java.util.Objects.requireNonNull(handler);
     }

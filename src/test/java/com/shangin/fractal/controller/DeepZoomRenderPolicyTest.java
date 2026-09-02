@@ -17,7 +17,7 @@ class DeepZoomRenderPolicyTest {
     private static final RenderTarget TARGET = new RenderTarget(1920, 1080);
 
     @Test
-    void deepMandelbrotUsesProgressiveBasePassWithoutDoubleRefinement() {
+    void deepMandelbrotUsesFastBasePresentationBeforeOptionalPreciseRefinement() {
         FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
                 .withViewport(new Viewport("-0.8267486182939549503119853330756",
                         "0.2150828768422976562284460839629", "1e-16"));

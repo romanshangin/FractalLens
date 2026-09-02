@@ -32,6 +32,7 @@ public final class FractalInspector extends ScrollPane {
     private final TextField centerImaginaryField = createCoordinateField();
     private final ZoomIndicator zoomIndicator = new ZoomIndicator();
     private final CheckBox colorCycling = new CheckBox("Animate");
+    private final CheckBox deepAntialiasing = new CheckBox("Enable");
     private final GridPane appearanceControls;
     private BigDecimal centerReal = BigDecimal.ZERO;
     private BigDecimal centerImaginary = BigDecimal.ZERO;
@@ -45,6 +46,7 @@ public final class FractalInspector extends ScrollPane {
             Consumer<OrbitTrap> onOrbitTrapChanged,
             Consumer<SamplingPattern> onSamplingPatternChanged,
             Consumer<InteractiveRenderMode> onRenderModeChanged,
+            Consumer<Boolean> onDeepAntialiasingChanged,
             Consumer<Boolean> onHistogramColoringChanged,
             Consumer<Boolean> onColorCyclingChanged,
             BiConsumer<BigDecimal, BigDecimal> onCenterChanged
@@ -90,6 +92,12 @@ public final class FractalInspector extends ScrollPane {
         colorCycling.setTooltip(new Tooltip("Cycle the palette without recalculating the fractal"));
         colorCycling.setOnAction(event -> onColorCyclingChanged.accept(colorCycling.isSelected()));
 
+        deepAntialiasing.setDisable(true);
+        deepAntialiasing.setTooltip(new Tooltip(
+                "Adaptively antialias strong edges with precise deep-zoom samples"));
+        deepAntialiasing.setOnAction(event ->
+                onDeepAntialiasingChanged.accept(deepAntialiasing.isSelected()));
+
         CheckBox histogramColoring = new CheckBox("Equalize");
         histogramColoring.setTooltip(new Tooltip(
                 "Apply frame-wide two-pass histogram tonal mapping"));
@@ -100,7 +108,7 @@ public final class FractalInspector extends ScrollPane {
 
         appearanceControls = appearanceGrid(
                 palette, paletteStops, orbitTrap, samplingPattern, renderMode,
-                histogramColoring, colorCycling);
+                histogramColoring, colorCycling, deepAntialiasing);
 
         VBox sections = new VBox(
                 8.0,
@@ -142,7 +150,8 @@ public final class FractalInspector extends ScrollPane {
             ComboBox<SamplingPattern> samplingPattern,
             ComboBox<InteractiveRenderMode> renderMode,
             CheckBox histogramColoring,
-            CheckBox colorCycling
+            CheckBox colorCycling,
+            CheckBox deepAntialiasing
     ) {
         GridPane grid = createGrid();
         grid.addRow(0, new Label("Palette"), palette);
@@ -152,7 +161,8 @@ public final class FractalInspector extends ScrollPane {
         grid.addRow(3, new Label("Histogram"), histogramColoring);
         grid.addRow(4, new Label("Color cycle"), colorCycling);
         grid.addRow(5, new Label("AA pattern"), samplingPattern);
-        grid.addRow(6, new Label("Display"), renderMode);
+        grid.addRow(6, new Label("Deep AA"), deepAntialiasing);
+        grid.addRow(7, new Label("Display"), renderMode);
         GridPane.setHgrow(palette, Priority.ALWAYS);
         GridPane.setHgrow(paletteStops, Priority.ALWAYS);
         GridPane.setHgrow(orbitTrap, Priority.ALWAYS);
@@ -160,6 +170,7 @@ public final class FractalInspector extends ScrollPane {
         GridPane.setHgrow(renderMode, Priority.ALWAYS);
         GridPane.setHgrow(colorCycling, Priority.ALWAYS);
         GridPane.setHgrow(histogramColoring, Priority.ALWAYS);
+        GridPane.setHgrow(deepAntialiasing, Priority.ALWAYS);
         return grid;
     }
 
@@ -227,6 +238,14 @@ public final class FractalInspector extends ScrollPane {
 
     public void setColorCyclingSelected(boolean selected) {
         colorCycling.setSelected(selected);
+    }
+
+    /** Enables the opt-in control only while the active viewport uses deep zoom. */
+    public void setDeepZoom(boolean active) {
+        deepAntialiasing.setDisable(!active);
+        if (!active) {
+            deepAntialiasing.setSelected(false);
+        }
     }
 
     private void updateCoordinateText() {

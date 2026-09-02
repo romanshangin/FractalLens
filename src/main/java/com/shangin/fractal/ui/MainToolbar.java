@@ -37,7 +37,7 @@ public final class MainToolbar extends StackPane {
         deepZoomLabel.setMouseTransparent(true);
         deepZoomLabel.setVisible(false);
         deepZoomLabel.setStyle(
-                "-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: #d06b00;");
+                "-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: #b55454;");
         StackPane.setAlignment(deepZoomLabel, Pos.CENTER);
 
         getChildren().addAll(actions, deepZoomLabel);

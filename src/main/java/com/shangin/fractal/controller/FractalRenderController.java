@@ -7,6 +7,7 @@ import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
+import com.shangin.fractal.scene.SamplingPattern;
 import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
@@ -39,6 +40,9 @@ public final class FractalRenderController implements AutoCloseable {
     private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
     private final RenderFrameCache frameCache = new RenderFrameCache();
     private final RenderActivityTracker renderActivity = new RenderActivityTracker();
+    private final DeepZoomAntialiasState deepAntialiasState =
+            new DeepZoomAntialiasState();
+    private RenderFrame deepAntialiasedFrame;
     private final ExecutorService recolorExecutor = new ThreadPoolExecutor(
             1, 1, 0L, TimeUnit.MILLISECONDS,
             new LinkedBlockingDeque<>(1),
@@ -154,6 +158,7 @@ public final class FractalRenderController implements AutoCloseable {
         Viewport viewport = scene.viewport();
 
         boolean deepZoom = DeepZoomRenderPolicy.isDeepZoom(scene, target);
+        deepAntialiasState.setDeepZoomActive(deepZoom);
         deepZoomChangedHandler.accept(deepZoom);
         InteractiveRenderMode presentationMode =
                 DeepZoomRenderPolicy.presentationMode(scene, target);
@@ -216,6 +221,9 @@ public final class FractalRenderController implements AutoCloseable {
         RenderFrame targetFrame =
                 reuseResult.frame();
 
+        if (deepAntialiasedFrame != targetFrame) {
+            deepAntialiasedFrame = null;
+        }
         activeFrame =
                 targetFrame;
 
@@ -358,23 +366,15 @@ public final class FractalRenderController implements AutoCloseable {
                     );
 
                     if (deepZoom) {
-                        antialiasService.refineDeep(
-                                completedFrame,
-                                completedColoring,
-                                scene.antialiasing().samplingPattern(),
-                                surface.refinedPixelSnapshot(completedFrame),
-                                Platform::runLater,
-                                (region, colors) -> surface.applyAntialiasing(
-                                        completedFrame,
-                                        region,
-                                        colors
-                                ),
-                                () -> renderActivity.finish(renderGeneration),
-                                error -> {
-                                    renderActivity.finish(renderGeneration);
-                                    error.printStackTrace();
-                                }
-                        );
+                        if (deepAntialiasState.shouldRefine()) {
+                            refineDeepFrame(
+                                    completedFrame,
+                                    completedColoring,
+                                    scene.antialiasing().samplingPattern(),
+                                    renderGeneration);
+                        } else {
+                            renderActivity.finish(renderGeneration);
+                        }
                         return;
                     }
 
@@ -398,6 +398,61 @@ public final class FractalRenderController implements AutoCloseable {
 
                 },
 
+                error -> {
+                    renderActivity.finish(renderGeneration);
+                    error.printStackTrace();
+                }
+        );
+    }
+
+    /** Opts into deep AA and refines an already visible base frame when possible. */
+    public void setDeepAntialiasingEnabled(boolean enabled) {
+        deepAntialiasState.setEnabled(enabled);
+        if (!deepAntialiasState.shouldRefine()) {
+            return;
+        }
+
+        CompletedRender completed = surface.completedRender();
+        if (completed == null
+                || completed.frame() != activeFrame
+                || !activeFrame.isComplete()
+                || deepAntialiasedFrame == activeFrame) {
+            return;
+        }
+
+        long refinementGeneration = renderActivity.begin();
+        ColoringStrategy coloring = completed.scene().coloring()
+                .createStrategy(activeFrame.samplePlane());
+        refineDeepFrame(
+                activeFrame,
+                coloring,
+                completed.scene().antialiasing().samplingPattern(),
+                refinementGeneration);
+    }
+
+    private void refineDeepFrame(
+            RenderFrame frame,
+            ColoringStrategy coloring,
+            SamplingPattern samplingPattern,
+            long renderGeneration
+    ) {
+        antialiasService.refineDeep(
+                frame,
+                coloring,
+                samplingPattern,
+                surface.refinedPixelSnapshot(frame),
+                Platform::runLater,
+                (region, colors) -> surface.applyAntialiasing(
+                        frame,
+                        region,
+                        colors
+                ),
+                () -> {
+                    if (frame == activeFrame) {
+                        deepAntialiasedFrame = frame;
+                    }
+                    renderActivity.finish(renderGeneration);
+                },
                 error -> {
                     renderActivity.finish(renderGeneration);
                     error.printStackTrace();
