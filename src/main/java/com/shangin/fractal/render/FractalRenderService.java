@@ -1,5 +1,8 @@
 package com.shangin.fractal.render;
 
+import com.shangin.fractal.gpu.GpuCapabilityReport;
+import com.shangin.fractal.gpu.GpuRuntime;
+import com.shangin.fractal.gpu.GpuRuntimeFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -18,6 +21,7 @@ public final class FractalRenderService implements AutoCloseable {
 
     private final ExecutorService coordinator;
     private final RenderBackend backend;
+    private final GpuRuntime gpuRuntime;
     private final AtomicLong generation = new AtomicLong();
     private Future<?> currentRender;
 
@@ -28,13 +32,28 @@ public final class FractalRenderService implements AutoCloseable {
     public FractalRenderService() {
         this(new PrecisionSelectingRenderBackend(
                 new DirectDoubleRenderBackend(),
-                new MandelbrotPerturbationRenderBackend()));
+                new MandelbrotPerturbationRenderBackend()),
+                GpuRuntimeFactory.createDefault());
     }
 
     public FractalRenderService(RenderBackend backend) {
+        this(backend, GpuRuntimeFactory.createDefault());
+    }
+
+    /**
+     * The runtime is owned here rather than by the controller or JavaFX surface.
+     * Until a GPU calculation backend exists, all render requests stay on CPU.
+     */
+    public FractalRenderService(RenderBackend backend, GpuRuntime gpuRuntime) {
         coordinator = Executors.newSingleThreadExecutor(daemonThreadFactory("fractal-render"));
         progressScheduler = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory("fractal-progress"));
         this.backend = Objects.requireNonNull(backend);
+        this.gpuRuntime = Objects.requireNonNull(gpuRuntime);
+    }
+
+    /** Safe diagnostic snapshot for UI/logging; contains no native handles. */
+    public GpuCapabilityReport gpuCapabilityReport() {
+        return gpuRuntime.capabilityReport();
     }
 
     private static ThreadFactory daemonThreadFactory(String prefix) {
@@ -225,7 +244,11 @@ public final class FractalRenderService implements AutoCloseable {
         coordinator.shutdownNow();
         progressScheduler.shutdownNow();
 
-        backend.close();
+        try {
+            backend.close();
+        } finally {
+            gpuRuntime.close();
+        }
     }
 
     private final class ProgressBatcher {
