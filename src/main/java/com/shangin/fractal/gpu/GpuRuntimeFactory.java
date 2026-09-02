@@ -7,6 +7,9 @@ public final class GpuRuntimeFactory {
     }
 
     public static GpuRuntime createDefault() {
+        if (!Boolean.parseBoolean(System.getProperty("fractal.gpu.enabled", "true"))) {
+            return new UnavailableGpuRuntime(GpuPlatform.current(), "GPU runtime disabled by fractal.gpu.enabled.");
+        }
         return switch (GpuPlatform.current()) {
             case MACOS -> MacosMoltenVkRuntime.discover();
             case WINDOWS -> new UnavailableGpuRuntime(

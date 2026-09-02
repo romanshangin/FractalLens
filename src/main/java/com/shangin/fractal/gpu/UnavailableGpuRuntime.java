@@ -2,8 +2,9 @@ package com.shangin.fractal.gpu;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
-class UnavailableGpuRuntime implements GpuRuntime {
+final class UnavailableGpuRuntime implements GpuRuntime {
 
     private final GpuPlatform platform;
     private String detail;
@@ -16,7 +17,24 @@ class UnavailableGpuRuntime implements GpuRuntime {
 
     @Override
     public synchronized GpuCapabilityReport capabilityReport() {
-        return new GpuCapabilityReport(platform, state, List.of(), detail);
+        return new GpuCapabilityReport(platform, state, List.of(), Optional.empty(), detail);
+    }
+
+    @Override
+    public boolean checkHealth() {
+        return false;
+    }
+
+    @Override
+    public <T> T runOrFallback(GpuNumericCapability required, GpuWork<T> gpu, GpuWork<T> cpu)
+            throws InterruptedException {
+        Objects.requireNonNull(required);
+        Objects.requireNonNull(gpu);
+        Objects.requireNonNull(cpu);
+        if (Thread.currentThread().isInterrupted()) {
+            throw new InterruptedException("CPU fallback cancelled");
+        }
+        return cpu.run();
     }
 
     @Override

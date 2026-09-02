@@ -1,29 +1,18 @@
 package com.shangin.fractal.gpu;
 
-/**
- * macOS entry point for MoltenVK. The initial boundary validates that LWJGL's
- * Vulkan binding is present; native loading and physical-device feature
- * enumeration remain pending in 8.1, so no numeric mode is enabled.
- */
-final class MacosMoltenVkRuntime extends UnavailableGpuRuntime {
+import java.util.Locale;
 
-    private MacosMoltenVkRuntime(String detail) {
-        super(GpuPlatform.MACOS, detail);
+/** Loads the native adapter only on supported macOS JVM architectures. */
+final class MacosMoltenVkRuntime {
+    private MacosMoltenVkRuntime() {
     }
 
     static GpuRuntime discover() {
-        try {
-            Class.forName("org.lwjgl.vulkan.VK", false,
-                    MacosMoltenVkRuntime.class.getClassLoader());
-            return new MacosMoltenVkRuntime(
-                    "LWJGL Vulkan binding found. MoltenVK device enumeration is not yet "
-                            + "implemented; rendering remains on CPU.");
-        } catch (ClassNotFoundException exception) {
-            return new MacosMoltenVkRuntime(
-                    "LWJGL Vulkan binding is not installed; using the CPU backend.");
-        } catch (LinkageError error) {
-            return new MacosMoltenVkRuntime(
-                    "LWJGL Vulkan binding could not load: " + error.getClass().getSimpleName());
+        String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
+        if (!arch.equals("aarch64") && !arch.equals("arm64")
+                && !arch.equals("x86_64") && !arch.equals("amd64")) {
+            return new UnavailableGpuRuntime(GpuPlatform.MACOS, "Unsupported macOS JVM architecture: " + arch);
         }
+        return ManagedGpuRuntime.open(GpuPlatform.MACOS, MacosMoltenVkSession::open);
     }
 }

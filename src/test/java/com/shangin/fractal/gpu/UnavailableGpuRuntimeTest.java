@@ -26,7 +26,7 @@ class UnavailableGpuRuntimeTest {
 
     @Test
     void deviceDescriptionCopiesItsCapabilities() {
-        GpuDevice device = new GpuDevice("Apple GPU", java.util.Set.of(
+        GpuDevice device = new GpuDevice("Apple GPU", "1.1.0", 0, 0, 0, 256, 1_048_576, java.util.Set.of(
                 GpuNumericCapability.FLOAT32));
 
         assertTrue(device.supports(GpuNumericCapability.FLOAT32));
