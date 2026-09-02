@@ -96,6 +96,30 @@ class MandelbrotPerturbationRenderBackendTest {
     }
 
     @Test
+    void fallsBackToHighPrecisionWhenPerturbationDeltasUnderflow() throws Exception {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("2", "0", "1e-400"), 5, 3, 5);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(1, diagnostics::set)) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+
+        int centerRow = job.width();
+        assertEquals(2, frame.samplePlane().iterations(centerRow + 2),
+                "the exact c=2 boundary point escapes on the second iteration");
+        assertEquals(1, frame.samplePlane().iterations(centerRow + 3),
+                "a positive sub-double delta must not collapse back to c=2");
+        assertEquals(1, frame.samplePlane().iterations(centerRow + 4),
+                "the right edge must retain its precise coordinate");
+        assertEquals(0, diagnostics.get().highPrecisionFallbackPixelCount(),
+                "scaled perturbation should avoid per-pixel BigDecimal iteration");
+    }
+
+    @Test
     void boundsExecutorTasksWhileReportingTileAndIterationDiagnostics() throws Exception {
         RenderJob job = new RenderJob(
                 FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
@@ -157,7 +181,7 @@ class MandelbrotPerturbationRenderBackendTest {
                 33, 25, 500);
         RenderJob second = new RenderJob(formula, new Viewport("0.6", "0", "1e-80"),
                 33, 25, 500);
-        long orbitBytes = 2L * (first.maxIterations() + 1) * Double.BYTES;
+        long orbitBytes = 5L * (first.maxIterations() + 1) * Double.BYTES;
 
         try (MandelbrotPerturbationRenderBackend backend =
                      new MandelbrotPerturbationRenderBackend(1, ignored -> {}, orbitBytes)) {
@@ -211,20 +235,24 @@ class MandelbrotPerturbationRenderBackendTest {
         }
 
         PreciseRenderGrid grid = job.preciseGrid();
-        for (int[] point : List.of(
-                new int[]{0, 0}, new int[]{32, 0}, new int[]{16, 12},
-                new int[]{0, 24}, new int[]{32, 24})) {
-            int index = point[1] * job.width() + point[0];
-            HighPrecisionSample expected = highPrecisionSample(
-                    grid.realAt(point[0]), grid.imaginaryAt(point[1]),
-                    grid.mathContext(), job.maxIterations());
-            assertEquals(expected.iterations(), frame.samplePlane().iterations(index),
-                    "iteration mismatch at " + point[0] + "," + point[1]);
-            assertEquals(expected.escaped(), frame.samplePlane().escaped(index),
-                    "escape mismatch at " + point[0] + "," + point[1]);
+        for (int y : List.of(0, 6, 12, 18, 24)) {
+            for (int x : List.of(0, 8, 16, 24, 32)) {
+                int index = y * job.width() + x;
+                HighPrecisionSample expected = highPrecisionSample(
+                        grid.realAt(x), grid.imaginaryAt(y),
+                        grid.mathContext(), job.maxIterations());
+                assertEquals(expected.iterations(), frame.samplePlane().iterations(index),
+                        "iteration mismatch at " + x + "," + y);
+                assertEquals(expected.escaped(), frame.samplePlane().escaped(index),
+                        "escape mismatch at " + x + "," + y);
+                assertEquals(expected.smoothIterations(),
+                        frame.samplePlane().smoothIterations(index), 1e-6,
+                        "smooth iteration mismatch at " + x + "," + y);
+            }
         }
         assertNotNull(diagnostics.get());
-        assertTrue(diagnostics.get().additionalReferenceOrbitCount() > 0);
+        assertTrue(diagnostics.get().modifiedRebaseCount() > 0);
+        assertEquals(0, diagnostics.get().additionalReferenceOrbitCount());
         assertEquals(0, diagnostics.get().highPrecisionFallbackPixelCount());
     }
 
@@ -260,7 +288,149 @@ class MandelbrotPerturbationRenderBackendTest {
                     "iteration mismatch at subpixel " + point[0] + "," + point[1]);
             assertEquals(expected.escaped(), actual.escaped(),
                     "escape mismatch at subpixel " + point[0] + "," + point[1]);
+            assertEquals(expected.smoothIterations(), actual.smoothIterations(), 1e-6,
+                    "smooth iteration mismatch at subpixel " + point[0] + "," + point[1]);
         }
+    }
+
+    @Test
+    void blaMatchesScalarAndHighPrecisionOnADeepBoundaryWithEscapingAndBoundedPixels() throws Exception {
+        RenderFrame frame = assertBlaMatchesControls(new Viewport("0", "1", "1e-30"), 137);
+        int escaped = 0;
+        for (int index = 0; index < frame.samplePlane().size(); index++) {
+            if (frame.samplePlane().escaped(index)) {
+                escaped++;
+            }
+        }
+        assertTrue(escaped > 0 && escaped < frame.samplePlane().size());
+    }
+
+    @Test
+    void blaMatchesScalarAndHighPrecisionOnTheDeepProductionReference() throws Exception {
+        assertBlaMatchesControls(new Viewport("-0.8317528516858322713653476366999",
+                "0.207813754242134522471317257011028", "1e-30"), 2_700);
+    }
+
+    @Test
+    void blaSamplerDoesNotApplyViewportRadiiToAnOutOfViewportPoint() {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("0", "1", "1e-30"), 17, 13, 137);
+        MandelbrotPerturbationRenderBackend.PreciseSampler sampler =
+                MandelbrotPerturbationRenderBackend.createPreciseSampler(
+                        job, () -> false).orElseThrow();
+        FractalSample sample = sampler.sample(new BigDecimal("0.5"), BigDecimal.ZERO, () -> false);
+
+        assertNotNull(sample);
+        assertTrue(sample.escaped());
+        assertEquals(5, sample.iterations());
+    }
+
+    @Test
+    void rebuildsBlaRadiiWhenZoomChangesWhileTheReferenceOrbitIsReused() throws Exception {
+        FormulaDefinition formula = FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE);
+        RenderJob deep = new RenderJob(formula,
+                new Viewport("-0.8317528516858322713653476366999",
+                        "0.207813754242134522471317257011028", "1e-30"), 17, 13, 2_700);
+        RenderJob wider = new RenderJob(formula,
+                new Viewport("-0.8317528516858322713653476366999",
+                        "0.207813754242134522471317257011028", "1.6e-13"), 17, 13, 2_700);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(1, diagnostics::set)) {
+            backend.render(RenderFrame.create(deep), () -> false, ignored -> {}, null);
+            assertTrue(diagnostics.get().blaStepCount() > 0);
+            assertEquals(1, backend.cachedReferenceCount());
+
+            backend.render(RenderFrame.create(wider), () -> false, ignored -> {}, null);
+            assertEquals(1, backend.cachedReferenceCount());
+            assertEquals(0, diagnostics.get().blaStepCount(),
+                    "the wider frame must not use the previous, over-permissive delta bound");
+        }
+    }
+
+    @Test
+    void cancelsABlaAcceleratedGenerationAfterProgressIsPublished() throws Exception {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("0", "1", "1e-30"), 129, 129, 137);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicBoolean cancelled = new AtomicBoolean();
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(1, diagnostics::set)) {
+            backend.render(frame, cancelled::get, ignored -> cancelled.set(true), null);
+        }
+        assertTrue(diagnostics.get().blaStepCount() > 0);
+        assertTrue(diagnostics.get().cancelledTileCount() > 0);
+        assertFalse(frame.isComplete());
+    }
+
+    @Test
+    void blaSamplerMatchesHighPrecisionAtDeepSubpixelCoordinates() {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("0", "1", "1e-30"), 17, 13, 137);
+        PreciseRenderGrid grid = job.preciseGrid();
+        MandelbrotPerturbationRenderBackend.PreciseSampler sampler =
+                MandelbrotPerturbationRenderBackend.createPreciseSampler(job, () -> false).orElseThrow();
+        BigDecimal cReal = grid.realAt(4).add(
+                grid.realStep().multiply(new BigDecimal("0.25"), grid.mathContext()), grid.mathContext());
+        BigDecimal cImaginary = grid.imaginaryAt(3).subtract(
+                grid.imaginaryStep().multiply(new BigDecimal("0.25"), grid.mathContext()), grid.mathContext());
+        FractalSample sample = sampler.sample(cReal, cImaginary, () -> false);
+        HighPrecisionSample expected = highPrecisionSample(
+                cReal, cImaginary, grid.mathContext(), job.maxIterations());
+
+        assertNotNull(sample);
+        assertEquals(expected.iterations(), sample.iterations());
+        assertEquals(expected.escaped(), sample.escaped());
+        assertEquals(expected.smoothIterations(), sample.smoothIterations(), 1e-6);
+    }
+
+    private static RenderFrame assertBlaMatchesControls(Viewport viewport, int maxIterations) throws Exception {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                viewport, 17, 13, maxIterations);
+        RenderFrame accelerated = RenderFrame.create(job);
+        RenderFrame scalar = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+        try (MandelbrotPerturbationRenderBackend bla =
+                     new MandelbrotPerturbationRenderBackend(2, diagnostics::set);
+             MandelbrotPerturbationRenderBackend baseline =
+                     new MandelbrotPerturbationRenderBackend(2, ignored -> {},
+                             MandelbrotPerturbationRenderBackend.DEFAULT_REFERENCE_CACHE_BYTES, false)) {
+            bla.render(accelerated, () -> false, ignored -> {}, null);
+            baseline.render(scalar, () -> false, ignored -> {}, null);
+        }
+        assertTrue(accelerated.isComplete());
+        assertTrue(diagnostics.get().blaStepCount() > 0);
+        assertTrue(diagnostics.get().blaSkippedIterationCount() > diagnostics.get().blaStepCount());
+        assertEquals(0, diagnostics.get().highPrecisionFallbackPixelCount());
+        for (int index = 0; index < scalar.samplePlane().size(); index++) {
+            assertEquals(scalar.samplePlane().iterations(index), accelerated.samplePlane().iterations(index),
+                    "BLA/scalar iteration mismatch at " + index);
+            assertEquals(scalar.samplePlane().escaped(index), accelerated.samplePlane().escaped(index),
+                    "BLA/scalar escape mismatch at " + index);
+            assertEquals(scalar.samplePlane().smoothIterations(index),
+                    accelerated.samplePlane().smoothIterations(index), 1e-6,
+                    "BLA/scalar smooth mismatch at " + index);
+        }
+        PreciseRenderGrid grid = job.preciseGrid();
+        for (int y : List.of(0, 6, 12)) {
+            for (int x : List.of(0, 8, 16)) {
+                int index = y * job.width() + x;
+                HighPrecisionSample expected = highPrecisionSample(
+                        grid.realAt(x), grid.imaginaryAt(y), grid.mathContext(), maxIterations);
+                assertEquals(expected.iterations(), accelerated.samplePlane().iterations(index),
+                        "BLA/high-precision iteration mismatch at " + x + "," + y);
+                assertEquals(expected.escaped(), accelerated.samplePlane().escaped(index));
+                assertEquals(expected.smoothIterations(),
+                        accelerated.samplePlane().smoothIterations(index), 1e-6,
+                        "BLA/high-precision smooth mismatch at " + x + "," + y);
+            }
+        }
+        return accelerated;
     }
 
     private static HighPrecisionSample highPrecisionSample(
@@ -280,13 +450,23 @@ class MandelbrotPerturbationRenderBackendTest {
             zr = nextReal;
             zi = nextImaginary;
             if (zr.multiply(zr, context).add(zi.multiply(zi, context)).compareTo(four) > 0) {
-                return new HighPrecisionSample(iteration, true);
+                return new HighPrecisionSample(
+                        iteration, true, zr.doubleValue(), zi.doubleValue());
             }
         }
-        return new HighPrecisionSample(maxIterations, false);
+        return new HighPrecisionSample(maxIterations, false, zr.doubleValue(), zi.doubleValue());
     }
 
-    private record HighPrecisionSample(int iterations, boolean escaped) {}
+    private record HighPrecisionSample(
+            int iterations,
+            boolean escaped,
+            double zr,
+            double zi
+    ) {
+        double smoothIterations() {
+            return new FractalSample(iterations, escaped, zr, zi).smoothIterations();
+        }
+    }
 
     private static int uncoveredArea(RenderRegion tile, RenderRegion coverage) {
         int overlapWidth = Math.max(0, Math.min(tile.x() + tile.width(), coverage.x() + coverage.width())

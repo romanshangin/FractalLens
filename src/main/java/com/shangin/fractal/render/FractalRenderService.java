@@ -45,8 +45,21 @@ public final class FractalRenderService implements AutoCloseable {
      * Until a GPU calculation backend exists, all render requests stay on CPU.
      */
     public FractalRenderService(RenderBackend backend, GpuRuntime gpuRuntime) {
+        this(backend, gpuRuntime,
+                Executors.newSingleThreadScheduledExecutor(daemonThreadFactory("fractal-progress")));
+    }
+
+    FractalRenderService(RenderBackend backend, ScheduledExecutorService progressScheduler) {
+        this(backend, GpuRuntimeFactory.createDefault(), progressScheduler);
+    }
+
+    private FractalRenderService(
+            RenderBackend backend,
+            GpuRuntime gpuRuntime,
+            ScheduledExecutorService progressScheduler
+    ) {
         coordinator = Executors.newSingleThreadExecutor(daemonThreadFactory("fractal-render"));
-        progressScheduler = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory("fractal-progress"));
+        this.progressScheduler = Objects.requireNonNull(progressScheduler);
         this.backend = Objects.requireNonNull(backend);
         this.gpuRuntime = Objects.requireNonNull(gpuRuntime);
     }
@@ -263,6 +276,8 @@ public final class FractalRenderService implements AutoCloseable {
         private final AtomicBoolean flushScheduled =
                 new AtomicBoolean();
 
+        private final AtomicBoolean firstFlush = new AtomicBoolean(true);
+
         private final RenderFrame renderFrame;
 
         private boolean finished;
@@ -299,7 +314,8 @@ public final class FractalRenderService implements AutoCloseable {
 
             progressScheduler.schedule(
                     this::flush,
-                    PROGRESS_INTERVAL_MS,
+                    // Do not hold the first ready pixels for a batching interval.
+                    firstFlush.getAndSet(false) ? 0L : PROGRESS_INTERVAL_MS,
                     TimeUnit.MILLISECONDS
             );
         }
