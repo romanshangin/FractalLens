@@ -8,7 +8,9 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -37,10 +39,12 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     private static final double INTERIOR_SAFETY_MARGIN = 1e-12;
     private static final double GLITCH_RELATIVE_THRESHOLD = 1e-6;
     private static final int MAX_ADDITIONAL_REFERENCES = 64;
+    static final long DEFAULT_REFERENCE_CACHE_BYTES = 32L * 1024L * 1024L;
 
     private final ExecutorService workers;
     private final int workerCount;
     private final Consumer<DeepZoomTimingStats> diagnosticsCompleted;
+    private final ReferenceOrbitCache referenceCache;
 
     public MandelbrotPerturbationRenderBackend() {
         this(Math.max(1, Runtime.getRuntime().availableProcessors() - 1), ignored -> {});
@@ -55,11 +59,23 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             int workerCount,
             Consumer<DeepZoomTimingStats> diagnosticsCompleted
     ) {
+        this(workerCount, diagnosticsCompleted, DEFAULT_REFERENCE_CACHE_BYTES);
+    }
+
+    MandelbrotPerturbationRenderBackend(
+            int workerCount,
+            Consumer<DeepZoomTimingStats> diagnosticsCompleted,
+            long referenceCacheBytes
+    ) {
         if (workerCount < 1) {
             throw new IllegalArgumentException("Worker count must be at least 1");
         }
+        if (referenceCacheBytes < 1) {
+            throw new IllegalArgumentException("Reference cache capacity must be positive");
+        }
         this.workerCount = workerCount;
         this.diagnosticsCompleted = Objects.requireNonNull(diagnosticsCompleted);
+        this.referenceCache = new ReferenceOrbitCache(referenceCacheBytes);
         AtomicInteger sequence = new AtomicInteger();
         workers = Executors.newFixedThreadPool(workerCount, runnable -> {
             Thread thread = new Thread(runnable,
@@ -99,7 +115,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             grid = frame.job().preciseGrid();
         }
         long referenceStarted = System.nanoTime();
-        ReferenceOrbit reference = ReferenceOrbit.create(frame.job(), grid, cancelled);
+        ReferenceOrbit reference = referenceCache.acquire(frame.job(), grid, cancelled);
         double referenceOrbitMs = elapsedMs(referenceStarted);
         if (reference == null) {
             return frame;
@@ -359,7 +375,8 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     }
 
     private static PerturbationResult perturb(
-            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, int maxIterations
+            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, int maxIterations,
+            BooleanSupplier cancelled
     ) {
         double deltaReal = 0.0;
         double deltaImaginary = 0.0;
@@ -367,6 +384,9 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         double zi = 0.0;
         int iteration = 0;
         while (iteration < maxIterations) {
+            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+                return new PerturbationResult(null, iteration, false);
+            }
             if (iteration >= reference.lastValidIteration()) {
                 return new PerturbationResult(null, iteration, false);
             }
@@ -513,7 +533,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         ) {
             int executed = 0;
             PerturbationResult primaryResult = perturb(
-                    primary(), primaryDeltaReal, primaryDeltaImaginary, maxIterations);
+                    primary(), primaryDeltaReal, primaryDeltaImaginary, maxIterations, cancelled);
             executed += primaryResult.executedIterations();
             if (primaryResult.reliable()) {
                 return primaryResult;
@@ -522,7 +542,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             for (ReferenceCandidate nearest : orderedAdditionalReferences(cReal, cImaginary)) {
                 PerturbationResult result = perturb(
                         nearest.reference(), nearest.deltaReal(),
-                        nearest.deltaImaginary(), maxIterations);
+                        nearest.deltaImaginary(), maxIterations, cancelled);
                 executed += result.executedIterations();
                 if (result.reliable()) {
                     return new PerturbationResult(result.sample(), executed, true);
@@ -543,7 +563,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             }
             references.add(additional);
             PerturbationResult result = perturb(
-                    additional, 0.0, 0.0, maxIterations);
+                    additional, 0.0, 0.0, maxIterations, cancelled);
             return new PerturbationResult(
                     result.sample(), executed + result.executedIterations(),
                     result.reliable());
@@ -624,7 +644,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         return new FractalSample(maxIterations, false, zr.doubleValue(), zi.doubleValue());
     }
 
-    private static List<RenderRegion> orderedTiles(RenderJob job) {
+    static List<RenderRegion> orderedTiles(RenderJob job) {
         List<RenderRegion> tiles = new ArrayList<>();
         for (int y = 0; y < job.height(); y += TILE_SIZE) {
             for (int x = 0; x < job.width(); x += TILE_SIZE) {
@@ -634,18 +654,71 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         }
         double priorityX = job.width() * job.priority().x();
         double priorityY = job.height() * job.priority().y();
-        tiles.sort(Comparator.comparingDouble(tile -> {
-            double dx = tile.x() + tile.width() / 2.0 - priorityX;
-            double dy = tile.y() + tile.height() / 2.0 - priorityY;
-            return dx * dx + dy * dy;
-        }));
+        Comparator<RenderRegion> byPriority = Comparator.comparingDouble(
+                tile -> distanceSquared(tile, priorityX, priorityY));
+        job.approximateCoverage().ifPresentOrElse(
+                coverage -> tiles.sort((first, second) -> compareForZoomOut(
+                        first, second, coverage, priorityX, priorityY)),
+                () -> tiles.sort(byPriority));
         return tiles;
+    }
+
+    private static int compareForZoomOut(
+            RenderRegion first,
+            RenderRegion second,
+            RenderRegion coverage,
+            double priorityX,
+            double priorityY
+    ) {
+        boolean firstExposed = uncoveredArea(first, coverage) > 0;
+        boolean secondExposed = uncoveredArea(second, coverage) > 0;
+        if (firstExposed != secondExposed) {
+            return firstExposed ? -1 : 1;
+        }
+        if (firstExposed) {
+            int byPreviewEdge = Double.compare(
+                    distanceToCoverageSquared(first, coverage),
+                    distanceToCoverageSquared(second, coverage));
+            if (byPreviewEdge != 0) {
+                return byPreviewEdge;
+            }
+        }
+        return Double.compare(
+                distanceSquared(first, priorityX, priorityY),
+                distanceSquared(second, priorityX, priorityY));
+    }
+
+    private static int uncoveredArea(RenderRegion tile, RenderRegion coverage) {
+        int overlapWidth = Math.max(0, Math.min(tile.x() + tile.width(), coverage.x() + coverage.width())
+                - Math.max(tile.x(), coverage.x()));
+        int overlapHeight = Math.max(0, Math.min(tile.y() + tile.height(), coverage.y() + coverage.height())
+                - Math.max(tile.y(), coverage.y()));
+        return tile.width() * tile.height() - overlapWidth * overlapHeight;
+    }
+
+    private static double distanceToCoverageSquared(RenderRegion tile, RenderRegion coverage) {
+        int coverageRight = coverage.x() + coverage.width();
+        int coverageBottom = coverage.y() + coverage.height();
+        int dx = Math.max(0, Math.max(coverage.x() - (tile.x() + tile.width()), tile.x() - coverageRight));
+        int dy = Math.max(0, Math.max(coverage.y() - (tile.y() + tile.height()), tile.y() - coverageBottom));
+        return (double) dx * dx + (double) dy * dy;
+    }
+
+    private static double distanceSquared(RenderRegion tile, double priorityX, double priorityY) {
+        double dx = tile.x() + tile.width() / 2.0 - priorityX;
+        double dy = tile.y() + tile.height() / 2.0 - priorityY;
+        return dx * dx + dy * dy;
     }
 
     @Override
     public void close() {
         workers.shutdownNow();
+        referenceCache.clear();
     }
+
+    int cachedReferenceCount() { return referenceCache.size(); }
+
+    long cachedReferenceBytes() { return referenceCache.retainedBytes(); }
 
     /** High-precision centre orbit retained once for all tiles in one frame. */
     private record ReferenceOrbit(
@@ -707,5 +780,72 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         double imaginaryAt(int iteration) { return imaginary[iteration]; }
         double cRealAsDouble() { return cReal.doubleValue(); }
         double cImaginaryAsDouble() { return cImaginary.doubleValue(); }
+        long retainedBytes() { return ((long) real.length + imaginary.length) * Double.BYTES; }
+    }
+
+    /**
+     * Backend-owned LRU cache. Entries are shared only when centre coordinate,
+     * precision, and iteration limit match exactly; cancelled work is never retained.
+     */
+    private static final class ReferenceOrbitCache {
+        private final long capacityBytes;
+        private final LinkedHashMap<ReferenceOrbitKey, ReferenceOrbit> entries =
+                new LinkedHashMap<>(16, 0.75f, true);
+        private long bytes;
+
+        private ReferenceOrbitCache(long capacityBytes) { this.capacityBytes = capacityBytes; }
+
+        ReferenceOrbit acquire(
+                RenderJob job, PreciseRenderGrid grid, BooleanSupplier cancelled
+        ) {
+            ReferenceOrbitKey key = ReferenceOrbitKey.forJob(job, grid);
+            synchronized (this) {
+                ReferenceOrbit cached = entries.get(key);
+                if (cached != null) {
+                    return cached;
+                }
+            }
+
+            /* Orbit construction is cancellable and must never block another generation's lookup. */
+            ReferenceOrbit created = ReferenceOrbit.create(job, grid, cancelled);
+            if (created == null || cancelled.getAsBoolean()) {
+                return created;
+            }
+
+            synchronized (this) {
+                ReferenceOrbit cached = entries.get(key);
+                if (cached != null) {
+                    return cached;
+                }
+                long entryBytes = created.retainedBytes();
+                if (entryBytes > capacityBytes) {
+                    return created;
+                }
+                while (bytes + entryBytes > capacityBytes && !entries.isEmpty()) {
+                    Map.Entry<ReferenceOrbitKey, ReferenceOrbit> eldest =
+                            entries.entrySet().iterator().next();
+                    bytes -= eldest.getValue().retainedBytes();
+                    entries.remove(eldest.getKey());
+                }
+                entries.put(key, created);
+                bytes += entryBytes;
+            }
+            return created;
+        }
+
+        synchronized int size() { return entries.size(); }
+        synchronized long retainedBytes() { return bytes; }
+        synchronized void clear() { entries.clear(); bytes = 0L; }
+    }
+
+    private record ReferenceOrbitKey(
+            BigDecimal cReal, BigDecimal cImaginary, MathContext context, int maxIterations
+    ) {
+        static ReferenceOrbitKey forJob(RenderJob job, PreciseRenderGrid grid) {
+            int centerX = (job.width() - 1) / 2;
+            int centerY = (job.height() - 1) / 2;
+            return new ReferenceOrbitKey(grid.realAt(centerX), grid.imaginaryAt(centerY),
+                    grid.mathContext(), job.maxIterations());
+        }
     }
 }

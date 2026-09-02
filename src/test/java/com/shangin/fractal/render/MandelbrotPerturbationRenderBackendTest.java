@@ -151,6 +151,51 @@ class MandelbrotPerturbationRenderBackendTest {
     }
 
     @Test
+    void retainsOnlyBoundedExactCompatibleReferenceOrbits() throws Exception {
+        FormulaDefinition formula = FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE);
+        RenderJob first = new RenderJob(formula, new Viewport("0.5", "0", "1e-80"),
+                33, 25, 500);
+        RenderJob second = new RenderJob(formula, new Viewport("0.6", "0", "1e-80"),
+                33, 25, 500);
+        long orbitBytes = 2L * (first.maxIterations() + 1) * Double.BYTES;
+
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(1, ignored -> {}, orbitBytes)) {
+            backend.render(RenderFrame.create(first), () -> false, ignored -> {}, null);
+            assertEquals(1, backend.cachedReferenceCount());
+            assertEquals(orbitBytes, backend.cachedReferenceBytes());
+
+            backend.render(RenderFrame.create(first), () -> false, ignored -> {}, null);
+            assertEquals(1, backend.cachedReferenceCount(), "same precise job reuses its orbit");
+
+            backend.render(RenderFrame.create(second), () -> false, ignored -> {}, null);
+            assertEquals(1, backend.cachedReferenceCount(), "LRU evicts rather than exceeding capacity");
+            assertTrue(backend.cachedReferenceBytes() <= orbitBytes);
+        }
+    }
+
+    @Test
+    void zoomOutSchedulesExposedTilesBeforeTheReprojectedCenter() {
+        RenderRegion previewCenter = new RenderRegion(32, 32, 64, 64);
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("0.5", "0", "1e-80"), 128, 128, 20,
+                RenderPriority.center(), java.util.Optional.of(previewCenter));
+
+        List<RenderRegion> tiles = MandelbrotPerturbationRenderBackend.orderedTiles(job);
+        boolean seenCoveredTile = false;
+        for (RenderRegion tile : tiles) {
+            boolean exposed = uncoveredArea(tile, previewCenter) > 0;
+            if (!exposed) {
+                seenCoveredTile = true;
+            }
+            assertFalse(exposed && seenCoveredTile,
+                    "an exposed tile must not be delayed behind the preview center");
+        }
+        assertTrue(uncoveredArea(tiles.getFirst(), previewCenter) > 0);
+    }
+
+    @Test
     void matchesHighPrecisionControlPointsNearReportedDeepViewport() throws Exception {
         RenderJob job = new RenderJob(
                 FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
@@ -242,6 +287,14 @@ class MandelbrotPerturbationRenderBackendTest {
     }
 
     private record HighPrecisionSample(int iterations, boolean escaped) {}
+
+    private static int uncoveredArea(RenderRegion tile, RenderRegion coverage) {
+        int overlapWidth = Math.max(0, Math.min(tile.x() + tile.width(), coverage.x() + coverage.width())
+                - Math.max(tile.x(), coverage.x()));
+        int overlapHeight = Math.max(0, Math.min(tile.y() + tile.height(), coverage.y() + coverage.height())
+                - Math.max(tile.y(), coverage.y()));
+        return tile.width() * tile.height() - overlapWidth * overlapHeight;
+    }
 
     private static RenderJob job(FractalPreset preset, OrbitTrap trap, Viewport viewport) {
         return new RenderJob(FormulaDefinition.forPreset(preset, trap), viewport,

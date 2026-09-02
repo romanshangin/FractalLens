@@ -109,18 +109,18 @@ existing behavior is covered by tests.
   backend for normal zoom levels and selects a separate deep-zoom backend only
   when hardware precision becomes insufficient.
 
-### 7.3. Implement the first correct Mandelbrot deep-zoom backend
+### 7.3. [x] Implement the first correct Mandelbrot deep-zoom backend
 
-- Initially enable deep zoom only for Mandelbrot; retain the current Julia path until its coordinate and orbit semantics receive a separate design.
-- Build a high-precision Mandelbrot reference orbit for the current viewport while retaining hardware floating point for per-pixel deltas.
-- Add a specialized perturbation Mandelbrot calculator that shares the reference orbit across tiles and still produces the final orbit values required by smooth coloring.
+- [x] Initially enable deep zoom only for Mandelbrot; retain the current Julia path until its coordinate and orbit semantics receive a separate design.
+- [x] Build a high-precision Mandelbrot reference orbit for the current viewport while retaining hardware floating point for per-pixel deltas.
+- [x] Add a specialized perturbation Mandelbrot calculator that shares the reference orbit across tiles and still produces the final orbit values required by smooth coloring.
 
-### 7.4. Add reliability, cancellation, and bounded reuse
+### 7.4. [x] Add reliability, cancellation, and bounded reuse
 
-- Detect unreliable perturbation results and recover through rebasing, additional reference orbits, or direct high-precision fallback for affected pixels.
-- Define cancellation and memory limits for reference-orbit construction before
+- [x] Detect unreliable perturbation results and recover through rebasing, additional reference orbits, or direct high-precision fallback for affected pixels.
+- [x] Define cancellation and memory limits for reference-orbit construction before
   retaining or sharing orbit data across render generations.
-- Cache reference orbits across compatible renders only after their ownership,
+- [x] Cache reference orbits across compatible renders only after their ownership,
   precision, and invalidation rules are explicit.
 
 ### 7.5. Pass the correctness and performance gate
