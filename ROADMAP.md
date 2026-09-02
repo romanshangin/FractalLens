@@ -169,16 +169,13 @@ with both platforms required throughout the GPU work.
 
 - [x] Select the GPU stack: MoltenVK on macOS through the LWJGL 3 Vulkan
   bindings, and LWJGL 3 + native Vulkan on Windows.
-- [x] Define the supported OS/GPU matrix, including the numeric
-  capabilities required by each backend mode (`GPU_RUNTIME.md`).
-- [x] Isolate native dependencies and GPU resource ownership behind a dedicated
+- Define the supported OS/GPU matrix, including the numeric
+  capabilities required by each backend mode.
+- Isolate native dependencies and GPU resource ownership behind a dedicated
   runtime so the render controller and JavaFX surface do not depend on a
   specific graphics API.
-- [x] Add the initial runtime API, capability-report model, device-loss state,
-  and shutdown integration; macOS currently checks only for the LWJGL class.
-- [ ] Add Vulkan physical-device discovery, native capability reporting,
-  device-loss handling, native resource cleanup, and automatic fallback to the
-  matching CPU backend. These remain part of 8.1; rendering currently stays on CPU.
+- Add device discovery, capability reporting, device-loss handling, clean
+  shutdown, and automatic fallback to the matching CPU backend.
 
 ### 8.2. Validate integration with palette recoloring
 
