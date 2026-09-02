@@ -142,9 +142,15 @@ This phase should remain separate from the current pan-reuse optimization.
 The GPU work starts only after the deep-zoom correctness gate. Each subsection
 must preserve the direct CPU backend as a portable fallback.
 
+Implement and validate the first GPU runtime and rendering prototype on macOS
+using MoltenVK. Windows implementation and validation follow, with compatibility
+with both platforms required throughout the GPU work.
+
 ### 8.1. Establish the GPU runtime and platform boundary
 
-- Select the GPU API and supported OS/GPU matrix, including the numeric
+- [x] Select the GPU stack: MoltenVK on macOS through the LWJGL 3 Vulkan
+  bindings, and LWJGL 3 + native Vulkan on Windows.
+- Define the supported OS/GPU matrix, including the numeric
   capabilities required by each backend mode.
 - Isolate native dependencies and GPU resource ownership behind a dedicated
   runtime so the render controller and JavaFX surface do not depend on a
