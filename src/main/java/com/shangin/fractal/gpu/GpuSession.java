@@ -11,4 +11,7 @@ interface GpuSession {
         throw new GpuException("Palette kernel unavailable", false);
     }
     void close(boolean deviceLost);
+    default void calculateMandelbrot(MandelbrotBatch batch) throws InterruptedException {
+        throw new GpuException("Mandelbrot kernel unavailable", false);
+    }
 }

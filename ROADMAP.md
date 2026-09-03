@@ -161,14 +161,14 @@ This phase should remain separate from the current pan-reuse optimization.
 The GPU work starts only after the deep-zoom correctness gate. Each subsection
 must preserve the direct CPU backend as a portable fallback.
 
-Implement and validate the first GPU runtime and rendering prototype on macOS
-using MoltenVK. Windows implementation and validation follow, with compatibility
-with both platforms required throughout the GPU work.
+Implement and validate the first GPU runtime and rendering prototype on Apple
+Silicon using MoltenVK. Windows work is tracked separately in 8.7 and Intel/AMD
+Mac validation in 8.8; preserve portable contracts throughout the GPU work.
 
 ### 8.1. Establish the GPU runtime and platform boundary
 
-- [x] Select the GPU stack: MoltenVK on macOS through the LWJGL 3 Vulkan
-  bindings, and LWJGL 3 + native Vulkan on Windows.
+- [x] Select the initial GPU stack: MoltenVK on macOS through the LWJGL 3 Vulkan
+  bindings.
 - [x] Define the supported OS/GPU matrix, including the numeric
   capabilities required by each backend mode (`GPU_RUNTIME.md`).
 - [x] Isolate native dependencies and GPU resource ownership behind a dedicated
@@ -183,8 +183,6 @@ with both platforms required throughout the GPU work.
 - [x] Validate startup, simultaneous runtimes, shutdown/reopen, simulated device
   loss, missing-native failures, and direct/deep CPU fallback on Apple M3 Pro.
   See `GPU_RUNTIME.md` for commands and limits of this macOS-first validation.
-- [ ] Implement and validate the native Windows runtime; validate the packaged
-  macOS x64 path on an Intel/AMD Mac. Apple Silicon is ready for the 8.2 experiment.
 
 ### 8.2. Validate integration with palette recoloring
 
@@ -197,33 +195,106 @@ with both platforms required throughout the GPU work.
   baseline, including palette/AA/frame invalidation and fallback. Run a paired
   Retina benchmark with warmup and saved samples (`PALETTE_BENCHMARK_RESULTS.md`).
   GPU remains opt-in: measured gains do not justify replacing CPU by default.
-  Windows and Intel Mac validation remain in 8.1.
+- [x] Repeat the paired Retina benchmark after the LWJGL 3.4.2 / FFM update,
+  retain raw samples, and refresh the performance decision. Both 12/40 and
+  30/120 runs favor GPU only for the large-AA workload; keep CPU as the default.
 
 ### 8.3. Build a limited Mandelbrot base-pass spike
 
-- Implement a Mandelbrot-only GPU calculation backend using the backend
-  contracts introduced for deep zoom.
-- Read samples back into the existing CPU flow and initially retain CPU
-  coloring, adaptive antialiasing, caching, and export.
-- Add generation-based cancellation, bounded asynchronous readback, and
-  progressive publication at GPU-appropriate region granularity.
+- [x] Define initial FP32 numeric tolerances and screen coordinate rounding,
+  orbit divergence and iteration limits against the direct-double CPU reference
+  (`GPU_FP32_PRECISION.md`). Reject automatic selection by scale alone: even
+  overview frames fail; whole-frame FP32 is not accepted.
+- [x] Validate actual FP32 shader arithmetic in a verification-only MoltenVK
+  Mandelbrot probe across full Retina frames, boundary sweeps, panned grids and
+  iteration limits. An outward-rounded interval certificate accepts 89.65% of
+  the overview Retina frame with zero false accepts in the recorded gate; raw
+  FP32 has 1,352 wrong escaped classifications (`GPU_FP32_NATIVE.md`).
+- [x] Integrate interval-based rejection and precision-preserving CPU recovery
+  into the production Mandelbrot GPU backend; retain whole-job CPU fallback for
+  unsupported grids, features and native failures.
+- [x] Implement an opt-in Mandelbrot-only GPU calculation backend using the
+  existing contracts and runtime-owned device/queue. Require explicit certified
+  sample accuracy; retain histogram/orbit traps/deep zoom on CPU.
+- [x] Read samples back into the existing CPU flow and retain CPU coloring,
+  adaptive antialiasing, caching, and export. Separate reuse/cache entries by
+  required sample accuracy.
+- [x] Add generation-based cancellation, bounded asynchronous readback, and
+  progressive 128x128 regions. Overlap the next readback with current CPU recovery,
+  drain cancelled submissions, and publish only completed regions.
 
 ### 8.4. Pass the conformance and performance decision gate
 
-- Verify CPU/GPU output within defined numeric tolerances across backend
-  selection boundaries and fallback transitions.
-- Benchmark kernel time, transfer cost, time to first visible region, total
-  frame time, memory use, and Retina-display presentation overhead.
-- Continue toward full GPU rendering only if the measured end-to-end gain
-  justifies the additional backend and packaging complexity.
+- [x] Verify CPU/GPU output within defined numeric tolerances across backend
+  selection boundaries and fallback transitions on M3 Pro. Native checks cross
+  the actual coordinate gate and 1000/1001-iteration boundary; all measured
+  frames satisfy exact iterations/escape and smooth error <= 0.01.
+- [x] Benchmark kernel time, transfer cost, first published region, full base/AA
+  frame time, memory use and Retina JavaFX publication overhead. Save paired
+  uninstrumented and separately profiled results in `GPU_RENDER_BENCHMARK_RESULTS.md`.
+  Physical scanout/vsync latency is not measured by this publication gate.
+- [x] Make the continuation decision from end-to-end results: **do not expand
+  GPU rendering yet**. All ten workload/size cases are slower on GPU; Retina
+  overview base is 592.52 vs 52.56 ms, Refined + AA is 1708.19 vs 1175.21 ms.
+  Keep CPU default and the limited GPU backend opt-in. Re-run this gate after
+  targeted certificate/kernel improvements before reconsidering GPU residency.
 
-### 8.5. Expand GPU residency incrementally only when justified
+### 8.5. Optimize certified GPU calculation and repeat the decision gate
+
+Address the costs measured in 8.4 before expanding GPU residency. On the Retina
+overview, host certification/recovery/publication takes about 545 ms and the
+interval kernel about 139 ms; these costs overlap. CPU remains the default.
+
+- [ ] Parallelize certificate checks, sample conversion and rejected-sample CPU
+  recovery with bounded workers and staging memory. Preserve cancellation,
+  generation isolation and publication of fully validated regions only.
+- [ ] Eliminate repeated certificate and smooth-value calculations; reuse
+  intermediate results without weakening the original-coordinate FP32 contract
+  or changing the exact iteration/escape and <= 0.01 smooth-error requirements.
+- [ ] Re-profile the host stages and interval kernel after these changes. Evaluate
+  symmetry and interior shortcuts only with a correctness argument and native
+  conformance checks; tune batch sizes if submission overhead remains material.
+- [ ] Repeat the 8.4 native conformance and paired CPU/GPU performance gate,
+  including fallback transitions, first publication, complete base/AA frames,
+  memory and Retina JavaFX costs. Keep primary timings uninstrumented and save
+  component profiling separately. Proceed to 8.6 only if end-to-end gains justify it.
+
+### 8.6. Expand GPU residency incrementally only when justified
+
+Deferred after the 8.4 performance gate on M3 Pro: the current hybrid backend
+has no measured end-to-end gain. The items below are conditional, not the next
+implementation step until the optimizations in 8.5 pass the repeated gate.
 
 - Move adaptive edge/distance candidate detection onto the GPU.
 - Move subpixel sampling and palette-independent AA sample storage onto the GPU.
 - Add GPU feature parity for orbit traps and histogram reduction.
 - Add GPU-resident frame caching, pan reuse, and exact CPU fallback transfers.
 - Evaluate GPU off-screen export only after the interactive pipeline is stable.
+
+### 8.7. Implement and validate the Windows GPU runtime
+
+- [x] Select LWJGL 3 with native Vulkan as the Windows GPU stack.
+- [ ] Add Windows native packaging, loader/device/compute-queue initialization,
+  and numeric capability reporting behind the existing runtime boundary.
+- [ ] Validate startup, simultaneous runtimes, shutdown/reopen, device loss,
+  missing natives, and direct/deep CPU fallback on Windows 10/11.
+- [ ] Validate palette recoloring, AA/frame/palette invalidation, and fallback;
+  record paired CPU/GPU timings including transfer and JavaFX publication costs.
+- [ ] Run calculation conformance and performance gates for implemented GPU
+  modes on Windows hardware before enabling them there.
+
+### 8.8. Validate the Intel/AMD Mac GPU path
+
+- [ ] Validate the packaged macOS x64 LWJGL/MoltenVK path on Intel/AMD Mac
+  hardware, including device selection and numeric capability reporting.
+- [ ] Validate startup, simultaneous runtimes, shutdown/reopen, device loss,
+  missing natives, and direct/deep CPU fallback.
+- [ ] Validate palette recoloring, AA/frame/palette invalidation, and fallback;
+  record paired Retina CPU/GPU timings and discrete-memory transfer costs where
+  applicable.
+- [ ] Run calculation conformance and performance gates for implemented GPU
+  modes on the selected device; do not infer FP64 correctness from capability
+  reporting alone.
 
 ## Target milestone
 

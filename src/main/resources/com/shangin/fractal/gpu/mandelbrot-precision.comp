@@ -1,0 +1,91 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Inputs { float inputs[]; };
+layout(std430, binding = 1) writeonly buffer Outputs { uint outputs[]; };
+layout(push_constant) uniform Settings { uint count; uint limit; uint unused0; uint unused1; } settings;
+
+// Outward expansion covers directed rounding plus the much smaller double-CPU
+// rounding at the same elementary operation. Clamp near zero to normal values
+// so interval endpoints never rely on denormal preservation.
+float down(float x) {
+    if (abs(x) < uintBitsToFloat(0x00800004u)) return -uintBitsToFloat(0x00800004u);
+    uint bits = floatBitsToUint(x);
+    return uintBitsToFloat(x > 0.0 ? bits - 4u : bits + 4u);
+}
+float up(float x) {
+    if (abs(x) < uintBitsToFloat(0x00800004u)) return uintBitsToFloat(0x00800004u);
+    uint bits = floatBitsToUint(x);
+    return uintBitsToFloat(x > 0.0 ? bits + 4u : bits - 4u);
+}
+vec2 addInterval(vec2 a, vec2 b) {
+    precise float low = a.x + b.x;
+    precise float high = a.y + b.y;
+    return vec2(down(low), up(high));
+}
+vec2 subtractInterval(vec2 a, vec2 b) {
+    precise float low = a.x - b.y;
+    precise float high = a.y - b.x;
+    return vec2(down(low), up(high));
+}
+vec2 multiplyInterval(vec2 a, vec2 b) {
+    precise float aa = a.x * b.x;
+    precise float ab = a.x * b.y;
+    precise float ba = a.y * b.x;
+    precise float bb = a.y * b.y;
+    return vec2(down(min(min(aa, ab), min(ba, bb))), up(max(max(aa, ab), max(ba, bb))));
+}
+vec2 squareInterval(vec2 a) {
+    precise float aa = a.x * a.x;
+    precise float bb = a.y * a.y;
+    float low = a.x <= 0.0 && a.y >= 0.0 ? 0.0 : max(0.0, down(min(aa, bb)));
+    return vec2(low, up(max(aa, bb)));
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * 64u;
+    if (index >= settings.count) return;
+    uint src = index * 8u;
+    float cr = inputs[src], ci = inputs[src + 1u];
+    vec2 realBounds = vec2(inputs[src + 2u], inputs[src + 3u]);
+    vec2 imaginaryBounds = vec2(inputs[src + 4u], inputs[src + 5u]);
+    precise float zr = 0.0, zi = 0.0;
+    uint iteration = 0u;
+    // Independent raw path keeps all errors visible, including rejected samples.
+    for (; iteration < settings.limit; iteration++) {
+        precise float modulus = zr * zr + zi * zi;
+        if (modulus > 4.0) break;
+        precise float nextReal = zr * zr - zi * zi + cr;
+        precise float nextImaginary = (2.0 * zr) * zi + ci;
+        zr = nextReal;
+        zi = nextImaginary;
+    }
+    uint dst = index * 12u;
+    outputs[dst] = iteration;
+    outputs[dst + 1u] = iteration < settings.limit ? 1u : 0u;
+    outputs[dst + 2u] = floatBitsToUint(zr);
+    outputs[dst + 3u] = floatBitsToUint(zi);
+
+    // Bound the original double-coordinate recurrence, independently of raw FP32.
+    vec2 rb = vec2(0.0), ib = vec2(0.0), norm = vec2(0.0);
+    uint n = 0u, status = 0u; // 0 = uncertain, 1 = escaped, 2 = reached limit.
+    for (;;) {
+        // The CPU reports unescaped at the budget even if this last orbit escaped.
+        if (n == settings.limit) { status = 2u; break; }
+        norm = addInterval(squareInterval(rb), squareInterval(ib));
+        if (norm.x > 4.0) { status = 1u; break; }
+        if (norm.y > 4.0) break; // Ambiguous escape iteration: recover on CPU.
+        vec2 nextReal = addInterval(subtractInterval(squareInterval(rb), squareInterval(ib)), realBounds);
+        vec2 nextImaginary = addInterval(multiplyInterval(multiplyInterval(vec2(2.0), rb), ib), imaginaryBounds);
+        rb = nextReal;
+        ib = nextImaginary;
+        n++;
+    }
+    outputs[dst + 4u] = status;
+    outputs[dst + 5u] = n;
+    outputs[dst + 6u] = floatBitsToUint(norm.x);
+    outputs[dst + 7u] = floatBitsToUint(norm.y);
+    outputs[dst + 8u] = floatBitsToUint(rb.x);
+    outputs[dst + 9u] = floatBitsToUint(rb.y);
+    outputs[dst + 10u] = floatBitsToUint(ib.x);
+    outputs[dst + 11u] = floatBitsToUint(ib.y);
+}

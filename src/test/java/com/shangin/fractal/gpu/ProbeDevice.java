@@ -18,23 +18,25 @@ import static org.lwjgl.vulkan.KHRPortabilitySubset.VK_KHR_PORTABILITY_SUBSET_EX
 import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK11.VK_API_VERSION_1_1;
 
-/** Headless compute session. No surfaces, swapchains, or JavaFX native handles. */
-final class MacosMoltenVkSession implements GpuSession {
+/** Standalone test-only device owner, using the shared reference-counted FFM loader.
+ * Duplicates platform setup deliberately so numerical experiments cannot change production execution.
+ */
+final class ProbeDevice {
     private VulkanLibraryLease library;
     private VkInstance instance;
-    private VkDevice device;
-    private VkQueue queue;
-    private VkPhysicalDevice physical;
-    private VulkanPaletteKernel paletteKernel;
-    private VulkanMandelbrotKernel mandelbrotKernel;
+    VkDevice device;
+    VkQueue queue;
+    VkPhysicalDevice physical;
+    int family;
+    String description;
     private List<GpuDevice> devices = List.of();
     private GpuDevice selectedDevice;
 
-    private MacosMoltenVkSession() {
+    private ProbeDevice() {
     }
 
-    static GpuSession open() {
-        MacosMoltenVkSession session = new MacosMoltenVkSession();
+    static ProbeDevice open() {
+        ProbeDevice session = new ProbeDevice();
         try {
             session.initialize();
             return session;
@@ -87,6 +89,8 @@ final class MacosMoltenVkSession implements GpuSession {
                 .orElseThrow(() -> new GpuException("No Vulkan 1.1 GPU with a compute queue found", false));
         selectedDevice = selected.description();
         createDevice(selected);
+        family = selectedDevice.computeQueueFamily();
+        description = selectedDevice.toString();
     }
 
     private void createDevice(Candidate selected) {
@@ -210,37 +214,6 @@ final class MacosMoltenVkSession implements GpuSession {
         }
     }
 
-    @Override
-    public List<GpuDevice> devices() {
-        return devices;
-    }
-
-    @Override
-    public GpuDevice selectedDevice() {
-        return selectedDevice;
-    }
-
-    @Override
-    public void checkHealth() {
-        check(vkQueueWaitIdle(queue), "vkQueueWaitIdle");
-    }
-
-    @Override
-    public PaletteRecolorTiming recolorPalette(PaletteRecolorRequest request) throws InterruptedException {
-        long started = System.nanoTime();
-        try {
-            if (paletteKernel == null) {
-                paletteKernel = VulkanPaletteKernel.open(device, physical, queue, selectedDevice.computeQueueFamily());
-            }
-            long ready = System.nanoTime();
-            PaletteRecolorTiming timing = paletteKernel.recolor(request);
-            return timing.withPreparation(ready - started, System.nanoTime() - started);
-        } catch (LinkageError failure) {
-            throw new GpuException("Palette native dependency unavailable: " + failure.getMessage(), false);
-        }
-    }
-
-    @Override
     public void close(boolean deviceLost) {
         try {
             if (device != null && !deviceLost) {
@@ -249,14 +222,6 @@ final class MacosMoltenVkSession implements GpuSession {
         } finally {
             try {
                 if (device != null) {
-                    if (mandelbrotKernel != null) {
-                        mandelbrotKernel.close();
-                        mandelbrotKernel = null;
-                    }
-                    if (paletteKernel != null) {
-                        paletteKernel.close();
-                        paletteKernel = null;
-                    }
                     vkDestroyDevice(device, null);
                     device = null;
                     queue = null;
@@ -279,18 +244,5 @@ final class MacosMoltenVkSession implements GpuSession {
 
     private record Candidate(VkPhysicalDevice physical, GpuDevice description, int type,
                              int apiVersion, Set<String> extensions) {
-    }
-
-    @Override
-    public void calculateMandelbrot(MandelbrotBatch batch) throws InterruptedException {
-        try {
-            if (mandelbrotKernel == null) {
-                mandelbrotKernel = VulkanMandelbrotKernel.open(device, physical, queue, selectedDevice.computeQueueFamily());
-            }
-            mandelbrotKernel.calculate(batch.input, batch.count, batch.maxIterations, batch.output);
-            batch.timing = mandelbrotKernel.lastTiming();
-        } catch (LinkageError failure) {
-            throw new GpuException("Mandelbrot native dependency unavailable: " + failure.getMessage(), false);
-        }
     }
 }

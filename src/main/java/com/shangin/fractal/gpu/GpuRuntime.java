@@ -41,6 +41,12 @@ public interface GpuRuntime extends AutoCloseable {
         return capabilityReport().supports(capability);
     }
 
+    /** Completes bounded readback before returning; false requests CPU fallback without publishing samples. */
+    default boolean calculateMandelbrot(MandelbrotBatch batch) throws InterruptedException {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Calculation cancelled");
+        return false;
+    }
+
     @Override
     void close();
 }

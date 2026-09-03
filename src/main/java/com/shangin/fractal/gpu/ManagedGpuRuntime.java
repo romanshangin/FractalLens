@@ -76,6 +76,14 @@ final class ManagedGpuRuntime implements GpuRuntime {
     }
 
     @Override
+    public boolean calculateMandelbrot(MandelbrotBatch batch) throws InterruptedException {
+        return runOrFallback(GpuNumericCapability.FLOAT32, () -> {
+            session.calculateMandelbrot(batch);
+            return true;
+        }, () -> false);
+    }
+
+    @Override
     public <T> T runOrFallback(GpuNumericCapability required, GpuWork<T> gpu, GpuWork<T> cpu)
             throws InterruptedException {
         Objects.requireNonNull(required);

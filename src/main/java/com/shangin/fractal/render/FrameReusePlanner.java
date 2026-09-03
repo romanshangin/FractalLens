@@ -242,6 +242,8 @@ public final class FrameReusePlanner {
         RenderJob sourceRequest =
                 sourceFrame.request();
 
+        if (sourceRequest.sampleAccuracy() != targetRequest.sampleAccuracy()) return false;
+
         /* Reuse across different render dimensions is not supported yet. */
         if (sourceRequest.width()
                 != targetRequest.width()) {

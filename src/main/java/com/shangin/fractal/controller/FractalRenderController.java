@@ -210,7 +210,11 @@ public final class FractalRenderController implements AutoCloseable {
                         target.height(),
                         maxIterations,
                         target.priority(),
-                        surface.approximatePreviewCoverage(viewport)
+                        surface.approximatePreviewCoverage(viewport),
+                        Boolean.getBoolean("fractal.gpu.mandelbrot.enabled")
+                                && !scene.coloring().histogramColoring()
+                                && scene.coloring().orbitTrap() == com.shangin.fractal.coloring.OrbitTrap.NONE
+                                ? SampleAccuracy.CERTIFIED_FP32 : SampleAccuracy.CPU_REFERENCE
                 );
 
         RenderFrame previousActiveFrame = activeFrame;

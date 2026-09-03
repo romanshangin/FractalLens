@@ -15,6 +15,7 @@ public class RenderJob {
     private final int maxIterations;
     private final RenderPriority priority;
     private final Optional<RenderRegion> approximateCoverage;
+    private final SampleAccuracy sampleAccuracy;
 
     public RenderJob(
             FormulaDefinition formula,
@@ -25,10 +26,17 @@ public class RenderJob {
             RenderPriority priority,
             Optional<RenderRegion> approximateCoverage
     ) {
+        this(formula, viewport, width, height, maxIterations, priority, approximateCoverage, SampleAccuracy.CPU_REFERENCE);
+    }
+
+    public RenderJob(FormulaDefinition formula, Viewport viewport, int width, int height,
+                     int maxIterations, RenderPriority priority, Optional<RenderRegion> approximateCoverage,
+                     SampleAccuracy sampleAccuracy) {
         this.formula = Objects.requireNonNull(formula);
         this.viewport = Objects.requireNonNull(viewport);
         this.priority = Objects.requireNonNull(priority);
         this.approximateCoverage = Objects.requireNonNull(approximateCoverage);
+        this.sampleAccuracy = Objects.requireNonNull(sampleAccuracy);
         if (width < 2 || height < 2) {
             throw new IllegalArgumentException("Render dimensions must be at least 2");
         }
@@ -68,6 +76,7 @@ public class RenderJob {
     public int maxIterations() { return maxIterations; }
     public RenderPriority priority() { return priority; }
     public Optional<RenderRegion> approximateCoverage() { return approximateCoverage; }
+    public SampleAccuracy sampleAccuracy() { return sampleAccuracy; }
 
     /** Derives a backend-neutral grid without converting coordinates to doubles. */
     public PreciseRenderGrid preciseGrid() {

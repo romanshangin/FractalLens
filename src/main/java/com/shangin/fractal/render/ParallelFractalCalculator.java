@@ -410,6 +410,18 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             RenderJob request,
             int renderedHeight
     ) {
+        return createOrderedTiles(request, renderedHeight, tileSize);
+    }
+
+    /** Shared ordering for CPU tiles and bounded GPU regions. */
+    public static List<RenderRegion> orderedRegions(RenderJob request, int tileSize) {
+        if (tileSize < 1) throw new IllegalArgumentException("Tile size must be positive");
+        return createOrderedTiles(request, request.height(), tileSize).stream()
+                .map(tile -> new RenderRegion(tile.xFrom(), tile.yFrom(), tile.xTo() - tile.xFrom(), tile.yTo() - tile.yFrom()))
+                .toList();
+    }
+
+    private static List<Tile> createOrderedTiles(RenderJob request, int renderedHeight, int tileSize) {
         List<Tile> tiles = new ArrayList<>();
 
         for (int y = 0; y < renderedHeight; y += tileSize) {

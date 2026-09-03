@@ -31,10 +31,18 @@ public final class FractalRenderService implements AutoCloseable {
     private final ScheduledExecutorService progressScheduler;
 
     public FractalRenderService() {
-        this(new PrecisionSelectingRenderBackend(
-                new DirectDoubleRenderBackend(),
-                new MandelbrotPerturbationRenderBackend()),
-                GpuRuntimeFactory.createDefault());
+        this(GpuRuntimeFactory.createDefault());
+    }
+
+    private FractalRenderService(GpuRuntime runtime) {
+        this(defaultBackend(runtime), runtime);
+    }
+
+    private static RenderBackend defaultBackend(GpuRuntime runtime) {
+        RenderBackend cpu = new PrecisionSelectingRenderBackend(new DirectDoubleRenderBackend(),
+                new MandelbrotPerturbationRenderBackend());
+        return Boolean.getBoolean("fractal.gpu.mandelbrot.enabled")
+                ? new com.shangin.fractal.gpu.GpuMandelbrotRenderBackend(runtime, cpu) : cpu;
     }
 
     public FractalRenderService(RenderBackend backend) {
@@ -43,7 +51,7 @@ public final class FractalRenderService implements AutoCloseable {
 
     /**
      * The runtime is owned here rather than by the controller or JavaFX surface.
-     * Until a GPU calculation backend exists, all render requests stay on CPU.
+     * Explicitly injected backends retain their selection policy.
      */
     public FractalRenderService(RenderBackend backend, GpuRuntime gpuRuntime) {
         this(backend, gpuRuntime,

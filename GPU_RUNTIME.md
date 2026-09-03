@@ -3,7 +3,8 @@
 The macOS runtime now loads MoltenVK, creates a headless Vulkan instance,
 enumerates physical devices and numeric/compute features, selects a GPU, and
 owns a logical device and compute queue. A ready runtime reports `AVAILABLE`.
-Fractal calculation still runs on CPU. The optional Vulkan palette kernel
+CPU calculation remains the default. An opt-in Mandelbrot base pass now certifies
+FP32 samples and recovers rejected pixels on CPU. The optional Vulkan palette kernel
 recolors compact base and AA smooth phases and returns ARGB pixels through the
 existing JavaFX buffer. CPU recoloring remains the default: measured GPU gains
 depend on AA workload and transfer/presentation cost.
@@ -24,7 +25,7 @@ selected. The CPU backends remain usable if native initialization fails.
 | Mode | GPU requirement | Current status / matching CPU path |
 | --- | --- | --- |
 | Palette recoloring (8.2) | FP32 for AA; 64-wide workgroup, four storage buffers, 32-byte push constants | Implemented and tested on M3 Pro; opt-in, parallel CPU fallback |
-| Limited base-pass spike (8.3) | FP32 only within a separately validated precision envelope | Direct-double CPU; FP32 is not considered equivalent to the current CPU backend |
+| Limited base-pass spike (8.3) | FP32 certificate + CPU recovery; two storage buffers, 16-byte push constants, 64-wide groups | Integrated and opt-in; Mandelbrot smooth coloring, 1–1000 iterations; precision-selecting CPU fallback |
 | Direct-double equivalent arithmetic | Explicit `shaderFloat64` support, enabled at device creation | Direct-double CPU; feature support alone is not a conformance guarantee |
 | Deep zoom | A separate precision-preserving implementation | CPU Mandelbrot perturbation; no GPU deep-zoom mode |
 
@@ -40,7 +41,7 @@ each future backend.
 
 `FractalRenderService` owns `GpuRuntime`; neither the controller nor JavaFX uses
 Vulkan handles. Native calls are confined to `MacosMoltenVkSession`,
-`VulkanPaletteKernel` and `VulkanLibraryLease`. The loader is reference-counted so closing one runtime
+`VulkanPaletteKernel`, `VulkanMandelbrotKernel` and `VulkanLibraryLease`. The loader is reference-counted so closing one runtime
 cannot invalidate another. An externally initialized loader is borrowed.
 Initialization rolls back partially created native resources. Normal shutdown
 waits for the device, destroys the logical device and instance, then releases
@@ -60,7 +61,74 @@ It must not re-enter lifecycle/health/execution methods. Palette work is synchro
 on the recolor worker, with one submission in flight. Cancellation before submission
 aborts immediately; cancellation after submission drains the fence before resources
 can be reused or destroyed. The controller rejects stale epochs at publication.
-Asynchronous calculation/readback and progressive GPU regions remain part of 8.3.
+Calculation uses this synchronous native boundary on a dedicated worker;
+readback is asynchronous to the coordinator and overlaps CPU recovery of the
+preceding batch. No submission outlives its runtime lease.
+
+## Mandelbrot base-pass integration
+
+```sh
+JAVA_TOOL_OPTIONS=-Dfractal.gpu.mandelbrot.enabled=true mvn javafx:run
+```
+
+The default `FractalRenderService` wraps the existing precision-selecting CPU
+backend with `GpuMandelbrotRenderBackend` only when this property is enabled.
+Explicitly injected backends keep their policy. GPU palette recoloring remains
+independently controlled by `fractal.gpu.palette.enabled`.
+
+GPU calculation requires Mandelbrot without orbit traps, 1–1000 iterations,
+adequate double-grid precision and `RenderJob.sampleAccuracy() == CERTIFIED_FP32`.
+The controller permits this accuracy for opted-in smooth coloring; histogram
+coloring requests `CPU_REFERENCE`. Legacy/default jobs and off-screen exports
+retain CPU-reference accuracy. Frame cache and pan reuse require matching accuracy,
+preventing tolerant GPU results from entering a CPU-reference request. The actual
+inherited pan grid is used for certification and recovery.
+
+The grid must pass the 1/16-pixel error and distinct-neighbor checks. Unsupported
+jobs retain the existing CPU selection, including deep-zoom perturbation.
+Accepted samples need the interval certificate in `GPU_FP32_NATIVE.md`; rejected
+samples are recomputed with the original CPU-double coordinates. Raw uncertified
+values are never marked ready or admitted into caches.
+
+Regions are 128x128 in the shared priority/zoom-out order. Ready pan overlap is
+skipped. Two reusable Java batches and one GPU worker with one queue slot bound
+asynchronous work. The next readback can run while the coordinator certifies and
+recovers the current region. Native work is serialized with palette dispatch and
+shutdown by `ManagedGpuRuntime`. The kernel uses two fixed mapped buffers
+(1.25 MiB logical storage, 4 MiB allocation ceiling); Java batch arrays use about
+2.63 MiB, plus one bounded region of staged sample objects. A cancelled active
+submission may retain a previous-generation batch until its fence drains; it
+never touches a frame.
+
+All missing samples in a region are staged before publication. Cancellation
+checks guard preparation, submission/readback, CPU recovery and progress. The
+render service independently rejects stale generation callbacks. Native failures
+clean up the runtime and send the original frame's remaining pixels to CPU;
+previously certified regions and reused overlap remain valid. No failed-batch
+sample is published, and lost devices are not retried.
+
+CPU coloring, AA sampling/cache, histogram mapping and export remain in their
+existing services. Certification does not imply bit-identical colors to a full
+CPU render for arbitrary palettes. The palette kernel was checked against CPU
+recoloring of the same certified/recovered samples. Roadmap 8.4 now records
+passing numeric conformance but a failed performance gate on M3 Pro: Retina
+base overview is 592.52 ms on GPU versus 52.56 ms on CPU; Refined + AA is
+1708.19 versus 1175.21 ms through JavaFX publication. CPU remains the default
+and GPU residency expansion is deferred. See [GPU_RENDER_BENCHMARK_RESULTS.md](GPU_RENDER_BENCHMARK_RESULTS.md)
+for raw runs, workload definitions, memory accounting and display limitations.
+
+`GpuMandelbrotRenderBackend.lastStats()` reports dispatched/certified/recovered
+pixel counts and job-level CPU fallback. Region timings include host wait and
+recovery; they are not GPU timestamp measurements.
+
+For opt-in diagnostic runs, `fractal.gpu.mandelbrot.profile=true` enables bounded
+Vulkan timestamp queries and `GpuMandelbrotRenderBackend.lastProfile()` component
+sums. The runtime owns and destroys the query pool with the kernel. Unsupported
+queue timestamps return -1, not a zero-time kernel. Upload, dispatch/fence and
+readback are host timings; the kernel query is device time. Host recovery overlaps
+native work, so those sums are not additive. Normal rendering does not allocate
+a query pool. `mvn -Pgpu-render-benchmark javafx:run` runs paired production
+CPU/GPU pipelines with full-frame numeric checks; see the report for options.
 
 ## Palette recoloring integration
 
@@ -165,7 +233,9 @@ mvn -Pgpu-smoke test
 This gate fails, rather than skips, when no GPU is available. It verifies two
 simultaneous runtimes, independent teardown, complete teardown/reopen, the
 simulated device-loss path, and CPU rendering at ordinary and deep coordinates.
-It also runs actual palette dispatches across all presets and offset wrap
+It also checks integrated Mandelbrot dispatch, CPU recovery, pan reuse, shared
+palette ownership, simulated loss, reopen and default-service opt-in selection.
+It runs actual palette dispatches across all presets and offset wrap
 boundaries, checks exact base output / one-level AA tolerance, zero repeated
 uploads, AA/scale/size/palette invalidation, cleanup, and reopening after dispatch.
 
@@ -188,11 +258,29 @@ modular launcher diagnostics, missing-MoltenVK and missing-native tests passed.
 The sandbox hid Metal; the hardware gate passed outside it. Device loss was
 injected at the runtime boundary, not induced on the physical GPU. Palette dispatch,
 output conformance and the JavaFX benchmark were also validated on this Mac.
-Intel Macs, Windows, non-coherent heaps and Vulkan validation-layer diagnostics
-remain unvalidated.
+Intel/AMD Mac validation is tracked in roadmap 8.8 and Windows runtime work in
+8.7. Non-coherent heaps and Vulkan validation-layer diagnostics also remain
+unvalidated.
 
 After the LWJGL 3.4.2/FFM update on the same date, the bundled MoltenVK reports
 Vulkan 1.1.350 on this Mac. The portable suite, native lifecycle/palette gate
 with Unsafe denied, and modular startup/shutdown diagnostics passed without
-Unsafe warnings. The retained palette performance results were recorded before
-this dependency/backend change and must be rerun for current performance claims.
+Unsafe warnings.
+
+The palette benchmark was repeated on 2026-09-03 with LWJGL 3.4.2 / FFM: an
+original-length 12/40 run and a 30/120 confirmation run both passed per-frame
+conformance without GPU fallback or Unsafe warnings. GPU won only the large-AA
+workload (3% and 16% lower time through the JavaFX buffer, respectively); CPU
+remains the default. `PALETTE_BENCHMARK_RESULTS.md` reports the current samples
+and retains the older data separately. The initial CPU-only FP32 study is in
+`GPU_FP32_PRECISION.md`. Actual Mandelbrot shader validation and the per-pixel
+interval acceptance contract are in `GPU_FP32_NATIVE.md`. The optional production
+backend and standalone diagnostic now share the validated kernel and gate. The
+production path uses the existing runtime owner.
+
+After integration on 2026-09-03, `mvn clean test` passed (316 tests, four native
+skips). A combined hardware run passed the runtime, palette, integrated backend
+and full Retina precision gates with Unsafe denied. The integrated 384x256
+overview certified 87,904 pixels and recovered 10,400, with exact escape/iteration
+agreement and smooth error within 0.01. A fresh-JVM missing-shaderc run passed
+exact CPU fallback. These are correctness checks, not performance claims.

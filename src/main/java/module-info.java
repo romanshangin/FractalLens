@@ -1,5 +1,6 @@
 module com.shangin.fractal {
     requires java.desktop;
+    requires java.management;
     requires javafx.controls;
     requires org.lwjgl;
     requires org.lwjgl.vulkan;
