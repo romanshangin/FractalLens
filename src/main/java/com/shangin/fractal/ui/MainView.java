@@ -7,57 +7,30 @@ import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.FileChooser;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.Locale;
 
 public class MainView extends BorderPane {
 
     private final FractalView fractalView;
-    private final MainToolbar toolbar;
-    private final FractalInspector inspector;
+    private final MainMenuBar menuBar;
+    private boolean closed;
     private final AdaptivePngExportService exportService =
             new AdaptivePngExportService();
 
-    public MainView() {
+    public MainView(Stage stage) {
         FractalPreset initialFractal = FractalPreset.MANDELBROT;
         PalettePreset initialPalette = PalettePreset.ICE;
-
-        this.fractalView = new FractalView(initialFractal, initialPalette);
-
-        toolbar = new MainToolbar(
-                fractalView::resetView,
-                this::exportPng
-        );
-        inspector = new FractalInspector(
-                initialFractal,
-                initialPalette,
-                fractalView::setFractal,
-                fractalView::setPalette,
-                fractalView::setPaletteStops,
-                fractalView::setOrbitTrap,
-                fractalView::setSamplingPattern,
-                fractalView::setInteractiveRenderMode,
-                fractalView::setDeepAntialiasing,
-                fractalView::setHistogramColoring,
-                fractalView::setColorCycling,
-                fractalView::setCenter
-        );
-        fractalView.setOnZoomChanged(
-                inspector::setZoom
-        );
-        fractalView.setOnDeepZoomChanged(active -> {
-            toolbar.setDeepZoom(active);
-            inspector.setDeepZoom(active);
-        });
-        fractalView.setOnViewportChanged(inspector::setCenter);
-        fractalView.setOnRenderingChanged(inspector::setAppearanceDisabled);
-        fractalView.setOnColorCyclingStopped(
-                () -> inspector.setColorCyclingSelected(false));
-
-        setTop(toolbar);
-        setLeft(inspector);
+        fractalView = new FractalView(initialFractal, initialPalette);
+        menuBar = new MainMenuBar(stage, fractalView, initialFractal, initialPalette, this::exportPng);
+        // JavaFX gives this bar zero height when macOS installs it in the system menu bar.
+        setTop(menuBar);
         setCenter(fractalView);
+        stage.setTitle(initialFractal + " — FractalUI");
     }
 
     private void exportPng() {
@@ -84,7 +57,7 @@ public class MainView extends BorderPane {
 
         Path target = withPngExtension(selected.toPath());
 
-        toolbar.setExportInProgress(true);
+        menuBar.setExportInProgress(true);
 
         fractalView.exportAntialiasedPng(
                 exportService,
@@ -97,7 +70,7 @@ public class MainView extends BorderPane {
     static Path withPngExtension(Path path) {
         String fileName = path.getFileName().toString();
 
-        if (fileName.toLowerCase().endsWith(".png")) {
+        if (fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
             return path;
         }
 
@@ -107,6 +80,7 @@ public class MainView extends BorderPane {
     private void showError(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.initOwner(getScene().getWindow());
+        alert.initModality(Modality.WINDOW_MODAL);
         alert.setTitle(title);
         alert.setHeaderText(title);
         alert.setContentText(message);
@@ -114,10 +88,14 @@ public class MainView extends BorderPane {
     }
 
     private void exportCompleted(Path path) {
-        toolbar.setExportInProgress(false);
+        if (closed) {
+            return;
+        }
+        menuBar.setExportInProgress(false);
 
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.initOwner(getScene().getWindow());
+        alert.initModality(Modality.WINDOW_MODAL);
         alert.setTitle("Export complete");
         alert.setHeaderText("PNG image saved");
         alert.setContentText(path.toAbsolutePath().toString());
@@ -125,7 +103,10 @@ public class MainView extends BorderPane {
     }
 
     private void exportFailed(Throwable exception) {
-        toolbar.setExportInProgress(false);
+        if (closed) {
+            return;
+        }
+        menuBar.setExportInProgress(false);
         showError(
                 "Export failed",
                 "The PNG image could not be saved: " + exception.getMessage()
@@ -133,6 +114,10 @@ public class MainView extends BorderPane {
     }
 
     public void close() {
+        if (closed) {
+            return;
+        }
+        closed = true;
         exportService.close();
         fractalView.close();
     }

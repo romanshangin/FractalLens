@@ -97,6 +97,29 @@
 
     <profiles>
         <profile>
+            <id>macos-app-name</id>
+            <activation>
+                <os><family>mac</family></os>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.openjfx</groupId>
+                        <artifactId>javafx-maven-plugin</artifactId>
+                        <configuration>
+                            <options combine.children="append">
+                                <option>-Xdock:name=FractalUI</option>
+                                <!-- Set before JavaFX starts so the generic Java icon never appears. -->
+                                <option>-Xdock:icon=${project.basedir}/src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns</option>
+                                <option>--add-exports=javafx.graphics/com.sun.glass.ui=com.shangin.fractal</option>
+                                <option>--add-opens=javafx.graphics/com.sun.glass.ui.mac=com.shangin.fractal</option>
+                            </options>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
             <id>palette-benchmark</id>
             <properties>
                 <fractal.mainClass>com.shangin.fractal/com.shangin.fractal.ui.PaletteRecolorBenchmark</fractal.mainClass>

@@ -93,6 +93,22 @@ public class FractalView extends StackPane {
         configureZoom();
         configurePan();
         configureTrackpadGestures();
+        setFocusTraversable(true);
+        setAccessibleText("Fractal canvas");
+        setAccessibleHelp("Use the View menu to zoom or go to coordinates. Drag to pan, scroll to zoom, or pinch on a trackpad.");
+        setOnKeyPressed(event -> {
+            if (event.isShortcutDown() || event.isAltDown() || event.isControlDown()) {
+                return;
+            }
+            switch (event.getCode()) {
+                case LEFT -> panBySwipe(SWIPE_PAN_FRACTION, 0.0);
+                case RIGHT -> panBySwipe(-SWIPE_PAN_FRACTION, 0.0);
+                case UP -> panBySwipe(0.0, SWIPE_PAN_FRACTION);
+                case DOWN -> panBySwipe(0.0, -SWIPE_PAN_FRACTION);
+                default -> { return; }
+            }
+            event.consume();
+        });
         getChildren().add(fractalSurface);
         interactionDebounce.setOnFinished(event -> interactionRender.finish());
         fractalSurface.setOnOutputScaleChanged(this::scheduleResize);
@@ -133,6 +149,26 @@ public class FractalView extends StackPane {
         resetPriority();
         fractalSurface.showPreview(camera.viewport());
         recalculate();
+    }
+
+    /** Menu and keyboard zoom use the same precision limits as pointer gestures. */
+    public void zoom(boolean in) {
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+        int renderWidth = fractalSurface.renderWidth();
+        int renderHeight = fractalSurface.renderHeight();
+        if (width < 2 || height < 2 || renderWidth < 2 || renderHeight < 2) {
+            return;
+        }
+        double centerX = (width - 1) / 2.0;
+        double centerY = (height - 1) / 2.0;
+        boolean changed = in
+                ? camera.zoomIn(centerX, centerY, width, height, renderWidth, renderHeight)
+                : camera.zoomOut(centerX, centerY, width, height);
+        if (changed) {
+            resetPriority();
+            cameraChanged();
+        }
     }
 
     public void setCenter(double centerReal, double centerImaginary) {
@@ -704,6 +740,7 @@ public class FractalView extends StackPane {
             if (!event.isPrimaryButtonDown()) {
                 return;
             }
+            requestFocus();
             panSourceViewport = camera.viewport();
 
             interactionRender.cancel();

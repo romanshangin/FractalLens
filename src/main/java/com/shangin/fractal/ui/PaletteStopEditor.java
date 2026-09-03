@@ -28,7 +28,7 @@ final class PaletteStopEditor extends VBox {
     PaletteStopEditor(List<ColorStop> initialStops, Consumer<List<ColorStop>> onChanged) {
         super(6.0);
         this.onChanged = Objects.requireNonNull(onChanged);
-        Button add = new Button("Add stop");
+        Button add = new Button("Add Color Stop");
         add.setMaxWidth(Double.MAX_VALUE);
         add.setOnAction(event -> addStop());
         getChildren().addAll(rows, add);
@@ -67,6 +67,10 @@ final class PaletteStopEditor extends VBox {
         return stopRows.stream().map(StopRow::value).toList();
     }
 
+    List<ColorStop> getStops() {
+        return currentStops();
+    }
+
     private void fireChanged() {
         if (!updating) {
             onChanged.accept(currentStops());
@@ -96,6 +100,7 @@ final class PaletteStopEditor extends VBox {
 
         private StopRow(ColorStop stop) {
             color = new ColorPicker(toColor(stop.color()));
+            color.setAccessibleText("Color stop color");
             color.setMaxWidth(Double.MAX_VALUE);
             HBox.setHgrow(color, Priority.ALWAYS);
 
@@ -104,6 +109,8 @@ final class PaletteStopEditor extends VBox {
                     0.0, 1.0, stop.position(), 0.01));
             position.setEditable(true);
             position.setPrefWidth(84.0);
+            position.setAccessibleText("Color stop position, from 0 to 1");
+            remove.setAccessibleText("Remove color stop");
 
             color.setOnAction(event -> fireChanged());
             position.valueProperty().addListener((observable, oldValue, newValue) -> fireChanged());
