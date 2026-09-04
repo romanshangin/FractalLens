@@ -1,0 +1,47 @@
+.fractal-context-menu {
+    -menu-background: #f6f6f6;
+    -menu-foreground: #202020;
+    -menu-border: rgba(0,0,0,0.16);
+    -menu-accent: #007aff;
+    -fx-font-family: "System";
+    -fx-font-size: 13px;
+    -fx-background-color: -menu-background;
+    -fx-background-insets: 0;
+    -fx-background-radius: 7;
+    -fx-border-color: -menu-border;
+    -fx-border-width: 0.5;
+    -fx-border-radius: 7;
+    -fx-padding: 5;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.28), 16, 0, 0, 5);
+}
+
+.fractal-context-menu .menu-item {
+    -fx-padding: 3 10 3 10;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4;
+}
+
+.fractal-context-menu .menu-item > .label {
+    -fx-text-fill: -menu-foreground;
+}
+
+.fractal-context-menu .menu-item:focused {
+    -fx-background-color: -menu-accent;
+}
+
+.fractal-context-menu .menu-item:focused > .label {
+    -fx-text-fill: white;
+}
+
+.fractal-context-menu .menu-item:disabled > .label {
+    -fx-opacity: 0.4;
+}
+
+.fractal-context-menu .separator {
+    -fx-padding: 4 5 4 5;
+}
+
+.fractal-context-menu .separator .line {
+    -fx-border-color: -menu-border transparent transparent transparent;
+    -fx-border-width: 0.5 0 0 0;
+}

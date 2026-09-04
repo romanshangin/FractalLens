@@ -77,18 +77,21 @@ class ViewportProjectionTest {
     }
 
     @Test
-    void identicalViewportKeepsImageBoundsFixedAcrossRasterSizes() {
-        Viewport viewport = new Viewport("-0.75", "0", "1e-20");
-
+    void resizeKeepsSourcePixelsCenteredAtTheirOriginalSize() {
+        Viewport source = new Viewport("-0.75", "0", "1e-20");
+        Viewport target = new Viewport(source.center(), source.imaginaryUnitsPerPixelExact(800)
+                .multiply(BigDecimal.valueOf(1599), source.mathContext()));
         ViewportProjection image = ViewportProjection.betweenImageBounds(
-                viewport, viewport,
-                2000, 1600,
-                1000, 800,
-                1000.0, 800.0);
-
-        assertEquals(1.0, image.scaleX(), 1e-12);
-        assertEquals(1.0, image.scaleY(), 1e-12);
-        assertEquals(0.0, image.translateX(), 1e-12);
-        assertEquals(0.0, image.translateY(), 1e-12);
+                source, target, 1000, 800, 2000, 1600, 1000, 800);
+        assertEquals(0.5, image.scaleX(), 1e-12);
+        assertEquals(0.5, image.scaleY(), 1e-12);
+        assertEquals(250, image.translateX(), 1e-12);
+        assertEquals(200, image.translateY(), 1e-12);
+        ViewportProjection crop = ViewportProjection.betweenImageBounds(
+                target, source, 2000, 1600, 1000, 800, 500, 400);
+        assertEquals(2, crop.scaleX(), 1e-12);
+        assertEquals(2, crop.scaleY(), 1e-12);
+        assertEquals(-250, crop.translateX(), 1e-12);
+        assertEquals(-200, crop.translateY(), 1e-12);
     }
 }

@@ -5,6 +5,7 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import javafx.stage.Screen;
 
 public class FractalApplication extends Application {
 
@@ -19,7 +20,9 @@ public class FractalApplication extends Application {
         ApplicationIcon.install(stage);
         mainView = new MainView(stage);
 
-        Scene scene = new Scene(mainView, 1000, 750);
+        var screen = Screen.getPrimary().getBounds();
+        Scene scene = new Scene(mainView, Math.floor(screen.getWidth() * 0.75),
+                Math.floor(screen.getHeight() * 0.75));
 
         stage.setScene(scene);
         stage.setMinWidth(480);
@@ -32,6 +35,7 @@ public class FractalApplication extends Application {
             }
         });
         stage.show();
+        stage.centerOnScreen();
         Platform.runLater(() -> MacApplicationMenu.setName("FractalUI"));
         mainView.getCenter().requestFocus();
     }

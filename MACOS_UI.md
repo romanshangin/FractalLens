@@ -67,6 +67,24 @@ API references: [Java Taskbar](https://docs.oracle.com/en/java/javase/25/docs/ap
 
 ## Commands
 
+The initial canvas uses 75% of the primary screen's width and height, preserving
+the screen proportions, and the window opens centered.
+
+Full screen and ordinary window resizing share the same behavior. At the preset's
+initial view, the last completed image stretches immediately across the entire
+canvas. A fitted frame starts rendering on the next JavaFX pulse and replaces
+the preview atomically when ready. Intermediate resize tiles stay hidden so that
+different aspect ratios cannot produce side bands or split fractal contours.
+In a zoomed view, the center and render-pixel
+spacing stay fixed: expansion reuses the center (including AA) and computes only
+the exposed borders; shrinking a completed frame crops it without rendering.
+Render dimensions use equal parity to keep centered copies on integer pixels.
+If resizing interrupts AA publication, missing display tiles are completed even
+when their sample data is already cached.
+
+The native JavaFX regression checks can be run with
+`mvn -Dfractal.fx.tests=true -Dtest=FractalResizeFxTest test` on a desktop session.
+
 | Menu | Commands |
 | --- | --- |
 | File | Export PNG… (⌘⇧E), Close Window (⌘W) |
@@ -81,6 +99,15 @@ API references: [Java Taskbar](https://docs.oracle.com/en/java/javase/25/docs/ap
 On other platforms the platform shortcut modifier replaces Command.
 Arrow keys pan the focused canvas. Pointer-centered scrolling, dragging, and
 trackpad gestures remain available. Menu and keyboard zoom preserve the center.
+Right-clicking the canvas opens a single **Copy Coordinates and Zoom** command.
+It copies the current center's real and imaginary coordinates and zoom together
+as plain text, preserving decimal precision for sharing a view.
+`FractalContextMenu` owns the popup commands and dismissal behavior separately
+from the renderer. Its JavaFX popup uses macOS-style rounded corners, the system
+font, appearance and accent color; it is not an AppKit NSMenu. Styling lives in
+`fractal-context-menu.css`. Canvas input, scene commands, window movement/resizing
+and loss of focus dismiss the menu without swallowing the initiating canvas click.
+Pointer movement alone leaves it open so its items remain reachable.
 
 Coordinates and custom gradients use owner-associated dialogs with explicit
 Go/Apply and Cancel actions. Coordinate validation keeps invalid input visible
@@ -108,6 +135,18 @@ AppKit or SwiftUI. Scene controls are grouped under their task menus; there
 are currently no separate application-wide preferences.
 
 ## Validation
+
+Resize regression checks: `mvn -Dfractal.fx.tests=true -Dtest=FractalResizeFxTest test`.
+Add `-Dfractal.fx.fullscreen=true` to exercise two native full-screen/window cycles
+at approximately 650,000× and 426 billion× zoom. These opt-in checks open macOS
+windows, verify full image coverage and preserved center pixels, and save snapshots
+to `target/fullscreen-zoom-60-qa.png` and `target/fullscreen-zoom-120-qa.png`.
+No-op scrolling and clicks must leave pending rendering intact.
+In a zoomed resize, completed base-pass pixels at newly exposed edges are shown
+immediately. Refined AA tiles replace those pixels in place instead of clearing
+the base layer and revealing a stair-stepped transparent boundary. The reported
+trackpad case is retained as an opt-in native regression fixture; it performs
+eight separate zoom gestures and waits for a completed refined frame after each.
 
 `mvn -o test`: 299 tests, 0 failures, 0 errors, 2 skipped native GPU tests.
 The final UI changes also pass `mvn -o -q -DskipTests compile`.

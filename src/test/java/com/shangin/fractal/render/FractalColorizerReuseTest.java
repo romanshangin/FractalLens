@@ -34,5 +34,12 @@ class FractalColorizerReuseTest {
         );
 
         assertArrayEquals(new int[]{1, 91, 92, 4}, pixels);
+
+        pixels[0] = 90;
+        pixels[3] = 93;
+        new FractalColorizer().colorRegion(data, IntBuffer.wrap(pixels), coloring,
+                new RenderRegion(0, 0, 4, 1), preservedRefinement);
+        assertArrayEquals(new int[]{1, 91, 92, 4}, pixels,
+                "A progress tile straddling a reused edge must not overwrite AA colors");
     }
 }

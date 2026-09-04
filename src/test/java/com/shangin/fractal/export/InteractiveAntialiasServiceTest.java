@@ -607,6 +607,44 @@ class InteractiveAntialiasServiceTest {
         return frame;
     }
 
+    @Test
+    void cancelledCachedTileMustBePublishedWhenRefinementResumes() throws Exception {
+        AtomicInteger samples = new AtomicInteger();
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator((real, imaginary, maximum) -> {
+                    samples.incrementAndGet();
+                    return new FractalSample(1, true, 3.0, 0.0);
+                }), FractalPreset.BURNING_SHIP.defaultViewport(), 4, 4, 20));
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                frame.fractalData().set(y * 4 + x,
+                        new FractalSample(1, (x + y) % 2 == 0, 3.0, 0.0));
+            }
+        }
+        frame.validity().markReady(new RenderRegion(0, 0, 4, 4));
+        try (InteractiveAntialiasService service = new InteractiveAntialiasService()) {
+            ConcurrentLinkedQueue<Runnable> callbacks = new ConcurrentLinkedQueue<>();
+            CountDownLatch queued = new CountDownLatch(2); // tile and completion
+            var coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+            service.refine(frame, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(4, 4),
+                    callback -> { callbacks.add(callback); queued.countDown(); },
+                    (region, colors) -> fail("Cancelled tile must not be published"),
+                    () -> {}, exception -> fail(exception));
+            assertTrue(queued.await(5, TimeUnit.SECONDS));
+            service.cancelCurrent();
+            callbacks.forEach(Runnable::run);
+            int calculated = samples.get();
+            AtomicInteger published = new AtomicInteger();
+            CountDownLatch completed = new CountDownLatch(1);
+            service.refine(frame, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(4, 4),
+                    Runnable::run, (region, colors) -> published.incrementAndGet(),
+                    completed::countDown, exception -> fail(exception));
+            assertTrue(completed.await(5, TimeUnit.SECONDS));
+            assertEquals(calculated, samples.get(), "Cached samples must not be recalculated");
+            assertEquals(1, published.get(), "Cached colors still need to reach the display");
+        }
+    }
+
     private static boolean colorsDifferByAtMostOne(int first, int second) {
         for (int shift : new int[]{24, 16, 8, 0}) {
             int firstChannel = (first >>> shift) & 0xFF;

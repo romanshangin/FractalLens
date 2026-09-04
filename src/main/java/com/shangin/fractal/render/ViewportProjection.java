@@ -91,6 +91,21 @@ public record ViewportProjection(
 
         BigDecimal sourceVisibleWidth = source.visibleWidthExact(
                 sourceWidth, sourceHeight);
+        if (sourceWidth != targetWidth || sourceHeight != targetHeight) {
+            BigDecimal stepRatio = source.imaginaryUnitsPerPixelExact(sourceHeight)
+                    .divide(target.imaginaryUnitsPerPixelExact(targetHeight), context);
+            BigDecimal halfPixel = BigDecimal.ONE.subtract(stepRatio, context)
+                    .divide(BigDecimal.valueOf(2), context);
+            double x = target.xAtExact(source.minRealExact(sourceWidth, sourceHeight),
+                    targetWidth, targetHeight).add(halfPixel, context).doubleValue();
+            double y = target.yAtExact(source.maxImaginaryExact(), targetHeight)
+                    .add(halfPixel, context).doubleValue();
+            return new ViewportProjection(
+                    stepRatio.doubleValue() * sourceWidth / targetWidth,
+                    stepRatio.doubleValue() * sourceHeight / targetHeight,
+                    x * displayWidth / targetWidth,
+                    y * displayHeight / targetHeight);
+        }
         BigDecimal targetVisibleWidth = target.visibleWidthExact(
                 targetWidth, targetHeight);
         BigDecimal scaleX = sourceVisibleWidth.divide(targetVisibleWidth, context);

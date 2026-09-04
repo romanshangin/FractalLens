@@ -52,7 +52,7 @@ class FractalCameraTest {
     }
 
     @Test
-    void resizeShouldPreserveZoomLevel() {
+    void resizeShouldPreservePixelSpacing() {
         FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
 
         int oldWidth = 1000;
@@ -60,12 +60,14 @@ class FractalCameraTest {
 
         camera.resize(oldWidth, oldHeight);
         camera.zoomIn(500, 350, oldWidth, oldHeight, 2000, 1400);
-        Viewport oldDefault = camera.defaultViewport(oldWidth, oldHeight);
-        double zoomBefore = oldDefault.scale() / camera.viewport().scale();
+        Viewport before = camera.viewport();
+        double stepBefore = before.imaginaryUnitsPerPixel(oldHeight);
         camera.resize(500, 1000);
-        Viewport newDefault = camera.defaultViewport(500, 1000);
-        double zoomAfter = newDefault.scale() / camera.viewport().scale();
-        assertEquals(zoomBefore, zoomAfter, DELTA);
+        assertEquals(stepBefore, camera.viewport().imaginaryUnitsPerPixel(1000), DELTA);
+        assertEquals(stepBefore, camera.viewport().realUnitsPerPixel(500, 1000), DELTA);
+        assertEquals(before.center(), camera.viewport().center());
+        camera.resize(oldWidth, oldHeight);
+        assertEquals(before.scale(), camera.viewport().scale(), DELTA);
     }
 
     @Test

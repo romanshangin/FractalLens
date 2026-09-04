@@ -80,7 +80,9 @@ public class ViewportTest {
 
         double width = viewport.visibleWidth(1000, 500);
 
-        assertEquals(4.8, width, DELTA);
+        assertEquals(2.4 * 999 / 499, width, DELTA);
+        assertEquals(viewport.imaginaryUnitsPerPixel(500),
+                viewport.realUnitsPerPixel(1000, 500), DELTA);
     }
 
     @Test

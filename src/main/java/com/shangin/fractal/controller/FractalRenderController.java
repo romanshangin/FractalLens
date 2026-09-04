@@ -163,6 +163,11 @@ public final class FractalRenderController implements AutoCloseable {
             RenderTarget target,
             Viewport defaultViewport
     ) {
+        render(scene, target, defaultViewport, false);
+    }
+
+    public void render(FractalScene scene, RenderTarget target,
+                       Viewport defaultViewport, boolean reuseResize) {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
@@ -201,6 +206,10 @@ public final class FractalRenderController implements AutoCloseable {
                         defaultViewport.scaleExact(),
                         viewport.scaleExact()
                 );
+        // Changing the amount of visible space must not change the samples in it.
+        if (reuseResize && activeFrame != null) {
+            maxIterations = activeFrame.request().maxIterations();
+        }
 
         RenderJob renderRequest =
                 new RenderJob(
@@ -310,13 +319,23 @@ public final class FractalRenderController implements AutoCloseable {
 
         }
 
-        /* Color reusable sample data when the displayed image cannot be shifted. */
-        if (!imageReused && !refinedDisplay) {
+        /* Include valid rows from cancelled tiles that never published progress. */
+        if (!refinedDisplay) {
 
-            surface.displayReadyPixels(
+            surface.displayReadyPixelsPreservingRefinement(
                     activeFrame,
                     coloring
             );
+        }
+
+        // A crop of a completed image is ready synchronously, including its AA.
+        if (reuseResize && imageReused && targetFrame.isComplete()
+                && (!refinedDisplay || surface.hasCompleteRefinement(targetFrame))) {
+            surface.completeProgressiveRender(targetFrame, scene);
+            frameCache.put(targetFrame);
+            initialFramePending = false;
+            renderActivity.finish(renderGeneration);
+            return;
         }
 
         /*
@@ -381,7 +400,7 @@ public final class FractalRenderController implements AutoCloseable {
 
                     if (initialFramePending
                             || completedFrame.request().approximateCoverage().isPresent()) {
-                        surface.displayReadyPixels(
+                        surface.displayReadyPixelsPreservingRefinement(
                                 completedFrame,
                                 completedColoring
                         );

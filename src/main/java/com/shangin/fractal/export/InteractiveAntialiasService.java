@@ -169,6 +169,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             SmoothColorLookup lookup = coloring instanceof SmoothPaletteColoring smooth
                     ? new SmoothColorLookup(smooth)
                     : null;
+            if (coloring instanceof SmoothPaletteColoring smooth) {
+                basePhases(frame, smooth).recolorInto(baseColors, lookup);
+            }
             MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler = deepZoom
                     ? MandelbrotPerturbationRenderBackend.createPreciseSampler(
                     frame.job(), () -> shouldCancel(refinementId)).orElseThrow(
@@ -235,7 +238,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 ? frame.job().formula().createDirectCalculator()
                 : null;
         int[] tileColors = new int[tile.width() * tile.height()];
-        boolean calculatedPixel = false;
 
         for (int y = tile.y(); y < tile.y() + tile.height(); y++) {
             if (shouldCancel(refinementId)) {
@@ -263,9 +265,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     continue;
                 }
 
-                if (preciseSampler == null) {
-                    calculatedPixel = true;
-                }
                 tileColors[tileIndex] = baseColors[frameIndex];
 
                 boolean candidate = preciseSampler == null
@@ -276,10 +275,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         data, baseColors, x, y);
                 if (!candidate) {
                     continue;
-                }
-
-                if (preciseSampler != null) {
-                    calculatedPixel = true;
                 }
 
                 FractalSample[] samples = preciseSampler == null
@@ -295,13 +290,21 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 }
                 if (coloring instanceof SmoothPaletteColoring smooth) {
                     sampleCache.put(frameIndex, samples, smooth);
+                    // Publish the same quantized color used by cache recoloring.
+                    Integer storedColor = sampleCache.color(frameIndex, lookup);
+                    if (storedColor != null) {
+                        tileColors[tileIndex] = storedColor;
+                        continue;
+                    }
                 }
                 tileColors[tileIndex] = AdaptivePngExportService.colorSamples(
                         samples, coloring, frame.request().maxIterations());
             }
         }
 
-        if (!calculatedPixel || shouldCancel(refinementId)) {
+        // orderedTiles excludes fully displayed tiles. Cached results may still
+        // be missing from the surface after cancellation, so publish them too.
+        if (shouldCancel(refinementId)) {
             return;
         }
 
@@ -401,12 +404,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
     /** Transfers cached AA samples along the exact pixel shift used for frame reuse. */
     public synchronized void reuseFrame(RenderFrame source, RenderFrame target, PixelShift shift) {
-        if (cachedFrame != source
-                || source.samplePlane().width() != target.samplePlane().width()
-                || source.samplePlane().height() != target.samplePlane().height()) {
+        if (cachedFrame != source) {
             sampleCache.clear();
         } else {
-            sampleCache.shift(source.samplePlane().width(), source.samplePlane().height(), shift);
+            sampleCache.shift(source.samplePlane().width(),
+                    target.samplePlane().width(), target.samplePlane().height(), shift);
         }
         cachedFrame = target;
         basePhaseFrame = null;

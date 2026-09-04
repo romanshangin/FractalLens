@@ -139,17 +139,13 @@ public final class ValidityMask {
 
     /** Replaces this mask with source pixels shifted into target coordinates. */
     public void copyShiftedFrom(ValidityMask source, PixelShift shift) {
-        if (source.width != width || source.height != height) {
-            throw new IllegalArgumentException("Validity mask dimensions must match");
-        }
-
         ValidityMask snapshot = source.copy();
         clear();
 
         int sourceXFrom = Math.max(0, -shift.dx());
-        int sourceXTo = Math.min(width, width - shift.dx());
+        int sourceXTo = Math.min(source.width, width - shift.dx());
         int sourceYFrom = Math.max(0, -shift.dy());
-        int sourceYTo = Math.min(height, height - shift.dy());
+        int sourceYTo = Math.min(source.height, height - shift.dy());
 
         for (int sourceY = sourceYFrom; sourceY < sourceYTo; sourceY++) {
             int targetY = sourceY + shift.dy();

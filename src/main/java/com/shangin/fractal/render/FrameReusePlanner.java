@@ -173,7 +173,7 @@ public final class FrameReusePlanner {
         int sourceXTo =
                 Math.min(
                         width,
-                        width - shift.dx()
+                        targetFrame.request().width() - shift.dx()
                 );
 
         int sourceYFrom =
@@ -185,7 +185,7 @@ public final class FrameReusePlanner {
         int sourceYTo =
                 Math.min(
                         height,
-                        height - shift.dy()
+                        targetFrame.request().height() - shift.dy()
                 );
 
         /* The frames do not overlap. */
@@ -244,17 +244,6 @@ public final class FrameReusePlanner {
 
         if (sourceRequest.sampleAccuracy() != targetRequest.sampleAccuracy()) return false;
 
-        /* Reuse across different render dimensions is not supported yet. */
-        if (sourceRequest.width()
-                != targetRequest.width()) {
-            return false;
-        }
-
-        if (sourceRequest.height()
-                != targetRequest.height()) {
-            return false;
-        }
-
         /* Samples calculated with different iteration limits are not equivalent. */
         if (sourceRequest.maxIterations()
                 != targetRequest.maxIterations()) {
@@ -266,9 +255,13 @@ public final class FrameReusePlanner {
             return false;
         }
 
-        /* Partial pan reuse currently requires an unchanged viewport scale. */
-        return sourceRequest.viewport().scaleExact().compareTo(
-                targetRequest.viewport().scaleExact()) == 0;
+        BigDecimal sourceStep = sourceRequest.viewport()
+                .imaginaryUnitsPerPixelExact(sourceRequest.height());
+        BigDecimal targetStep = targetRequest.viewport()
+                .imaginaryUnitsPerPixelExact(targetRequest.height());
+        // Decimal division during resize can round the last guard digit.
+        return sourceStep.subtract(targetStep).abs().compareTo(
+                sourceStep.abs().multiply(new BigDecimal("1e-25"))) <= 0;
     }
 
     private Optional<PixelShift> calculatePixelShift(
@@ -285,14 +278,18 @@ public final class FrameReusePlanner {
         RenderGrid grid =
                 sourceFrame.renderGrid();
 
+        BigDecimal resizeX = BigDecimal.valueOf(targetRequest.width() - sourceFrame.request().width())
+                .divide(BigDecimal.valueOf(2));
+        BigDecimal resizeY = BigDecimal.valueOf(targetRequest.height() - sourceFrame.request().height())
+                .divide(BigDecimal.valueOf(2));
         PreciseRenderGrid preciseGrid = grid.preciseGrid();
         if (preciseGrid != null) {
             BigDecimal rawShiftX = sourceViewport.center().real()
                     .subtract(targetViewport.center().real(), sourceViewport.mathContext())
-                    .divide(preciseGrid.realStep(), sourceViewport.mathContext());
+                    .divide(preciseGrid.realStep(), sourceViewport.mathContext()).add(resizeX);
             BigDecimal rawShiftY = targetViewport.center().imaginary()
                     .subtract(sourceViewport.center().imaginary(), sourceViewport.mathContext())
-                    .divide(preciseGrid.imaginaryStep(), sourceViewport.mathContext());
+                    .divide(preciseGrid.imaginaryStep(), sourceViewport.mathContext()).add(resizeY);
             Optional<Integer> preciseX = toIntegerShift(rawShiftX);
             Optional<Integer> preciseY = toIntegerShift(rawShiftY);
             if (preciseX.isPresent() && preciseY.isPresent()) {
@@ -309,13 +306,13 @@ public final class FrameReusePlanner {
         double rawShiftX =
                 (sourceViewport.centerReal()
                         - targetViewport.centerReal())
-                        / grid.realStep();
+                        / grid.realStep() + resizeX.doubleValue();
 
         /* The imaginary axis points up while screen Y points down. */
         double rawShiftY =
                 (targetViewport.centerImaginary()
                         - sourceViewport.centerImaginary())
-                        / grid.imaginaryStep();
+                        / grid.imaginaryStep() + resizeY.doubleValue();
 
         Optional<Integer> shiftX =
                 toIntegerShift(
@@ -443,7 +440,7 @@ public final class FrameReusePlanner {
         int sourceXTo =
                 Math.min(
                         width,
-                        width - shift.dx()
+                        targetFrame.request().width() - shift.dx()
                 );
 
         int sourceYFrom =
@@ -455,7 +452,7 @@ public final class FrameReusePlanner {
         int sourceYTo =
                 Math.min(
                         height,
-                        height - shift.dy()
+                        targetFrame.request().height() - shift.dy()
                 );
 
         /* The frames do not overlap. */

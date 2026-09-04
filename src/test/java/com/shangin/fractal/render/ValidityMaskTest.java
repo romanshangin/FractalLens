@@ -103,15 +103,16 @@ class ValidityMaskTest {
     }
 
     @Test
-    void shiftedCopyShouldRejectDifferentDimensions() {
+    void shiftedCopyShouldCropDifferentDimensions() {
+        ValidityMask source = new ValidityMask(6, 5);
+        source.markReady(new RenderRegion(0, 0, 6, 5));
         ValidityMask target = new ValidityMask(4, 3);
-
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> target.copyShiftedFrom(
-                        new ValidityMask(5, 3),
-                        new PixelShift(0, 0)
-                )
-        );
+        target.copyShiftedFrom(source, new PixelShift(-1, -1));
+        assertTrue(target.isComplete());
+        ValidityMask expanded = new ValidityMask(6, 5);
+        expanded.copyShiftedFrom(target, new PixelShift(1, 1));
+        assertEquals(12, expanded.readyPixelCount());
+        assertTrue(expanded.isRegionReady(new RenderRegion(1, 1, 4, 3)));
+        assertFalse(expanded.isReady(0, 0));
     }
 }

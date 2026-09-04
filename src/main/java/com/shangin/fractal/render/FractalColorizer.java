@@ -31,6 +31,13 @@ public class FractalColorizer {
             ColoringStrategy coloring,
             RenderRegion region
     ) {
+        colorRegion(data, buffer, coloring, region, null);
+    }
+
+    /** Tile progress may straddle reused AA pixels along a resized edge. */
+    public void colorRegion(SamplePlane data, IntBuffer buffer, ColoringStrategy coloring,
+                            RenderRegion region, ValidityMask preserve) {
+        BitSet preserved = preserve == null ? null : preserve.readyBitsCopy();
         int xTo = region.x() + region.width();
 
         int yTo = region.y() + region.height();
@@ -38,6 +45,9 @@ public class FractalColorizer {
         for (int y = region.y(); y < yTo; y++) {
             for (int x = region.x(); x < xTo; x++) {
                 int index = y * data.width() + x;
+                if (preserved != null && preserved.get(index)) {
+                    continue;
+                }
                 int color = coloring.color(
                         data.iterations(index),
                         data.smoothIterations(index),

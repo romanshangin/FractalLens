@@ -20,6 +20,8 @@ import com.shangin.fractal.scene.SamplingPattern;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.animation.PauseTransition;
 import javafx.animation.AnimationTimer;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
@@ -34,9 +36,18 @@ import java.util.List;
  */
 public class FractalView extends StackPane {
 
-    // for resize only
-    private static final Duration RESIZE_DELAY = Duration.millis(200);
-    private final PauseTransition resizeDebounce = new PauseTransition(RESIZE_DELAY);
+    // Coalesce width/height events into the next pulse without waiting for idle.
+    private final AnimationTimer resizeRender = new AnimationTimer() {
+        @Override
+        public void handle(long now) {
+            stop();
+            layout();
+            if (resizePending) {
+                resizeAndRender();
+            }
+        }
+    };
+    private boolean resizePending;
 
     // Coalesce wheel events, but flush immediately when a pinch gesture finishes.
     private static final double SWIPE_PAN_FRACTION = 0.2;
@@ -58,6 +69,7 @@ public class FractalView extends StackPane {
     private final FractalSurface fractalSurface = new FractalSurface();
     private final FractalRenderController renderController = new FractalRenderController(fractalSurface);
     private final FractalCamera camera;
+    private final FractalContextMenu contextMenu;
     private FractalScene scene;
     private RenderPriority renderPriority = RenderPriority.center();
     private Consumer<Viewport> viewportChangedHandler = ignored -> {};
@@ -93,6 +105,7 @@ public class FractalView extends StackPane {
         configureZoom();
         configurePan();
         configureTrackpadGestures();
+        contextMenu = new FractalContextMenu(this, this::copyCoordinatesAndZoom);
         setFocusTraversable(true);
         setAccessibleText("Fractal canvas");
         setAccessibleHelp("Use the View menu to zoom or go to coordinates. Drag to pan, scroll to zoom, or pinch on a trackpad.");
@@ -117,6 +130,7 @@ public class FractalView extends StackPane {
     }
 
     public void setFractal(FractalPreset preset) {
+        dismissContextMenu();
         int width = (int) getWidth();
         int height = (int) getHeight();
 
@@ -133,7 +147,24 @@ public class FractalView extends StackPane {
         recalculate();
     }
 
+    private void dismissContextMenu() {
+        if (contextMenu != null) contextMenu.hide();
+    }
+
+    private void copyCoordinatesAndZoom() {
+        Viewport viewport = camera.viewport();
+        BigDecimal zoom = camera.defaultViewport(
+                        Math.max(2, (int) getWidth()), Math.max(2, (int) getHeight()))
+                .scaleExact().divide(viewport.scaleExact(), viewport.mathContext());
+        ClipboardContent content = new ClipboardContent();
+        content.putString("Real: " + viewport.center().real().stripTrailingZeros().toPlainString()
+                + "\nImaginary: " + viewport.center().imaginary().stripTrailingZeros().toPlainString()
+                + "\nZoom: " + zoom.stripTrailingZeros().toPlainString());
+        Clipboard.getSystemClipboard().setContent(content);
+    }
+
     public void resetView() {
+        dismissContextMenu();
         int width = (int) getWidth();
         int height = (int) getHeight();
 
@@ -153,6 +184,7 @@ public class FractalView extends StackPane {
 
     /** Menu and keyboard zoom use the same precision limits as pointer gestures. */
     public void zoom(boolean in) {
+        dismissContextMenu();
         int width = (int) getWidth();
         int height = (int) getHeight();
         int renderWidth = fractalSurface.renderWidth();
@@ -172,6 +204,7 @@ public class FractalView extends StackPane {
     }
 
     public void setCenter(double centerReal, double centerImaginary) {
+        dismissContextMenu();
         int width = (int) getWidth();
         int height = (int) getHeight();
 
@@ -190,6 +223,7 @@ public class FractalView extends StackPane {
     }
 
     public void setCenter(BigDecimal centerReal, BigDecimal centerImaginary) {
+        dismissContextMenu();
         int width = (int) getWidth();
         int height = (int) getHeight();
 
@@ -220,6 +254,7 @@ public class FractalView extends StackPane {
     }
 
     public void setPalette(PalettePreset preset) {
+        dismissContextMenu();
         ColoringSettings settings = new ColoringSettings(
                 preset, preset.stops(), scene.coloring().colorScale(), scene.coloring().offset(),
                 scene.coloring().histogramColoring(), scene.coloring().orbitTrap());
@@ -237,6 +272,7 @@ public class FractalView extends StackPane {
     }
 
     public void setPaletteStops(List<ColorStop> stops) {
+        dismissContextMenu();
         ColoringSettings current = scene.coloring();
         ColoringSettings settings = new ColoringSettings(
                 current.palette(), stops, current.colorScale(), current.offset(),
@@ -265,6 +301,7 @@ public class FractalView extends StackPane {
     }
 
     public void setColorCycling(boolean enabled) {
+        dismissContextMenu();
         if (enabled && (scene.coloring().histogramColoring()
                 || scene.coloring().orbitTrap() != OrbitTrap.NONE)) {
             colorCycling = false;
@@ -301,6 +338,7 @@ public class FractalView extends StackPane {
     }
 
     private void stopColorCyclingForSceneChange() {
+        dismissContextMenu();
         if (!colorCycling) {
             return;
         }
@@ -394,8 +432,6 @@ public class FractalView extends StackPane {
     }
 
     private void configureResize() {
-        resizeDebounce.setOnFinished(event -> resizeAndRender());
-
         widthProperty().addListener(
                 (observable, oldValue, newValue)
                         -> scheduleResize());
@@ -486,17 +522,16 @@ public class FractalView extends StackPane {
             return;
         }
 
+        Viewport sourceViewport = camera.viewport();
+        if (!camera.pan(event.getDeltaX(), event.getDeltaY(), width, height)) {
+            return;
+        }
+
         if (trackpadPanSourceViewport == null) {
-            trackpadPanSourceViewport = camera.viewport();
+            trackpadPanSourceViewport = sourceViewport;
             interactionRender.cancel();
             renderController.cancelCurrent();
             colorCyclePaused = true;
-        }
-
-        if (!camera.pan(event.getDeltaX(), event.getDeltaY(), width, height)) {
-            trackpadPanSourceViewport = null;
-            colorCyclePaused = false;
-            return;
         }
 
         stopColorCyclingForSceneChange();
@@ -620,10 +655,36 @@ public class FractalView extends StackPane {
     }
 
     private void scheduleResize() {
+        dismissContextMenu();
+        resizePending = true;
         stopColorCyclingForSceneChange();
+        interactionRender.cancel();
         renderController.cancelCurrent();
         colorCyclePaused = true;
-        resizeDebounce.playFromStart();
+        resizeRender.start();
+        requestLayout();
+    }
+
+    @Override
+    protected void layoutChildren() {
+        super.layoutChildren();
+        if (resizePending && fractalSurface.renderHeight() >= 2) {
+            showResizePreview();
+        }
+    }
+
+    private void showResizePreview() {
+        int oldHeight = fractalSurface.renderHeight();
+        if (camera.isDefaultView()) {
+            fractalSurface.showInitialResizePreview();
+        } else {
+            int newWidth = fractalSurface.renderWidthFor((int) getWidth());
+            int newHeight = fractalSurface.renderHeightFor((int) getHeight());
+            Viewport preview = new Viewport(camera.viewport().center(),
+                    camera.viewport().imaginaryUnitsPerPixelExact(oldHeight).multiply(
+                            BigDecimal.valueOf(newHeight - 1L), camera.viewport().mathContext()));
+            fractalSurface.showResizePreview(preview, newWidth, newHeight);
+        }
     }
 
     private void resizeAndRender() {
@@ -634,13 +695,23 @@ public class FractalView extends StackPane {
             return;
         }
 
+        int oldRenderHeight = fractalSurface.renderHeight();
+        boolean resizeDefaultView = camera.isDefaultView();
+        if (oldRenderHeight >= 2) {
+            showResizePreview();
+        }
         fractalSurface.resizeBuffer(width, height);
-        camera.resize(width, height);
+        camera.resize(width, height, oldRenderHeight, fractalSurface.renderHeight());
+        resizePending = false;
         resetPriority();
-        recalculate();
+        recalculate(!resizeDefaultView);
     }
 
     private void recalculate() {
+        recalculate(false);
+    }
+
+    private void recalculate(boolean reuseResize) {
         int logicalWidth = (int) getWidth();
         int logicalHeight = (int) getHeight();
 
@@ -673,13 +744,15 @@ public class FractalView extends StackPane {
         renderController.render(
                 scene,
                 target,
-                defaultViewport
+                defaultViewport,
+                reuseResize
         );
     }
 
     public void close() {
+        contextMenu.close();
         interactionRender.cancel();
-        resizeDebounce.stop();
+        resizeRender.stop();
         colorCycleTimer.stop();
         renderController.close();
     }
@@ -728,6 +801,7 @@ public class FractalView extends StackPane {
     }
 
     private void cameraChanged() {
+        dismissContextMenu();
         stopColorCyclingForSceneChange();
         fractalSurface.showPreview(camera.viewport());
         renderController.cancelCurrent();
@@ -743,7 +817,6 @@ public class FractalView extends StackPane {
             requestFocus();
             panSourceViewport = camera.viewport();
 
-            interactionRender.cancel();
             lastDragX = event.getX();
             lastDragY = event.getY();
             panning = true;
@@ -779,6 +852,7 @@ public class FractalView extends StackPane {
 
             if (!panChanged) {
                 stopColorCyclingForSceneChange();
+                interactionRender.cancel();
                 renderController.cancelCurrent();
                 panChanged = true;
             }

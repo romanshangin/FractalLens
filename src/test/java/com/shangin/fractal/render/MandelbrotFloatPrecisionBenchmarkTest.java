@@ -23,10 +23,11 @@ class MandelbrotFloatPrecisionBenchmarkTest {
 
     @Test
     void smallCoordinateErrorDoesNotImplySmallSmoothIterationError() {
-        var grid = RenderGrid.from(new Viewport(-0.75, 0.0, 2.4), 384, 256);
-        double re = grid.realAt(254), im = grid.imaginaryAt(17);
-        double coordinateError = Math.max(Math.abs((float) re - re) / grid.realStep(),
-                Math.abs((float) im - im) / grid.imaginaryStep());
+        // Fixed counterexample, independent of the viewport's raster convention.
+        double stepX = 3.6 / 383, stepY = 2.4 / 255;
+        double re = -2.55 + 254 * stepX, im = 1.2 - 17 * stepY;
+        double coordinateError = Math.max(Math.abs((float) re - re) / stepX,
+                Math.abs((float) im - im) / stepY);
         var reference = new MandelbrotFormula().calculate(re, im, 300);
         var candidate = calculate((float) re, (float) im, 300, false);
         assertTrue(coordinateError < MAX_COORDINATE_ERROR_PIXELS);

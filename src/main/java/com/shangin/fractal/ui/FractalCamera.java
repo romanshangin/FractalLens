@@ -180,26 +180,34 @@ public final class FractalCamera {
             int width,
             int height
     ) {
+        resize(width, height, viewportHeight, height);
+    }
+
+    public boolean isDefaultView() {
+        return viewportWidth < 2 || viewportHeight < 2
+                || viewport.equals(defaultViewport(viewportWidth, viewportHeight));
+    }
+
+    /** Keeps sample spacing in a navigated view; fits the preset only at home. */
+    public void resize(int width, int height, int oldRenderHeight, int newRenderHeight) {
         validateDimensions(width, height);
         if (viewportWidth < 2 || viewportHeight < 2) {
             reset(width, height);
             return;
         }
 
-        if (width == viewportWidth && height == viewportHeight) {
+        if (width == viewportWidth && height == viewportHeight
+                && oldRenderHeight == newRenderHeight) {
             return;
         }
 
-        Viewport oldDefault = defaultViewport(viewportWidth, viewportHeight);
-        Viewport newDefault = defaultViewport(width, height);
-
-        MathContext context = viewport.mathContext();
-        BigDecimal relativeScale = viewport.scaleExact()
-                .divide(oldDefault.scaleExact(), context)
-                .min(BigDecimal.ONE);
-        BigDecimal newScale = newDefault.scaleExact().multiply(relativeScale, context);
-
-        viewport = new Viewport(viewport.center(), newScale);
+        if (isDefaultView()) {
+            viewport = defaultViewport(width, height);
+        } else {
+            BigDecimal step = viewport.imaginaryUnitsPerPixelExact(oldRenderHeight);
+            viewport = new Viewport(viewport.center(), step.multiply(
+                    BigDecimal.valueOf(newRenderHeight - 1L), viewport.mathContext()));
+        }
         viewportWidth = width;
         viewportHeight = height;
     }

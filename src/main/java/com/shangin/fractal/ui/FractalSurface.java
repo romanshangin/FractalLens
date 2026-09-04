@@ -49,6 +49,8 @@ public final class FractalSurface extends Region {
     private FractalScene displayedScene;
     private Viewport displayedViewport;
     private Viewport previewTargetViewport;
+    private boolean initialResizePreview;
+    private boolean stagingShowsBaseProgress;
 
     private Runnable renderScaleChangedHandler = () -> {};
 
@@ -112,9 +114,13 @@ public final class FractalSurface extends Region {
 
         stagingRenderFrame = renderFrame;
         progressivePreviewTransform.setToIdentity();
+        stagingShowsBaseProgress = !initialResizePreview && plannerSourceFrame != null
+                && (plannerSourceFrame.request().width() != renderFrame.request().width()
+                || plannerSourceFrame.request().height() != renderFrame.request().height());
 
         progressiveImageView.setImage(
-                InteractiveRenderPresentation.showsBaseProgress(renderMode)
+                !initialResizePreview && (stagingShowsBaseProgress
+                        || InteractiveRenderPresentation.showsBaseProgress(renderMode))
                         ? stagingFrame.image()
                         : null
         );
@@ -146,7 +152,7 @@ public final class FractalSurface extends Region {
         retainedProgressRenderFrame = stagingRenderFrame;
         retainedProgressRefinementValidity = stagingRefinementValidity;
         retainedPreviewTransform.setToTransform(progressivePreviewTransform);
-        retainedImageView.setImage(stagingFrame.image());
+        retainedImageView.setImage(initialResizePreview ? null : stagingFrame.image());
         progressiveImageView.setImage(null);
     }
 
@@ -172,7 +178,8 @@ public final class FractalSurface extends Region {
     ) {
         Objects.requireNonNull(renderMode);
 
-        if (!InteractiveRenderPresentation.showsBaseProgress(renderMode)) {
+        if (!stagingShowsBaseProgress
+                && !InteractiveRenderPresentation.showsBaseProgress(renderMode)) {
             return;
         }
 
@@ -201,7 +208,8 @@ public final class FractalSurface extends Region {
                     data,
                     stagingFrame.intBuffer(),
                     coloring,
-                    region
+                    region,
+                    stagingRefinementValidity
             );
         }
 
@@ -245,7 +253,7 @@ public final class FractalSurface extends Region {
             FractalScene scene
     ) {
 
-        if (stagingFrame == null) {
+        if (stagingFrame == null || stagingRenderFrame != renderFrame) {
             return;
         }
 
@@ -257,10 +265,14 @@ public final class FractalSurface extends Region {
         if (stagingFrame == null || stagingRenderFrame != frame) {
             return;
         }
-        /* Never expose raw base-pass colors through the refined display path. */
-        stagingFrame.clearExcept(stagingRefinementValidity);
+        // During resize, keep newly calculated base colors visible at the edges;
+        // AA tiles replace them in place. Other refined renders retain the
+        // established quality-only presentation.
+        if (!stagingShowsBaseProgress) {
+            stagingFrame.clearExcept(stagingRefinementValidity);
+        }
         progressivePreviewTransform.setToIdentity();
-        progressiveImageView.setImage(stagingFrame.image());
+        progressiveImageView.setImage(initialResizePreview ? null : stagingFrame.image());
     }
 
     private void promoteStagingFrame(
@@ -283,6 +295,7 @@ public final class FractalSurface extends Region {
         displayedScene = Objects.requireNonNull(scene);
         displayedViewport = scene.viewport();
         stagingRenderFrame = null;
+        stagingShowsBaseProgress = false;
 
         baseImageView.setImage(
                 displayedFrame.image()
@@ -301,17 +314,19 @@ public final class FractalSurface extends Region {
             int logicalWidth,
             int logicalHeight
     ) {
-        int newRenderWidth = Math.max(2, (int) Math.ceil(logicalWidth * outputScaleX));
-        int newRenderHeight = Math.max(2, (int) Math.ceil(logicalHeight * outputScaleY));
+        // Update dimensions even when the spare buffer happens to match.
+        // Keep visible progress until beginProgressiveRender can retain/copy it.
+        renderWidth = renderWidthFor(logicalWidth);
+        renderHeight = renderHeightFor(logicalHeight);
+    }
 
-        if (stagingFrame != null && stagingFrame.matches(newRenderWidth, newRenderHeight)) {
-            return;
-        }
-        renderWidth = newRenderWidth;
-        renderHeight = newRenderHeight;
-        stagingFrame = new SurfaceBuffer(renderWidth, renderHeight);
-        stagingRefinementValidity = new ValidityMask(renderWidth, renderHeight);
-        stagingRenderFrame = null;
+    // Equal parity keeps the center on the same sample grid during resize.
+    public int renderWidthFor(int logicalWidth) {
+        return Math.max(2, 2 * (int) Math.ceil(logicalWidth * outputScaleX / 2));
+    }
+
+    public int renderHeightFor(int logicalHeight) {
+        return Math.max(2, 2 * (int) Math.ceil(logicalHeight * outputScaleY / 2));
     }
 
     public int renderWidth() {
@@ -332,6 +347,12 @@ public final class FractalSurface extends Region {
         }
 
         return new CompletedRender(displayedScene, displayedRenderFrame);
+    }
+
+    /** Sample completion alone does not guarantee that AA colors were published. */
+    public boolean hasCompleteRefinement(RenderFrame frame) {
+        return stagingRenderFrame == frame && stagingRefinementValidity != null
+                && stagingRefinementValidity.isComplete();
     }
 
     /** Applies one refined tile only when it belongs to the visible frame. */
@@ -420,6 +441,7 @@ public final class FractalSurface extends Region {
     }
 
     private void resetPreview() {
+        initialResizePreview = false;
         previewTransform.setToIdentity();
         retainedPreviewTransform.setToIdentity();
         progressivePreviewTransform.setToIdentity();
@@ -444,10 +466,33 @@ public final class FractalSurface extends Region {
 
     /** Transforms the last completed image as an immediate pan/zoom preview. */
     public void showPreview(Viewport targetViewport) {
+        initialResizePreview = false;
+        showPreview(targetViewport, renderWidth, renderHeight);
+    }
 
-        if (displayedViewport == null) {
+    /** Keep one full-window image until a refitted overview is ready to replace it. */
+    public void showInitialResizePreview() {
+        if (displayedFrame == null) {
             return;
         }
+        resetPreview();
+        initialResizePreview = true;
+        // ImageView fit dimensions follow the surface, so this stretches without
+        // accumulating projections from intermediate window aspect ratios.
+        baseImageView.setImage(displayedFrame.image());
+        retainedImageView.setImage(null);
+        progressiveImageView.setImage(null);
+    }
+
+    /** Projects every visible layer using its own source dimensions. */
+    public void showResizePreview(Viewport targetViewport, int targetWidth, int targetHeight) {
+        initialResizePreview = false;
+        showPreview(targetViewport, targetWidth, targetHeight);
+        // A resized image is presentation only, never evidence of computed samples.
+        previewTargetViewport = null;
+    }
+
+    private void showPreview(Viewport targetViewport, int targetWidth, int targetHeight) {
 
         double width = getWidth();
         double height = getHeight();
@@ -458,17 +503,19 @@ public final class FractalSurface extends Region {
 
         previewTargetViewport = targetViewport;
 
-        applyPreviewTransform(
+        if (displayedViewport != null) {
+            applyPreviewTransform(
                 previewTransform,
                 displayedViewport,
                 targetViewport,
                 displayedFrame.width(),
                 displayedFrame.height(),
-                renderWidth,
-                renderHeight,
+                targetWidth,
+                targetHeight,
                 width,
                 height
-        );
+            );
+        }
 
         if (stagingRenderFrame != null) {
             applyPreviewTransform(
@@ -477,8 +524,8 @@ public final class FractalSurface extends Region {
                     targetViewport,
                     stagingRenderFrame.request().width(),
                     stagingRenderFrame.request().height(),
-                    renderWidth,
-                    renderHeight,
+                    targetWidth,
+                    targetHeight,
                     width,
                     height
             );
@@ -491,8 +538,8 @@ public final class FractalSurface extends Region {
                     targetViewport,
                     retainedProgressRenderFrame.request().width(),
                     retainedProgressRenderFrame.request().height(),
-                    renderWidth,
-                    renderHeight,
+                    targetWidth,
+                    targetHeight,
                     width,
                     height
             );
@@ -721,6 +768,14 @@ public final class FractalSurface extends Region {
             return false;
         }
 
+        if (!stagingFrame.matches(targetFrame.request().width(), targetFrame.request().height())) {
+            retainVisibleProgress();
+            stagingFrame = null;
+            stagingRefinementValidity = null;
+            stagingRenderFrame = null;
+            return false;
+        }
+
         if (!stagingFrame.shiftInPlace(shift)) {
             stagingRefinementValidity.clear();
             return false;
@@ -736,7 +791,7 @@ public final class FractalSurface extends Region {
          * the resumed renderer skips them.
          */
         if (includeRawReadyPixels) {
-            displayReadyPixels(targetFrame, coloring);
+            displayReadyPixelsPreservingRefinement(targetFrame, coloring);
         }
 
         return true;
@@ -770,12 +825,7 @@ public final class FractalSurface extends Region {
             return false;
         }
 
-        if (sourceSurface == null
-                || sourceValidity == null
-                || sourceSurface.width()
-                != stagingFrame.width()
-                || sourceSurface.height()
-                != stagingFrame.height()) {
+        if (sourceSurface == null || sourceValidity == null) {
             return false;
         }
 

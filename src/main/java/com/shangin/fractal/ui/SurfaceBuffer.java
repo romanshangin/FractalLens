@@ -99,13 +99,6 @@ public class SurfaceBuffer {
         Objects.requireNonNull(source);
         Objects.requireNonNull(shift);
 
-        if (source.width() != width
-                || source.height() != height) {
-            throw new IllegalArgumentException(
-                    "SurfaceBuffer dimensions must match"
-            );
-        }
-
         if (source == this) {
             throw new IllegalArgumentException(
                     "Source and target buffers must be different"
@@ -117,7 +110,7 @@ public class SurfaceBuffer {
 
         int sourceXTo =
                 Math.min(
-                        width,
+                        source.width(),
                         width - shift.dx()
                 );
 
@@ -126,7 +119,7 @@ public class SurfaceBuffer {
 
         int sourceYTo =
                 Math.min(
-                        height,
+                        source.height(),
                         height - shift.dy()
                 );
 
@@ -152,7 +145,7 @@ public class SurfaceBuffer {
                     sourceY + shift.dy();
 
             int sourceIndex =
-                    sourceY * width
+                    sourceY * source.width()
                             + sourceXFrom;
 
             int targetIndex =

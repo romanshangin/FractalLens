@@ -80,8 +80,9 @@ public final class Viewport {
 
     public BigDecimal visibleWidthExact(int width, int height) {
         validateDimensions(width, height);
-        return scale.multiply(BigDecimal.valueOf(width), mathContext)
-                .divide(BigDecimal.valueOf(height), mathContext);
+        // Scale spans sample centers (0 .. size - 1) on both axes.
+        return imaginaryUnitsPerPixelExact(height)
+                .multiply(BigDecimal.valueOf(width - 1L), mathContext);
     }
 
     public BigDecimal minRealExact(int width, int height) {
@@ -104,8 +105,7 @@ public final class Viewport {
 
     public BigDecimal realUnitsPerPixelExact(int width, int height) {
         validateDimensions(width, height);
-        return visibleWidthExact(width, height)
-                .divide(BigDecimal.valueOf(width - 1L), mathContext);
+        return imaginaryUnitsPerPixelExact(height);
     }
 
     public BigDecimal imaginaryUnitsPerPixelExact(int height) {
@@ -182,8 +182,8 @@ public final class Viewport {
         validateDimensions(pixelWidth, pixelHeight);
         BigDecimal width = finitePositive(contentWidth);
         BigDecimal height = finitePositive(contentHeight);
-        BigDecimal windowAspect = BigDecimal.valueOf(pixelWidth)
-                .divide(BigDecimal.valueOf(pixelHeight), mathContext);
+        BigDecimal windowAspect = BigDecimal.valueOf(pixelWidth - 1L)
+                .divide(BigDecimal.valueOf(pixelHeight - 1L), mathContext);
         BigDecimal contentAspect = width.divide(height, mathContext);
         BigDecimal fittedScale = windowAspect.compareTo(contentAspect) < 0
                 ? width.divide(windowAspect, mathContext) : height;

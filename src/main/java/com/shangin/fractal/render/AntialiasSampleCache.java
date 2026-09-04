@@ -118,10 +118,14 @@ public final class AntialiasSampleCache {
 
     /** Retains samples whose pixels remain visible after an integer pan. */
     public synchronized void shift(int width, int height, PixelShift shift) {
+        shift(width, width, height, shift);
+    }
+
+    public synchronized void shift(int sourceWidth, int width, int height, PixelShift shift) {
         LinkedHashMap<Integer, Samples> shifted = new LinkedHashMap<>(256, 0.75f, true);
         for (Map.Entry<Integer, Samples> entry : entries.entrySet()) {
-            int sourceX = entry.getKey() % width;
-            int sourceY = entry.getKey() / width;
+            int sourceX = entry.getKey() % sourceWidth;
+            int sourceY = entry.getKey() / sourceWidth;
             int targetX = sourceX + shift.dx();
             int targetY = sourceY + shift.dy();
             if (targetX >= 0 && targetX < width && targetY >= 0 && targetY < height) {
