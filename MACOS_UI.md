@@ -107,7 +107,9 @@ It copies the current center's real and imaginary coordinates and zoom together
 as plain text, preserving decimal precision for sharing a view.
 `FractalContextMenu` owns the popup commands and dismissal behavior separately
 from the renderer. Its JavaFX popup uses macOS-style rounded corners, the system
-font, appearance and accent color; it is not an AppKit NSMenu. Styling lives in
+font, appearance and accent color, a translucent background, an inset rounded
+selection and a soft shadow. Transparency does not include backdrop blur; this
+is a JavaFX popup, not an AppKit NSMenu. Styling lives in
 `fractal-context-menu.css`. Canvas input, scene commands, window movement/resizing
 and loss of focus dismiss the menu without swallowing the initiating canvas click.
 Pointer movement alone leaves it open so its items remain reachable.

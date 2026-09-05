@@ -81,9 +81,9 @@ final class FractalContextMenu extends ContextMenu implements AutoCloseable {
         setStyle(String.format(Locale.ROOT,
                 "-menu-background: %s; -menu-foreground: %s; -menu-border: %s; "
                         + "-menu-accent: rgb(%d,%d,%d);",
-                dark ? "rgba(42,42,44,0.98)" : "rgba(246,246,246,0.98)",
+                dark ? "rgba(38,38,40,0.90)" : "rgba(250,250,252,0.92)",
                 dark ? "#f5f5f5" : "#202020",
-                dark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.16)",
+                dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.12)",
                 Math.round(accent.getRed() * 255), Math.round(accent.getGreen() * 255),
                 Math.round(accent.getBlue() * 255)));
     }
