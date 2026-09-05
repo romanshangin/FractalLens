@@ -392,7 +392,7 @@ public final class FractalRenderController implements AutoCloseable {
                                             completedFrame, completedColoring);
                                     surface.completeProgressiveRender(completedFrame, scene);
                                     initialFramePending = false;
-                                    renderActivity.finish(renderGeneration);
+                                    renderActivity.fail(renderGeneration);
                                     error.printStackTrace();
                                 }
                         );
@@ -439,7 +439,7 @@ public final class FractalRenderController implements AutoCloseable {
                             ),
                             () -> renderActivity.finish(renderGeneration),
                             error -> {
-                                renderActivity.finish(renderGeneration);
+                                renderActivity.fail(renderGeneration);
                                 error.printStackTrace();
                             }
                     );
@@ -447,7 +447,7 @@ public final class FractalRenderController implements AutoCloseable {
                 },
 
                 error -> {
-                    renderActivity.finish(renderGeneration);
+                    renderActivity.fail(renderGeneration);
                     error.printStackTrace();
                 }
         );
@@ -468,7 +468,7 @@ public final class FractalRenderController implements AutoCloseable {
             return;
         }
 
-        long refinementGeneration = renderActivity.begin();
+        long refinementGeneration = renderActivity.beginRefinement();
         ColoringStrategy coloring = completed.scene().coloring()
                 .createStrategy(activeFrame.samplePlane());
         refineDeepFrame(
@@ -502,10 +502,14 @@ public final class FractalRenderController implements AutoCloseable {
                     renderActivity.finish(renderGeneration);
                 },
                 error -> {
-                    renderActivity.finish(renderGeneration);
+                    renderActivity.fail(renderGeneration);
                     error.printStackTrace();
                 }
         );
+    }
+
+    public void setOnRenderStatusChanged(Consumer<RenderStatus> handler) {
+        renderActivity.setStatusListener(handler);
     }
 
     public void setOnRenderingChanged(Consumer<Boolean> handler) {

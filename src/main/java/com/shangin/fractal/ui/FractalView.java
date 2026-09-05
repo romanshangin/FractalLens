@@ -59,6 +59,8 @@ public class FractalView extends StackPane {
     private boolean panning;
     private boolean panChanged;
 
+    private final RenderModeIndicator modeIndicator = new RenderModeIndicator();
+    private Consumer<Boolean> deepZoomChangedHandler = ignored -> {};
     private final FractalSurface fractalSurface = new FractalSurface();
     private final FractalRenderController renderController = new FractalRenderController(fractalSurface);
     private final FractalCamera camera;
@@ -115,7 +117,14 @@ public class FractalView extends StackPane {
             }
             event.consume();
         });
-        getChildren().add(fractalSurface);
+        getChildren().addAll(fractalSurface, modeIndicator);
+        StackPane.setAlignment(modeIndicator, javafx.geometry.Pos.BOTTOM_LEFT);
+        StackPane.setMargin(modeIndicator, new javafx.geometry.Insets(12));
+        renderController.setOnRenderStatusChanged(modeIndicator::setRenderStatus);
+        renderController.setOnDeepZoomChanged(active -> {
+            modeIndicator.setDeepZoom(active);
+            deepZoomChangedHandler.accept(active);
+        });
         interactionDebounce.setOnFinished(event -> interactionRender.finish());
         fractalSurface.setOnOutputScaleChanged(this::scheduleResize);
         renderController.setOnRenderingChanged(this::renderingChanged);
@@ -417,6 +426,7 @@ public class FractalView extends StackPane {
     /** Enables precise AA for the current and subsequent Mandelbrot deep frames. */
     public void setDeepAntialiasing(boolean enabled) {
         stopColorCyclingForSceneChange();
+        modeIndicator.setDeepAntialiasing(enabled);
         renderController.setDeepAntialiasingEnabled(enabled);
     }
 
@@ -892,7 +902,7 @@ public class FractalView extends StackPane {
     }
 
     public void setOnDeepZoomChanged(Consumer<Boolean> handler) {
-        renderController.setOnDeepZoomChanged(handler);
+        deepZoomChangedHandler = java.util.Objects.requireNonNull(handler);
     }
 
     public void setOnViewportChanged(Consumer<Viewport> handler) {

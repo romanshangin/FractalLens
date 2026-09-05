@@ -176,3 +176,17 @@ and after `ApplicationIcon.install()`: both matched the Mandelbrot asset
 forwarded JVM arguments also contained the correct absolute ICNS path. Compilation
 and `git diff --check` passed. This check specifically covers the startup flash,
 not only the icon after the application has initialized.
+
+### Viewport mode indicator
+
+A compact translucent badge sits 12 logical pixels from the bottom-left corner
+of the viewport. A blue dot marks **Standard** rendering; a soft coral dot marks
+**Deep Zoom**, following the controller's actual precision policy. The badge is
+informational, with no click action, and is not included in PNG exports.
+
+Hovering shows the mode description and the latest viewport render duration
+(including enabled antialiasing). A new render replaces the previous timing with
+`Rendering…`; cancelled or failed work never appears as a completed duration.
+Enabling deep antialiasing after completion adds refinement time to the base
+render duration without counting the intervening idle time. Palette animation
+and export do not replace the viewport timing.
