@@ -12,8 +12,42 @@ class InteractionRenderDebouncerTest {
     private final List<Long> delays = new ArrayList<>();
     private int stops;
     private int renders;
+    private final List<Boolean> preservedLimits = new ArrayList<>();
     private final InteractionRenderDebouncer debouncer = new InteractionRenderDebouncer(
-            delays::add, () -> stops++, () -> renders++);
+            delays::add, () -> stops++, preserve -> {
+                renders++;
+                preservedLimits.add(preserve);
+            });
+
+    @Test
+    void onlyPurePanBatchesMayPreserveTheIterationBudget() {
+        debouncer.requestPanRender();
+        debouncer.finish();
+        debouncer.requestZoomRender();
+        debouncer.finish();
+        debouncer.zoomStarted();
+        debouncer.requestZoomRender();
+        debouncer.zoomFinished();
+        debouncer.requestZoomRender();
+        debouncer.requestPanRender();
+        debouncer.finish();
+        debouncer.requestPanRender();
+        debouncer.requestZoomRender();
+        debouncer.finish();
+        debouncer.requestPanRender();
+        debouncer.finish();
+
+        assertEquals(List.of(true, false, false, false, false, true), preservedLimits);
+    }
+
+    @Test
+    void cancellationClearsThePendingZoomBudgetChange() {
+        debouncer.requestZoomRender();
+        debouncer.cancel();
+        debouncer.requestPanRender();
+        debouncer.finish();
+        assertEquals(List.of(true), preservedLimits);
+    }
 
     @Test
     void wheelChangesRestartAShortTimerWithoutRenderingEveryEvent() {

@@ -550,7 +550,7 @@ public class FractalView extends StackPane {
         interactionRender.requestPanRender();
     }
 
-    private void finishInteraction() {
+    private void finishInteraction(boolean preserveIterationLimit) {
         if (trackpadPanSourceViewport != null) {
             camera.snapToRenderGrid(
                     trackpadPanSourceViewport,
@@ -560,7 +560,7 @@ public class FractalView extends StackPane {
             trackpadPanSourceViewport = null;
         }
 
-        recalculate(true);
+        recalculate(preserveIterationLimit);
     }
 
     private void configureTrackpadGestures() {

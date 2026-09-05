@@ -1,6 +1,7 @@
 package com.shangin.fractal.ui;
 
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.LongConsumer;
 
 /** Coalesces camera changes and flushes a pending render at a gesture boundary. */
@@ -11,17 +12,19 @@ final class InteractionRenderDebouncer {
 
     private final LongConsumer restartTimer;
     private final Runnable stopTimer;
-    private final Runnable render;
+    private final Consumer<Boolean> render;
+    private boolean pendingZoom;
     private boolean pending;
     private boolean zoomGestureActive;
 
-    InteractionRenderDebouncer(LongConsumer restartTimer, Runnable stopTimer, Runnable render) {
+    InteractionRenderDebouncer(LongConsumer restartTimer, Runnable stopTimer, Consumer<Boolean> render) {
         this.restartTimer = Objects.requireNonNull(restartTimer);
         this.stopTimer = Objects.requireNonNull(stopTimer);
         this.render = Objects.requireNonNull(render);
     }
 
     void requestZoomRender() {
+        pendingZoom = true;
         // Keep the existing coalescing during a live pinch; its end flushes immediately.
         request(zoomGestureActive ? GESTURE_DELAY_MS : ZOOM_DELAY_MS);
     }
@@ -49,12 +52,16 @@ final class InteractionRenderDebouncer {
         if (!pending) {
             return;
         }
+        // Any zoom in the coalesced batch invalidates the old iteration budget,
+        // even if the last event was a pan. Pure pans can retain it for reuse.
+        boolean preserveIterationLimit = !pendingZoom;
         cancel();
-        render.run();
+        render.accept(preserveIterationLimit);
     }
 
     void cancel() {
         pending = false;
+        pendingZoom = false;
         stopTimer.run();
     }
 }

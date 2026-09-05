@@ -41,6 +41,41 @@ class FractalResizeFxTest {
         return task.get(15, TimeUnit.SECONDS);
     }
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void wheelAndPinchRecalculateIterationBudget(boolean pinch) throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE));
+        FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+        try {
+            changeView(view, surface, () -> { view.resize(100, 80); view.layout(); });
+            int before = fx(() -> surface.completedRender().frame().job().maxIterations());
+            changeView(view, surface, () -> {
+                if (pinch) {
+                    for (var type : java.util.List.of(javafx.scene.input.ZoomEvent.ZOOM_STARTED,
+                            javafx.scene.input.ZoomEvent.ZOOM, javafx.scene.input.ZoomEvent.ZOOM_FINISHED)) {
+                        view.fireEvent(new javafx.scene.input.ZoomEvent(type, 50, 40, 50, 40,
+                                false, false, false, false, false, false, 2, 2, null));
+                    }
+                } else {
+                    view.fireEvent(new javafx.scene.input.ScrollEvent(
+                            javafx.scene.input.ScrollEvent.SCROLL, 50, 40, 50, 40,
+                            false, false, false, false, false, false, 0, 40, 0, 40,
+                            javafx.scene.input.ScrollEvent.HorizontalTextScrollUnits.NONE, 0,
+                            javafx.scene.input.ScrollEvent.VerticalTextScrollUnits.NONE, 0, 0, null));
+                }
+            });
+            var completed = fx(surface::completedRender);
+            int expected = completed.scene().iterations().maxIterations(
+                    new FractalCamera(FractalPreset.MANDELBROT).defaultViewport(100, 80).scaleExact(),
+                    completed.scene().viewport().scaleExact());
+            assertTrue(expected > before);
+            assertEquals(expected, completed.frame().job().maxIterations(),
+                    "Zoom must increase the budget instead of retaining the initial 300 iterations");
+        } finally {
+            fx(() -> { view.close(); return null; });
+        }
+    }
+
     @Test
     void refinedResizeKeepsCalculatedBaseEdgesVisibleDuringAntialiasing() throws Exception {
         FractalSurface surface = fx(FractalSurface::new);

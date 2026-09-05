@@ -18,6 +18,27 @@ import static org.junit.jupiter.api.Assertions.*;
 class MandelbrotPerturbationRenderBackendTest {
 
     @Test
+    void reportedDeepZoomMatchesHighPrecision() throws Exception {
+        // User report: zoom ~9.19e19. Retain >40 guard digits beyond the pixel scale.
+        Viewport viewport = new Viewport(
+                "-1.7320499354826012102266901746994696566373363854765666418862854899626008",
+                "-0.000000000000000000073960377089232188358962638032921973873012811454845762766",
+                new BigDecimal("2.4").divide(new BigDecimal("91931147197833409032.468797100544316727867315464397353051"), new MathContext(80)).toString());
+        int limit = new com.shangin.fractal.scene.IterationSettings().maxIterations(
+                FractalPreset.MANDELBROT.defaultViewport().scaleExact(), viewport.scaleExact());
+        assertTrue(limit > 3000);
+        RenderFrame frame = assertBlaMatchesControls(viewport, limit);
+        boolean needsMoreThanInitialBudget = false;
+        for (int index = 0; index < frame.samplePlane().size(); index++) {
+            assertTrue(frame.samplePlane().escaped(index),
+                    "The reported view's filaments must not become false black interior");
+            needsMoreThanInitialBudget |= frame.samplePlane().iterations(index) > 300;
+        }
+        assertTrue(needsMoreThanInitialBudget,
+                "This fixture must expose the frozen 300-iteration budget regression");
+    }
+
+    @Test
     void isAvailableOnlyForPlainMandelbrot() {
         MandelbrotPerturbationRenderBackend backend = new MandelbrotPerturbationRenderBackend(1);
         try {
