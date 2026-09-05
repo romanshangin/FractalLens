@@ -84,6 +84,15 @@ final class ManagedGpuRuntime implements GpuRuntime {
     }
 
     @Override
+    public java.util.Optional<GpuResidentMandelbrotResult> renderResidentMandelbrot(
+            GpuResidentMandelbrotRequest request) throws InterruptedException {
+        Objects.requireNonNull(request);
+        return runOrFallback(GpuNumericCapability.FLOAT32,
+                () -> java.util.Optional.of(session.renderResidentMandelbrot(request)),
+                java.util.Optional::empty);
+    }
+
+    @Override
     public <T> T runOrFallback(GpuNumericCapability required, GpuWork<T> gpu, GpuWork<T> cpu)
             throws InterruptedException {
         Objects.requireNonNull(required);

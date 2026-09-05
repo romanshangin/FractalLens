@@ -40,13 +40,13 @@ final class MandelbrotPrecisionGate {
         input[offset + 5] = upper(imaginary);
     }
 
-    private static float lower(double value) {
+    static float lower(double value) {
         float f = (float) value;
         f = f > value ? Math.nextDown(f) : f;
         return f != 0 && Math.abs(f) < Float.MIN_NORMAL ? -Float.MIN_NORMAL : f;
     }
 
-    private static float upper(double value) {
+    static float upper(double value) {
         float f = (float) value;
         f = f < value ? Math.nextUp(f) : f;
         return f != 0 && Math.abs(f) < Float.MIN_NORMAL ? Float.MIN_NORMAL : f;

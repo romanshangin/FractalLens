@@ -27,6 +27,7 @@ final class MacosMoltenVkSession implements GpuSession {
     private VkPhysicalDevice physical;
     private VulkanPaletteKernel paletteKernel;
     private VulkanMandelbrotKernel mandelbrotKernel;
+    private VulkanResidentMandelbrotKernel residentMandelbrotKernel;
     private List<GpuDevice> devices = List.of();
     private GpuDevice selectedDevice;
 
@@ -253,6 +254,10 @@ final class MacosMoltenVkSession implements GpuSession {
                         mandelbrotKernel.close();
                         mandelbrotKernel = null;
                     }
+                    if (residentMandelbrotKernel != null) {
+                        residentMandelbrotKernel.close();
+                        residentMandelbrotKernel = null;
+                    }
                     if (paletteKernel != null) {
                         paletteKernel.close();
                         paletteKernel = null;
@@ -291,6 +296,20 @@ final class MacosMoltenVkSession implements GpuSession {
             batch.timing = mandelbrotKernel.lastTiming();
         } catch (LinkageError failure) {
             throw new GpuException("Mandelbrot native dependency unavailable: " + failure.getMessage(), false);
+        }
+    }
+
+    @Override
+    public GpuResidentMandelbrotResult renderResidentMandelbrot(
+            GpuResidentMandelbrotRequest request) throws InterruptedException {
+        try {
+            if (residentMandelbrotKernel == null) {
+                residentMandelbrotKernel = VulkanResidentMandelbrotKernel.open(
+                        device, physical, queue, selectedDevice.computeQueueFamily());
+            }
+            return residentMandelbrotKernel.render(request);
+        } catch (LinkageError failure) {
+            throw new GpuException("Resident Mandelbrot dependency unavailable: " + failure.getMessage(), false);
         }
     }
 }

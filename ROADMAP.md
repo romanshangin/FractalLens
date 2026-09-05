@@ -285,14 +285,40 @@ interval kernel about 139 ms; these costs overlap. CPU remains the default.
 
 Deferred again after the repeated 8.5 performance gate on M3 Pro: the optimized
 hybrid backend is substantially faster than in 8.4 but still has no measured
-end-to-end win over CPU. The items below remain conditional rather than the next
-implementation step.
+end-to-end win over CPU. A whole-frame resident feasibility spike now shows that
+residency can win when the FP32 certificate rejects few pixels, but it fails the
+cross-scene gate and is not connected to production backend selection. The items
+below remain conditional rather than the next implementation step.
 
 - [x] Measure adaptive edge/distance candidate detection separately before
   moving it. The 8.6 M3 Pro profile shows a 17-19 ms candidate critical path at
   1512x982 and 72-74 ms at 3024x1964, smaller than the GPU base-frame deficit in
   every paired AA case. Even zero-cost GPU detection would remain 1.03-1.07x
   slower end to end; see `GPU_RESIDENCY_8_6_DECISION.md`.
+- [x] Build an isolated whole-frame residency feasibility spike: keep canonical
+  samples on GPU, read back only the FP32 rejection list, upload exact CPU
+  corrections, color on GPU, and return ARGB. On M3 Pro it is 39.9% faster for
+  Retina overview and 83.9% faster for Retina exterior, but 24.1% slower for
+  Retina seahorse because 68.5% of pixels require CPU recovery. The strict 15%
+  cross-scene gate therefore fails; see `GPU_RESIDENT_SPIKE_RESULTS.md`.
+- [x] Classify resident certificate rejections before changing the kernel. In
+  the Retina seahorse view, 51.16% of rejections come from an uncertain escape
+  interval and 48.84% from a smooth-value interval wider than the contract;
+  iteration, boundedness, validity, palette-phase and catch-all mismatches are
+  all zero. Palette or dispatch tuning cannot remove this bottleneck. See
+  `GPU_RESIDENT_REJECTION_PROFILE.csv`.
+- [x] Prototype a tighter centered-error FP32 certificate only for first-stage
+  rejections. Its outward-rounded error recurrence certifies zero additional
+  pixels in overview, exterior, and seahorse, while raising the Retina seahorse
+  calculation median from 27.06 to 46.65 ms. Remove the second pass; a future
+  attempt needs a genuinely higher-precision representation, not another FP32
+  interval shape. See `GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`.
+- [x] Measure the accuracy and performance ceiling of double-single GPU recovery
+  for every FP32 rejection before investing in its certificate. It removes CPU
+  recovery, but fails both gates: Retina seahorse is 37.3% slower than CPU and
+  has 54 color outliers with a maximum channel error of 189; Retina overview is
+  only 4.3% faster and has 46 outliers. Remove the emulation path and retain its
+  diagnostic results in `GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`.
 - [ ] Move adaptive edge/distance candidate detection onto the GPU only after a
   repeated gate shows an end-to-end win including dispatch, synchronization,
   storage and exact fallback costs.

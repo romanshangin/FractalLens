@@ -144,6 +144,54 @@ found that even free candidate detection would not close the current GPU
 base-frame deficit, so AA remains on CPU. See
 [GPU_RESIDENCY_8_6_DECISION.md](GPU_RESIDENCY_8_6_DECISION.md).
 
+The follow-up 8.6 whole-frame residency spike is also isolated from production
+backend selection. It keeps a palette-independent four-word sample record per
+pixel in Vulkan storage, reads back only rejected pixel indices, uploads exact
+CPU corrections, performs smooth palette coloring on GPU, and finally reads
+back ARGB. Run its paired off-screen gate with:
+
+```sh
+JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true' \
+  mvn -Pgpu-resident-benchmark javafx:run
+```
+
+`fractal.residentBenchmark.sizes`, `.scenes`, `.warmup`, `.samples`, and
+`.output` configure the run; `fractal.gpu.resident.maxBytes` bounds its native
+allocation (384 MiB by default). `fractal.residentBenchmark.allowMismatch=true`
+is diagnostic-only: it records outlier counts for a known-bad experiment instead
+of stopping at the first conformance failure. The M3 Pro gate found meaningful wins for
+Retina overview and exterior, but a correction-heavy seahorse view remained
+24.1% slower than CPU. This fails the required 15% win in every representative
+scene, so the spike remains an opt-in experiment. See
+[GPU_RESIDENT_SPIKE_RESULTS.md](GPU_RESIDENT_SPIKE_RESULTS.md).
+
+The rejection buffer also carries bounded diagnostic counters. The follow-up
+Retina seahorse profile attributes 51.16% of rejected pixels to an uncertain
+escape interval and 48.84% to a smooth-value interval wider than the accepted
+error contract; every other category is zero. This rules out palette-phase and
+iteration-matching tweaks as useful next work. A further calculation experiment
+must apply a higher-precision certificate only to rejected pixels. The raw
+profile is in
+[GPU_RESIDENT_REJECTION_PROFILE.csv](GPU_RESIDENT_REJECTION_PROFILE.csv).
+
+A follow-up centered-error FP32 certificate was tested only on first-stage
+rejections. It preserved conformance but certified zero additional pixels at
+both benchmark sizes and all three native smoke scenes. On Retina seahorse its
+extra arithmetic raised median GPU calculation from 27.06 to 46.65 ms. The
+second pass was removed; its measurements remain in
+[GPU_RESIDENT_SECOND_STAGE_PROFILE.csv](GPU_RESIDENT_SECOND_STAGE_PROFILE.csv).
+Any later certificate experiment must use a genuinely higher-precision numeric
+representation rather than reshaping the same FP32 bounds.
+
+Double-single arithmetic (two floats, approximately 48 significant bits) was
+then measured as an optimistic ceiling by accepting every FP32 rejection on the
+GPU, before adding the still-missing rigorous stability certificate. Even with
+zero CPU recovery it fails the performance gate: Retina seahorse is 37.3% slower
+than CPU and Retina overview is only 4.3% faster. It also fails conformance, with
+54 Retina seahorse outliers and a maximum channel error of 189. The emulation
+path was removed. Raw results are in
+[GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv](GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv).
+
 ## Palette recoloring integration
 
 `PaletteRecolorBackend` is owned through `FractalRenderService`, so the

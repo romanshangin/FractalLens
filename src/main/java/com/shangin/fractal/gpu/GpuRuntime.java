@@ -47,6 +47,13 @@ public interface GpuRuntime extends AutoCloseable {
         return false;
     }
 
+    /** Experimental whole-frame resident calculation/coloring; empty keeps production fallback unchanged. */
+    default java.util.Optional<GpuResidentMandelbrotResult> renderResidentMandelbrot(
+            GpuResidentMandelbrotRequest request) throws InterruptedException {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Resident render cancelled");
+        return java.util.Optional.empty();
+    }
+
     @Override
     void close();
 }

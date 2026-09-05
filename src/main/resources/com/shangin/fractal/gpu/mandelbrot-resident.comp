@@ -1,0 +1,219 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Axes { float axes[]; };
+layout(std430, binding = 1) buffer Samples { uint samples[]; };
+layout(std430, binding = 2) buffer Rejections { uint rejected[]; };
+layout(std430, binding = 3) readonly buffer Corrections { uint corrections[]; };
+layout(std430, binding = 4) readonly buffer Palette { uint palette[]; };
+layout(std430, binding = 5) writeonly buffer Colors { uint colors[]; };
+layout(push_constant) uniform Settings {
+    uint pixelCount;
+    uint width;
+    uint height;
+    uint limit;
+    uint pass;
+    uint correctionCount;
+    float colorScale;
+    uint whole;
+    int ascendingBias;
+    uint ascendingLast;
+    int descendingBias;
+    uint descendingLast;
+} p;
+
+float down(float x) {
+    if (abs(x) < uintBitsToFloat(0x00800004u)) return -uintBitsToFloat(0x00800004u);
+    uint bits = floatBitsToUint(x);
+    return uintBitsToFloat(x > 0.0 ? bits - 4u : bits + 4u);
+}
+float up(float x) {
+    if (abs(x) < uintBitsToFloat(0x00800004u)) return uintBitsToFloat(0x00800004u);
+    uint bits = floatBitsToUint(x);
+    return uintBitsToFloat(x > 0.0 ? bits + 4u : bits - 4u);
+}
+vec2 addInterval(vec2 a, vec2 b) {
+    precise float low = a.x + b.x;
+    precise float high = a.y + b.y;
+    return vec2(down(low), up(high));
+}
+vec2 subtractInterval(vec2 a, vec2 b) {
+    precise float low = a.x - b.y;
+    precise float high = a.y - b.x;
+    return vec2(down(low), up(high));
+}
+vec2 multiplyInterval(vec2 a, vec2 b) {
+    precise float aa = a.x * b.x;
+    precise float ab = a.x * b.y;
+    precise float ba = a.y * b.x;
+    precise float bb = a.y * b.y;
+    return vec2(down(min(min(aa, ab), min(ba, bb))), up(max(max(aa, ab), max(ba, bb))));
+}
+vec2 squareInterval(vec2 a) {
+    precise float aa = a.x * a.x;
+    precise float bb = a.y * a.y;
+    float low = a.x <= 0.0 && a.y >= 0.0 ? 0.0 : max(0.0, down(min(aa, bb)));
+    return vec2(low, up(max(aa, bb)));
+}
+
+bool certifiedAnalyticInterior(vec2 realBounds, vec2 imaginaryBounds) {
+    vec2 imaginarySquared = squareInterval(imaginaryBounds);
+    vec2 cardioidX = addInterval(realBounds, vec2(-0.25));
+    vec2 q = addInterval(squareInterval(cardioidX), imaginarySquared);
+    vec2 cardioidLeft = multiplyInterval(q, addInterval(q, cardioidX));
+    vec2 cardioidRight = multiplyInterval(vec2(0.25), imaginarySquared);
+    if (cardioidLeft.y < cardioidRight.x) return true;
+    vec2 bulbX = addInterval(realBounds, vec2(1.0));
+    return addInterval(squareInterval(bulbX), imaginarySquared).y < 0.0625;
+}
+
+float smoothValue(uint iteration, float squaredRadius) {
+    return float(iteration) + 1.0 - log(log(sqrt(squaredRadius))) / log(2.0);
+}
+
+uint phaseCode(float value) {
+    precise float scaled = value * p.colorScale;
+    precise float wrapped = scaled - floor(scaled * 0.5) * 2.0;
+    return uint(clamp(floor(wrapped * 32768.0 + 0.5), 0.0, 65535.0));
+}
+
+bool stablePhase(float minimum, float maximum, float candidate, out uint code) {
+    code = phaseCode(candidate);
+    return phaseCode(minimum) == code && phaseCode(maximum) == code;
+}
+
+const uint REJECTION_HEADER_WORDS = 8u;
+const uint REJECT_UNCERTAIN_INTERVAL = 1u;
+const uint REJECT_BOUNDED_MISMATCH = 2u;
+const uint REJECT_ITERATION_MISMATCH = 3u;
+const uint REJECT_INVALID_INTERVAL = 4u;
+const uint REJECT_SMOOTH_ERROR = 5u;
+const uint REJECT_PHASE_MISMATCH = 6u;
+const uint REJECT_OTHER = 7u;
+
+void rejectPixel(uint pixel, uint reason) {
+    uint slot = atomicAdd(rejected[0], 1u);
+    atomicAdd(rejected[reason], 1u);
+    rejected[slot + REJECTION_HEADER_WORDS] = pixel;
+    uint dst = pixel * 4u;
+    samples[dst] = 0u;
+    samples[dst + 1u] = 0u;
+    samples[dst + 2u] = 0u;
+    samples[dst + 3u] = 0u;
+}
+
+void calculatePixel(uint pixel) {
+    uint x = pixel % p.width;
+    uint y = pixel / p.width;
+    uint xi = x * 3u;
+    uint yi = (p.width + y) * 3u;
+    float cr = axes[xi], ci = axes[yi];
+    vec2 realBounds = vec2(axes[xi + 1u], axes[xi + 2u]);
+    vec2 imaginaryBounds = vec2(axes[yi + 1u], axes[yi + 2u]);
+    uint dst = pixel * 4u;
+    if (certifiedAnalyticInterior(realBounds, imaginaryBounds)) {
+        samples[dst] = p.limit;
+        samples[dst + 1u] = floatBitsToUint(float(p.limit));
+        samples[dst + 2u] = 0u;
+        samples[dst + 3u] = 0u;
+        return;
+    }
+
+    precise float zr = 0.0, zi = 0.0;
+    uint iteration = 0u;
+    for (; iteration < p.limit; iteration++) {
+        precise float modulus = zr * zr + zi * zi;
+        if (modulus > 4.0) break;
+        precise float nextReal = zr * zr - zi * zi + cr;
+        precise float nextImaginary = (2.0 * zr) * zi + ci;
+        zr = nextReal;
+        zi = nextImaginary;
+    }
+
+    vec2 rb = vec2(0.0), ib = vec2(0.0), norm = vec2(0.0);
+    uint n = 0u, status = 0u;
+    for (;;) {
+        if (n == p.limit) { status = 2u; break; }
+        norm = addInterval(squareInterval(rb), squareInterval(ib));
+        if (norm.x > 4.0) { status = 1u; break; }
+        if (norm.y > 4.0) break;
+        vec2 nextReal = addInterval(subtractInterval(squareInterval(rb), squareInterval(ib)), realBounds);
+        vec2 nextImaginary = addInterval(
+                multiplyInterval(multiplyInterval(vec2(2.0), rb), ib), imaginaryBounds);
+        rb = nextReal;
+        ib = nextImaginary;
+        n++;
+    }
+
+    if (status == 2u) {
+        if (iteration == p.limit) {
+            samples[dst] = p.limit;
+            samples[dst + 1u] = floatBitsToUint(float(p.limit));
+            samples[dst + 2u] = 0u;
+            samples[dst + 3u] = 0u;
+            return;
+        }
+        rejectPixel(pixel, REJECT_BOUNDED_MISMATCH);
+        return;
+    }
+    if (status == 1u) {
+        if (iteration != n || iteration >= p.limit) {
+            rejectPixel(pixel, REJECT_ITERATION_MISMATCH);
+            return;
+        }
+        if (!(norm.x > 4.0) || isnan(norm.y) || isinf(norm.y)) {
+            rejectPixel(pixel, REJECT_INVALID_INTERVAL);
+            return;
+        }
+        precise float candidate = smoothValue(iteration, zr * zr + zi * zi);
+        float minimum = smoothValue(iteration, norm.y);
+        float maximum = smoothValue(iteration, norm.x);
+        if (isnan(candidate) || isinf(candidate)
+                || abs(candidate - minimum) > 0.009 || abs(candidate - maximum) > 0.009) {
+            rejectPixel(pixel, REJECT_SMOOTH_ERROR);
+            return;
+        }
+        uint phase;
+        if (!stablePhase(minimum, maximum, candidate, phase)) {
+            rejectPixel(pixel, REJECT_PHASE_MISMATCH);
+            return;
+        }
+        samples[dst] = iteration;
+        samples[dst + 1u] = floatBitsToUint(candidate);
+        samples[dst + 2u] = 1u;
+        samples[dst + 3u] = phase;
+        return;
+    }
+    rejectPixel(pixel, status == 0u ? REJECT_UNCERTAIN_INTERVAL : REJECT_OTHER);
+}
+
+uint colorFor(uint phase) {
+    uint x = (phase + p.whole) & 65535u;
+    int index;
+    if (x < 32768u) {
+        index = int(2u * x) + p.ascendingBias - (x > p.ascendingLast ? 1 : 0);
+    } else {
+        uint t = 65535u - x;
+        index = int(2u * t) + p.descendingBias - (t > p.descendingLast ? 1 : 0);
+    }
+    return palette[clamp(index, 0, 65535)];
+}
+
+void main() {
+    uint i = (gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x) * 64u
+            + gl_LocalInvocationID.x;
+    if (p.pass == 0u) {
+        if (i < p.pixelCount) calculatePixel(i);
+    } else if (p.pass == 1u) {
+        if (i >= p.correctionCount) return;
+        uint src = i * 5u;
+        uint dst = corrections[src] * 4u;
+        samples[dst] = corrections[src + 1u];
+        samples[dst + 1u] = corrections[src + 2u];
+        samples[dst + 2u] = corrections[src + 3u];
+        samples[dst + 3u] = corrections[src + 4u];
+    } else {
+        if (i >= p.pixelCount) return;
+        uint src = i * 4u;
+        colors[i] = samples[src + 2u] == 0u ? 0xff000000u : colorFor(samples[src + 3u]);
+    }
+}

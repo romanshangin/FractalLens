@@ -161,6 +161,12 @@
                 <fractal.mainClass>com.shangin.fractal/com.shangin.fractal.ui.GpuRenderBenchmark</fractal.mainClass>
             </properties>
         </profile>
+        <profile>
+            <id>gpu-resident-benchmark</id>
+            <properties>
+                <fractal.mainClass>com.shangin.fractal/com.shangin.fractal.ui.GpuResidentRenderBenchmark</fractal.mainClass>
+            </properties>
+        </profile>
         <!-- MoltenVK is bundled in lwjgl-vulkan's macOS native artifact. -->
         <profile>
             <id>gpu-macos</id>
@@ -213,10 +219,12 @@
                         <include>**/GpuRuntimeNativeTest.java</include>
                         <include>**/PaletteRecolorNativeTest.java</include>
                         <include>**/GpuMandelbrotRenderBackendNativeTest.java</include>
+                        <include>**/GpuResidentMandelbrotNativeTest.java</include>
                     </includes>
                     <systemPropertyVariables>
                         <fractal.gpu.enabled>true</fractal.gpu.enabled>
                         <fractal.gpu.nativeSmoke>true</fractal.gpu.nativeSmoke>
+                        <fractal.gpu.residentNative>true</fractal.gpu.residentNative>
                     </systemPropertyVariables>
                 </configuration>
             </plugin></plugins></build>

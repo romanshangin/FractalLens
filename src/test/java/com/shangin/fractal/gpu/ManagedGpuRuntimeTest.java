@@ -1,8 +1,17 @@
 package com.shangin.fractal.gpu;
 
+import com.shangin.fractal.coloring.OrbitTrap;
+import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.coloring.SmoothPaletteColoring;
+import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.render.FormulaDefinition;
+import com.shangin.fractal.render.RenderGrid;
+import com.shangin.fractal.render.RenderJob;
+import com.shangin.fractal.render.RenderPriority;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -86,6 +95,25 @@ class ManagedGpuRuntimeTest {
             assertEquals("cpu", runtime.runOrFallback(FLOAT32, () -> fail("GPU used"), () -> "cpu"));
             assertTrue(runtime.capabilityReport().detail().contains("missing native"));
         }
+    }
+
+    @Test
+    void residentKernelFailureReturnsEmptyAndDisablesTheExperimentalPath() throws Exception {
+        FakeSession session = new FakeSession();
+        try (GpuRuntime runtime = open(session)) {
+            RenderJob job = new RenderJob(
+                    FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                    FractalPreset.MANDELBROT.defaultViewport(), 8, 6, 40,
+                    RenderPriority.center(), Optional.empty());
+            var request = new GpuResidentMandelbrotRequest(
+                    job, RenderGrid.from(job.viewport(), 8, 6),
+                    new SmoothPaletteColoring(PalettePreset.ICE.palette()), new int[48]);
+
+            assertTrue(runtime.renderResidentMandelbrot(request).isEmpty());
+            assertEquals(GpuRuntimeState.UNAVAILABLE, runtime.capabilityReport().state());
+            assertTrue(runtime.capabilityReport().detail().contains("Resident Mandelbrot spike unavailable"));
+        }
+        assertEquals(1, session.closes);
     }
 
     @Test

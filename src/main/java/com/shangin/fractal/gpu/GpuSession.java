@@ -14,4 +14,8 @@ interface GpuSession {
     default void calculateMandelbrot(MandelbrotBatch batch) throws InterruptedException {
         throw new GpuException("Mandelbrot kernel unavailable", false);
     }
+    default GpuResidentMandelbrotResult renderResidentMandelbrot(
+            GpuResidentMandelbrotRequest request) throws InterruptedException {
+        throw new GpuException("Resident Mandelbrot spike unavailable", false);
+    }
 }
