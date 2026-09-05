@@ -48,6 +48,11 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - Add keyboard navigation and render progress/status.
 - Show user-facing errors instead of printing stack traces.
 - Add copyable/shareable viewport presets.
+- [ ] Replace the macOS canvas context menu with a native AppKit `NSMenu` for
+  system-managed appearance and behavior. Add a small Objective-C/JNI bridge
+  and package its native library, retaining the JavaFX menu on other platforms.
+  Validate command callbacks, main-thread coordination, focus and dismissal,
+  uninterrupted rendering, Retina/multiple-display positioning, and full screen.
 
 ## 5. Add history and reproducibility
 
