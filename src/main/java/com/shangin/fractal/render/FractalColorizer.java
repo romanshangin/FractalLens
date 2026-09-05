@@ -37,17 +37,28 @@ public class FractalColorizer {
     /** Tile progress may straddle reused AA pixels along a resized edge. */
     public void colorRegion(SamplePlane data, IntBuffer buffer, ColoringStrategy coloring,
                             RenderRegion region, ValidityMask preserve) {
-        BitSet preserved = preserve == null ? null : preserve.readyBitsCopy();
+        BitSet preserved = preserve == null ? null : preserve.readyBitsCopy(region);
+        if (preserved != null && preserved.isEmpty()) preserved = null;
         int xTo = region.x() + region.width();
-
         int yTo = region.y() + region.height();
+
+        if (preserved == null) {
+            for (int y = region.y(); y < yTo; y++) {
+                for (int x = region.x(); x < xTo; x++) {
+                    int index = y * data.width() + x;
+                    buffer.put(index, coloring.color(
+                            data.iterations(index), data.smoothIterations(index), data.escaped(index),
+                            data.maxIterations(), data.orbitTrapDistance(index)));
+                }
+            }
+            return;
+        }
 
         for (int y = region.y(); y < yTo; y++) {
             for (int x = region.x(); x < xTo; x++) {
                 int index = y * data.width() + x;
-                if (preserved != null && preserved.get(index)) {
-                    continue;
-                }
+                int localIndex = (y - region.y()) * region.width() + x - region.x();
+                if (preserved.get(localIndex)) continue;
                 int color = coloring.color(
                         data.iterations(index),
                         data.smoothIterations(index),

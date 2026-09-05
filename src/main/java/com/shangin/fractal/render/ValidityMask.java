@@ -137,6 +137,21 @@ public final class ValidityMask {
         return (BitSet) ready.clone();
     }
 
+    /** Returns a compact row-major snapshot local to one region. */
+    synchronized BitSet readyBitsCopy(RenderRegion region) {
+        validateRegion(region);
+        BitSet copy = new BitSet(region.width() * region.height());
+        for (int y = region.y(); y < region.y() + region.height(); y++) {
+            int rowFrom = y * width + region.x();
+            int rowTo = rowFrom + region.width();
+            for (int pixel = ready.nextSetBit(rowFrom); pixel >= 0 && pixel < rowTo;
+                 pixel = ready.nextSetBit(pixel + 1)) {
+                copy.set((y - region.y()) * region.width() + pixel - rowFrom);
+            }
+        }
+        return copy;
+    }
+
     /** Replaces this mask with source pixels shifted into target coordinates. */
     public void copyShiftedFrom(ValidityMask source, PixelShift shift) {
         ValidityMask snapshot = source.copy();

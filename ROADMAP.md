@@ -264,25 +264,29 @@ Address the costs measured in 8.4 before expanding GPU residency. On the Retina
 overview, host certification/recovery/publication takes about 545 ms and the
 interval kernel about 139 ms; these costs overlap. CPU remains the default.
 
-- [ ] Parallelize certificate checks, sample conversion and rejected-sample CPU
+- [x] Parallelize certificate checks, sample conversion and rejected-sample CPU
   recovery with bounded workers and staging memory. Preserve cancellation,
   generation isolation and publication of fully validated regions only.
-- [ ] Eliminate repeated certificate and smooth-value calculations; reuse
+- [x] Eliminate repeated certificate and smooth-value calculations; reuse
   intermediate results without weakening the original-coordinate FP32 contract
   or changing the exact iteration/escape and <= 0.01 smooth-error requirements.
-- [ ] Re-profile the host stages and interval kernel after these changes. Evaluate
+- [x] Re-profile the host stages and interval kernel after these changes. Evaluate
   symmetry and interior shortcuts only with a correctness argument and native
   conformance checks; tune batch sizes if submission overhead remains material.
-- [ ] Repeat the 8.4 native conformance and paired CPU/GPU performance gate,
+- [x] Repeat the 8.4 native conformance and paired CPU/GPU performance gate,
   including fallback transitions, first publication, complete base/AA frames,
   memory and Retina JavaFX costs. Keep primary timings uninstrumented and save
-  component profiling separately. Proceed to 8.6 only if end-to-end gains justify it.
+  component profiling separately. The repeated M3 Pro gate passes conformance
+  but fails performance: all ten cases remain slower on GPU. Retina overview
+  improves from 592.52 to 238.67 ms but remains behind CPU at 71.93 ms; see
+  `GPU_RENDER_BENCHMARK_8_5_RESULTS.md`. Keep CPU default and 8.6 deferred.
 
 ### 8.6. Expand GPU residency incrementally only when justified
 
-Deferred after the 8.4 performance gate on M3 Pro: the current hybrid backend
-has no measured end-to-end gain. The items below are conditional, not the next
-implementation step until the optimizations in 8.5 pass the repeated gate.
+Deferred again after the repeated 8.5 performance gate on M3 Pro: the optimized
+hybrid backend is substantially faster than in 8.4 but still has no measured
+end-to-end win over CPU. The items below remain conditional rather than the next
+implementation step.
 
 - Move adaptive edge/distance candidate detection onto the GPU.
 - Move subpixel sampling and palette-independent AA sample storage onto the GPU.

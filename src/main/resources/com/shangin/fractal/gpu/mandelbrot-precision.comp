@@ -41,6 +41,22 @@ vec2 squareInterval(vec2 a) {
     return vec2(low, up(max(aa, bb)));
 }
 
+// Accept only when every original double coordinate enclosed by the input
+// interval is strictly inside an analytic Mandelbrot interior. All operations
+// use the same outward-rounded interval primitives as the recurrence.
+bool certifiedAnalyticInterior(vec2 realBounds, vec2 imaginaryBounds) {
+    vec2 imaginarySquared = squareInterval(imaginaryBounds);
+    vec2 cardioidX = addInterval(realBounds, vec2(-0.25));
+    vec2 q = addInterval(squareInterval(cardioidX), imaginarySquared);
+    vec2 cardioidLeft = multiplyInterval(q, addInterval(q, cardioidX));
+    vec2 cardioidRight = multiplyInterval(vec2(0.25), imaginarySquared);
+    if (cardioidLeft.y < cardioidRight.x) return true;
+
+    vec2 bulbX = addInterval(realBounds, vec2(1.0));
+    vec2 bulbNorm = addInterval(squareInterval(bulbX), imaginarySquared);
+    return bulbNorm.y < 0.0625;
+}
+
 void main() {
     uint index = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * 64u;
     if (index >= settings.count) return;
@@ -48,6 +64,17 @@ void main() {
     float cr = inputs[src], ci = inputs[src + 1u];
     vec2 realBounds = vec2(inputs[src + 2u], inputs[src + 3u]);
     vec2 imaginaryBounds = vec2(inputs[src + 4u], inputs[src + 5u]);
+    uint dst = index * 12u;
+    if (certifiedAnalyticInterior(realBounds, imaginaryBounds)) {
+        outputs[dst] = settings.limit;
+        outputs[dst + 1u] = 0u;
+        outputs[dst + 2u] = 0u;
+        outputs[dst + 3u] = 0u;
+        outputs[dst + 4u] = 2u;
+        outputs[dst + 5u] = settings.limit;
+        for (uint word = 6u; word < 12u; word++) outputs[dst + word] = 0u;
+        return;
+    }
     precise float zr = 0.0, zi = 0.0;
     uint iteration = 0u;
     // Independent raw path keeps all errors visible, including rejected samples.
@@ -59,7 +86,6 @@ void main() {
         zr = nextReal;
         zi = nextImaginary;
     }
-    uint dst = index * 12u;
     outputs[dst] = iteration;
     outputs[dst + 1u] = iteration < settings.limit ? 1u : 0u;
     outputs[dst + 2u] = floatBitsToUint(zr);

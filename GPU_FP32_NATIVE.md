@@ -147,13 +147,16 @@ additional rounding; the current result does not validate such reconstruction.
 
 The optional `GpuMandelbrotRenderBackend` uses the existing runtime owner,
 recovers rejected samples at original coordinates, preserves compatible pan
-overlap, and publishes completed 128x128 regions. A bounded worker overlaps GPU
-readback with CPU recovery; generation cancellation suppresses stale output.
+overlap, and publishes completed 192x192 regions. A bounded GPU worker overlaps
+readback with a bounded host pool that certifies, converts and recovers into
+reusable primitive staging; generation cancellation suppresses stale output.
 Sample-accuracy tags separate certified and CPU-reference cache/reuse requests.
 The hardware integration gate checks output, recovery, shared palette dispatch,
 loss fallback, reopening and opt-in default-service selection. The standalone
 full precision gate still passes against the same production shader.
 
-Next, measure total frame time, first visible region, memory and presentation
-costs under roadmap 8.4. Low certificate yield in long boundary orbits may favor
-CPU rendering. GPU calculation remains opt-in pending that end-to-end evidence.
+Roadmap 8.5 adds an outward-rounded analytic cardioid/period-2-bulb certificate,
+removes duplicate host smooth calculations, tunes bounded batches, and repeats
+the full gate. Conformance still passes, but every end-to-end case remains slower
+than CPU; GPU calculation therefore stays opt-in. See
+`GPU_RENDER_BENCHMARK_8_5_RESULTS.md`.

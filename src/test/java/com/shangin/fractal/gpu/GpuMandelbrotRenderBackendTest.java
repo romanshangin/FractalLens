@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,13 +23,14 @@ class GpuMandelbrotRenderBackendTest {
             backend.render(frame, () -> false, region -> {
                 assertTrue(frame.validity().isRegionReady(region));
                 published.add(region);
-            }, stats -> assertEquals(6, stats.tileCount()));
+            }, stats -> assertEquals(2, stats.tileCount()));
             assertTrue(frame.isComplete());
-            assertEquals(6, published.size());
+            assertEquals(2, published.size());
             assertEquals(frame.samplePlane().size(), session.pixels);
             assertEquals(frame.samplePlane().size(), backend.lastStats().recoveredPixels());
             assertEquals(0, backend.lastStats().certifiedPixels());
             assertFalse(backend.lastStats().cpuFallback());
+            assertEquals(2 * MandelbrotStaging.bytesPerBatch(), backend.lastProfile().stagingBytes());
             assertMatchesCpu(frame, 0);
         }
     }
@@ -86,6 +88,7 @@ class GpuMandelbrotRenderBackendTest {
                 backend.render(frame, () -> false, ignored -> {}, null);
                 assertTrue(frame.isComplete());
                 assertTrue(backend.lastStats().cpuFallback());
+                assertEquals(0, backend.lastProfile().stagingBytes());
             }
             assertEquals(0, session.calls.get());
         }
@@ -111,6 +114,24 @@ class GpuMandelbrotRenderBackendTest {
             assertEquals(0, frame.validity().readyPixelCount());
             assertEquals(GpuRuntimeState.AVAILABLE, runtime.capabilityReport().state());
         } finally { session.release.countDown(); }
+    }
+
+    @Test
+    void cancellationDuringParallelRecoveryDrainsWorkersAndPublishesNothing() throws Exception {
+        var session = new RejectingSession();
+        var frame = RenderFrame.create(job(new Viewport(-0.75, 0, 2.4), 128, 128));
+        AtomicInteger hostChecks = new AtomicInteger();
+        try (GpuRuntime runtime = runtime(session); var backend = new GpuMandelbrotRenderBackend(runtime,
+                new DirectDoubleRenderBackend(), 4)) {
+            BooleanSupplier cancelled = () -> session.completed
+                    && Thread.currentThread().getName().startsWith("fractal-gpu-host")
+                    && hostChecks.incrementAndGet() > 4;
+            assertThrows(InterruptedException.class,
+                    () -> backend.render(frame, cancelled, ignored -> fail("Cancelled region was published"), null));
+            assertEquals(0, frame.validity().readyPixelCount());
+            assertTrue(hostChecks.get() > 4);
+            assertEquals(GpuRuntimeState.AVAILABLE, runtime.capabilityReport().state());
+        }
     }
 
     @Test
@@ -147,6 +168,19 @@ class GpuMandelbrotRenderBackendTest {
         assertEquals(0, new FrameReusePlanner().createFrame(certified, reference).validity().readyPixelCount());
     }
 
+    @Test
+    void boundsHostParallelismAndRegionStagingConfiguration() {
+        var session = new RejectingSession();
+        try (GpuRuntime runtime = runtime(session); var cpu = new DirectDoubleRenderBackend()) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new GpuMandelbrotRenderBackend(runtime, cpu, 0, 192));
+            assertThrows(IllegalArgumentException.class,
+                    () -> new GpuMandelbrotRenderBackend(runtime, cpu, 4, 193));
+            assertThrows(IllegalArgumentException.class,
+                    () -> new GpuMandelbrotRenderBackend(runtime, cpu, 4, 31));
+        }
+    }
+
     static RenderJob job(Viewport view, int width, int height) {
         return new RenderJob(FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE), view, width, height, 300,
                 RenderPriority.center(), Optional.empty(), SampleAccuracy.CERTIFIED_FP32);
@@ -175,6 +209,7 @@ class GpuMandelbrotRenderBackendTest {
         final AtomicInteger calls = new AtomicInteger();
         final CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1);
         int failAt, pixels;
+        volatile boolean completed;
         boolean blockFirst, closedAsLost;
         public List<GpuDevice> devices() { return List.of(device); }
         public GpuDevice selectedDevice() { return device; }
@@ -188,6 +223,7 @@ class GpuMandelbrotRenderBackendTest {
             pixels += batch.count;
             // Deliberately invalid raw output: only full CPU recovery may make any pixel ready.
             Arrays.fill(batch.output, -1);
+            completed = true;
         }
     }
 }

@@ -83,12 +83,14 @@ class GpuMandelbrotRenderBackendNativeTest {
             System.out.println("Mandelbrot integrated overview: " + backend.lastStats());
             if (Boolean.getBoolean("fractal.gpu.mandelbrot.profile")) {
                 var profile = backend.lastProfile();
-                assertEquals(6, profile.batches());
+                assertEquals(4, profile.batches());
                 assertTrue(profile.uploadNanos() > 0);
                 assertTrue(profile.readbackNanos() > 0);
                 assertTrue(profile.dispatchNanos() > 0);
                 assertTrue(profile.kernelNanos() == -1 || profile.kernelNanos() > 0);
-                assertTrue(profile.nativeBytes() >= 1_310_720 && profile.nativeBytes() <= 4 * 1024 * 1024);
+                assertTrue(profile.nativeBytes() >= 2_949_120 && profile.nativeBytes() <= 4 * 1024 * 1024);
+                assertEquals(192, profile.regionSize());
+                assertTrue(profile.stagingBytes() > 0 && profile.stagingBytes() < 1024 * 1024);
             }
 
             // The existing CPU coloring boundary and optional palette kernel consume identical phases.
@@ -111,7 +113,10 @@ class GpuMandelbrotRenderBackendNativeTest {
 
             var boundary = RenderFrame.create(job(new Viewport(-0.743643887037151, 0.13182590420533, 0.024), 128, 96));
             backend.render(boundary, () -> false, ignored -> {}, null);
-            assertEquals(boundary.samplePlane().size(), backend.lastStats().recoveredPixels());
+            assertTrue(backend.lastStats().certifiedPixels() > 0, "Analytic interior should remain GPU-certified");
+            assertTrue(backend.lastStats().recoveredPixels() > 0, "Uncertain boundary samples must use exact CPU recovery");
+            assertEquals(boundary.samplePlane().size(),
+                    backend.lastStats().certifiedPixels() + backend.lastStats().recoveredPixels());
             assertMatchesCpu(boundary, 0);
 
             runtime.handleDeviceLoss(new GpuException("simulated after integrated dispatch", true));

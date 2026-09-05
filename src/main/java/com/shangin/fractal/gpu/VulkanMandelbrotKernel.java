@@ -17,7 +17,7 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Bounded synchronous compute kernel, owned and serialized by the GPU runtime. */
 final class VulkanMandelbrotKernel implements AutoCloseable {
-    static final int CAPACITY = 16384;
+    static final int CAPACITY = 192 * 192;
     static final int INPUT_WORDS = 8;
     static final int OUTPUT_WORDS = 12;
     private static final int LOCAL_SIZE = 64;

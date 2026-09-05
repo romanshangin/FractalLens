@@ -90,15 +90,15 @@ Accepted samples need the interval certificate in `GPU_FP32_NATIVE.md`; rejected
 samples are recomputed with the original CPU-double coordinates. Raw uncertified
 values are never marked ready or admitted into caches.
 
-Regions are 128x128 in the shared priority/zoom-out order. Ready pan overlap is
-skipped. Two reusable Java batches and one GPU worker with one queue slot bound
-asynchronous work. The next readback can run while the coordinator certifies and
-recovers the current region. Native work is serialized with palette dispatch and
-shutdown by `ManagedGpuRuntime`. The kernel uses two fixed mapped buffers
-(1.25 MiB logical storage, 4 MiB allocation ceiling); Java batch arrays use about
-2.63 MiB, plus one bounded region of staged sample objects. A cancelled active
-submission may retain a previous-generation batch until its fence drains; it
-never touches a frame.
+Regions are 192x192 in the shared priority/zoom-out order. Ready pan overlap is
+skipped. Two reusable Java batches, one GPU worker with one queue slot, and at
+most ten host workers bound asynchronous work. The next readback can run while
+the host pool certifies and recovers the current region. Native work is serialized
+with palette dispatch and shutdown by `ManagedGpuRuntime`. The kernel uses two
+fixed mapped buffers (2.8125 MiB logical storage, 4 MiB allocation ceiling);
+Java request arrays use about 5.91 MiB and reusable primitive staging adds about
+0.91 MiB. Cancelled native and host work is drained before its batch can be
+reused, and no partial region is published.
 
 All missing samples in a region are staged before publication. Cancellation
 checks guard preparation, submission/readback, CPU recovery and progress. The
@@ -110,12 +110,14 @@ sample is published, and lost devices are not retried.
 CPU coloring, AA sampling/cache, histogram mapping and export remain in their
 existing services. Certification does not imply bit-identical colors to a full
 CPU render for arbitrary palettes. The palette kernel was checked against CPU
-recoloring of the same certified/recovered samples. Roadmap 8.4 now records
-passing numeric conformance but a failed performance gate on M3 Pro: Retina
-base overview is 592.52 ms on GPU versus 52.56 ms on CPU; Refined + AA is
-1708.19 versus 1175.21 ms through JavaFX publication. CPU remains the default
-and GPU residency expansion is deferred. See [GPU_RENDER_BENCHMARK_RESULTS.md](GPU_RENDER_BENCHMARK_RESULTS.md)
-for raw runs, workload definitions, memory accounting and display limitations.
+recoloring of the same certified/recovered samples. Roadmap 8.5 records the
+optimized repeat of the numeric/performance gate on M3 Pro. Retina base overview
+improves from 592.52 to 238.67 ms on GPU, but remains behind its paired 71.93 ms
+CPU baseline; Refined + AA is 1534.89 versus 1378.67 ms. CPU remains the default
+and GPU residency expansion is still deferred. See
+[GPU_RENDER_BENCHMARK_8_5_RESULTS.md](GPU_RENDER_BENCHMARK_8_5_RESULTS.md) for
+raw runs, host/kernel profiles, memory accounting and display limitations; the
+original 8.4 result remains archived separately.
 
 `GpuMandelbrotRenderBackend.lastStats()` reports dispatched/certified/recovered
 pixel counts and job-level CPU fallback. Region timings include host wait and
@@ -123,12 +125,15 @@ recovery; they are not GPU timestamp measurements.
 
 For opt-in diagnostic runs, `fractal.gpu.mandelbrot.profile=true` enables bounded
 Vulkan timestamp queries and `GpuMandelbrotRenderBackend.lastProfile()` component
-sums. The runtime owns and destroys the query pool with the kernel. Unsupported
-queue timestamps return -1, not a zero-time kernel. Upload, dispatch/fence and
-readback are host timings; the kernel query is device time. Host recovery overlaps
-native work, so those sums are not additive. Normal rendering does not allocate
-a query pool. `mvn -Pgpu-render-benchmark javafx:run` runs paired production
-CPU/GPU pipelines with full-frame numeric checks; see the report for options.
+sums, including separate certification, recovery and publication wall times.
+The runtime owns and destroys the query pool with the kernel. Unsupported queue
+timestamps return -1, not a zero-time kernel. Upload, dispatch/fence and readback
+are host timings; the kernel query is device time. Host work overlaps native work,
+so those sums are not additive. Normal rendering does not allocate a query pool.
+`fractal.gpu.mandelbrot.hostWorkers` and `.regionSize` allow bounded diagnostic
+tuning (defaults 10-or-processors-minus-2 and 192; region bounds are 32..192).
+`mvn -Pgpu-render-benchmark javafx:run` runs paired production CPU/GPU pipelines
+with full-frame numeric checks; see the report for options.
 
 ## Palette recoloring integration
 

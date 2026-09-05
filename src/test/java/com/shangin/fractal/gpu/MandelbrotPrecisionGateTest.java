@@ -63,4 +63,24 @@ class MandelbrotPrecisionGateTest {
         output[1] = 0; output[2] = Float.floatToRawIntBits(Float.POSITIVE_INFINITY);
         assertFalse(MandelbrotPrecisionGate.accepts(output, 0, 300, true));
     }
+
+    @Test
+    void certifiesAndStagesTheSameSmoothValueWithoutRecalculation() {
+        int[] output = new int[12];
+        output[0] = 2; output[1] = 1;
+        output[2] = Float.floatToRawIntBits(6); output[3] = Float.floatToRawIntBits(0.25f);
+        output[4] = 1; output[5] = 2;
+        output[6] = Float.floatToRawIntBits(36.0624f);
+        output[7] = Float.floatToRawIntBits(36.0626f);
+        var staging = new MandelbrotStaging();
+        assertTrue(MandelbrotPrecisionGate.certify(output, 0, 300, true, staging));
+        assertFalse(staging.rejected(0));
+        assertTrue(staging.escaped(0));
+        assertEquals(2, staging.iterations[0]);
+        assertEquals(MandelbrotPrecisionGate.sample(output, 0).smoothIterations(), staging.smoothIterations[0]);
+
+        output[5] = 3;
+        assertFalse(MandelbrotPrecisionGate.certify(output, 0, 300, true, staging));
+        assertTrue(staging.rejected(0), "A reused staging slot must not retain an earlier certificate");
+    }
 }

@@ -203,13 +203,16 @@ public final class FractalSurface extends Region {
             return;
         }
 
+        ValidityMask refinementToPreserve = stagingRefinementValidity.readyPixelCount() == 0
+                ? null
+                : stagingRefinementValidity;
         for (RenderRegion region : progress.regions()) {
             colorizer.colorRegion(
                     data,
                     stagingFrame.intBuffer(),
                     coloring,
                     region,
-                    stagingRefinementValidity
+                    refinementToPreserve
             );
         }
 

@@ -58,21 +58,44 @@ final class MandelbrotPrecisionGate {
                 Float.intBitsToFloat(output[offset + 2]), Float.intBitsToFloat(output[offset + 3]));
     }
 
-    static boolean accepts(int[] output, int index, int limit, boolean gridAllowed) {
-        if (!gridAllowed) return false;
+    /** Certifies and converts a sample once, without allocating an intermediate sample object. */
+    static boolean certify(int[] output, int index, int limit, boolean gridAllowed,
+                           MandelbrotStaging staging) {
+        if (!gridAllowed) {
+            if (staging != null) staging.reject(index);
+            return false;
+        }
         int o = index * VulkanMandelbrotKernel.OUTPUT_WORDS;
         int iteration = output[o], escaped = output[o + 1], status = output[o + 4], boundedIteration = output[o + 5];
-        if (iteration < 0 || iteration > limit || iteration != boundedIteration) return false;
-        if (!Float.isFinite(Float.intBitsToFloat(output[o + 2])) || !Float.isFinite(Float.intBitsToFloat(output[o + 3]))) return false;
-        if (status == 2) return iteration == limit && escaped == 0;
-        if (status != 1 || escaped != 1 || iteration >= limit) return false;
-        double low = Float.intBitsToFloat(output[o + 6]), high = Float.intBitsToFloat(output[o + 7]);
-        if (!(low > 4.0) || !Double.isFinite(high) || low > high) return false;
-        double smooth = sample(output, index).smoothIterations();
-        double minimum = smooth(iteration, high), maximum = smooth(iteration, low);
-        // CPU logs are outside the shader; the interval certificate is independent of the CPU orbit oracle.
-        return Double.isFinite(smooth) && Math.max(Math.abs(smooth - minimum), Math.abs(smooth - maximum))
-                <= MAX_SMOOTH_ERROR - LOG_MARGIN;
+        double zr = Float.intBitsToFloat(output[o + 2]);
+        double zi = Float.intBitsToFloat(output[o + 3]);
+        boolean accepted = iteration >= 0 && iteration <= limit && iteration == boundedIteration
+                && Double.isFinite(zr) && Double.isFinite(zi);
+        double candidateSmooth = iteration;
+        if (accepted && status == 2) {
+            accepted = iteration == limit && escaped == 0;
+        } else if (accepted && status == 1 && escaped == 1 && iteration < limit) {
+            double low = Float.intBitsToFloat(output[o + 6]);
+            double high = Float.intBitsToFloat(output[o + 7]);
+            candidateSmooth = smooth(iteration, zr * zr + zi * zi);
+            double minimum = smooth(iteration, high), maximum = smooth(iteration, low);
+            // CPU logs are outside the shader; the interval certificate is independent of the CPU orbit oracle.
+            accepted = low > 4.0 && Double.isFinite(high) && low <= high
+                    && Double.isFinite(candidateSmooth)
+                    && Math.max(Math.abs(candidateSmooth - minimum), Math.abs(candidateSmooth - maximum))
+                    <= MAX_SMOOTH_ERROR - LOG_MARGIN;
+        } else {
+            accepted = false;
+        }
+        if (staging != null) {
+            if (accepted) staging.certify(index, iteration, candidateSmooth, escaped != 0);
+            else staging.reject(index);
+        }
+        return accepted;
+    }
+
+    static boolean accepts(int[] output, int index, int limit, boolean gridAllowed) {
+        return certify(output, index, limit, gridAllowed, null);
     }
 
     private static double smooth(int iteration, double squaredRadius) {
