@@ -32,7 +32,7 @@ public final class GpuRenderBenchmark extends Application {
     private CompletableFuture<Long> nextPulse;
     private final List<String> rows = new ArrayList<>();
     private final SmoothPaletteColoring coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
-    private static final String HEADER = "scene,width,height,aa,backend,phase,iteration,profile,first_region_ms,first_publish_ms,calculation_ms,base_frame_ms,total_frame_ms,fx_color_publish_ms,next_pulse_ms,certified,recovered,fallback,pack_ms,upload_ms,dispatch_ms,readback_ms,kernel_ms,recover_publish_ms,certification_ms,recovery_ms,publication_ms,batches,native_bytes,staging_bytes,host_workers,region_size,heap_before_bytes,heap_after_bytes,heap_pool_peak_sum_bytes,gc_count,gc_ms,max_smooth_error";
+    private static final String HEADER = "scene,width,height,aa,backend,phase,iteration,profile,aa_profile,first_region_ms,first_publish_ms,calculation_ms,base_frame_ms,total_frame_ms,fx_color_publish_ms,next_pulse_ms,certified,recovered,fallback,pack_ms,upload_ms,dispatch_ms,readback_ms,kernel_ms,recover_publish_ms,certification_ms,recovery_ms,publication_ms,batches,native_bytes,staging_bytes,host_workers,region_size,aa_total_ms,aa_base_color_ms,aa_candidate_cpu_ms,aa_candidate_critical_path_ms,aa_sampling_cpu_ms,aa_cache_color_cpu_ms,aa_tested_pixels,aa_candidates,aa_samples,heap_before_bytes,heap_after_bytes,heap_pool_peak_sum_bytes,gc_count,gc_ms,max_smooth_error";
 
     public static void main(String[] args) {
         launch(args);
@@ -193,6 +193,7 @@ public final class GpuRenderBenchmark extends Application {
         result.calculation = backend.finished - started;
         result.stats = gpu ? backend.gpu.lastStats() : new GpuMandelbrotRenderBackend.CalculationStats(0, 0, 0, false);
         result.profile = gpu ? backend.gpu.lastProfile() : GpuMandelbrotRenderBackend.Profile.empty(0, 0);
+        result.aaProfile = aa ? aaService.lastProfile() : InteractiveAntialiasService.Profile.EMPTY;
         if (gpu && (result.stats.cpuFallback() || result.stats.dispatchedPixels() != (long) w * h)) {
             throw new IllegalStateException("Benchmark requires actual GPU dispatch: " + result.stats);
         }
@@ -248,17 +249,24 @@ public final class GpuRenderBenchmark extends Application {
         long heapBefore, heapAfter, heapPeak, gcCount, gcTime;
         GpuMandelbrotRenderBackend.CalculationStats stats;
         GpuMandelbrotRenderBackend.Profile profile;
+        InteractiveAntialiasService.Profile aaProfile;
         Result(RenderFrame frame) { this.frame = frame; }
         String csv(String scene, int w, int h, boolean aa, boolean gpu, String phase, int iteration, double error) {
             var values = new ArrayList<String>(List.of(scene, "" + w, "" + h, "" + aa, gpu ? "GPU" : "CPU", phase,
-                    "" + iteration, "" + Boolean.getBoolean("fractal.gpu.mandelbrot.profile")));
+                    "" + iteration, "" + Boolean.getBoolean("fractal.gpu.mandelbrot.profile"),
+                    "" + Boolean.getBoolean("fractal.aa.profile")));
             for (long n : new long[]{firstRegion, firstPublish, calculation, base, total, publication, nextPulse}) values.add(ms(n));
             values.add("" + stats.certifiedPixels()); values.add("" + stats.recoveredPixels()); values.add("" + stats.cpuFallback());
             for (long n : new long[]{profile.packNanos(), profile.uploadNanos(), profile.dispatchNanos(), profile.readbackNanos(),
                     profile.kernelNanos(), profile.recoverPublishNanos(), profile.certificationNanos(),
                     profile.recoveryNanos(), profile.publicationNanos()}) values.add(n < 0 ? "" : ms(n));
             for (long n : new long[]{profile.batches(), profile.nativeBytes(), profile.stagingBytes(),
-                    profile.hostWorkers(), profile.regionSize(), heapBefore, heapAfter, heapPeak, gcCount, gcTime}) values.add("" + n);
+                    profile.hostWorkers(), profile.regionSize()}) values.add("" + n);
+            for (long n : new long[]{aaProfile.totalNanos(), aaProfile.baseColorNanos(), aaProfile.candidateNanos(),
+                    aaProfile.candidateCriticalPathNanos(), aaProfile.samplingNanos(),
+                    aaProfile.cacheColorNanos()}) values.add(ms(n));
+            for (long n : new long[]{aaProfile.testedPixels(), aaProfile.candidates(), aaProfile.samples(),
+                    heapBefore, heapAfter, heapPeak, gcCount, gcTime}) values.add("" + n);
             values.add(Double.toString(error));
             return String.join(",", values);
         }

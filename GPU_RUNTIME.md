@@ -135,6 +135,15 @@ tuning (defaults 10-or-processors-minus-2 and 192; region bounds are 32..192).
 `mvn -Pgpu-render-benchmark javafx:run` runs paired production CPU/GPU pipelines
 with full-frame numeric checks; see the report for options.
 
+Roadmap 8.6 also profiles the first proposed residency increment without
+enabling it. `fractal.aa.profile=true` records AA wall time, base-color
+preparation, summed worker time for candidate detection, sampling and cache/color
+work, the candidate time accumulated by the busiest worker, and pixel/sample
+counts. Per-pixel timestamps exist only in this diagnostic mode. The M3 Pro gate
+found that even free candidate detection would not close the current GPU
+base-frame deficit, so AA remains on CPU. See
+[GPU_RESIDENCY_8_6_DECISION.md](GPU_RESIDENCY_8_6_DECISION.md).
+
 ## Palette recoloring integration
 
 `PaletteRecolorBackend` is owned through `FractalRenderService`, so the

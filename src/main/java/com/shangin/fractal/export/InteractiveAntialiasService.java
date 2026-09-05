@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -53,20 +54,36 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     );
     private final AtomicLong generation = new AtomicLong();
     private final AntialiasSampleCache sampleCache;
+    private final boolean profiling;
     private RenderFrame cachedFrame;
     private RenderFrame basePhaseFrame;
     private BaseColorPhaseCache basePhaseCache;
     private final ThreadLocal<SmoothColorLookup> recolorLookup =
             ThreadLocal.withInitial(SmoothColorLookup::new);
     private Future<?> currentRefinement;
+    private volatile Profile lastProfile = Profile.EMPTY;
+
+    /** Worker CPU times are summed and may overlap; totalNanos is wall time. */
+    public record Profile(long totalNanos, long baseColorNanos, long candidateNanos,
+                          long candidateCriticalPathNanos, long samplingNanos,
+                          long cacheColorNanos, long testedPixels, long candidates, long samples) {
+        public static final Profile EMPTY = new Profile(0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
 
     public InteractiveAntialiasService() {
-        this(new AntialiasSampleCache());
+        this(new AntialiasSampleCache(), Boolean.getBoolean("fractal.aa.profile"));
     }
 
     InteractiveAntialiasService(AntialiasSampleCache sampleCache) {
-        this.sampleCache = Objects.requireNonNull(sampleCache);
+        this(sampleCache, false);
     }
+
+    InteractiveAntialiasService(AntialiasSampleCache sampleCache, boolean profiling) {
+        this.sampleCache = Objects.requireNonNull(sampleCache);
+        this.profiling = profiling;
+    }
+
+    public Profile lastProfile() { return lastProfile; }
 
     public void refine(
             RenderFrame frame,
@@ -164,6 +181,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             boolean deepZoom
     ) {
         try {
+            long started = profiling ? System.nanoTime() : 0;
+            MutableProfile profile = profiling ? new MutableProfile() : null;
+            lastProfile = Profile.EMPTY;
             SamplePlane data = frame.samplePlane();
             int[] baseColors = AdaptivePngExportService.colorBaseFrame(data, coloring);
             SmoothColorLookup lookup = coloring instanceof SmoothPaletteColoring smooth
@@ -172,6 +192,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             if (coloring instanceof SmoothPaletteColoring smooth) {
                 basePhases(frame, smooth).recolorInto(baseColors, lookup);
             }
+            if (profiling) profile.baseColorNanos = System.nanoTime() - started;
             MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler = deepZoom
                     ? MandelbrotPerturbationRenderBackend.createPreciseSampler(
                     frame.job(), () -> shouldCancel(refinementId)).orElseThrow(
@@ -191,7 +212,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         tile,
                         callbackExecutor,
                         onTileReady,
-                        preciseSampler
+                        preciseSampler,
+                        profile
                 )));
             }
 
@@ -202,6 +224,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             if (shouldCancel(refinementId)) {
                 return;
             }
+            if (profiling) lastProfile = profile.snapshot(System.nanoTime() - started);
 
             callbackExecutor.execute(() -> {
                 if (isCurrent(refinementId)) {
@@ -230,7 +253,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             RenderRegion tile,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
-            MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler
+            MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler,
+            MutableProfile profile
     ) {
         SamplePlane data = frame.samplePlane();
         RenderGrid grid = frame.renderGrid();
@@ -238,6 +262,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 ? frame.job().formula().createDirectCalculator()
                 : null;
         int[] tileColors = new int[tile.width() * tile.height()];
+        long candidateNanos = 0, samplingNanos = 0, cacheColorNanos = 0;
+        long testedPixels = 0, candidates = 0, samplesCount = 0;
 
         for (int y = tile.y(); y < tile.y() + tile.height(); y++) {
             if (shouldCancel(refinementId)) {
@@ -267,16 +293,23 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
                 tileColors[tileIndex] = baseColors[frameIndex];
 
+                long candidateStarted = profiling ? System.nanoTime() : 0;
                 boolean candidate = preciseSampler == null
                         ? AdaptivePngExportService.isSupersamplingCandidate(
                         calculator, grid, frame.request().maxIterations(),
                         data, baseColors, x, y)
                         : isDeepSupersamplingCandidate(
                         data, baseColors, x, y);
+                if (profiling) {
+                    candidateNanos += System.nanoTime() - candidateStarted;
+                    testedPixels++;
+                }
                 if (!candidate) {
                     continue;
                 }
+                if (profiling) candidates++;
 
+                long samplingStarted = profiling ? System.nanoTime() : 0;
                 FractalSample[] samples = preciseSampler == null
                         ? sampleGrid(
                         calculator, grid, frame.request().maxIterations(),
@@ -288,19 +321,29 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 if (samples == null) {
                     throw new CancellationException();
                 }
+                if (profiling) {
+                    samplingNanos += System.nanoTime() - samplingStarted;
+                    samplesCount += samples.length;
+                }
+                long cacheStarted = profiling ? System.nanoTime() : 0;
                 if (coloring instanceof SmoothPaletteColoring smooth) {
                     sampleCache.put(frameIndex, samples, smooth);
                     // Publish the same quantized color used by cache recoloring.
                     Integer storedColor = sampleCache.color(frameIndex, lookup);
                     if (storedColor != null) {
                         tileColors[tileIndex] = storedColor;
+                        if (profiling) cacheColorNanos += System.nanoTime() - cacheStarted;
                         continue;
                     }
                 }
                 tileColors[tileIndex] = AdaptivePngExportService.colorSamples(
                         samples, coloring, frame.request().maxIterations());
+                if (profiling) cacheColorNanos += System.nanoTime() - cacheStarted;
             }
         }
+
+        if (profiling) profile.addTile(candidateNanos, samplingNanos, cacheColorNanos,
+                testedPixels, candidates, samplesCount);
 
         // orderedTiles excludes fully displayed tiles. Cached results may still
         // be missing from the surface after cancellation, so publish them too.
@@ -697,6 +740,35 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             thread.setDaemon(true);
             return thread;
         };
+    }
+
+    private static final class MutableProfile {
+        private long baseColorNanos;
+        private final LongAdder candidateNanos = new LongAdder();
+        private final LongAdder samplingNanos = new LongAdder();
+        private final LongAdder cacheColorNanos = new LongAdder();
+        private final LongAdder testedPixels = new LongAdder();
+        private final LongAdder candidates = new LongAdder();
+        private final LongAdder samples = new LongAdder();
+        private final ConcurrentHashMap<Thread, LongAdder> candidateByWorker = new ConcurrentHashMap<>();
+
+        private void addTile(long candidate, long sampling, long cacheColor,
+                             long tested, long candidateCount, long sampleCount) {
+            candidateNanos.add(candidate);
+            samplingNanos.add(sampling);
+            cacheColorNanos.add(cacheColor);
+            testedPixels.add(tested);
+            candidates.add(candidateCount);
+            samples.add(sampleCount);
+            candidateByWorker.computeIfAbsent(Thread.currentThread(), ignored -> new LongAdder()).add(candidate);
+        }
+
+        private Profile snapshot(long totalNanos) {
+            long candidateCriticalPath = candidateByWorker.values().stream()
+                    .mapToLong(LongAdder::sum).max().orElse(0);
+            return new Profile(totalNanos, baseColorNanos, candidateNanos.sum(), candidateCriticalPath,
+                    samplingNanos.sum(), cacheColorNanos.sum(), testedPixels.sum(), candidates.sum(), samples.sum());
+        }
     }
 
     @Override

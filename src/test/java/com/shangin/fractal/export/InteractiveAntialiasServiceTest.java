@@ -448,7 +448,8 @@ class InteractiveAntialiasServiceTest {
         ));
 
         try (ParallelFractalCalculator calculator = new ParallelFractalCalculator(2);
-             InteractiveAntialiasService service = new InteractiveAntialiasService()) {
+             InteractiveAntialiasService service = new InteractiveAntialiasService(
+                     new AntialiasSampleCache(), true)) {
             calculator.calculate(frame, () -> false, ignored -> {});
             CountDownLatch completed = new CountDownLatch(1);
             AtomicInteger publishedTiles = new AtomicInteger();
@@ -469,6 +470,11 @@ class InteractiveAntialiasServiceTest {
 
             assertTrue(completed.await(5, TimeUnit.SECONDS));
             assertEquals(4, publishedTiles.get());
+            InteractiveAntialiasService.Profile profile = service.lastProfile();
+            assertTrue(profile.totalNanos() >= profile.baseColorNanos());
+            assertEquals(40L * 40, profile.testedPixels());
+            assertEquals(0, profile.candidates());
+            assertEquals(0, profile.samples());
         }
     }
 

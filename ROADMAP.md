@@ -288,11 +288,18 @@ hybrid backend is substantially faster than in 8.4 but still has no measured
 end-to-end win over CPU. The items below remain conditional rather than the next
 implementation step.
 
-- Move adaptive edge/distance candidate detection onto the GPU.
-- Move subpixel sampling and palette-independent AA sample storage onto the GPU.
-- Add GPU feature parity for orbit traps and histogram reduction.
-- Add GPU-resident frame caching, pan reuse, and exact CPU fallback transfers.
-- Evaluate GPU off-screen export only after the interactive pipeline is stable.
+- [x] Measure adaptive edge/distance candidate detection separately before
+  moving it. The 8.6 M3 Pro profile shows a 17-19 ms candidate critical path at
+  1512x982 and 72-74 ms at 3024x1964, smaller than the GPU base-frame deficit in
+  every paired AA case. Even zero-cost GPU detection would remain 1.03-1.07x
+  slower end to end; see `GPU_RESIDENCY_8_6_DECISION.md`.
+- [ ] Move adaptive edge/distance candidate detection onto the GPU only after a
+  repeated gate shows an end-to-end win including dispatch, synchronization,
+  storage and exact fallback costs.
+- [ ] Move subpixel sampling and palette-independent AA sample storage onto the GPU.
+- [ ] Add GPU feature parity for orbit traps and histogram reduction.
+- [ ] Add GPU-resident frame caching, pan reuse, and exact CPU fallback transfers.
+- [ ] Evaluate GPU off-screen export only after the interactive pipeline is stable.
 
 ### 8.7. Implement and validate the Windows GPU runtime
 
