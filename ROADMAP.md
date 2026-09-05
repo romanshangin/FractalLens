@@ -53,6 +53,20 @@ Remaining items in this section are deferred while rendering-engine work is prio
   and package its native library, retaining the JavaFX menu on other platforms.
   Validate command callbacks, main-thread coordination, focus and dismissal,
   uninterrupted rendering, Retina/multiple-display positioning, and full screen.
+- [ ] First unify JavaFX dialog appearance with macOS: system fonts, light/dark
+  backgrounds, system accent colors, restrained input styling, and consistent
+  spacing. Place the primary action on the right; support Enter to confirm,
+  Escape to cancel, and predictable keyboard focus and validation.
+- [ ] Reduce unnecessary modality: use a compact owner-associated sheet for
+  Go to Coordinates, a nonmodal palette editor with live preview, and a nonmodal
+  Help window. Show export completion unobtrusively inside the application;
+  reserve modal alerts for errors or decisions requiring user action.
+- [ ] Extend the planned AppKit bridge to native dialogs: use `NSAlert` sheets
+  for actionable messages and custom sheets with native fields and buttons for
+  forms such as Go to Coordinates. Retain JavaFX dialogs on other platforms.
+  `WINDOW_MODAL` and CSS alone do not provide a native AppKit sheet. Validate
+  ownership, focus restoration, cancellation, input validation, appearance
+  changes, full screen, and callbacks without blocking rendering.
 
 ## 5. Add history and reproducibility
 
