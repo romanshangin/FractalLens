@@ -72,12 +72,15 @@ the screen proportions, and the window opens centered.
 
 Full screen and ordinary window resizing share the same behavior. At the preset's
 initial view, the last completed image stretches immediately across the entire
-canvas. A fitted frame starts rendering on the next JavaFX pulse and replaces
-the preview atomically when ready. Intermediate resize tiles stay hidden so that
+canvas. A fitted frame starts rendering after the window size has remained stable
+for 75 ms, then replaces the preview atomically when ready. Intermediate resize
+tiles stay hidden so that
 different aspect ratios cannot produce side bands or split fractal contours.
 In a zoomed view, the center and render-pixel
 spacing stay fixed: expansion reuses the center (including AA) and computes only
 the exposed borders; shrinking a completed frame crops it without rendering.
+The next pan keeps the resized frame's iteration limit, so dragging after either
+operation also calculates only the newly exposed edge strips.
 Render dimensions use equal parity to keep centered copies on integer pixels.
 If resizing interrupts AA publication, missing display tiles are completed even
 when their sample data is already cached.

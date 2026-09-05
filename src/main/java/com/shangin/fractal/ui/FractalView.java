@@ -36,17 +36,10 @@ import java.util.List;
  */
 public class FractalView extends StackPane {
 
-    // Coalesce width/height events into the next pulse without waiting for idle.
-    private final AnimationTimer resizeRender = new AnimationTimer() {
-        @Override
-        public void handle(long now) {
-            stop();
-            layout();
-            if (resizePending) {
-                resizeAndRender();
-            }
-        }
-    };
+    // Keep the preview responsive, but wait until native window resizing settles
+    // before spending work on a render that would immediately be superseded.
+    private static final Duration RESIZE_SETTLE_DELAY = Duration.millis(75);
+    private final PauseTransition resizeRender = new PauseTransition(RESIZE_SETTLE_DELAY);
     private boolean resizePending;
 
     // Coalesce wheel events, but flush immediately when a pinch gesture finishes.
@@ -432,6 +425,13 @@ public class FractalView extends StackPane {
     }
 
     private void configureResize() {
+        resizeRender.setOnFinished(event -> {
+            layout();
+            if (resizePending) {
+                resizeAndRender();
+            }
+        });
+
         widthProperty().addListener(
                 (observable, oldValue, newValue)
                         -> scheduleResize());
@@ -550,7 +550,7 @@ public class FractalView extends StackPane {
             trackpadPanSourceViewport = null;
         }
 
-        recalculate();
+        recalculate(true);
     }
 
     private void configureTrackpadGestures() {
@@ -651,7 +651,7 @@ public class FractalView extends StackPane {
                 fractalSurface.renderHeight()
         );
         resetPriority();
-        recalculate();
+        recalculate(true);
     }
 
     private void scheduleResize() {
@@ -661,7 +661,7 @@ public class FractalView extends StackPane {
         interactionRender.cancel();
         renderController.cancelCurrent();
         colorCyclePaused = true;
-        resizeRender.start();
+        resizeRender.playFromStart();
         requestLayout();
     }
 
@@ -711,7 +711,7 @@ public class FractalView extends StackPane {
         recalculate(false);
     }
 
-    private void recalculate(boolean reuseResize) {
+    private void recalculate(boolean preserveIterationLimit) {
         int logicalWidth = (int) getWidth();
         int logicalHeight = (int) getHeight();
 
@@ -745,7 +745,7 @@ public class FractalView extends StackPane {
                 scene,
                 target,
                 defaultViewport,
-                reuseResize
+                preserveIterationLimit
         );
     }
 
@@ -874,7 +874,7 @@ public class FractalView extends StackPane {
                 );
 
                 resetPriority();
-                recalculate();
+                recalculate(true);
             } else {
                 colorCyclePaused = false;
                 lastCycleTick = 0L;

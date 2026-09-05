@@ -167,7 +167,7 @@ public final class FractalRenderController implements AutoCloseable {
     }
 
     public void render(FractalScene scene, RenderTarget target,
-                       Viewport defaultViewport, boolean reuseResize) {
+                       Viewport defaultViewport, boolean preserveIterationLimit) {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
@@ -206,8 +206,9 @@ public final class FractalRenderController implements AutoCloseable {
                         defaultViewport.scaleExact(),
                         viewport.scaleExact()
                 );
-        // Changing the amount of visible space must not change the samples in it.
-        if (reuseResize && activeFrame != null) {
+        // Resizing and panning retain the pixel scale, so keep their samples
+        // compatible even if the resized default viewport changes zoom policy.
+        if (preserveIterationLimit && activeFrame != null) {
             maxIterations = activeFrame.request().maxIterations();
         }
 
@@ -329,7 +330,7 @@ public final class FractalRenderController implements AutoCloseable {
         }
 
         // A crop of a completed image is ready synchronously, including its AA.
-        if (reuseResize && imageReused && targetFrame.isComplete()
+        if (preserveIterationLimit && imageReused && targetFrame.isComplete()
                 && (!refinedDisplay || surface.hasCompleteRefinement(targetFrame))) {
             surface.completeProgressiveRender(targetFrame, scene);
             frameCache.put(targetFrame);

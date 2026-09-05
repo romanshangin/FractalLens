@@ -545,6 +545,49 @@ class FractalResizeFxTest {
         }
     }
 
+    @Test
+    void dragAfterExpandedAndCroppedResizeKeepsIterationLimitForReuse() throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE));
+        FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+        try {
+            changeView(view, surface, () -> { view.resize(100, 80); view.layout(); });
+            changeView(view, surface, () -> {
+                for (int zoom = 0; zoom < 5; zoom++) view.zoom(true);
+            });
+
+            changeView(view, surface, () -> { view.resize(160, 120); view.layout(); });
+            int expandedIterations = fx(() -> surface.completedRender().frame().request().maxIterations());
+            changeView(view, surface, () -> drag(view, 80, 60, 92, 67));
+            assertEquals(expandedIterations,
+                    fx(() -> surface.completedRender().frame().request().maxIterations()),
+                    "A drag after expansion must remain compatible with the resized frame");
+
+            changeView(view, surface, () -> { view.resize(100, 80); view.layout(); });
+            int croppedIterations = fx(() -> surface.completedRender().frame().request().maxIterations());
+            changeView(view, surface, () -> drag(view, 50, 40, 42, 46));
+            assertEquals(croppedIterations,
+                    fx(() -> surface.completedRender().frame().request().maxIterations()),
+                    "A drag after cropping must remain compatible with the resized frame");
+        } finally {
+            fx(() -> { view.close(); return null; });
+        }
+    }
+
+    private static void drag(FractalView view, double fromX, double fromY, double toX, double toY) {
+        view.fireEvent(new javafx.scene.input.MouseEvent(
+                javafx.scene.input.MouseEvent.MOUSE_PRESSED,
+                fromX, fromY, fromX, fromY, javafx.scene.input.MouseButton.PRIMARY, 1,
+                false, false, false, false, true, false, false, false, false, true, null));
+        view.fireEvent(new javafx.scene.input.MouseEvent(
+                javafx.scene.input.MouseEvent.MOUSE_DRAGGED,
+                toX, toY, toX, toY, javafx.scene.input.MouseButton.PRIMARY, 1,
+                false, false, false, false, true, false, false, false, false, false, null));
+        view.fireEvent(new javafx.scene.input.MouseEvent(
+                javafx.scene.input.MouseEvent.MOUSE_RELEASED,
+                toX, toY, toX, toY, javafx.scene.input.MouseButton.PRIMARY, 1,
+                false, false, false, false, false, false, false, false, false, false, null));
+    }
+
     private static void awaitSurfaceComplete(FractalSurface surface) throws Exception {
         CountDownLatch completed = new CountDownLatch(1);
         var timer = fx(() -> {

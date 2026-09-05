@@ -44,6 +44,19 @@ class FrameReuseResizeTest {
             }
             workers.calculate(expanded.frame(), () -> false, ignored -> {});
             assertEquals(60 * 50 - 40 * 30, calls.get());
+
+            calls.set(0);
+            PixelShift expandedPanShift = new PixelShift(7, -4);
+            Viewport expandedPanViewport = expanded.frame().request().viewport()
+                    .shiftedByPixels(expandedPanShift.dx(), expandedPanShift.dy(), 60, 50);
+            FrameReuseResult expandedPan = planner.plan(expanded.frame(),
+                    new RenderRequest(calculator, expandedPanViewport, 60, 50, 300));
+            assertEquals(expandedPanShift, expandedPan.shift().orElseThrow());
+            assertEquals((60 - 7) * (50 - 4), expandedPan.reusedPixels());
+            workers.calculate(expandedPan.frame(), () -> false, ignored -> {});
+            assertEquals(60 * 50 - expandedPan.reusedPixels(), calls.get(),
+                    "A pan after expansion must calculate only exposed edges");
+
             calls.set(0);
             FrameReuseResult cropped = planner.plan(expanded.frame(), source.request());
             assertTrue(cropped.frame().isComplete());
@@ -53,6 +66,18 @@ class FrameReuseResizeTest {
             for (int i = 0; i < source.samplePlane().size(); i++) {
                 assertEquals(source.samplePlane().smoothIterations(i), cropped.frame().samplePlane().smoothIterations(i));
             }
+
+            calls.set(0);
+            PixelShift croppedPanShift = new PixelShift(-5, 3);
+            Viewport croppedPanViewport = cropped.frame().request().viewport()
+                    .shiftedByPixels(croppedPanShift.dx(), croppedPanShift.dy(), 40, 30);
+            FrameReuseResult croppedPan = planner.plan(cropped.frame(),
+                    new RenderRequest(calculator, croppedPanViewport, 40, 30, 300));
+            assertEquals(croppedPanShift, croppedPan.shift().orElseThrow());
+            assertEquals((40 - 5) * (30 - 3), croppedPan.reusedPixels());
+            workers.calculate(croppedPan.frame(), () -> false, ignored -> {});
+            assertEquals(40 * 30 - croppedPan.reusedPixels(), calls.get(),
+                    "A pan after cropping must calculate only exposed edges");
         }
     }
 
