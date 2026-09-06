@@ -7,6 +7,7 @@ import com.shangin.fractal.formula.FractalSample;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.BitSet;
 import java.util.stream.IntStream;
 
 /**
@@ -44,11 +45,20 @@ public final class AntialiasSampleCache {
             FractalSample[] samples,
             SmoothPaletteColoring coloring
     ) {
-        if (Double.compare(cachedColorScale, coloring.colorScale()) != 0) {
-            clear();
-            cachedColorScale = coloring.colorScale();
-        }
         Samples value = Samples.copyOf(samples, coloring);
+        prepareScale(coloring.colorScale());
+        putEncoded(pixelIndex, value);
+    }
+
+    private void prepareScale(double colorScale) {
+        if (Double.compare(cachedColorScale, colorScale) != 0) {
+            clear();
+            cachedColorScale = colorScale;
+        }
+    }
+
+    /** Caller owns this cache's monitor; encoding and coloring need no shared state. */
+    private void putEncoded(int pixelIndex, Samples value) {
         long bytes = value.estimatedBytes();
         Samples replaced = entries.remove(pixelIndex);
         if (replaced != null) {
@@ -65,6 +75,55 @@ public final class AntialiasSampleCache {
             usedBytes -= eldest.getValue().estimatedBytes();
             entries.remove(eldest.getKey());
         }
+    }
+
+    /** Worker-owned staging, bounded to one 32x32 tile; no cache lock is acquired. */
+    public Batch newBatch(int capacity, SmoothPaletteColoring coloring) {
+        return new Batch(capacity, java.util.Objects.requireNonNull(coloring));
+    }
+
+    /** Atomically admits a completed tile. The caller must first validate its render generation. */
+    public synchronized void merge(Batch batch) {
+        if (batch.owner != this || batch.merged) {
+            throw new IllegalArgumentException("Batch belongs to another cache or has already been merged");
+        }
+        batch.merged = true;
+        if (batch.size == 0) return;
+        prepareScale(batch.coloring.colorScale());
+        for (int index = 0; index < batch.size; index++) {
+            putEncoded(batch.pixels[index], batch.samples[index]);
+        }
+    }
+
+    public final class Batch {
+        private final AntialiasSampleCache owner = AntialiasSampleCache.this;
+        private final SmoothPaletteColoring coloring;
+        private final int[] pixels;
+        private final Samples[] samples;
+        private int size;
+        private boolean merged;
+
+        private Batch(int capacity, SmoothPaletteColoring coloring) {
+            if (capacity < 1 || capacity > 32 * 32) {
+                throw new IllegalArgumentException("AA staging is limited to one 32x32 tile");
+            }
+            this.coloring = coloring;
+            pixels = new int[capacity];
+            samples = new Samples[capacity];
+        }
+
+        /** Copies phases once and returns their display color without a second cache lookup. */
+        public Integer add(int pixel, FractalSample[] source, SmoothColorLookup lookup) {
+            if (merged || size == pixels.length) throw new IllegalStateException("AA batch is full or merged");
+            Samples value = Samples.copyOf(source, coloring);
+            // Match the uncached color path when one pixel cannot fit in the configured cache.
+            if (value.estimatedBytes() > maxBytes) return null;
+            pixels[size] = pixel;
+            samples[size++] = value;
+            return value.color(lookup);
+        }
+
+        public boolean isEmpty() { return size == 0; }
     }
 
     public synchronized Integer color(int pixelIndex, ColoringStrategy coloring, int maxIterations) {
@@ -232,6 +291,13 @@ public final class AntialiasSampleCache {
         public int size() { return pixelIndices.length; }
         public int gpuWordCount() { return words; }
         public int maxPixelIndex() { return maxPixel; }
+
+        /** An independent membership mask for a refinement's read-only cache snapshot. */
+        public BitSet pixelMask() {
+            BitSet mask = new BitSet();
+            for (int pixel : pixelIndices) mask.set(pixel);
+            return mask;
+        }
 
         public void recolorInto(int[] colors, SmoothColorLookup lookup) {
             IntStream.range(0, samples.length).parallel().forEach(i ->

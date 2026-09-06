@@ -1,5 +1,13 @@
 # FractalUI development roadmap
 
+CPU/GPU optimization review (2026-09-05):
+[analysis, experiment inventory and validation rules](CPU_GPU_OPTIMIZATION_ANALYSIS.md).
+Keep CPU as the default after the failed 8.5 and resident 8.6 gates. The next
+optimization work is section 9: establish comparable measurements, investigate
+CPU AA synchronization, improve CPU/deep-zoom work, then test different GPU
+algorithms. Completed and rejected experiments below remain historical evidence;
+new unchecked items are proposals, not measured speedups.
+
 ## 1. Restore a stable green build
 
 - [x] Fix compilation and run the complete test suite.
@@ -33,7 +41,9 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 - [x] Compare the scalar kernel with the Java Vector API; retain scalar production code because the current 128-bit/two-double species regresses overview rendering and provides only a small deep-zoom gain.
 - [x] Retune tile size and worker count after optimizing the calculation kernel; retain 32-pixel tiles and `CPU - 1` workers as the best throughput, progressive-latency, and UI-responsiveness balance.
 - [x] Evaluate a specialized direct-to-data Julia pipeline; retain the generic formula pipeline because HotSpot removes its abstraction cost and the measured difference is about 1%.
-- [x] Investigate perturbation/reference-orbit rendering; defer production integration until arbitrary-precision coordinates provide a high-precision reference orbit.
+- [x] Investigate perturbation/reference-orbit rendering; the early double-only
+  prototype was rejected. The subsequent high-precision production implementation
+  and successful rebasing/BLA work are completed in 7.3–7.6.
 
 ## 4. Strengthen user interaction
 
@@ -95,9 +105,11 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - [x] Add orbit traps and editable palette stops.
 - [x] Add a memory-bounded LRU render cache for exact reverse-navigation reuse.
 - [x] During zoom out, keep the scale-aware previous-frame reprojection as approximate display coverage, grow newly exposed base and AA tiles outward from its edges, and atomically replace the preview center with exact samples.
-- Resize reuse is deferred: exact reuse requires changing viewport/render-grid
-  geometry, while the current stretched preview and debounced rerender make the
-  practical benefit too small to justify that complexity now.
+- [x] Reuse exact samples and retained AA across compatible resize/pan grids;
+  expansion calculates exposed borders and cropping retains valid overlap.
+  Preserve unchanged pixel spacing, formula, sample accuracy and iteration
+  limits; cover partial frames and resize-then-drag regressions. Measure its
+  application-level benefit in 9.1 rather than repeating the completed work.
 - Add a separate high-resolution/off-screen export pipeline.
 
 ## 7. Implement deep zoom
@@ -297,10 +309,14 @@ below remain conditional rather than the next implementation step.
   slower end to end; see `GPU_RESIDENCY_8_6_DECISION.md`.
 - [x] Build an isolated whole-frame residency feasibility spike: keep canonical
   samples on GPU, read back only the FP32 rejection list, upload exact CPU
-  corrections, color on GPU, and return ARGB. On M3 Pro it is 39.9% faster for
-  Retina overview and 83.9% faster for Retina exterior, but 24.1% slower for
-  Retina seahorse because 68.5% of pixels require CPU recovery. The strict 15%
-  cross-scene gate therefore fails; see `GPU_RESIDENT_SPIKE_RESULTS.md`.
+  corrections, color on GPU, and return ARGB. At that pre-JavaFX boundary on
+  M3 Pro it is 39.9% faster for Retina overview and 83.9% faster for Retina
+  exterior, but 24.1% slower for Retina seahorse because 68.5% of pixels require
+  CPU recovery. These fixed-300-iteration, base/color-only measurements exclude
+  AA and progressive presentation; their color comparison is not a full sample
+  conformance gate. The strict 15% cross-scene gate therefore fails; see
+  `GPU_RESIDENT_SPIKE_RESULTS.md` and the scope audit in
+  `CPU_GPU_OPTIMIZATION_ANALYSIS.md`.
 - [x] Classify resident certificate rejections before changing the kernel. In
   the Retina seahorse view, 51.16% of rejections come from an uncertain escape
   interval and 48.84% from a smooth-value interval wider than the contract;
@@ -327,6 +343,10 @@ below remain conditional rather than the next implementation step.
 - [ ] Add GPU-resident frame caching, pan reuse, and exact CPU fallback transfers.
 - [ ] Evaluate GPU off-screen export only after the interactive pipeline is stable.
 
+The next algorithm and selection experiments are specified in 9.6 and 9.7.
+Their diagnostic scope does not reopen production residency expansion or mark
+this section's failed gates as passed.
+
 ### 8.7. Implement and validate the Windows GPU runtime
 
 - [x] Select LWJGL 3 with native Vulkan as the Windows GPU stack.
@@ -351,6 +371,245 @@ below remain conditional rather than the next implementation step.
 - [ ] Run calculation conformance and performance gates for implemented GPU
   modes on the selected device; do not infer FP64 correctness from capability
   reporting alone.
+
+## 9. Pursue CPU/GPU optimization from the measured bottlenecks
+
+Use [the analysis](CPU_GPU_OPTIMIZATION_ANALYSIS.md) for the evidence, current
+code entry points, alternative approaches and rejected experiments. Start with
+9.1 and 9.2. Sections 9.3–9.5 are CPU follow-ups selected from the resulting
+profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
+9.8 are conditional alternatives. Production GPU expansion remains gated by
+8.6 and the final checks in 9.9. Windows and Intel/AMD Mac work stays in 8.7/8.8.
+
+### 9.1. Establish comparable baselines and close profiling gaps
+
+- [x] Audit the saved CPU, palette, 8.4/8.5, candidate-detection, resident,
+  rejection, centered-error and double-single results against current code;
+  recompute the cited Retina GPU medians from saved samples. Record the analysis
+  separately from new performance measurements.
+- [ ] Build a reproducible fixture matrix with exact viewport coordinates,
+  actual adaptive/fixed iteration caps, formula/features, AA pattern, dimensions,
+  sample accuracy and cache state. Include Mandelbrot/Julia, other formulas,
+  direct/deep transitions, glitch-heavy and BLA-friendly scenes, scaled-exponent
+  zoom, pan overlap, reverse navigation, resize-then-drag and cancellation.
+- [ ] Measure formula/backend, returned-ARGB, JavaFX base/AA publication and
+  input-to-visible-update scopes separately. Record first useful region,
+  cold/warm full-frame time and cancellation tails; label physical scanout as
+  unmeasured until a dedicated display experiment exists.
+- [x] Add a headless production-AA benchmark, an explicit CPU-only JavaFX
+  comparison mode, and cache preparation/merge timing and batch counters.
+  Record separate contention profiles and 30-sample comparisons across three
+  fresh process pairs in [CPU AA results](CPU_AA_OPTIMIZATION_RESULTS.md).
+- [ ] Extend diagnostics to allocation, task scheduling, cancellation tails and
+  long-duration memory/thermal behavior. Per-worker stage intervals overlap;
+  they are not additive frame costs or process CPU utilization.
+- [ ] Use uninstrumented alternating pairs for decisions and separate JFR/native
+  profiles for attribution. Confirm promising changes with at least 30 measured
+  pairs and multiple process starts; record median/tails, hardware/runtime,
+  memory/GC and sustained thermal behavior. Do not run competing timing suites
+  simultaneously or overwrite historical CSVs.
+
+Exit criterion: a current, scope-matched baseline identifies the dominant costs
+and defines the correctness/performance gate before each implementation spike.
+
+### 9.2. Reduce CPU antialiasing synchronization and repeated work
+
+- [x] Profile `InteractiveAntialiasService.refineTile` and the synchronized
+  access-order map in `AntialiasSampleCache`. Separate JFR runs recorded
+  3,266,546 contended cache entries before the change and zero after it;
+  accumulated worker waits are diagnostic evidence, not frame wall time.
+- [x] Replace per-pixel shared-cache lookups with an immutable retained snapshot
+  and an empty-cache fast path. Encode samples once into worker-owned tile
+  batches, reuse sample scratch arrays and merge completed tiles after checking
+  the frame/generation. Remove duplicate base coloring and repeated cache reads.
+  Preserve phase quantization, payload limits, recoloring and pan/resize reuse;
+  snapshot reads no longer update per-pixel LRU positions. Add regressions for
+  cancelled-worker admission, phase ownership and pattern/scale invalidation.
+  Three alternating JVM pairs, 30 measured frames per build/case: AA-only gains
+  **2.05–6.46x**, with every compared pixel unchanged. Retina overview including
+  JavaFX publication improves **1378.67 → 332.33 ms** (Fast + AA) and
+  **1393.72 → 283.65 ms** (Refined + AA). Refined first publication improves;
+  Fast base publication shifts by less than 1 ms before AA starts.
+  Deep-AA follow-up shows no meaningful gain. See
+  [CPU AA results](CPU_AA_OPTIMIZATION_RESULTS.md) for scopes, tails, memory
+  observations and supplementary controls.
+- [ ] Reduce the retained-snapshot color preparation barrier without restoring
+  shared-cache contention. The 30-sample retained-Julia follow-up completes
+  about 10x faster, but the first tile arrives about 5 ms later. Compare
+  on-demand tile coloring with a compact immutable lookup; verify palette
+  reuse, additional memory and first/full publication together.
+- [ ] Compare an AA-enabled distance/candidate sidecar in the base pass with the
+  current second derivative-orbit calculation for non-edge pixels. Include
+  base-pass/first-publication cost and keep image-space edge detection for
+  interior-centered boundaries; retain the current path for non-analytic maps.
+- [ ] Separately evaluate nested/adaptive subpixel sampling only if sampling
+  still dominates. Current direct 4x4 and deep 2x2/4x4 positions are not
+  automatically reusable nested grids. Treat changed positions/sample counts
+  as a quality-policy change with dense-reference image comparisons, stable
+  jitter, palette-independent caches and exact export semantics.
+
+Exit criterion: unchanged-quality work passes sample/color and retention tests,
+with a confirmed full-AA improvement under the 9.1 gate and no material first
+publication regression. Sampling-quality experiments have a separate decision.
+
+### 9.3. Improve CPU batching, scheduling and publication
+
+- [ ] Benchmark interleaved independent scalar orbits and modest unrolling on
+  Mandelbrot, Julia and AA samples. Inspect JIT/allocation profiles; preserve
+  arithmetic order and bounded cancellation. Do not repeat rejected manual
+  square caching or generic-to-specialized Julia rewrites without new evidence.
+- [ ] Compare SIMD lane refill/compaction and workload-specific dispatch,
+  including wider x86 FP64 species where available. Keep the current scalar
+  fallback; the rejected M3 Pro two-lane masked loop is not the proposed change.
+- [ ] Compare small first tiles followed by larger low-cost tiles and measured
+  cost-based scheduling. Coordinate base, AA and recovery worker budgets to
+  prevent oversubscription; retain UI headroom and the existing default until
+  both throughput and latency pass. Do not assume more threads always help.
+- [ ] Measure dirty-rectangle PixelBuffer updates, post-first-region callback
+  coalescing, reusable output/staging and avoided redundant recoloring/copies.
+  Preserve refined pixels, exact reused spans and resize behavior. Validate
+  through JavaFX; a faster kernel or direct buffer alone is insufficient.
+
+Exit criterion: each retained change improves its declared workloads and keeps
+overview, deep scenes, interaction and cancellation within the control budget.
+
+### 9.4. Extend the successful CPU perturbation/BLA path
+
+- [ ] Profile BLA preparation/lookup, block objects, coordinate setup and sample
+  publication once skipping dominates. Compare primitive block arrays and
+  tile-local delta bounds while retaining the existing strict accuracy controls.
+- [ ] Evaluate reference and sampler/BLA sharing across base/AA and compatible
+  navigation, plus bounded additional-reference reuse. Make ownership,
+  precision, iteration capacity, coverage and eviction explicit; recompute
+  generation-specific radii and never cache cancelled construction.
+- [ ] Extend modified rebasing and BLA to the scaled-exponent path and, where
+  profitable, additional-reference retries. Preserve the separate exponent,
+  scalar escape tail, glitch detection and arbitrary-precision fallback.
+- [ ] Evaluate higher-order series/polynomial blocks or tighter accumulated
+  error bounds first as offline correctness/skip-coverage experiments. Include
+  the shallow boundary where current BLA skips nothing; reject tolerance
+  relaxation and do not repeat the failed cubic/loose-radius trials unchanged.
+
+Exit criterion: BigDecimal controls and full scalar comparisons retain exact
+escape/iteration behavior and existing deep smooth tolerance; gains include
+reference/table setup and AA, with no stale-bound or navigation regression.
+
+### 9.5. Investigate conditional CPU numerical and spatial algorithms
+
+- [ ] If reference construction or precise fallback dominates, compare optimized
+  BigDecimal setup with batched binary fixed-point, double-double transition
+  arithmetic or MPFR/GMP via FFM. Include call/conversion costs, rounding,
+  precision growth, native packaging and a portable BigDecimal fallback.
+- [ ] For increasing iteration caps at unchanged precise coordinates, evaluate
+  explicit continuation state for unfinished pixels, including derivative/trap
+  state where required. Account for memory and invalidation; existing capped
+  samples are not completed higher-cap results. Keep current cache compatibility
+  and zoom-budget rules until this separate contract is proven.
+- [ ] Evaluate certified attracting-cycle/interior tests or interval-proven
+  region skipping only on workloads that can amortize their cost. Exact
+  checkpoint periodicity already lost. Matching corner/border colors,
+  approximate bulb circles or a small derivative alone cannot authorize exact
+  tile filling; quadtree scheduling can still be evaluated independently.
+- [ ] Extend optimized sampling to Julia/Multibrot first where applicable;
+  give Julia, Burning Ship and Tricorn perturbation separate numerical designs
+  and controls. Do not reuse Mandelbrot-specific symmetry/interior predicates
+  or analytic derivatives without formula-specific justification.
+- [ ] Consider batched native CPU kernels or an alternate JVM only for a
+  demonstrated hot loop. Include portability, build/runtime costs and full
+  pipeline checks; a language or UI rewrite is not an established speedup.
+
+Exit criterion: a bounded spike demonstrates a worthwhile gain over the current
+optimized CPU path before adding a second production numerical engine.
+
+### 9.6. Test GPU perturbation/BLA as a different algorithm
+
+- [ ] Build a diagnostic Mandelbrot path using a high-precision CPU reference
+  and GPU delta iteration/BLA, with compact rejected-sample recovery from
+  original coordinates. Compare with the current CPU rebasing/BLA backend,
+  not a naive arbitrary-precision-per-pixel baseline.
+- [ ] Establish native error bounds for reference/coefficient conversion, delta
+  recurrence, BLA truncation, escape and smooth values. Do not transplant CPU
+  radius constants or assume FP32 rescaling supplies extra mantissa precision.
+  Add exponent-preserving rescaling only with explicit range checks and tests.
+- [ ] Measure BLA-friendly, glitch-heavy and scaled-exponent scenes at both
+  target sizes, including CPU reference/table setup, uploads, divergence,
+  failures/recovery, first region and complete frame. Reject the spike if the
+  CPU's already short skipped workload leaves no end-to-end opportunity.
+- [ ] Tune queried workgroup/subgroup behavior, register pressure, compact work
+  lists and bounded iteration batches only after a viable numerical kernel
+  exists. Preserve generation cancellation, device-loss fallback and memory
+  ceilings; never substitute a sampled pilot for per-result validation.
+
+Exit criterion: pass native sample conformance and a predeclared paired
+performance gate, then production-service/JavaFX/AA validation in 9.9. This is
+unmeasured research and does not enable GPU calculation by default.
+
+### 9.7. Evaluate selective residency and CPU/GPU scheduling
+
+- [ ] In a separate diagnostic selector experiment, model total cost using
+  dimensions, iteration distribution, reuse, AA, native warm state and rejection
+  density. Compare cheap spatial pilot tiles and recent compatible-frame
+  statistics; include pilot and wrong-prediction costs and use hysteresis.
+- [ ] Select CPU early for predicted expensive recovery. Check abrupt scene,
+  zoom, resize and palette changes; require CPU fallback for unknown/unsupported
+  cases. Running the full FP32 frame before falling back cannot produce the
+  missing seahorse win and must be accounted for as wasted work.
+- [ ] Compare independent CPU/GPU tile assignment with separate recovery only
+  when profiling supports it. Avoid duplicated work, excess host workers and
+  shared-memory/power contention; keep publication ordering and exact caches.
+- [ ] Evaluate warmed large-AA GPU palette animation as an independent narrow
+  policy, including initialization, invalidation, small buffers and CPU fallback.
+
+Exit criterion: predeclare eligible classes and require at least 15% confirmed
+gain on selected cases, no more than 5% regression on controls and bounded first
+publication/cancellation. Passing this new selector experiment does not rewrite
+the failed six-case resident GPU gate or automatically authorize 8.6 expansion.
+
+### 9.8. Keep hardware and API alternatives conditional
+
+- [ ] Through 8.7, test native Vulkan FP64 on actual Windows hardware: query and
+  enable support, measure FP64 throughput, validate rounding/FMA/escape/smooth
+  semantics and compare direct vs perturbation workloads. Keep the M3 Pro CPU
+  path; device capability alone does not establish correctness or performance.
+- [ ] Through 8.8, validate Intel/AMD Mac behavior and discrete-memory transfer
+  costs separately. Do not assume Metal/MoltenVK exposes native FP64 there.
+- [ ] Consider native Metal or external-texture presentation only if profiling
+  demonstrates dispatch/translation or readback/presentation dominance. Compare
+  an equivalent kernel first and retain a Windows Vulkan path; JavaFX
+  PixelBuffer has no public external GPU texture import API.
+- [ ] Keep CUDA, OpenCL/SYCL, Java-to-GPU compilers, WebGPU/OpenGL and multiword
+  GPU arithmetic as explicitly unmeasured alternatives in the analysis. Reopen
+  one only with a supported hardware matrix and a materially different measured
+  opportunity. The failed all-rejection double-single route stays closed;
+  additional float limbs or API replacement are not presumed remedies.
+
+Exit criterion: retain an alternative only when its benefit exceeds added
+runtime/packaging complexity and passes the same numerical and application gates.
+
+### 9.9. Promote only validated improvements; separate preview and export
+
+- [ ] For retained optimizations, run portable regressions and applicable native
+  and FX gates: sample accuracy, deep BigDecimal controls, palette/AA, feature
+  fallback, cache/reuse, resize, cancellation and device loss. Strengthen the
+  resident spike's color-only tests to sample-level checks before integration.
+- [ ] Re-run paired production-service/JavaFX base and AA benchmarks, cold
+  startup, sustained navigation, memory/GC and thermal behavior. Keep CPU
+  default until the appropriate production decision gate passes on that device.
+- [ ] Only then revisit 8.6 GPU AA sampling/storage, histogram/traps and resident
+  reuse/cache. Measure candidate detection and subpixel work separately; moving
+  detection alone has already failed as the next hybrid optimization.
+- [ ] Evaluate low-resolution/low-iteration or uncertified GPU previews only as
+  an explicit approximate display policy. Keep exact sample caches/export
+  isolated and converge to the requested precision and iteration budget;
+  never preserve a stale cap across a zoom-containing interaction batch.
+- [ ] Give tiled high-resolution export, animation batches and optional
+  multi-device/distributed rendering their own amortization and correctness
+  gates after the stable interactive path. Include tile seams, storage/encoding,
+  transfers and cancellation; do not report batch gains as interaction gains.
+
+Exit criterion: publish reproducible before/after results and an explicit
+retain/reject decision for each completed experiment; only demonstrated,
+compatible improvements enter production.
 
 ## Target milestone
 

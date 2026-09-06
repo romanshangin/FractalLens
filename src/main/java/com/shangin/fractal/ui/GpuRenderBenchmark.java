@@ -58,8 +58,9 @@ public final class GpuRenderBenchmark extends Application {
     }
     private void runBenchmark() {
         Path output = Path.of(System.getProperty("fractal.benchmark.output", "target/gpu-render-benchmark.csv"));
+        boolean cpuOnly = Boolean.getBoolean("fractal.benchmark.cpuOnly");
         try (GpuRuntime runtime = GpuRuntimeFactory.createDefault()) {
-            if (!runtime.isUsableFor(GpuNumericCapability.FLOAT32)) throw new IllegalStateException(runtime.capabilityReport().toString());
+            if (!cpuOnly && !runtime.isUsableFor(GpuNumericCapability.FLOAT32)) throw new IllegalStateException(runtime.capabilityReport().toString());
             var cpu = new PrecisionSelectingRenderBackend(new DirectDoubleRenderBackend(), new MandelbrotPerturbationRenderBackend());
             var gpu = new GpuMandelbrotRenderBackend(runtime,
                     new PrecisionSelectingRenderBackend(new DirectDoubleRenderBackend(), new MandelbrotPerturbationRenderBackend()));
@@ -93,15 +94,17 @@ public final class GpuRenderBenchmark extends Application {
                         for (int i = -warmup - 1; i < samples; i++) {
                             String phase = i == -warmup - 1 ? "cold" : i < 0 ? "warmup" : "sample";
                             Result[] pair = new Result[2];
-                            for (int order = 0; order < 2; order++) {
-                                int backend = (i + order) & 1;
+                            for (int order = 0; order < (cpuOnly ? 1 : 2); order++) {
+                                int backend = cpuOnly ? 0 : (i + order) & 1;
                                 pair[backend] = measure(service, aaService, measured, scene, w, h, aa, backend == 1);
                             }
-                            double error = verify(pair[0].frame, pair[1].frame);
-                            for (int b = 0; b < 2; b++) rows.add(pair[b].csv(name, w, h, aa, b == 1, phase, i, error));
+                            double error = cpuOnly ? 0 : verify(pair[0].frame, pair[1].frame);
+                            for (int b = 0; b < (cpuOnly ? 1 : 2); b++) rows.add(pair[b].csv(name, w, h, aa, b == 1, phase, i, error));
                             Files.createDirectories(output.toAbsolutePath().getParent());
                             Files.writeString(output, metadata + HEADER + "\n" + String.join("\n", rows) + "\n");
-                            System.out.printf(Locale.ROOT, "%s %s %s %d: CPU %.1f ms; GPU %.1f ms; certified %d; recovered %d; error %.8g%n",
+                            if (cpuOnly) System.out.printf(Locale.ROOT, "%s %s %s %d: CPU %.1f ms%n",
+                                    size, name, phase, i, pair[0].total / 1e6);
+                            else System.out.printf(Locale.ROOT, "%s %s %s %d: CPU %.1f ms; GPU %.1f ms; certified %d; recovered %d; error %.8g%n",
                                     size, name, phase, i, pair[0].total / 1e6, pair[1].total / 1e6,
                                     pair[1].stats.certifiedPixels(), pair[1].stats.recoveredPixels(), error);
                         }

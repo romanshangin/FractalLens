@@ -21,6 +21,7 @@ import com.shangin.fractal.scene.SamplingPattern;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -48,14 +49,12 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private final ExecutorService coordinator = Executors.newSingleThreadExecutor(
             daemonThreadFactory("fractal-aa")
     );
-    private final ExecutorService workers = Executors.newFixedThreadPool(
-            Math.max(1, Runtime.getRuntime().availableProcessors() - 1),
-            daemonThreadFactory("fractal-aa-worker")
-    );
+    private final ExecutorService workers;
     private final AtomicLong generation = new AtomicLong();
     private final AntialiasSampleCache sampleCache;
     private final boolean profiling;
     private RenderFrame cachedFrame;
+    private SamplingPattern cachedSamplingPattern;
     private RenderFrame basePhaseFrame;
     private BaseColorPhaseCache basePhaseCache;
     private final ThreadLocal<SmoothColorLookup> recolorLookup =
@@ -63,11 +62,12 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private Future<?> currentRefinement;
     private volatile Profile lastProfile = Profile.EMPTY;
 
-    /** Worker CPU times are summed and may overlap; totalNanos is wall time. */
+    /** Worker elapsed times are summed and overlap; they are not process CPU time. */
     public record Profile(long totalNanos, long baseColorNanos, long candidateNanos,
                           long candidateCriticalPathNanos, long samplingNanos,
-                          long cacheColorNanos, long testedPixels, long candidates, long samples) {
-        public static final Profile EMPTY = new Profile(0, 0, 0, 0, 0, 0, 0, 0, 0);
+                          long cacheColorNanos, long testedPixels, long candidates, long samples,
+                          long cachePreparationNanos, long cacheMergeNanos, long cacheBatches) {
+        public static final Profile EMPTY = new Profile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     public InteractiveAntialiasService() {
@@ -79,8 +79,14 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     }
 
     InteractiveAntialiasService(AntialiasSampleCache sampleCache, boolean profiling) {
+        this(sampleCache, profiling, Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+    }
+
+    InteractiveAntialiasService(AntialiasSampleCache sampleCache, boolean profiling, int workerCount) {
+        if (workerCount < 1) throw new IllegalArgumentException("Positive worker count required");
         this.sampleCache = Objects.requireNonNull(sampleCache);
         this.profiling = profiling;
+        workers = Executors.newFixedThreadPool(workerCount, daemonThreadFactory("fractal-aa-worker"));
     }
 
     public Profile lastProfile() { return lastProfile; }
@@ -147,9 +153,10 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         long refinementId = generation.incrementAndGet();
         cancelCurrentFuture();
         synchronized (this) {
-            if (cachedFrame != frame) {
+            if (cachedFrame != frame || cachedSamplingPattern != samplingPattern) {
                 sampleCache.clear();
                 cachedFrame = frame;
+                cachedSamplingPattern = samplingPattern;
                 basePhaseFrame = null;
                 basePhaseCache = null;
             }
@@ -185,14 +192,29 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             MutableProfile profile = profiling ? new MutableProfile() : null;
             lastProfile = Profile.EMPTY;
             SamplePlane data = frame.samplePlane();
-            int[] baseColors = AdaptivePngExportService.colorBaseFrame(data, coloring);
+            int[] baseColors;
             SmoothColorLookup lookup = coloring instanceof SmoothPaletteColoring smooth
                     ? new SmoothColorLookup(smooth)
                     : null;
             if (coloring instanceof SmoothPaletteColoring smooth) {
+                baseColors = new int[data.size()];
                 basePhases(frame, smooth).recolorInto(baseColors, lookup);
+            } else {
+                baseColors = AdaptivePngExportService.colorBaseFrame(data, coloring);
             }
             if (profiling) profile.baseColorNanos = System.nanoTime() - started;
+            long cacheStarted = profiling ? System.nanoTime() : 0;
+            AntialiasSampleCache.Snapshot retained;
+            synchronized (this) {
+                if (shouldCancel(refinementId) || cachedFrame != frame) return;
+                retained = coloring instanceof SmoothPaletteColoring smooth
+                        ? sampleCache.snapshotFor(smooth) : AntialiasSampleCache.Snapshot.EMPTY;
+            }
+            BitSet cachedPixels = retained.pixelMask();
+            // Keep retained AA colors separate: candidate detection must still see base-only colors.
+            int[] cachedColors = retained.size() == 0 ? null : new int[data.size()];
+            if (cachedColors != null) retained.recolorInto(cachedColors, lookup);
+            if (profiling) profile.cachePreparationNanos = System.nanoTime() - cacheStarted;
             MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler = deepZoom
                     ? MandelbrotPerturbationRenderBackend.createPreciseSampler(
                     frame.job(), () -> shouldCancel(refinementId)).orElseThrow(
@@ -207,6 +229,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         coloring,
                         samplingPattern,
                         baseColors,
+                        cachedPixels,
+                        cachedColors,
                         reusedPixels,
                         lookup,
                         tile,
@@ -248,6 +272,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             ColoringStrategy coloring,
             SamplingPattern samplingPattern,
             int[] baseColors,
+            BitSet cachedPixels,
+            int[] cachedColors,
             RefinedPixelSnapshot reusedPixels,
             SmoothColorLookup lookup,
             RenderRegion tile,
@@ -262,6 +288,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 ? frame.job().formula().createDirectCalculator()
                 : null;
         int[] tileColors = new int[tile.width() * tile.height()];
+        AntialiasSampleCache.Batch batch = lookup == null ? null
+                : sampleCache.newBatch(tileColors.length, (SmoothPaletteColoring) coloring);
+        FractalSample[] regularSamples = null, smallSamples = null;
         long candidateNanos = 0, samplingNanos = 0, cacheColorNanos = 0;
         long testedPixels = 0, candidates = 0, samplesCount = 0;
 
@@ -278,11 +307,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 int tileIndex = (y - tile.y()) * tile.width() + x - tile.x();
                 int frameIndex = y * data.width() + x;
 
-                Integer cachedColor = lookup == null
-                        ? null
-                        : sampleCache.color(frameIndex, lookup);
-                if (cachedColor != null) {
-                    tileColors[tileIndex] = cachedColor;
+                if (cachedPixels.get(frameIndex)) {
+                    tileColors[tileIndex] = cachedColors[frameIndex];
                     continue;
                 }
 
@@ -310,14 +336,24 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 if (profiling) candidates++;
 
                 long samplingStarted = profiling ? System.nanoTime() : 0;
+                int sampleGridSize = preciseSampler == null ? SAMPLE_GRID : deepSampleGridSize(data, x, y);
+                int sampleCount = sampleGridSize * sampleGridSize;
+                FractalSample[] scratch;
+                if (sampleCount == DEEP_LOW_SAMPLE_GRID * DEEP_LOW_SAMPLE_GRID) {
+                    if (smallSamples == null) smallSamples = new FractalSample[sampleCount];
+                    scratch = smallSamples;
+                } else {
+                    if (regularSamples == null) regularSamples = new FractalSample[sampleCount];
+                    scratch = regularSamples;
+                }
                 FractalSample[] samples = preciseSampler == null
                         ? sampleGrid(
                         calculator, grid, frame.request().maxIterations(),
-                        x, y, samplingPattern)
+                        x, y, samplingPattern, scratch)
                         : sampleDeepGrid(
                         preciseSampler, grid.preciseGrid(), data,
                         x, y, samplingPattern,
-                        () -> shouldCancel(refinementId));
+                        () -> shouldCancel(refinementId), scratch);
                 if (samples == null) {
                     throw new CancellationException();
                 }
@@ -326,10 +362,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     samplesCount += samples.length;
                 }
                 long cacheStarted = profiling ? System.nanoTime() : 0;
-                if (coloring instanceof SmoothPaletteColoring smooth) {
-                    sampleCache.put(frameIndex, samples, smooth);
-                    // Publish the same quantized color used by cache recoloring.
-                    Integer storedColor = sampleCache.color(frameIndex, lookup);
+                if (batch != null) {
+                    Integer storedColor = batch.add(frameIndex, samples, lookup);
                     if (storedColor != null) {
                         tileColors[tileIndex] = storedColor;
                         if (profiling) cacheColorNanos += System.nanoTime() - cacheStarted;
@@ -350,12 +384,28 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         if (shouldCancel(refinementId)) {
             return;
         }
+        if (batch != null && !batch.isEmpty()) {
+            long mergeStarted = profiling ? System.nanoTime() : 0;
+            if (!commitTile(refinementId, frame, batch)) return;
+            if (profiling) {
+                profile.cacheMergeNanos.add(System.nanoTime() - mergeStarted);
+                profile.cacheBatches.increment();
+            }
+        }
 
         callbackExecutor.execute(() -> {
             if (isCurrent(refinementId)) {
                 onTileReady.accept(tile, tileColors);
             }
         });
+    }
+
+    /** Serialize admission with frame replacement, cache shifting and cancellation. */
+    private synchronized boolean commitTile(long refinementId, RenderFrame frame,
+                                            AntialiasSampleCache.Batch batch) {
+        if (shouldCancel(refinementId) || cachedFrame != frame) return false;
+        sampleCache.merge(batch);
+        return true;
     }
 
     /** Recolors the completed base frame and every cached AA candidate. */
@@ -465,13 +515,14 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             int pixelX,
             int pixelY,
             SamplingPattern pattern,
-            java.util.function.BooleanSupplier cancelled
+            java.util.function.BooleanSupplier cancelled,
+            FractalSample[] samples
     ) {
         if (grid == null) {
             throw new IllegalArgumentException("Deep AA requires a precise render grid");
         }
-        int sampleGridSize = deepSampleGridSize(data, pixelX, pixelY);
-        FractalSample[] samples = new FractalSample[sampleGridSize * sampleGridSize];
+        int sampleGridSize = samples.length == DEEP_LOW_SAMPLE_GRID * DEEP_LOW_SAMPLE_GRID
+                ? DEEP_LOW_SAMPLE_GRID : DEEP_HIGH_SAMPLE_GRID;
         BigDecimal centerReal = grid.realAt(pixelX);
         BigDecimal centerImaginary = grid.imaginaryAt(pixelY);
         int index = 0;
@@ -561,9 +612,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             int maxIterations,
             int pixelX,
             int pixelY,
-            SamplingPattern pattern
+            SamplingPattern pattern,
+            FractalSample[] samples
     ) {
-        FractalSample[] samples = new FractalSample[SAMPLE_GRID * SAMPLE_GRID];
         double centerReal = grid.realAt(pixelX);
         double centerImaginary = grid.imaginaryAt(pixelY);
         int index = 0;
@@ -744,6 +795,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
     private static final class MutableProfile {
         private long baseColorNanos;
+        private long cachePreparationNanos;
+        private final LongAdder cacheMergeNanos = new LongAdder();
+        private final LongAdder cacheBatches = new LongAdder();
         private final LongAdder candidateNanos = new LongAdder();
         private final LongAdder samplingNanos = new LongAdder();
         private final LongAdder cacheColorNanos = new LongAdder();
@@ -767,7 +821,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             long candidateCriticalPath = candidateByWorker.values().stream()
                     .mapToLong(LongAdder::sum).max().orElse(0);
             return new Profile(totalNanos, baseColorNanos, candidateNanos.sum(), candidateCriticalPath,
-                    samplingNanos.sum(), cacheColorNanos.sum(), testedPixels.sum(), candidates.sum(), samples.sum());
+                    samplingNanos.sum(), cacheColorNanos.sum(), testedPixels.sum(), candidates.sum(), samples.sum(),
+                    cachePreparationNanos, cacheMergeNanos.sum(), cacheBatches.sum());
         }
     }
 

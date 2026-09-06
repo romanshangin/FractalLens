@@ -2,6 +2,7 @@ package com.shangin.fractal.render;
 
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
+import com.shangin.fractal.coloring.SmoothColorLookup;
 import com.shangin.fractal.formula.FractalSample;
 import org.junit.jupiter.api.Test;
 
@@ -58,5 +59,66 @@ class AntialiasSampleCacheTest {
             samples[index] = new FractalSample(10, true, smooth + index, 0.0);
         }
         return samples;
+    }
+
+    @Test
+    void tileBatchCopiesScratchSamplesAndColorsWithoutPublishingPartialEntries() {
+        var coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        var lookup = new SmoothColorLookup(coloring);
+        var cache = new AntialiasSampleCache(1024);
+        var reference = new AntialiasSampleCache(1024);
+        var scratch = samples(12, 16);
+        reference.put(3, scratch, coloring);
+        int expected = reference.color(3, lookup);
+        var batch = cache.newBatch(2, coloring);
+        assertEquals(expected, batch.add(3, scratch, lookup));
+        java.util.Arrays.fill(scratch, new FractalSample(100, false, 0, 0));
+        assertEquals(0xFF000000, batch.add(4, scratch, lookup));
+        assertEquals(0, cache.size(), "Workers must not publish a partially calculated tile");
+        cache.merge(batch);
+        assertEquals(expected, cache.color(3, lookup));
+        assertEquals(0xFF000000, cache.color(4, lookup));
+        assertThrows(IllegalArgumentException.class, () -> cache.merge(batch));
+    }
+
+    @Test
+    void tileMergeKeepsMemoryBoundAndInvalidatesSnapshotAndColorScale() {
+        var cache = new AntialiasSampleCache(16);
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0);
+        cache.put(1, samples(4, 2), ice);
+        var retained = cache.snapshotFor(ice);
+        var batch = cache.newBatch(3, ice);
+        var lookup = new SmoothColorLookup(ice);
+        batch.add(2, samples(8, 2), lookup);
+        batch.add(3, samples(12, 2), lookup);
+        cache.merge(batch);
+        assertEquals(16, cache.usedBytes());
+        assertFalse(cache.contains(1));
+        assertTrue(cache.contains(2));
+        assertTrue(cache.contains(3));
+        assertEquals(1, retained.size());
+        var mask = retained.pixelMask();
+        mask.clear();
+        assertTrue(retained.pixelMask().get(1), "Returned masks cannot mutate a retained snapshot");
+        var changedScale = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.04, 0);
+        var changed = cache.newBatch(1, changedScale);
+        changed.add(7, samples(20, 2), new SmoothColorLookup(changedScale));
+        cache.merge(changed);
+        assertEquals(1, cache.size());
+        assertEquals(0, cache.snapshotFor(ice).size());
+        assertEquals(1, cache.snapshotFor(changedScale).size());
+    }
+
+    @Test
+    void disabledOrTooSmallCacheRequestsTheUncachedColorPath() {
+        var coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        for (int budget : new int[]{0, 35}) {
+            var cache = new AntialiasSampleCache(budget);
+            var batch = cache.newBatch(1, coloring);
+            assertNull(batch.add(0, samples(10, 16), new SmoothColorLookup(coloring)));
+            assertTrue(batch.isEmpty());
+            cache.merge(batch);
+            assertEquals(0, cache.size());
+        }
     }
 }

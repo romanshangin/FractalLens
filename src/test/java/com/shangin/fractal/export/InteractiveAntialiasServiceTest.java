@@ -661,4 +661,85 @@ class InteractiveAntialiasServiceTest {
         }
         return true;
     }
+
+    @Test
+    void lateCancelledWorkerCannotInsertSamplesIntoReplacementFramesCache() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        RenderFrame old = checkerFrame(new FractalCalculator((r, i, limit) -> {
+            entered.countDown();
+            try {
+                if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("Worker was not released");
+            } catch (InterruptedException e) { throw new AssertionError(e); }
+            return new FractalSample(1, true, 3, 0);
+        }));
+        RenderFrame replacement = checkerFrame(new FractalCalculator((r, i, limit) ->
+                new FractalSample(limit, false, 0, 0)));
+        for (int i = 0; i < 16; i++) replacement.fractalData().set(i, new FractalSample(20, false, 0, 0));
+        var coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        var cache = new AntialiasSampleCache();
+        try (var service = new InteractiveAntialiasService(cache, false, 1)) {
+            service.refine(old, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(4, 4),
+                    Runnable::run, (region, colors) -> fail("Stale tile published"),
+                    () -> fail("Stale completion"), exception -> fail(exception));
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            var completed = new java.util.concurrent.CompletableFuture<int[]>();
+            int[] output = new int[16];
+            service.refine(replacement, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(4, 4),
+                    Runnable::run, (region, colors) -> System.arraycopy(colors, 0, output, 0, colors.length),
+                    () -> completed.complete(output), completed::completeExceptionally);
+            release.countDown();
+            int[] black = new int[16];
+            Arrays.fill(black, 0xFF000000);
+            assertArrayEquals(black, completed.get(5, TimeUnit.SECONDS));
+            assertArrayEquals(black, service.recolorCached(replacement, coloring));
+            assertEquals(0, cache.size(), "Cancelled work must not contaminate the new frame");
+        } finally { release.countDown(); }
+    }
+
+    @Test
+    void cachedRefinementRecolorsWithoutSamplingButInvalidatesChangedPatternAndScale() throws Exception {
+        AtomicInteger samples = new AtomicInteger();
+        RenderFrame frame = checkerFrame(new FractalCalculator((r, i, limit) -> {
+            samples.incrementAndGet();
+            return new FractalSample(1, true, 3 + r * 0.01, i * 0.01);
+        }));
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0);
+        var fire = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.02, 0.5);
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            int[] first = refineAndWait(service, frame, ice, SamplingPattern.REGULAR);
+            assertEquals(16 * 16, samples.get());
+            assertEquals(1, service.lastProfile().cacheBatches());
+            assertEquals(16 * 16, service.lastProfile().samples());
+            int[] recolored = refineAndWait(service, frame, fire, SamplingPattern.REGULAR);
+            assertFalse(Arrays.equals(first, recolored));
+            assertArrayEquals(service.recolorCached(frame, fire), recolored);
+            assertEquals(16 * 16, samples.get(), "Retained samples should not be recalculated");
+            assertEquals(0, service.lastProfile().cacheBatches());
+            refineAndWait(service, frame, fire, SamplingPattern.DETERMINISTIC_JITTER);
+            assertEquals(2 * 16 * 16, samples.get(), "Changed sample positions invalidate retained samples");
+            var scale = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.04, 0.5);
+            refineAndWait(service, frame, scale, SamplingPattern.DETERMINISTIC_JITTER);
+            assertEquals(3 * 16 * 16, samples.get(), "Encoded phases depend on color scale");
+        }
+    }
+
+    private static RenderFrame checkerFrame(FractalCalculator calculator) {
+        RenderFrame frame = RenderFrame.create(new RenderRequest(calculator,
+                FractalPreset.BURNING_SHIP.defaultViewport(), 4, 4, 20));
+        for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) {
+            frame.fractalData().set(y * 4 + x, new FractalSample(1, (x + y) % 2 == 0, 3, 0));
+        }
+        frame.validity().markReady(new RenderRegion(0, 0, 4, 4));
+        return frame;
+    }
+
+    private static int[] refineAndWait(InteractiveAntialiasService service, RenderFrame frame,
+                                      SmoothPaletteColoring coloring, SamplingPattern pattern) throws Exception {
+        var done = new java.util.concurrent.CompletableFuture<int[]>();
+        int[] output = new int[16];
+        service.refine(frame, coloring, pattern, RefinedPixelSnapshot.empty(4, 4), Runnable::run,
+                (region, colors) -> System.arraycopy(colors, 0, output, 0, colors.length),
+                () -> done.complete(output), done::completeExceptionally);
+        return done.get(5, TimeUnit.SECONDS);
+    }
 }
