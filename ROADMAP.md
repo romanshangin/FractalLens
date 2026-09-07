@@ -387,15 +387,21 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   rejection, centered-error and double-single results against current code;
   recompute the cited Retina GPU medians from saved samples. Record the analysis
   separately from new performance measurements.
-- [ ] Build a reproducible fixture matrix with exact viewport coordinates,
+- [x] Build a reproducible fixture matrix with exact viewport coordinates,
   actual adaptive/fixed iteration caps, formula/features, AA pattern, dimensions,
   sample accuracy and cache state. Include Mandelbrot/Julia, other formulas,
   direct/deep transitions, glitch-heavy and BLA-friendly scenes, scaled-exponent
   zoom, pan overlap, reverse navigation, resize-then-drag and cancellation.
+  The versioned [matrix and headless runner](BASELINE_BENCHMARK.md) contain
+  28 sequences / 37 steps at three render sizes, with a pinned exact manifest
+  and behavioral regressions. See [validation](BASELINE_VALIDATION.md).
 - [ ] Measure formula/backend, returned-ARGB, JavaFX base/AA publication and
   input-to-visible-update scopes separately. Record first useful region,
   cold/warm full-frame time and cancellation tails; label physical scanout as
   unmeasured until a dedicated display experiment exists.
+  Headless backend, returned-ARGB, first useful sample region, production AA
+  and post-first-region cancellation scopes now share the 9.1 matrix. Migrating
+  JavaFX/publication/input scopes to the same fixtures remains open.
 - [x] Add a headless production-AA benchmark, an explicit CPU-only JavaFX
   comparison mode, and cache preparation/merge timing and batch counters.
   Record separate contention profiles and 30-sample comparisons across three

@@ -1,5 +1,9 @@
 # Frame reuse benchmark
 
+For the versioned roadmap 9.1 scene/navigation matrix and separate backend,
+returned-ARGB and production-AA scopes, see [baseline benchmark](BASELINE_BENCHMARK.md).
+The original frame-reuse profile below remains available for historical comparisons.
+
 Run the dedicated benchmark profile:
 
 ```shell
