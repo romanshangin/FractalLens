@@ -29,6 +29,10 @@ import java.util.Optional;
  */
 public final class FractalSurface extends Region {
 
+    private final InteractionLatency latency = new InteractionLatency();
+
+    public InteractionLatency latency() { return latency; }
+
     private final Affine previewTransform = new Affine();
     private final Affine retainedPreviewTransform = new Affine();
     private final Affine progressivePreviewTransform = new Affine();
@@ -221,6 +225,7 @@ public final class FractalSurface extends Region {
         stagingFrame.pixelBuffer().updateBuffer(
                 pixelBuffer -> dirtyRegion
         );
+        if (progressiveImageView.getImage() == stagingFrame.image()) latency.mark("base_publish");
 
     }
 
@@ -311,6 +316,7 @@ public final class FractalSurface extends Region {
         retainedProgressFrame = null;
         retainedProgressRenderFrame = null;
         retainedProgressRefinementValidity = null;
+        latency.mark("frame_promoted");
     }
 
     public void resizeBuffer(
@@ -369,6 +375,7 @@ public final class FractalSurface extends Region {
         }
         applyTile(displayedFrame, region, colors);
         displayedRefinementValidity.markReady(region);
+        latency.mark("aa_publish");
     }
 
     /** Publishes one quality-mode AA tile into the current staging frame. */
@@ -382,6 +389,7 @@ public final class FractalSurface extends Region {
         }
         applyTile(stagingFrame, region, colors);
         stagingRefinementValidity.markReady(region);
+        latency.mark("aa_publish");
     }
 
     /** Copies current refined colors and their validity for background AA reuse. */
@@ -546,6 +554,9 @@ public final class FractalSurface extends Region {
                     width,
                     height
             );
+        }
+        if (displayedViewport != null || stagingRenderFrame != null || retainedProgressRenderFrame != null) {
+            latency.preview();
         }
     }
 
@@ -755,6 +766,10 @@ public final class FractalSurface extends Region {
         );
 
         stagingFrame.update();
+        if (latency.isEnabled() && validity.readyPixelCount() > 0
+                && progressiveImageView.getImage() == stagingFrame.image()) {
+            latency.mark("base_publish");
+        }
     }
 
     /** Keeps a visible partial render when its samples are shifted by a pan. */

@@ -171,6 +171,7 @@ public final class FractalRenderController implements AutoCloseable {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
+        surface.latency().renderStarted();
         long renderGeneration = renderActivity.begin();
         recolorEpoch.incrementAndGet();
         antialiasService.cancelCurrent();
@@ -253,6 +254,7 @@ public final class FractalRenderController implements AutoCloseable {
             }
         }
 
+        surface.latency().mark("reuse_planned");
         RenderFrame sourceFrame = reuseSelection.sourceFrame();
         FrameReuseResult reuseResult = reuseSelection.result();
 
@@ -271,6 +273,8 @@ public final class FractalRenderController implements AutoCloseable {
                     targetFrame,
                     reuseResult.shift().orElseThrow());
         }
+
+        surface.latency().mark("aa_reuse_prepared");
 
         /* Keep the displaced zoom level so a reverse zoom can resume it. */
         if (sourceFrame != previousActiveFrame) {
@@ -329,6 +333,8 @@ public final class FractalRenderController implements AutoCloseable {
             );
         }
 
+        surface.latency().mark("surface_prepared");
+
         // A crop of a completed image is ready synchronously, including its AA.
         if (preserveIterationLimit && imageReused && targetFrame.isComplete()
                 && (!refinedDisplay || surface.hasCompleteRefinement(targetFrame))) {
@@ -347,9 +353,10 @@ public final class FractalRenderController implements AutoCloseable {
          * --------------------------------
          */
 
+        surface.latency().mark("render_submit");
         renderService.render(
                 activeFrame,
-                Platform::runLater,
+                surface.latency().callbacks("base", Platform::runLater),
 
                 progress -> {
                     surface.displayProgress(
@@ -360,6 +367,7 @@ public final class FractalRenderController implements AutoCloseable {
                 },
 
                 completedFrame -> {
+                    surface.latency().mark("base_complete");
 
                     frameCache.put(completedFrame);
 
@@ -373,7 +381,7 @@ public final class FractalRenderController implements AutoCloseable {
                                 completedColoring,
                                 scene.antialiasing().samplingPattern(),
                                 surface.refinedPixelSnapshot(completedFrame),
-                                Platform::runLater,
+                                surface.latency().callbacks("aa", Platform::runLater),
                                 (region, colors) -> surface.displayRefinedTile(
                                         completedFrame,
                                         region,
@@ -431,7 +439,7 @@ public final class FractalRenderController implements AutoCloseable {
                             completedColoring,
                             scene.antialiasing().samplingPattern(),
                             surface.refinedPixelSnapshot(completedFrame),
-                            Platform::runLater,
+                            surface.latency().callbacks("aa", Platform::runLater),
                             (region, colors) -> surface.applyAntialiasing(
                                     completedFrame,
                                     region,
@@ -489,7 +497,7 @@ public final class FractalRenderController implements AutoCloseable {
                 coloring,
                 samplingPattern,
                 surface.refinedPixelSnapshot(frame),
-                Platform::runLater,
+                surface.latency().callbacks("aa", Platform::runLater),
                 (region, colors) -> surface.applyAntialiasing(
                         frame,
                         region,
@@ -509,7 +517,10 @@ public final class FractalRenderController implements AutoCloseable {
     }
 
     public void setOnRenderStatusChanged(Consumer<RenderStatus> handler) {
-        renderActivity.setStatusListener(handler);
+        renderActivity.setStatusListener(status -> {
+            if (status.state() == RenderStatus.State.COMPLETE) surface.latency().mark("complete");
+            handler.accept(status);
+        });
     }
 
     public void setOnRenderingChanged(Consumer<Boolean> handler) {

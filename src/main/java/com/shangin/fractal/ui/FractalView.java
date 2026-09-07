@@ -131,6 +131,21 @@ public class FractalView extends StackPane {
         colorCycleTimer.start();
     }
 
+    public InteractionLatency latency() { return fractalSurface.latency(); }
+
+    boolean isLatencyIdle() {
+        return !rendering && !resizePending && !panning && !interactionRender.hasPendingRender();
+    }
+
+    String latencyFixture() {
+        CompletedRender completed = fractalSurface.completedRender();
+        if (completed == null) return "incomplete";
+        var request = completed.frame().request();
+        return "width=" + request.width() + "; height=" + request.height()
+                + "; viewport=" + request.viewport() + "; iterations=" + request.maxIterations()
+                + "; sampling=" + completed.scene().antialiasing().samplingPattern();
+    }
+
     public void setFractal(FractalPreset preset) {
         dismissContextMenu();
         int width = (int) getWidth();
@@ -458,11 +473,13 @@ public class FractalView extends StackPane {
         });
 
         setOnScrollFinished(event -> {
+            latency().boundary("scroll_finished");
             trackpadScrollActive = false;
             event.consume();
         });
 
         setOnScroll(event -> {
+            latency().input("scroll");
             if (trackpadScrollActive || event.isInertia() || event.getDeltaX() != 0.0) {
                 panByTrackpadScroll(event);
                 event.consume();
@@ -570,11 +587,13 @@ public class FractalView extends StackPane {
         });
 
         setOnZoomFinished(event -> {
+            latency().boundary("pinch_finished");
             interactionRender.zoomFinished();
             event.consume();
         });
 
         setOnZoom(event -> {
+            latency().input("pinch");
             double surfaceWidth = fractalSurface.getWidth();
             double surfaceHeight = fractalSurface.getHeight();
             int logicalWidth = (int) surfaceWidth;
@@ -836,6 +855,7 @@ public class FractalView extends StackPane {
         });
 
         setOnMouseDragged(event -> {
+            latency().input("drag");
             if (!panning || !event.isPrimaryButtonDown()) {
                 return;
             }
@@ -872,6 +892,7 @@ public class FractalView extends StackPane {
         });
 
         setOnMouseReleased(event -> {
+            latency().boundary("drag_released");
             if (!panning) {
                 return;
             }

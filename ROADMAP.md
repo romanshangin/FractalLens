@@ -400,6 +400,11 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   comparison mode, and cache preparation/merge timing and batch counters.
   Record separate contention profiles and 30-sample comparisons across three
   fresh process pairs in [CPU AA results](CPU_AA_OPTIMIZATION_RESULTS.md).
+- [x] Measure production scroll/pinch/drag handler latency with generation-aware
+  callback/publication tracing, no-screen controls and a calibrated screen-marker
+  capture proxy. Isolate the roughly 1.82 s fully-ready validity-mask scan at
+  2400x1520; physical scanout remains unmeasured. See
+  [interaction latency results](INTERACTION_LATENCY_RESULTS.md).
 - [ ] Extend diagnostics to allocation, task scheduling, cancellation tails and
   long-duration memory/thermal behavior. Per-worker stage intervals overlap;
   they are not additive frame costs or process CPU utilization.

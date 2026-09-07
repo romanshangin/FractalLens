@@ -173,6 +173,12 @@
             </properties>
         </profile>
         <profile>
+            <id>interaction-latency</id>
+            <properties>
+                <fractal.mainClass>com.shangin.fractal/com.shangin.fractal.ui.InteractionLatencyBenchmark</fractal.mainClass>
+            </properties>
+        </profile>
+        <profile>
             <id>gpu-render-benchmark</id>
             <properties>
                 <fractal.mainClass>com.shangin.fractal/com.shangin.fractal.ui.GpuRenderBenchmark</fractal.mainClass>

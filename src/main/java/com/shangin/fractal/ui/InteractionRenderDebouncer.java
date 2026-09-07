@@ -23,6 +23,8 @@ final class InteractionRenderDebouncer {
         this.render = Objects.requireNonNull(render);
     }
 
+    boolean hasPendingRender() { return pending; }
+
     void requestZoomRender() {
         pendingZoom = true;
         // Keep the existing coalescing during a live pinch; its end flushes immediately.
