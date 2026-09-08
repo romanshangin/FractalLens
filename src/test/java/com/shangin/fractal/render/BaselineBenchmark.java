@@ -42,7 +42,7 @@ public final class BaselineBenchmark {
         }
     }
 
-    private static List<BaselineFixtures.Fixture> selectedFixtures() {
+    static List<BaselineFixtures.Fixture> selectedFixtures() {
         String filter = System.getProperty("baseline.fixtures", "all");
         Set<String> requested = new LinkedHashSet<>(List.of(filter.split(",")));
         Set<String> found = new HashSet<>();
@@ -180,7 +180,7 @@ public final class BaselineBenchmark {
                 cancelledAt < 0 ? -1 : cancelledAt - start, cancelledAt < 0 ? -1 : backendEnd - cancelledAt, regions.get());
     }
 
-    private static long[] refine(BaselineFixtures.Step step, InteractiveAntialiasService service, RenderFrame frame,
+    static long[] refine(BaselineFixtures.Step step, InteractiveAntialiasService service, RenderFrame frame,
                                  ColoringStrategy coloring, int[] pixels, boolean deep) throws Exception {
         CompletableFuture<Void> done = new CompletableFuture<>();
         AtomicLong first = new AtomicLong(-1);
@@ -216,12 +216,12 @@ public final class BaselineBenchmark {
 
     private static long mix(long hash, long value) { return (hash ^ value) * 0x100000001b3L; }
     private static double ms(long nanos) { return nanos < 0 ? -1 : nanos / 1e6; }
-    private static long usedHeap() { return Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory(); }
-    private static long gcCount() {
+    static long usedHeap() { return Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory(); }
+    static long gcCount() {
         var values = ManagementFactory.getGarbageCollectorMXBeans().stream().mapToLong(bean -> bean.getCollectionCount()).toArray();
         return Arrays.stream(values).anyMatch(v -> v < 0) ? -1 : Arrays.stream(values).sum();
     }
-    private static long gcMillis() {
+    static long gcMillis() {
         var values = ManagementFactory.getGarbageCollectorMXBeans().stream().mapToLong(bean -> bean.getCollectionTime()).toArray();
         return Arrays.stream(values).anyMatch(v -> v < 0) ? -1 : Arrays.stream(values).sum();
     }

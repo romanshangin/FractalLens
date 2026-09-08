@@ -7,6 +7,7 @@ import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.InteractiveRenderMode;
+import javafx.beans.value.ChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.image.ImageView;
@@ -57,6 +58,11 @@ public final class FractalSurface extends Region {
     private boolean stagingShowsBaseProgress;
 
     private Runnable renderScaleChangedHandler = () -> {};
+    private Window observedWindow;
+    private final ChangeListener<Window> windowListener =
+            (observable, oldWindow, newWindow) -> observeWindow(newWindow);
+    private final ChangeListener<Number> outputScaleListener =
+            (observable, oldScale, newScale) -> updateWindowScale();
 
     private int renderWidth;
     private int renderHeight;
@@ -677,46 +683,35 @@ public final class FractalSurface extends Region {
     }
 
     private void configureHiDpi() {
-        sceneProperty().addListener(
-                (observable, oldScene, newScene) -> {
-                    if (newScene == null) {
-                        return;
-                    }
-
-                    newScene.windowProperty().addListener(
-                            (obs, oldWindow, newWindow) -> {
-                                if (newWindow != null) {
-                                    configureWindowScale(newWindow);
-                                }
-                            }
-                    );
-
-                    if (newScene.getWindow() != null) {
-                        configureWindowScale(
-                                newScene.getWindow()
-                        );
-                    }
-                }
-        );
+        sceneProperty().addListener((observable, oldScene, newScene) -> {
+            // Scene and Window properties own strong listeners. A removed surface
+            // must release both subscriptions, including when its scene becomes null.
+            if (oldScene != null) oldScene.windowProperty().removeListener(windowListener);
+            observeWindow(null);
+            if (newScene != null) {
+                newScene.windowProperty().addListener(windowListener);
+                observeWindow(newScene.getWindow());
+            }
+        });
     }
 
-    private void configureWindowScale(Window window) {
-        setOutputScale(window.getOutputScaleX(), window.getOutputScaleY());
+    private void observeWindow(Window window) {
+        if (observedWindow == window) return;
+        if (observedWindow != null) {
+            observedWindow.outputScaleXProperty().removeListener(outputScaleListener);
+            observedWindow.outputScaleYProperty().removeListener(outputScaleListener);
+        }
+        observedWindow = window;
+        if (window != null) {
+            window.outputScaleXProperty().addListener(outputScaleListener);
+            window.outputScaleYProperty().addListener(outputScaleListener);
+            updateWindowScale();
+        }
+    }
 
-        window.outputScaleXProperty().addListener(
-                (obs, oldValue, newValue) -> {
-                    setOutputScale(window.getOutputScaleX(), window.getOutputScaleY());
-                    renderScaleChangedHandler.run();
-                }
-        );
-
-        window.outputScaleYProperty().addListener(
-                (obs, oldValue, newValue) -> {
-                    setOutputScale(window.getOutputScaleX(), window.getOutputScaleY());
-                    renderScaleChangedHandler.run();
-                }
-        );
-
+    private void updateWindowScale() {
+        if (observedWindow == null) return;
+        setOutputScale(observedWindow.getOutputScaleX(), observedWindow.getOutputScaleY());
         renderScaleChangedHandler.run();
     }
 

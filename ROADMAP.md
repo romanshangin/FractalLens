@@ -400,8 +400,12 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   cold/warm full-frame time and cancellation tails; label physical scanout as
   unmeasured until a dedicated display experiment exists.
   Headless backend, returned-ARGB, first useful sample region, production AA
-  and post-first-region cancellation scopes now share the 9.1 matrix. Migrating
-  JavaFX/publication/input scopes to the same fixtures remains open.
+  and post-first-region cancellation scopes share the 9.1 matrix. The
+  [JavaFX publication runner](BASELINE_FX_BENCHMARK.md) now uses the same inputs
+  for Fast/Refined base/AA publication and request-bound post-layout observations,
+  with exact sample/ARGB controls. See [validation](BASELINE_FX_VALIDATION.md).
+  Migrating production input handlers to the matrix remains open; render-request
+  timestamps and post-layout observations are not physical input/display latency.
 - [x] Add a headless production-AA benchmark, an explicit CPU-only JavaFX
   comparison mode, and cache preparation/merge timing and batch counters.
   Record separate contention profiles and 30-sample comparisons across three
@@ -414,6 +418,10 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
 - [ ] Extend diagnostics to allocation, task scheduling, cancellation tails and
   long-duration memory/thermal behavior. Per-worker stage intervals overlap;
   they are not additive frame costs or process CPU utilization.
+  The long FX matrix exposed detached surfaces retained by Scene/Window scale
+  listeners; unsubscribe-on-detach is now regression-tested. FX rows also record
+  heap/GC observations. Allocation attribution and sustained thermal/native-memory
+  measurements remain open; see [the ownership fix](BASELINE_FX_VALIDATION.md).
 - [ ] Use uninstrumented alternating pairs for decisions and separate JFR/native
   profiles for attribution. Confirm promising changes with at least 30 measured
   pairs and multiple process starts; record median/tails, hardware/runtime,
