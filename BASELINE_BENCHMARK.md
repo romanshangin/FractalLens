@@ -4,11 +4,12 @@ Matrix version: `9.1-v1`. The reviewed [manifest](BASELINE_FIXTURES.csv)
 contains 28 sequences / 37 steps at each of 480x270, 1512x982 and 3024x1964.
 Dimensions are **render pixels**, not logical window dimensions. Resize adds
 128x72 render pixels. This is a reproducibility foundation; it does not close
-the input-handler, allocation/scheduling or sustained thermal baseline.
+the allocation/scheduling or sustained thermal baseline.
 
 Follow-up: the [JavaFX publication harness](BASELINE_FX_BENCHMARK.md) now shares
-this matrix. Production input-handler migration and sustained diagnostics
-remain open; see [the new validation](BASELINE_FX_VALIDATION.md).
+this matrix. The [production input runner](BASELINE_INPUT_BENCHMARK.md) also uses
+its fixtures and records actual camera/controller requests for comparison; see
+[input validation](BASELINE_INPUT_VALIDATION.md). Sustained diagnostics remain open.
 
 ## Workloads and contracts
 
@@ -139,7 +140,8 @@ yet colored or displayed. Physical scanout and hardware/OS input latency remain
 unmeasured. Use the separate [JavaFX render](GPU_RENDER_BENCHMARK_8_5_RESULTS.md)
 and [interaction](INTERACTION_LATENCY.md) harnesses for their existing scopes.
 The new [CPU JavaFX publication harness](BASELINE_FX_BENCHMARK.md) uses this
-matrix; production input handlers have not yet been migrated.
+matrix. The [production input runner](BASELINE_INPUT_BENCHMARK.md) connects real
+handlers and records exact actual jobs alongside the canonical manifest.
 
 `cold_fixture` is the first sequence on a new backend and AA service. It is
 **not cold JVM startup**, because earlier fixtures/classes may already be warm.

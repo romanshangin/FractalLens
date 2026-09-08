@@ -684,6 +684,7 @@ public class FractalView extends StackPane {
     }
 
     private void scheduleResize() {
+        latency().input("resize");
         dismissContextMenu();
         resizePending = true;
         stopColorCyclingForSceneChange();

@@ -226,11 +226,15 @@ public final class Viewport {
     }
 
     public Viewport shiftedByPixels(int shiftX, int shiftY, int width, int height) {
+        return shiftedByPixels(BigDecimal.valueOf(shiftX), BigDecimal.valueOf(shiftY), width, height);
+    }
+
+    private Viewport shiftedByPixels(BigDecimal shiftX, BigDecimal shiftY, int width, int height) {
         validateDimensions(width, height);
         BigDecimal realShift = realUnitsPerPixelExact(width, height)
-                .multiply(BigDecimal.valueOf(shiftX), mathContext);
+                .multiply(shiftX, mathContext);
         BigDecimal imaginaryShift = imaginaryUnitsPerPixelExact(height)
-                .multiply(BigDecimal.valueOf(shiftY), mathContext);
+                .multiply(shiftY, mathContext);
         return new Viewport(new PreciseComplex(
                 center.real().subtract(realShift, mathContext),
                 center.imaginary().add(imaginaryShift, mathContext)), scale);
@@ -243,8 +247,11 @@ public final class Viewport {
                 .divide(reference.realUnitsPerPixelExact(width, height), mathContext);
         BigDecimal rawShiftY = center.imaginary().subtract(reference.center.imaginary(), mathContext)
                 .divide(reference.imaginaryUnitsPerPixelExact(height), mathContext);
-        int shiftX = rawShiftX.setScale(0, RoundingMode.HALF_UP).intValueExact();
-        int shiftY = rawShiftY.setScale(0, RoundingMode.HALF_UP).intValueExact();
+        // Clamping a deep viewport back into preset bounds can move it far more
+        // than Integer.MAX_VALUE pixels. Grid alignment is a coordinate operation;
+        // only the later overlap/reuse planner needs bounded integer offsets.
+        BigDecimal shiftX = rawShiftX.setScale(0, RoundingMode.HALF_UP);
+        BigDecimal shiftY = rawShiftY.setScale(0, RoundingMode.HALF_UP);
         return reference.shiftedByPixels(shiftX, shiftY, width, height);
     }
 

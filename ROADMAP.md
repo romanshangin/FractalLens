@@ -395,7 +395,7 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   The versioned [matrix and headless runner](BASELINE_BENCHMARK.md) contain
   28 sequences / 37 steps at three render sizes, with a pinned exact manifest
   and behavioral regressions. See [validation](BASELINE_VALIDATION.md).
-- [ ] Measure formula/backend, returned-ARGB, JavaFX base/AA publication and
+- [x] Measure formula/backend, returned-ARGB, JavaFX base/AA publication and
   input-to-visible-update scopes separately. Record first useful region,
   cold/warm full-frame time and cancellation tails; label physical scanout as
   unmeasured until a dedicated display experiment exists.
@@ -404,7 +404,12 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   [JavaFX publication runner](BASELINE_FX_BENCHMARK.md) now uses the same inputs
   for Fast/Refined base/AA publication and request-bound post-layout observations,
   with exact sample/ARGB controls. See [validation](BASELINE_FX_VALIDATION.md).
-  Migrating production input handlers to the matrix remains open; render-request
+  The [production input runner](BASELINE_INPUT_BENCHMARK.md) now connects scroll,
+  pinch, trackpad, drag, resize and input-driven replacement to the same fixtures.
+  Exact actual camera/controller jobs and generation-bound traces distinguish UI
+  policy from canonical requests; sample/ARGB controls preserve verified reuse.
+  See [input validation](BASELINE_INPUT_VALIDATION.md). The matrix also exposed
+  and regression-tested scaled-exponent pan grid-snap overflow. Handler-entry
   timestamps and post-layout observations are not physical input/display latency.
 - [x] Add a headless production-AA benchmark, an explicit CPU-only JavaFX
   comparison mode, and cache preparation/merge timing and batch counters.

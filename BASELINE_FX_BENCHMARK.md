@@ -11,9 +11,10 @@ their buffers and sample frames to be collected. Rendering policy is unchanged.
 
 This is a component-pipeline benchmark. It starts from an exact render request,
 not a `FractalView` input event, and does not include camera fitting, input
-debounce, OS input delivery or physical scanout. The separate
-[interaction benchmark](INTERACTION_LATENCY.md) remains the production-handler
-measurement. Migrating those handlers to the matrix is still open in 9.1.
+debounce, OS input delivery or physical scanout. The [production input runner](BASELINE_INPUT_BENCHMARK.md) now connects those
+handlers to the shared fixtures, preserving actual camera/controller requests.
+The older [interaction benchmark](INTERACTION_LATENCY.md) retains its separate
+screen-marker capture experiment.
 
 ## Presentation and cache contract
 
