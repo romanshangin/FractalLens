@@ -25,6 +25,13 @@ public final class FractalRenderService implements AutoCloseable {
     private final GpuRuntime gpuRuntime;
     private final AtomicLong generation = new AtomicLong();
     private Future<?> currentRender;
+    private RenderDiagnostics currentDiagnostics;
+    private Consumer<RenderDiagnostics> diagnosticsListener;
+
+    /** Opt-in only: called at submission; completion includes actual worker exits. */
+    public synchronized void setDiagnosticsListener(Consumer<RenderDiagnostics> listener) {
+        diagnosticsListener = listener;
+    }
 
     private static final long PROGRESS_INTERVAL_MS = 16;
 
@@ -147,26 +154,28 @@ public final class FractalRenderService implements AutoCloseable {
             Consumer<RenderFrame> onSuccess,
             Consumer<Throwable> onError
     ) {
+        markCancellationRequested();
         long renderId = generation.incrementAndGet();
 
         cancelCurrentFuture();
 
-        currentRender = coordinator.submit(() ->
-                        executeRender(
-                                renderId,
-                                frame,
-                                callbackExecutor,
-                                onProgress,
-                                onCalculationComplete,
-                                onTileTimingComplete,
-                                onSuccess,
-                                onError
-                        )
-                );
+        RenderDiagnostics diagnostics = RenderDiagnostics.enabled() && diagnosticsListener != null
+                ? new RenderDiagnostics(renderId) : null;
+        currentDiagnostics = diagnostics;
+        if (diagnostics != null) diagnosticsListener.accept(diagnostics);
+        Runnable operation = () -> executeRender(renderId, frame, callbackExecutor, onProgress,
+                onCalculationComplete, onTileTimingComplete, onSuccess, onError, diagnostics);
+        if (diagnostics == null) currentRender = coordinator.submit(operation);
+        else {
+            var task = diagnostics.coordinatorTask(operation);
+            currentRender = task;
+            coordinator.execute(task);
+        }
     }
 
     /** Cancels the active generation and suppresses any pending callbacks. */
     public synchronized void cancelCurrent() {
+        markCancellationRequested();
         generation.incrementAndGet();
 
         cancelCurrentFuture();
@@ -180,7 +189,8 @@ public final class FractalRenderService implements AutoCloseable {
             LongConsumer onCalculationComplete,
             Consumer<TileTimingStats> onTileTimingComplete,
             Consumer<RenderFrame> onSuccess,
-            Consumer<Throwable> onError
+            Consumer<Throwable> onError,
+            RenderDiagnostics diagnostics
     ) {
         ProgressBatcher progressBatcher =
                 new ProgressBatcher(
@@ -198,12 +208,16 @@ public final class FractalRenderService implements AutoCloseable {
 
             RenderFrame resultFrame;
 
-            if (onTileTimingComplete == null) {
-                resultFrame = backend.render(frame, () -> shouldCancel(renderId),
-                        progressBatcher::add, null);
-            } else {
-                resultFrame = backend.render(frame, () -> shouldCancel(renderId),
-                        progressBatcher::add, onTileTimingComplete);
+            java.util.function.BooleanSupplier cancelled = diagnostics == null ? () -> shouldCancel(renderId) : () -> {
+                boolean value = shouldCancel(renderId);
+                if (value) diagnostics.cancellationObserved();
+                return value;
+            };
+            RenderDiagnostics.mark("backend_start");
+            try {
+                resultFrame = backend.render(frame, cancelled, progressBatcher::add, onTileTimingComplete);
+            } finally {
+                if (diagnostics != null) diagnostics.backendExited();
             }
 
             if (shouldCancel(renderId)) {
@@ -226,6 +240,7 @@ public final class FractalRenderService implements AutoCloseable {
             progressBatcher.finish(() -> onSuccess.accept(resultFrame));
 
         } catch (InterruptedException e) {
+            RenderDiagnostics.mark("coordinator_interrupt_observed");
             progressBatcher.cancel();
 
             Thread.currentThread().interrupt();
@@ -245,6 +260,11 @@ public final class FractalRenderService implements AutoCloseable {
         }
     }
 
+    private void markCancellationRequested() {
+        // Record before invalidating the generation: workers can observe that immediately.
+        if (currentRender != null && !currentRender.isDone() && currentDiagnostics != null) currentDiagnostics.cancelled();
+    }
+
     private void cancelCurrentFuture() {
         Future<?> render = currentRender;
         currentRender = null;
@@ -252,6 +272,7 @@ public final class FractalRenderService implements AutoCloseable {
         if (render != null && !render.isDone()) {
             render.cancel(true);
         }
+        currentDiagnostics = null;
     }
 
     private boolean isCurrent(long renderId) {
@@ -264,6 +285,7 @@ public final class FractalRenderService implements AutoCloseable {
 
     @Override
     public synchronized void close() {
+        markCancellationRequested();
         generation.incrementAndGet();
 
         cancelCurrentFuture();

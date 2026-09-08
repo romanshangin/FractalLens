@@ -1,5 +1,7 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.render.RenderDiagnostics;
+import java.util.concurrent.CompletableFuture;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -25,6 +27,7 @@ public final class InteractionLatency {
     private volatile long epoch;
     private final AtomicInteger count = new AtomicInteger();
     private static final int MAX_EVENTS = 100_000;
+    private final List<CompletableFuture<Void>> diagnostics = new ArrayList<>();
     private final List<CallbackStats> callbackStats = new ArrayList<>();
     private long input;
     private long render;
@@ -43,6 +46,7 @@ public final class InteractionLatency {
         count.set(0);
         milestones.clear();
         callbackStats.clear();
+        diagnostics.clear();
         input = render = 0;
         token = new Token(epoch, 0, 0);
         this.publication = publication;
@@ -51,12 +55,34 @@ public final class InteractionLatency {
 
     public synchronized List<Event> stop() {
         if (enabled) {
+            if (!diagnosticsDrained().isDone()) throw new IllegalStateException("Render diagnostics have not drained");
+            diagnosticsDrained().join();
             for (CallbackStats stats : callbackStats) stats.finish();
         }
         enabled = false;
         publication = ignored -> {};
         if (count.get() > MAX_EVENTS) throw new IllegalStateException("Latency recording exceeded event limit");
         return new ArrayList<>(events);
+    }
+
+    /** Submission runs on the FX thread; late worker exits retain this trial and render. */
+    public synchronized void attachDiagnostics(CompletableFuture<RenderDiagnostics.Snapshot> completion) {
+        if (!enabled) return;
+        Token captured = token;
+        diagnostics.add(completion.thenAccept(snapshot -> {
+            long drained = snapshot.values().get("request_drained");
+            snapshot.values().forEach((key, value) -> {
+                boolean metric = key.endsWith("_ns") || key.startsWith("worker_tasks_")
+                        || key.equals("planned_tasks") || key.equals("candidate_tiles");
+                addAt(captured, "diagnostic_" + key, metric ? drained : value, metric ? value : 0);
+            });
+            addAt(captured, "diagnostic_generation", drained, snapshot.generation());
+        }));
+    }
+
+    /** Await off the FX thread after UI idle, before stop(), to include cancelled workers. */
+    public synchronized CompletableFuture<Void> diagnosticsDrained() {
+        return CompletableFuture.allOf(diagnostics.toArray(CompletableFuture[]::new));
     }
 
     public void input(String kind) {
@@ -135,9 +161,13 @@ public final class InteractionLatency {
     }
 
     private synchronized Event add(Token identity, String stage, long duration) {
+        return addAt(identity, stage, clock.getAsLong(), duration);
+    }
+
+    private synchronized Event addAt(Token identity, String stage, long nanos, long duration) {
         if (!enabled || identity.epoch != epoch) return null;
         if (count.incrementAndGet() > MAX_EVENTS) return null;
-        Event event = new Event(identity.epoch, identity.input, identity.render, stage, clock.getAsLong(), duration);
+        Event event = new Event(identity.epoch, identity.input, identity.render, stage, nanos, duration);
         events.add(event);
         return event;
     }

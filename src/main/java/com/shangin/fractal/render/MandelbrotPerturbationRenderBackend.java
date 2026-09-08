@@ -15,7 +15,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -90,7 +89,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         this.referenceCache = new ReferenceOrbitCache(referenceCacheBytes);
         this.blaEnabled = blaEnabled;
         AtomicInteger sequence = new AtomicInteger();
-        workers = Executors.newFixedThreadPool(workerCount, runnable -> {
+        workers = RenderDiagnostics.workerPool(workerCount, runnable -> {
             Thread thread = new Thread(runnable,
                     "mandelbrot-perturbation-" + sequence.incrementAndGet());
             thread.setDaemon(true);
@@ -127,23 +126,29 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         if (grid == null) {
             grid = frame.job().preciseGrid();
         }
+        RenderDiagnostics.mark("reference_start");
         long referenceStarted = System.nanoTime();
         ReferenceOrbit reference = referenceCache.acquire(frame.job(), grid, cancelled);
+        RenderDiagnostics.mark("reference_end");
         double referenceOrbitMs = elapsedMs(referenceStarted);
         if (reference == null) {
             return frame;
         }
+        RenderDiagnostics.mark("coordinates_start");
         long coordinatesStarted = System.nanoTime();
         CoordinateDeltas deltas = CoordinateDeltas.create(
                 grid, reference, frame.job().width(), frame.job().height(), cancelled);
+        RenderDiagnostics.mark("coordinates_end");
         double coordinatePreparationMs = elapsedMs(coordinatesStarted);
         if (deltas == null) {
             return frame;
         }
+        RenderDiagnostics.mark("bla_start");
         long blaStarted = System.nanoTime();
         MandelbrotBlaTable bla = blaEnabled ? MandelbrotBlaTable.create(
                 reference.real(), reference.imaginary(), reference.lastBoundedIteration(),
                 deltas.maximumDeltaMagnitude(), cancelled) : null;
+        RenderDiagnostics.mark("bla_end");
         double blaPreparationMs = elapsedMs(blaStarted);
         if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
             return frame;
@@ -151,6 +156,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         ReferencePool referencePool = new ReferencePool(
                 frame.job(), grid.mathContext(), reference, bla);
 
+        RenderDiagnostics.mark("planning_start");
         List<RenderRegion> queuedTiles = orderedTiles(frame.job()).stream()
                 .filter(tile -> !frame.validity().isRegionReady(tile))
                 .toList();
@@ -189,6 +195,9 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             });
         }
 
+        RenderDiagnostics.mark("planning_end");
+        RenderDiagnostics.add("candidate_tiles", queuedTiles.size());
+        RenderDiagnostics.add("planned_tasks", workerTasks.size());
         try {
             for (Future<Void> future : workers.invokeAll(workerTasks)) {
                 try {

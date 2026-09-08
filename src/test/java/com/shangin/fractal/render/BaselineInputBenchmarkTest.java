@@ -108,6 +108,12 @@ class BaselineInputBenchmarkTest {
             assertTrue(r.time("replacement_dispatch", 1) >= r.time("render_submit", 1));
             assertEquals(-1, r.time("complete", 1));
             assertTrue(r.time("complete", 2) > r.time("render_start", 2));
+            if (RenderDiagnostics.enabled()) {
+                var drains = r.events.stream().filter(e -> e.stage().equals("diagnostic_request_drained")).toList();
+                assertEquals(2, drains.size());
+                assertEquals(java.util.Set.of(1L, 2L), drains.stream().map(e -> e.input()).collect(java.util.stream.Collectors.toSet()));
+                assertTrue(r.events.stream().anyMatch(e -> e.stage().equals("diagnostic_cancel_requested") && e.input() == 1));
+            }
         }
     }
 

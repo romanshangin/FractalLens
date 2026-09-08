@@ -83,7 +83,7 @@ public final class BaselineInputBenchmark {
                         + "\ngestures=" + System.getProperty("baseline.input.gestures", String.join(",", GESTURES))
                         + "\nwarmups=" + warmups + "\nsamples=" + runs
                         + "\ninput_origin=synthetic_javafx_dispatch\nphysical_scanout=unmeasured\nos_input=unmeasured"
-                        + "\ncancel_trigger=queued_input_after_render_submit\ncancel_worker_tail=unmeasured\ngpu_calculation=false\n",
+                        + "\ncancel_trigger=queued_input_after_render_submit\nrender_diagnostics=" + RenderDiagnostics.enabled() + "\ncancel_worker_tail=" + (RenderDiagnostics.enabled() ? "base_workers_drained" : "unmeasured") + "\ngpu_calculation=false\n",
                         StandardOpenOption.CREATE_NEW);
                 rows.println(HEADER); events.println(EVENT_HEADER); actual.println("trial,role," + BaselineFixtures.HEADER);
                 long trial = 0;
@@ -258,6 +258,7 @@ public final class BaselineInputBenchmark {
         else perform(ui, gesture);
         if (gesture.equals("replacement")) ui.replacement.get(180, TimeUnit.SECONDS);
         awaitIdle(ui);
+        fx(() -> ui.view.latency().diagnosticsDrained()).get(180, TimeUnit.SECONDS);
         // Flush the last publication's post-layout observation before stopping the epoch.
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (!fx(() -> ui.pending.isEmpty())) {

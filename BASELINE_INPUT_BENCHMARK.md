@@ -36,8 +36,8 @@ pixel was visible on the display.
 `cancel-direct` and `cancel-deep` dispatch a second wheel event queued at the
 first request's `render_submit` boundary. This tests production cancellation
 and replacement by newer input. This trigger is deliberately distinct from the
-headless matrix's first-backend-region cancellation. Worker drain/tail time is
-not measured here. The raw trace retains callbacks from earlier generations;
+headless matrix's first-backend-region cancellation. Base-worker drain/tail time is available with the opt-in
+[scheduling diagnostics](BASELINE_SCHEDULING_BENCHMARK.md); default runs leave it unmeasured. The raw trace retains callbacks from earlier generations;
 they cannot supply completion for the last input.
 
 Every sequence starts with a new view/controller, an exact source viewport,
@@ -157,9 +157,10 @@ mvn -q -Dfractal.fx.tests=true -Djavafx.cachedir=/tmp/fractalui-javafx-cache \
 ```
 
 See [saved validation](BASELINE_INPUT_VALIDATION.md). This step connects the
-handlers and comparable job descriptions; allocation attribution, scheduling
-internals, cancellation worker tails and sustained memory/thermal measurements
-remain open in roadmap 9.1.
+handlers and comparable job descriptions. Optional
+[scheduling and base-worker cancellation diagnostics](BASELINE_SCHEDULING_BENCHMARK.md)
+now extend the same trace. Allocation attribution and sustained memory/thermal
+measurements remain open in roadmap 9.1.
 
 The matrix exposed and regression-tested an `int` overflow in scaled-exponent
 pan grid snapping. Coordinate alignment now keeps arbitrary-size integer pixel

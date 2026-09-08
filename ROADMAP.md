@@ -420,9 +420,13 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   capture proxy. Isolate the roughly 1.82 s fully-ready validity-mask scan at
   2400x1520; physical scanout remains unmeasured. See
   [interaction latency results](INTERACTION_LATENCY_RESULTS.md).
-- [ ] Extend diagnostics to allocation, task scheduling, cancellation tails and
-  long-duration memory/thermal behavior. Per-worker stage intervals overlap;
+- [x] Add opt-in CPU base-task planning, queue and cancellation-drain diagnostics
+  to the canonical matrix and real-input trace. Preserve request/input generation
+  through worker exit, including workers outliving cancelled coordinator Futures.
+  See [the contract](BASELINE_SCHEDULING_BENCHMARK.md) and
+  [validation](BASELINE_SCHEDULING_VALIDATION.md). Per-worker intervals overlap;
   they are not additive frame costs or process CPU utilization.
+- [ ] Extend diagnostics to allocation and long-duration memory/thermal behavior.
   The long FX matrix exposed detached surfaces retained by Scene/Window scale
   listeners; unsubscribe-on-detach is now regression-tested. FX rows also record
   heap/GC observations. Allocation attribution and sustained thermal/native-memory
@@ -478,6 +482,13 @@ publication regression. Sampling-quality experiments have a separate decision.
 
 ### 9.3. Improve CPU batching, scheduling and publication
 
+- [ ] Bound reusable `ValidityMask.missingRowSpans` scans to their row/region,
+  avoid repeated complete-frame scans, and check cancellation during task
+  preparation. The [9.1 scheduling probe](BASELINE_SCHEDULING_VALIDATION.md)
+  attributes roughly 5 seconds at 3024x1964 to planning with zero worker tasks,
+  including a similar cancellation tail. Add exact-mask/reuse and deterministic
+  cancellation regressions, then apply the 30-pair/multiple-process gate before
+  claiming an interaction or throughput gain.
 - [ ] Benchmark interleaved independent scalar orbits and modest unrolling on
   Mandelbrot, Julia and AA samples. Inspect JIT/allocation profiles; preserve
   arithmetic order and bounded cancellation. Do not repeat rejected manual

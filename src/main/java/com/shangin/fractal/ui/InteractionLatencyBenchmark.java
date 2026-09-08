@@ -198,6 +198,7 @@ public final class InteractionLatencyBenchmark extends Application {
                         });
                         perform(gesture);
                         awaitIdle();
+                        fx(() -> view.latency().diagnosticsDrained()).get(180, TimeUnit.SECONDS);
                         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
                         if (!Boolean.getBoolean("fractal.latency.noScreen")) {
                             while (!fx(() -> currentCodes[3] != 0 && observedCodes.contains(currentCodes[3]))) {

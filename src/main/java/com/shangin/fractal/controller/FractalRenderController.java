@@ -68,6 +68,7 @@ public final class FractalRenderController implements AutoCloseable {
 
     public FractalRenderController(FractalSurface surface) {
         this.surface = Objects.requireNonNull(surface);
+        renderService.setDiagnosticsListener(diagnostics -> surface.latency().attachDiagnostics(diagnostics.completion()));
         this.paletteRecolorBackend = renderService.paletteRecolorBackend();
     }
 

@@ -46,7 +46,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             throw new IllegalArgumentException("Tile size must be at least 1");
         }
         this.tileSize = tileSize;
-        workers = Executors.newFixedThreadPool(
+        workers = RenderDiagnostics.workerPool(
                 workerCount,
                 daemonThreadFactory("fractal-worker"));
     }
@@ -115,6 +115,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                 ? null
                 : new ConcurrentLinkedQueue<>();
 
+        RenderDiagnostics.mark("planning_start");
         List<Callable<Void>> tasks =
                 createTileTasks(
                         frame,
@@ -123,8 +124,9 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                         tileTimesNanos
                 );
 
-        List<Future<Void>> futures =
-                workers.invokeAll(tasks);
+        RenderDiagnostics.mark("planning_end");
+        RenderDiagnostics.add("planned_tasks", tasks.size());
+        List<Future<Void>> futures = workers.invokeAll(tasks);
 
         for (Future<Void> future : futures) {
 
@@ -270,6 +272,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         boolean hasReusablePixels =
                 renderFrame.validity().readyPixelCount() > 0;
 
+        RenderDiagnostics.mark("tile_order_start");
         List<Tile> tiles =
                 createOrderedTiles(
                         renderRequest,
@@ -278,6 +281,9 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                                 : renderRequest.height()
                 );
 
+        RenderDiagnostics.mark("tile_order_end");
+        RenderDiagnostics.add("candidate_tiles", tiles.size());
+        boolean diagnostics = RenderDiagnostics.current() != null;
         List<Callable<Void>> tasks =
                 new ArrayList<>(
                         tiles.size()
@@ -293,9 +299,11 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                             tile.yTo() - tile.yFrom()
                     );
 
+            long scanStart = diagnostics && hasReusablePixels ? System.nanoTime() : 0;
             List<RenderRegion> missingSpans = hasReusablePixels
                     ? renderFrame.validity().missingRowSpans(region)
                     : List.of(region);
+            if (scanStart != 0) RenderDiagnostics.add("mask_scan_ns", System.nanoTime() - scanStart);
 
             /* Fully reused tiles do not need worker tasks. */
             if (missingSpans.isEmpty()) {

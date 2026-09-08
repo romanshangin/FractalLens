@@ -88,4 +88,31 @@ class InteractionLatencyTest {
         trace.observed(original, "_screen_observed");
         assertTrue(trace.stop().isEmpty());
     }
+    @Test void diagnosticsRetainOriginalIdentityAndStopRequiresWorkerDrain() {
+        var trace = new InteractionLatency();
+        var done = new java.util.concurrent.CompletableFuture<com.shangin.fractal.render.RenderDiagnostics.Snapshot>();
+        trace.arm(ignored -> {});
+        trace.input("scroll"); trace.renderStarted();
+        trace.attachDiagnostics(done);
+        trace.input("scroll"); trace.renderStarted();
+        assertThrows(IllegalStateException.class, trace::stop);
+        done.complete(new com.shangin.fractal.render.RenderDiagnostics.Snapshot(27,
+                java.util.Map.of("request_drained", 900L, "backend_exit", 800L, "worker_run_sum_ns", 123L)));
+        trace.diagnosticsDrained().join();
+        var events = trace.stop();
+        var exit = events.stream().filter(e -> e.stage().equals("diagnostic_backend_exit")).findFirst().orElseThrow();
+        assertEquals(1, exit.input()); assertEquals(1, exit.render()); assertEquals(800, exit.nanos());
+        var work = events.stream().filter(e -> e.stage().equals("diagnostic_worker_run_sum_ns")).findFirst().orElseThrow();
+        assertEquals(123, work.durationNanos()); assertEquals(900, work.nanos());
+    }
+
+    @Test void lateDiagnosticsFromOldEpochCannotEnterNextTrial() {
+        var trace = new InteractionLatency();
+        var done = new java.util.concurrent.CompletableFuture<com.shangin.fractal.render.RenderDiagnostics.Snapshot>();
+        trace.arm(ignored -> {}); trace.input("scroll"); trace.renderStarted(); trace.attachDiagnostics(done);
+        trace.arm(ignored -> {});
+        done.complete(new com.shangin.fractal.render.RenderDiagnostics.Snapshot(3, java.util.Map.of("request_drained", 900L)));
+        assertTrue(trace.stop().isEmpty());
+    }
+
 }
