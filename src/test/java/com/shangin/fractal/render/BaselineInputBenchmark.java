@@ -336,7 +336,7 @@ public final class BaselineInputBenchmark {
         }
     }
 
-    private static void save(Result r, BaselineFixtures.Step source, String phase, int run,
+    static void save(Result r, BaselineFixtures.Step source, String phase, int run,
                              PrintWriter rows, PrintWriter events, PrintWriter actual) {
         rows.println(r.csv(phase, run)); rows.flush();
         actual.println(r.trial + ",source," + actualCsv(source, r.fixture, true));

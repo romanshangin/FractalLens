@@ -426,11 +426,16 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   See [the contract](BASELINE_SCHEDULING_BENCHMARK.md) and
   [validation](BASELINE_SCHEDULING_VALIDATION.md). Per-worker intervals overlap;
   they are not additive frame costs or process CPU utilization.
-- [ ] Extend diagnostics to allocation and long-duration memory/thermal behavior.
+- [x] Extend diagnostics to allocation and long-duration memory/thermal behavior.
   The long FX matrix exposed detached surfaces retained by Scene/Window scale
   listeners; unsubscribe-on-detach is now regression-tested. FX rows also record
-  heap/GC observations. Allocation attribution and sustained thermal/native-memory
-  measurements remain open; see [the ownership fix](BASELINE_FX_VALIDATION.md).
+  heap/GC observations; see [the ownership fix](BASELINE_FX_VALIDATION.md).
+  The [allocation and sustained-memory driver](BASELINE_MEMORY_BENCHMARK.md)
+  separates navigation from exact CPU controls and adds JFR allocation attribution,
+  RSS, NMT, GC checkpoints and macOS thermal pressure. The selected eight-fixture
+  validation covers 288 exact trials, including a 13.24-minute 1512x982 run with
+  stable detached-heap checkpoints; see [results and limits](BASELINE_MEMORY_VALIDATION.md).
+  Physical temperature, energy and all-platform/full-matrix soaks remain unmeasured.
 - [ ] Use uninstrumented alternating pairs for decisions and separate JFR/native
   profiles for attribution. Confirm promising changes with at least 30 measured
   pairs and multiple process starts; record median/tails, hardware/runtime,
@@ -513,6 +518,11 @@ overview, deep scenes, interaction and cancellation within the control budget.
 - [ ] Profile BLA preparation/lookup, block objects, coordinate setup and sample
   publication once skipping dominates. Compare primitive block arrays and
   tile-local delta bounds while retaining the existing strict accuracy controls.
+  The [9.1 allocation profile](BASELINE_MEMORY_VALIDATION.md) identifies repeated
+  precise AA coordinate construction and `ReferenceOrbit.cRealAsDouble` /
+  `cImaginaryAsDouble` conversions as concrete allocation candidates. First
+  evaluate caching immutable reference conversions and reusing exact coordinate
+  components; preserve BigDecimal operation order and the same sample controls.
 - [ ] Evaluate reference and sampler/BLA sharing across base/AA and compatible
   navigation, plus bounded additional-reference reuse. Make ownership,
   precision, iteration capacity, coverage and eviction explicit; recompute

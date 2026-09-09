@@ -30,16 +30,6 @@ def validate(directory):
     trials = {r["trial"]: r for r in rows}
     require(len(trials) == len(rows), "Duplicate trial")
     require(set(map(int, trials)) == set(range(1, len(rows) + 1)), "Missing trial identity")
-    actual_by_trial = defaultdict(dict)
-    for record in actual:
-        trial, role = record["trial"], record["role"]
-        require(trial in trials and role in ("source", "target"), "Unknown actual manifest identity")
-        require(role not in actual_by_trial[trial], "Duplicate actual manifest role")
-        actual_by_trial[trial][role] = record
-    by_trial = defaultdict(list)
-    for event in events:
-        require(event["trial"] in trials, "Unknown event trial")
-        by_trial[event["trial"]].append(event)
     expected = set()
     seeds = defaultdict(list)
     for record in manifest:
@@ -62,6 +52,24 @@ def validate(directory):
     keys = [tuple(r[k] for k in ("fixture", "step", "seed_width", "seed_height", "gesture", "requested_mode", "phase", "run")) for r in rows]
     require(len(set(keys)) == len(keys), "Duplicate sequence repetition")
     require(set(keys) == expected, "Missing or unexpected fixture/mode/gesture/repetition")
+    validate_trials(rows, actual, events)
+    return rows
+
+
+def validate_trials(rows, actual, events, repeatable=True):
+    """Shared exact manifest/event checks for matrix runs and repeated-navigation soaks."""
+    trials = {r["trial"]: r for r in rows}
+    require(len(trials) == len(rows), "Duplicate trial")
+    actual_by_trial = defaultdict(dict)
+    for record in actual:
+        trial, role = record["trial"], record["role"]
+        require(trial in trials and role in ("source", "target"), "Unknown actual manifest identity")
+        require(role not in actual_by_trial[trial], "Duplicate actual manifest role")
+        actual_by_trial[trial][role] = record
+    by_trial = defaultdict(list)
+    for event in events:
+        require(event["trial"] in trials, "Unknown event trial")
+        by_trial[event["trial"]].append(event)
     hashes = defaultdict(set)
     for row in rows:
         trial = row["trial"]
@@ -124,9 +132,8 @@ def validate(directory):
             require(abs(float(row[field]) - value) <= .000001, f"Timing disagrees with raw events: {field}")
         key = tuple(row[k] for k in ("fixture", "step", "seed_width", "seed_height", "gesture", "requested_mode"))
         hashes[key].add((row["sample_hash"], row["argb_hash"], row["status"], target["center_real"], target["center_imaginary"], target["scale"], target["actual_cap"]))
-    require(all(len(values) == 1 for values in hashes.values()), "Non-repeatable endpoint or fingerprints")
-    return rows
-
+    if repeatable:
+        require(all(len(values) == 1 for values in hashes.values()), "Non-repeatable endpoint or fingerprints")
 
 def summarize(directory, output):
     rows = validate(directory)
