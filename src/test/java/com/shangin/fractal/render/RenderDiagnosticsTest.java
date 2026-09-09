@@ -157,4 +157,49 @@ class RenderDiagnosticsTest {
         }
     }
 
+    @Test void cancellationInsideMaskPlanningDrainsWithoutSubmittingWorkers() throws Exception {
+        var enteredScan = new CountDownLatch(1);
+        var releaseScan = new CountDownLatch(1);
+        var checks = new AtomicInteger();
+        var callbacks = new AtomicInteger();
+        var snapshots = new LinkedBlockingQueue<RenderDiagnostics>();
+        RenderFrame frame = frame();
+        frame.validity().markReady(new RenderRegion(0, 0, 1, 1));
+        try (var direct = new DirectDoubleRenderBackend()) {
+            TestBackend backend = (f, cancelled, progress, timing) -> {
+                Thread coordinator = Thread.currentThread();
+                return direct.render(f, () -> {
+                    if (Thread.currentThread() == coordinator && checks.incrementAndGet() == 8) {
+                        enteredScan.countDown();
+                        awaitIgnoringInterrupt(releaseScan);
+                    }
+                    return cancelled.getAsBoolean();
+                }, progress, timing);
+            };
+            try (var service = new FractalRenderService(backend)) {
+                service.setDiagnosticsListener(snapshots::add);
+                service.render(frame, Runnable::run, p -> callbacks.incrementAndGet(),
+                        f -> callbacks.incrementAndGet(), e -> callbacks.incrementAndGet());
+                var diagnostics = snapshots.poll(5, TimeUnit.SECONDS);
+                assertNotNull(diagnostics);
+                try {
+                    assertTrue(enteredScan.await(5, TimeUnit.SECONDS));
+                    assertTrue(diagnostics.currentValues().containsKey("planning_start"));
+                    assertFalse(diagnostics.currentValues().containsKey("planning_end"));
+                    service.cancelCurrent();
+                    assertFalse(diagnostics.completion().isDone());
+                } finally {
+                    releaseScan.countDown();
+                }
+                var values = diagnostics.completion().get(5, TimeUnit.SECONDS).values();
+                assertEquals(0L, values.get("planned_tasks"));
+                assertEquals(0L, values.getOrDefault("worker_tasks_registered", 0L));
+                assertTrue(values.get("request_drained") >= values.get("coordinator_exit"));
+                assertTrue(values.get("cancel_observed") >= values.get("cancel_requested"));
+                assertEquals(0, callbacks.get());
+                assertEquals(1, frame.validity().readyPixelCount());
+            }
+        }
+    }
+
 }

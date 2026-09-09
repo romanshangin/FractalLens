@@ -126,6 +126,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
 
         RenderDiagnostics.mark("planning_end");
         RenderDiagnostics.add("planned_tasks", tasks.size());
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) return frame;
         List<Future<Void>> futures = workers.invokeAll(tasks);
 
         for (Future<Void> future : futures) {
@@ -252,6 +253,9 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             Consumer<RenderRegion> regionCompleted,
             ConcurrentLinkedQueue<Long> tileTimesNanos
     ) {
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()
+                || renderFrame.isComplete()) return List.of();
+
         RenderJob renderRequest =
                 renderFrame.request();
 
@@ -290,6 +294,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                 );
 
         for (Tile tile : tiles) {
+            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) return List.of();
 
             RenderRegion region =
                     new RenderRegion(
@@ -301,7 +306,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
 
             long scanStart = diagnostics && hasReusablePixels ? System.nanoTime() : 0;
             List<RenderRegion> missingSpans = hasReusablePixels
-                    ? renderFrame.validity().missingRowSpans(region)
+                    ? renderFrame.validity().missingRowSpans(region, cancelled)
                     : List.of(region);
             if (scanStart != 0) RenderDiagnostics.add("mask_scan_ns", System.nanoTime() - scanStart);
 

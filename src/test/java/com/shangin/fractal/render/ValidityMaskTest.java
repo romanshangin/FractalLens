@@ -115,4 +115,106 @@ class ValidityMaskTest {
         assertTrue(expanded.isRegionReady(new RenderRegion(1, 1, 4, 3)));
         assertFalse(expanded.isReady(0, 0));
     }
+    @Test
+    void wordBoundariesCountsAndSnapshotsShouldMatchPixelOracle() {
+        var random = new java.util.Random(910903);
+        for (int width : new int[]{1, 31, 63, 64, 65, 127, 129, 3024}) {
+            int height = 7;
+            ValidityMask mask = new ValidityMask(width, height);
+            java.util.BitSet expected = new java.util.BitSet(width * height);
+            for (int trial = 0; trial < 100; trial++) {
+                int x = random.nextInt(width), y = random.nextInt(height);
+                RenderRegion marked = new RenderRegion(x, y, 1 + random.nextInt(width - x), 1 + random.nextInt(height - y));
+                mask.markReady(marked);
+                mask.markReady(marked); // Repeated publication must not double-count.
+                for (int row = y; row < y + marked.height(); row++) {
+                    expected.set(row * width + x, row * width + x + marked.width());
+                }
+                assertEquals(expected.cardinality(), mask.readyPixelCount());
+                assertEquals(expected.cardinality() == width * height, mask.isComplete());
+                assertEquals(expected, mask.readyBitsCopy());
+                assertEquals(expected, mask.copy().readyBitsCopy());
+                x = random.nextInt(width); y = random.nextInt(height);
+                RenderRegion query = new RenderRegion(x, y, 1 + random.nextInt(width - x), 1 + random.nextInt(height - y));
+                var gaps = new java.util.ArrayList<RenderRegion>();
+                var local = new java.util.BitSet(query.width() * query.height());
+                for (int row = y; row < y + query.height(); row++) {
+                    int start = -1;
+                    for (int col = x; col < x + query.width(); col++) {
+                        boolean ready = expected.get(row * width + col);
+                        assertEquals(ready, mask.isReady(col, row));
+                        if (ready) local.set((row - y) * query.width() + col - x);
+                        if (!ready && start < 0) start = col;
+                        if (ready && start >= 0) {
+                            gaps.add(new RenderRegion(start, row, col - start, 1));
+                            start = -1;
+                        }
+                    }
+                    if (start >= 0) gaps.add(new RenderRegion(start, row, x + query.width() - start, 1));
+                }
+                assertEquals(gaps, mask.missingRowSpans(query));
+                assertEquals(gaps.isEmpty(), mask.isRegionReady(query));
+                assertEquals(local, mask.readyBitsCopy(query));
+                if (trial % 10 == 9) {
+                    ValidityMask copy = mask.copy();
+                    mask.clear();
+                    assertEquals(expected, copy.readyBitsCopy());
+                    expected.clear();
+                    assertEquals(0, mask.readyPixelCount());
+                    assertFalse(mask.isComplete());
+                }
+            }
+        }
+    }
+
+    @Test
+    void retinaTileScansMustNotWalkTheReadySuffixOutsideEachRow() {
+        int width = 3024, height = 1964;
+        ValidityMask mask = new ValidityMask(width, height);
+        mask.markReady(new RenderRegion(0, 0, width, height - 1));
+        mask.markReady(new RenderRegion(0, height - 1, width - 1, 1));
+        // Incomplete overall: a complete-frame shortcut alone cannot fix this case.
+        org.junit.jupiter.api.Assertions.assertTimeout(java.time.Duration.ofSeconds(2), () -> {
+            var gaps = new java.util.ArrayList<RenderRegion>();
+            for (int y = 0; y < height; y += 32) {
+                for (int x = 0; x < width; x += 32) {
+                    RenderRegion tile = new RenderRegion(x, y, Math.min(32, width - x), Math.min(32, height - y));
+                    var missing = mask.missingRowSpans(tile);
+                    assertEquals(missing.isEmpty(), mask.isRegionReady(tile));
+                    gaps.addAll(missing);
+                }
+            }
+            assertEquals(List.of(new RenderRegion(width - 1, height - 1, 1, 1)), gaps);
+            mask.markReady(gaps.getFirst());
+            assertTrue(mask.isComplete());
+            assertTrue(mask.missingRowSpans(new RenderRegion(0, 0, width, height)).isEmpty());
+        });
+    }
+
+    @Test
+    void cancellationDuringScanMustDiscardPartialPlanWithoutChangingMask() {
+        ValidityMask mask = new ValidityMask(65, 20);
+        mask.markReady(new RenderRegion(32, 0, 1, 20));
+        var before = mask.readyBitsCopy();
+        var checks = new java.util.concurrent.atomic.AtomicInteger();
+        assertTrue(mask.missingRowSpans(new RenderRegion(0, 0, 65, 20),
+                () -> checks.incrementAndGet() >= 4).isEmpty());
+        assertEquals(4, checks.get());
+        assertEquals(before, mask.readyBitsCopy());
+        assertFalse(mask.isComplete());
+    }
+
+    @Test
+    void interruptionCancelsPlanningButDoesNotChangePlainSnapshotSemantics() {
+        ValidityMask mask = new ValidityMask(65, 1);
+        RenderRegion all = new RenderRegion(0, 0, 65, 1);
+        Thread.currentThread().interrupt();
+        try {
+            assertTrue(mask.missingRowSpans(all, () -> false).isEmpty());
+            assertEquals(List.of(all), mask.missingRowSpans(all));
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
 }

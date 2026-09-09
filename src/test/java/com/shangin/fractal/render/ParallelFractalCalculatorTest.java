@@ -537,4 +537,21 @@ class ParallelFractalCalculatorTest {
         );
     }
 
+    @Test
+    void cancellationDuringPlanningMustNotSubmitPartialTilePlan() throws InterruptedException {
+        RenderFrame frame = RenderFrame.create(new RenderRequest(calculator, viewport, 256, 256, 2));
+        frame.validity().markReady(new RenderRegion(0, 0, 1, 1));
+        Thread coordinator = Thread.currentThread();
+        var checks = new AtomicInteger();
+        var cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        var published = new AtomicInteger();
+        parallelCalculator.calculate(frame, () -> {
+            if (Thread.currentThread() == coordinator && checks.incrementAndGet() >= 8) cancelled.set(true);
+            return cancelled.get();
+        }, ignored -> published.incrementAndGet());
+        assertTrue(cancelled.get(), "Cancellation must be observed while preparing work");
+        assertEquals(0, published.get(), "An abandoned partial plan must never reach workers");
+        assertEquals(1, frame.validity().readyPixelCount());
+    }
+
 }
