@@ -446,6 +446,11 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   [A/A calibration](BASELINE_PAIRS_VALIDATION.md) validates the protocol on
   identical builds. This item stays open until a production candidate has a
   confirmed, scope-matched A/B result; calibration is not an optimization gain.
+  The first [bounded-mask candidate](VALIDITY_MASK_OPTIMIZATION.md) now has
+  six-process-pair A/B evidence: retained-frame returned pixels improve about
+  145x at 3024x1964 and full FX publication about 22x at 1512x982. Exact controls
+  pass, but the aggregate 5% timing-control budget is still inconclusive, so
+  this decision item remains open.
 
 Exit criterion: a current, scope-matched baseline identifies the dominant costs
 and defines the correctness/performance gate before each implementation spike.
@@ -499,6 +504,16 @@ publication regression. Sampling-quality experiments have a separate decision.
   including a similar cancellation tail. Add exact-mask/reuse and deterministic
   cancellation regressions, then apply the 30-pair/multiple-process gate before
   claiming an interaction or throughput gain.
+  Implemented in candidate `9778ac9`: bounded bitmap-word scans, an exact cached
+  readiness count, complete-frame early exit and cancellation before task
+  submission. Pixel-oracle, near-complete Retina and deterministic request-drain
+  regressions pass. The [candidate report](VALIDITY_MASK_OPTIMIZATION.md)
+  confirms the retained-frame target gain; final acceptance remains open on the
+  unresolved overview, pan and short-latency timing controls.
+  A separate 13.37-minute input/memory soak passes 108 exact trials and three
+  whole rounds, with stable detached heap near 126.8 MB. A prior clock-shifted
+  soak is explicitly rejected. Keep power source fixed for the next timing
+  campaign; the last FX control process changed from battery to AC power.
 - [ ] Benchmark interleaved independent scalar orbits and modest unrolling on
   Mandelbrot, Julia and AA samples. Inspect JIT/allocation profiles; preserve
   arithmetic order and bounded cancellation. Do not repeat rejected manual

@@ -84,6 +84,16 @@ class MemorySummaryTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Overlapping"):
             validate(self.path)
 
+    def test_rejects_wall_clock_step_in_either_direction(self):
+        # A real soak had a 107.868 ms backward wall-clock step, also present
+        # in the JVM wall/uptime log. Exact frames alone must not accept it.
+        for elapsed in ("1107.868", "892.132"):
+            with self.subTest(elapsed_ms=elapsed):
+                self.scopes[0]["elapsed_ms"] = elapsed
+                self.save_scopes()
+                with self.assertRaisesRegex(ValueError, "Wall/monotonic clock disagreement"):
+                    validate(self.path)
+
     def test_rejects_missing_control(self):
         self.scopes = [s for s in self.scopes if not (s["scope"] == "control" and s["trial"] == "2")]
         self.save_scopes()

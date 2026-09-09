@@ -105,6 +105,14 @@ For the planning-cancellation probe, select `direct-deep-reverse`,
 first sequence and one sample suffice for validating this long scan; they do
 not characterize statistical tails.
 
+That polling probe targets the historical long complete-mask scan. With the
+[bounded-mask candidate](VALIDITY_MASK_OPTIMIZATION.md), complete-frame planning
+may finish before the polling thread runs; a missed trigger must still fail,
+not be recorded as zero cancellation latency. Use the deterministic
+`RenderDiagnosticsTest.cancellationInsideMaskPlanningDrainsWithoutSubmittingWorkers`
+regression for cancellation inside preparation, and keep `cancelPlanning=false`
+for the ordinary post-first-region diagnostic matrix on the candidate.
+
 For the input scope, use the same startup switch with
 `com.shangin.fractal.render.BaselineInputBenchmark`, a graphical session and
 `-Djavafx.cachedir=/tmp/fractalui-javafx-cache`. The scheduling summarizer also
