@@ -441,6 +441,11 @@ profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
   pairs and multiple process starts; record median/tails, hardware/runtime,
   memory/GC and sustained thermal behavior. Do not run competing timing suites
   simultaneously or overwrite historical CSVs.
+  The [frozen-build paired runner](BASELINE_PAIRS_BENCHMARK.md) now enforces
+  declared targets/controls, matching samples and alternating process starts.
+  [A/A calibration](BASELINE_PAIRS_VALIDATION.md) validates the protocol on
+  identical builds. This item stays open until a production candidate has a
+  confirmed, scope-matched A/B result; calibration is not an optimization gain.
 
 Exit criterion: a current, scope-matched baseline identifies the dominant costs
 and defines the correctness/performance gate before each implementation spike.

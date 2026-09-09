@@ -1,0 +1,18 @@
+{
+  "version": "9.1-pairs-v1",
+  "purpose": "calibration",
+  "runner": "fx",
+  "sizes": "480x270",
+  "fixtures": "seahorse-fixed,julia-aa-regular",
+  "modes": "FAST,REFINED",
+  "process_pairs": 3,
+  "samples": 10,
+  "warmups": 3,
+  "timeout_seconds": 300,
+  "metrics": [
+    {"fixture": "seahorse-fixed", "step": "render", "metric": "full_publish_ms", "role": "target", "max_ratio": 0.9},
+    {"fixture": "seahorse-fixed", "step": "render", "metric": "first_visible_publish_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "julia-aa-regular", "step": "render", "metric": "full_publish_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "julia-aa-regular", "step": "render", "metric": "first_visible_publish_ms", "role": "control", "max_ratio": 1.05}
+  ]
+}

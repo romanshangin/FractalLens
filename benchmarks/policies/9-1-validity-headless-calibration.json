@@ -1,0 +1,24 @@
+{
+  "version": "9.1-pairs-v1",
+  "purpose": "calibration",
+  "runner": "headless",
+  "sizes": "3024x1964",
+  "fixtures": "mandelbrot-overview,julia-aa-regular,direct-deep-reverse,pan-25,cancel-direct",
+  "process_pairs": 3,
+  "samples": 10,
+  "warmups": 3,
+  "timeout_seconds": 1800,
+  "metrics": [
+    {"fixture": "direct-deep-reverse", "step": "reverse", "metric": "backend_ms", "role": "target", "max_ratio": 0.9},
+    {"fixture": "direct-deep-reverse", "step": "reverse", "metric": "returned_argb_ms", "role": "target", "max_ratio": 0.9},
+    {"fixture": "direct-deep-reverse", "step": "direct", "metric": "returned_argb_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "direct-deep-reverse", "step": "deep", "metric": "returned_argb_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "mandelbrot-overview", "step": "render", "metric": "returned_argb_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "mandelbrot-overview", "step": "render", "metric": "first_new_region_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "julia-aa-regular", "step": "render", "metric": "operation_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "julia-aa-regular", "step": "render", "metric": "first_aa_tile_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "pan-25", "step": "source", "metric": "returned_argb_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "pan-25", "step": "pan", "metric": "returned_argb_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "cancel-direct", "step": "cancel", "metric": "cancel_tail_ms", "role": "control", "max_ratio": 1.05}
+  ]
+}

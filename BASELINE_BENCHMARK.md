@@ -9,7 +9,10 @@ the allocation/scheduling or sustained thermal baseline.
 Follow-up: the [JavaFX publication harness](BASELINE_FX_BENCHMARK.md) now shares
 this matrix. The [production input runner](BASELINE_INPUT_BENCHMARK.md) also uses
 its fixtures and records actual camera/controller requests for comparison; see
-[input validation](BASELINE_INPUT_VALIDATION.md). Sustained diagnostics remain open.
+[input validation](BASELINE_INPUT_VALIDATION.md). Allocation and sustained-memory
+evidence is recorded in [memory validation](BASELINE_MEMORY_VALIDATION.md).
+For decisions, use the [frozen-build paired runner](BASELINE_PAIRS_BENCHMARK.md)
+to preserve declared policies, individual matching samples and process order.
 
 ## Workloads and contracts
 
