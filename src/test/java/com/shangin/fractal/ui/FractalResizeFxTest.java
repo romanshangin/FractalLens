@@ -43,6 +43,60 @@ class FractalResizeFxTest {
 
     @ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void loadingScreenWaitsForFullRenderAndReturnsOnlyForSceneChanges(boolean macStartup) throws Exception {
+        FractalView view = fx(() -> new FractalView(
+                FractalPreset.MANDELBROT, PalettePreset.ICE, macStartup));
+        FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+        try {
+            fx(() -> {
+                assertEquals(!macStartup, surface.isVisible());
+                assertTrue(surface.isManaged(), "Hidden surface must still receive layout");
+                assertEquals(macStartup ? 3 : 2, view.getChildrenUnmodifiable().size());
+                return null;
+            });
+            changeView(view, surface, () -> {
+                view.resize(120, 90);
+                view.layout();
+                assertEquals(!macStartup, surface.isVisible(), "Layout must not reveal partial pixels");
+                // Supersede the initial request before it can finish.
+                view.resize(160, 100);
+                view.layout();
+                assertEquals(!macStartup, surface.isVisible(), "Resize cancellation must not reveal the canvas");
+            });
+            fx(() -> {
+                assertTrue(surface.isVisible());
+                assertEquals(2, view.getChildrenUnmodifiable().size());
+                assertTrue(surface.hasCompletedFrame());
+                return null;
+            });
+            changeView(view, surface, () -> {
+                view.resize(180, 110);
+                view.layout();
+                assertTrue(surface.isVisible(), "Later renders must remain progressive");
+                assertEquals(2, view.getChildrenUnmodifiable().size());
+            });
+            for (boolean reset : new boolean[] {false, true}) {
+                changeView(view, surface, () -> {
+                    if (reset) view.resetView();
+                    else view.setFractal(FractalPreset.JULIA);
+                    assertEquals(!macStartup, surface.isVisible(),
+                            "Scene changes must hide the old frame until rendering finishes");
+                    assertEquals(macStartup ? 3 : 2, view.getChildrenUnmodifiable().size());
+                });
+                fx(() -> {
+                    assertTrue(surface.isVisible());
+                    assertEquals(2, view.getChildrenUnmodifiable().size());
+                    assertTrue(surface.hasCompletedFrame());
+                    return null;
+                });
+            }
+        } finally {
+            fx(() -> { view.close(); return null; });
+        }
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
     void wheelAndPinchRecalculateIterationBudget(boolean pinch) throws Exception {
         FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE));
         FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());

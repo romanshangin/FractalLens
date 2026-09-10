@@ -71,7 +71,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.version}</version>
                 <configuration>
-                    <argLine>--enable-native-access=org.lwjgl --add-modules=ALL-MODULE-PATH --sun-misc-unsafe-memory-access=deny</argLine>
+                    <argLine>--enable-native-access=org.lwjgl,com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.stage=com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.tk=com.shangin.fractal --add-modules=ALL-MODULE-PATH --sun-misc-unsafe-memory-access=deny</argLine>
                     <systemPropertyVariables>
                         <fractal.gpu.enabled>false</fractal.gpu.enabled>
                     </systemPropertyVariables>
@@ -86,7 +86,7 @@
                     <mainClass>${fractal.mainClass}</mainClass>
 
                     <options>
-                        <option>--enable-native-access=javafx.graphics,org.lwjgl</option>
+                        <option>--enable-native-access=javafx.graphics,org.lwjgl,com.shangin.fractal</option>
                         <option>--add-modules=ALL-MODULE-PATH</option>
                     </options>
                 </configuration>
@@ -180,6 +180,8 @@
                                 <option>-Xdock:icon=${project.basedir}/src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns</option>
                                 <option>--add-exports=javafx.graphics/com.sun.glass.ui=com.shangin.fractal</option>
                                 <option>--add-opens=javafx.graphics/com.sun.glass.ui.mac=com.shangin.fractal</option>
+                                <option>--add-exports=javafx.graphics/com.sun.javafx.stage=com.shangin.fractal</option>
+                                <option>--add-exports=javafx.graphics/com.sun.javafx.tk=com.shangin.fractal</option>
                             </options>
                         </configuration>
                     </plugin>

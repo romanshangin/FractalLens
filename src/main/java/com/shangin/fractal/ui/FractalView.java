@@ -6,6 +6,7 @@ import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.coloring.GradientPalette;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.controller.FractalRenderController;
+import com.shangin.fractal.controller.RenderStatus;
 import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.export.ExportFileName;
 import com.shangin.fractal.formula.FractalPreset;
@@ -59,6 +60,9 @@ public class FractalView extends StackPane {
     private boolean panning;
     private boolean panChanged;
 
+    private final boolean loadingScreenEnabled;
+    private LoadingScreen loadingScreen;
+
     private final RenderModeIndicator modeIndicator = new RenderModeIndicator();
     private Consumer<Boolean> deepZoomChangedHandler = ignored -> {};
     private final FractalSurface fractalSurface = new FractalSurface();
@@ -93,6 +97,11 @@ public class FractalView extends StackPane {
             FractalPreset initialFractal,
             PalettePreset initialPalette
     ) {
+        this(initialFractal, initialPalette, System.getProperty("os.name", "").startsWith("Mac"));
+    }
+
+    FractalView(FractalPreset initialFractal, PalettePreset initialPalette, boolean loadingScreenEnabled) {
+        this.loadingScreenEnabled = loadingScreenEnabled;
         scene = FractalScene.create(initialFractal, initialPalette);
         camera = new FractalCamera(initialFractal);
         configurePalette(initialPalette);
@@ -120,7 +129,19 @@ public class FractalView extends StackPane {
         getChildren().addAll(fractalSurface, modeIndicator);
         StackPane.setAlignment(modeIndicator, javafx.geometry.Pos.BOTTOM_LEFT);
         StackPane.setMargin(modeIndicator, new javafx.geometry.Insets(12));
-        renderController.setOnRenderStatusChanged(modeIndicator::setRenderStatus);
+        showLoadingScreen();
+        renderController.setOnRenderStatusChanged(status -> {
+            modeIndicator.setRenderStatus(status);
+            if (loadingScreen != null && (status.state() == RenderStatus.State.COMPLETE
+                    || status.state() == RenderStatus.State.FAILED)) {
+                // On failure expose the existing error indicator instead of leaving a stuck splash.
+                loadingScreen.close();
+                getChildren().remove(loadingScreen);
+                loadingScreen = null;
+                fractalSurface.setVisible(true);
+                modeIndicator.setVisible(true);
+            }
+        });
         renderController.setOnDeepZoomChanged(active -> {
             modeIndicator.setDeepZoom(active);
             deepZoomChangedHandler.accept(active);
@@ -129,6 +150,16 @@ public class FractalView extends StackPane {
         fractalSurface.setOnOutputScaleChanged(this::scheduleResize);
         renderController.setOnRenderingChanged(this::renderingChanged);
         colorCycleTimer.start();
+    }
+
+    private void showLoadingScreen() {
+        if (loadingScreenEnabled && loadingScreen == null) {
+            loadingScreen = new LoadingScreen();
+            // Keep the surface managed so layout and rendering proceed at the real window size.
+            fractalSurface.setVisible(false);
+            modeIndicator.setVisible(false);
+            getChildren().add(loadingScreen);
+        }
     }
 
     public InteractionLatency latency() { return fractalSurface.latency(); }
@@ -158,6 +189,7 @@ public class FractalView extends StackPane {
         stopColorCyclingForSceneChange();
         interactionRender.cancel();
         renderController.cancelCurrent();
+        showLoadingScreen();
         camera.setPreset(preset, width, height);
         scene = scene.withFractal(preset, camera.viewport());
         resetPriority();
@@ -192,6 +224,7 @@ public class FractalView extends StackPane {
         stopColorCyclingForSceneChange();
         interactionRender.cancel();
         renderController.cancelCurrent();
+        showLoadingScreen();
         camera.reset(width, height);
         scene = scene.withViewport(camera.viewport());
         resetPriority();
@@ -780,6 +813,7 @@ public class FractalView extends StackPane {
     }
 
     public void close() {
+        if (loadingScreen != null) loadingScreen.close();
         contextMenu.close();
         interactionRender.cancel();
         resizeRender.stop();
