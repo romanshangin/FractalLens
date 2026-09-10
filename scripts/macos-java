@@ -1,0 +1,62 @@
+#!/bin/bash
+set -euo pipefail
+
+# javafx:run supplies ordinary Java arguments plus the JDK used by Maven.
+project_dir=$(cd "$(dirname "$0")/.." && pwd)
+java_home=""
+java_args=()
+for arg in "$@"; do
+    if [[ -z "$java_home" && "$arg" == --fractal-java-home=* ]]; then
+        java_home=${arg#*=}
+    else
+        java_args+=("$arg")
+    fi
+done
+if [[ -z "$java_home" || ! -x "$java_home/bin/java" ]]; then
+    echo 'FractalUI: expected --fractal-java-home=<Maven JDK home>' >&2
+    exit 1
+fi
+
+plist="$project_dir/src/main/macos/Info.plist"
+icon="$project_dir/src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns"
+source_file="$project_dir/src/main/macos/FractalLauncher.c"
+sdk_path=$(xcrun --sdk macosx --show-sdk-path)
+compiler=$(xcrun --sdk macosx --find clang)
+jdk_version=$(awk -F '"' '/^JAVA_VERSION=/{print $2}' "$java_home/release")
+# Reuse an unchanged bundle; a JDK or launcher update gets its own directory.
+# Copying Java also copies its old SDK identity and compatibility window design.
+cache_key=$({
+    printf '%s\n' "$java_home" "$sdk_path"
+    shasum -a 256 "$java_home/lib/libjli.dylib" "$java_home/release" "$compiler" "$source_file" "$plist" "$icon" "$0"
+} | shasum -a 256 | cut -d ' ' -f 1)
+cache_root="$project_dir/target/macos-launcher"
+cache_dir="$cache_root/$cache_key"
+bundle="$cache_dir/FractalUI.app"
+if [[ ! -d "$bundle" ]]; then
+    mkdir -p "$cache_root"
+    staging=$(mktemp -d "$cache_root/.build.XXXXXX")
+    trap 'rm -rf "$staging"' EXIT
+    contents="$staging/FractalUI.app/Contents"
+    mkdir -p "$contents/MacOS" "$contents/Resources"
+    "$compiler" -std=c11 -Wall -Wextra -Werror -isysroot "$sdk_path" \
+        -mmacosx-version-min=11.0 -I"$java_home/include" -I"$java_home/include/darwin" \
+        "-DFRACTAL_JAVA_VERSION=\"$jdk_version\"" "$source_file" \
+        -L"$java_home/lib" -ljli -Xlinker -rpath -Xlinker "$java_home/lib" \
+        -Wl,-exported_symbol,_main -o "$contents/MacOS/FractalUI"
+    cp "$plist" "$contents/Info.plist"
+    cp "$icon" "$contents/Resources/FractalUI.icns"
+    # Sign only our generated application; the installed JDK stays untouched.
+    codesign --force --sign - "$staging/FractalUI.app"
+    mkdir -p "$cache_dir"
+    # Publish the complete bundle atomically. Another launch may win this race.
+    if ! mv -n "$staging/FractalUI.app" "$cache_dir/" 2>/dev/null; then
+        if [[ ! -x "$bundle/Contents/MacOS/FractalUI" ]]; then
+            echo "FractalUI: cannot install launcher in $cache_dir" >&2
+            exit 1
+        fi
+    fi
+    rm -rf "$staging"
+    trap - EXIT
+fi
+
+exec "$bundle/Contents/MacOS/FractalUI" "${java_args[@]}"
