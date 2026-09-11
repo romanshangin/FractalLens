@@ -7,7 +7,6 @@ import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.FileChooser;
-import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import java.io.File;
@@ -78,13 +77,8 @@ public class MainView extends BorderPane {
     }
 
     private void showError(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.initOwner(getScene().getWindow());
-        alert.initModality(Modality.WINDOW_MODAL);
-        alert.setTitle(title);
-        alert.setHeaderText(title);
-        alert.setContentText(message);
-        alert.showAndWait();
+        FractalDialogs.messageDialog(getScene().getWindow(), Alert.AlertType.ERROR,
+                title, title, message).showAndWait();
     }
 
     private void exportCompleted(Path path) {
@@ -93,13 +87,8 @@ public class MainView extends BorderPane {
         }
         menuBar.setExportInProgress(false);
 
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.initOwner(getScene().getWindow());
-        alert.initModality(Modality.WINDOW_MODAL);
-        alert.setTitle("Export complete");
-        alert.setHeaderText("PNG image saved");
-        alert.setContentText(path.toAbsolutePath().toString());
-        alert.showAndWait();
+        FractalDialogs.messageDialog(getScene().getWindow(), Alert.AlertType.INFORMATION,
+                "Export complete", "PNG image saved", path.toAbsolutePath().toString()).showAndWait();
     }
 
     private void exportFailed(Throwable exception) {

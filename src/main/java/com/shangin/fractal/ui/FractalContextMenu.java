@@ -6,6 +6,7 @@ import javafx.beans.InvalidationListener;
 import javafx.event.EventHandler;
 import javafx.scene.Node;
 import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.Skin;
@@ -19,7 +20,11 @@ import java.util.Objects;
 /** Canvas commands, presentation and dismissal live here as the menu grows. */
 final class FractalContextMenu extends ContextMenu implements AutoCloseable {
     private final Node owner;
+    private final Runnable copyCoordinatesAndZoom;
+    private MacContextMenu nativeMenu;
+    private boolean closed;
     private Window observedWindow;
+    private Scene observedScene;
     private final InvalidationListener dismiss = ignored -> hide();
     private final InvalidationListener appearanceChanged = ignored -> updateAppearance();
     private final InvalidationListener focusChanged = ignored -> {
@@ -37,13 +42,35 @@ final class FractalContextMenu extends ContextMenu implements AutoCloseable {
     private final EventHandler<ContextMenuEvent> request = this::showForRequest;
 
     private void showForRequest(ContextMenuEvent event) {
+        if (closed) return;
         hide();
+        if (MacContextMenu.isAvailable() && owner.getScene() != null
+                && owner.getScene().getWindow() != null) {
+            var local = owner.screenToLocal(event.getScreenX(), event.getScreenY());
+            var point = local == null ? null : owner.localToScene(local);
+            if (point != null) {
+                try {
+                    nativeMenu = MacContextMenu.show(owner.getScene().getWindow(), point.getX(), point.getY(), selected -> {
+                        nativeMenu = null;
+                        stopObservingWindow();
+                        if (selected && !closed) copyCoordinatesAndZoom.run();
+                    });
+                    observeWindow();
+                    event.consume();
+                    return;
+                } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+                    System.getLogger(getClass().getName()).log(System.Logger.Level.WARNING,
+                            "Cannot open AppKit menu; using JavaFX menu", error);
+                }
+            }
+        }
         show(owner, event.getScreenX(), event.getScreenY());
         event.consume();
     }
 
     FractalContextMenu(Node owner, Runnable copyCoordinatesAndZoom) {
         this.owner = Objects.requireNonNull(owner);
+        this.copyCoordinatesAndZoom = Objects.requireNonNull(copyCoordinatesAndZoom);
         MenuItem copy = new MenuItem("Copy Coordinates and Zoom");
         copy.setOnAction(event -> {
             hide();
@@ -90,7 +117,9 @@ final class FractalContextMenu extends ContextMenu implements AutoCloseable {
 
     private void observeWindow() {
         stopObservingWindow();
-        observedWindow = owner.getScene() == null ? null : owner.getScene().getWindow();
+        observedScene = owner.getScene();
+        observedWindow = observedScene == null ? null : observedScene.getWindow();
+        if (observedScene != null) observedScene.windowProperty().addListener(dismiss);
         if (observedWindow != null) {
             observedWindow.xProperty().addListener(dismiss);
             observedWindow.yProperty().addListener(dismiss);
@@ -104,6 +133,10 @@ final class FractalContextMenu extends ContextMenu implements AutoCloseable {
     }
 
     private void stopObservingWindow() {
+        if (observedScene != null) {
+            observedScene.windowProperty().removeListener(dismiss);
+            observedScene = null;
+        }
         if (observedWindow != null) {
             observedWindow.xProperty().removeListener(dismiss);
             observedWindow.yProperty().removeListener(dismiss);
@@ -117,7 +150,19 @@ final class FractalContextMenu extends ContextMenu implements AutoCloseable {
         Platform.getPreferences().accentColorProperty().removeListener(appearanceChanged);
     }
 
+    boolean hasNativeMenu() { return nativeMenu != null; }
+
+    @Override public void hide() {
+        if (nativeMenu != null) {
+            nativeMenu.close();
+            nativeMenu = null;
+            stopObservingWindow();
+        }
+        super.hide();
+    }
+
     @Override public void close() {
+        closed = true;
         hide();
         stopObservingWindow();
         owner.removeEventFilter(InputEvent.ANY, interaction);

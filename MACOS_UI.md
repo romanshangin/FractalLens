@@ -105,14 +105,53 @@ trackpad gestures remain available. Menu and keyboard zoom preserve the center.
 Right-clicking the canvas opens a single **Copy Coordinates and Zoom** command.
 It copies the current center's real and imaginary coordinates and zoom together
 as plain text, preserving decimal precision for sharing a view.
-`FractalContextMenu` owns the popup commands and dismissal behavior separately
-from the renderer. Its JavaFX popup uses macOS-style rounded corners, the system
-font, appearance and accent color, a translucent background, an inset rounded
-selection and a soft shadow. Transparency does not include backdrop blur; this
-is a JavaFX popup, not an AppKit NSMenu. Styling lives in
-`fractal-context-menu.css`. Canvas input, scene commands, window movement/resizing
-and loss of focus dismiss the menu without swallowing the initiating canvas click.
-Pointer movement alone leaves it open so its items remain reachable.
+`FractalContextMenu` owns the commands and lifecycle separately from the renderer.
+On macOS it opens a real AppKit `NSMenu` through the small Objective-C/JNI bridge
+in `src/main/macos/FractalContextMenu.m`. AppKit controls appearance, highlighting,
+keyboard navigation and tracking. No CSS or custom appearance is applied to it.
+The existing styled JavaFX popup remains available on other platforms and when
+the native library or the required JavaFX module access is unavailable.
+
+Each native menu session is created and cancelled on the JavaFX/AppKit main
+thread. Opening is scheduled in the native run loop so the Java call returns
+before AppKit starts tracking; selection is delivered with `Platform.runLater`
+after tracking finishes. Closing or replacing a session suppresses its pending
+callback and releases its JNI global reference. Window movement, resizing, focus
+loss, scene detachment and canvas commands cancel the session. Input consumed by
+AppKit follows the system menu's behavior; JavaFX input that reaches the canvas
+continues through the existing dismissal filter.
+
+Opening is scheduled in the default run-loop mode so a replacement waits for
+the previous menu's tracking loop to unwind. Scheduling it in common modes can
+prematurely open and cancel the replacement. The item's target/action explicitly
+ends tracking, including when accessibility activates it directly. Both cases
+are covered by the native regression suite.
+
+Positioning uses the owning window's content view in logical points, including
+its flipped-coordinate convention. There is no manual Retina multiplication or
+conversion through the primary screen's height. AppKit positions the popup
+within the current display's available area.
+
+The `macos-native-menu` Maven profile compiles a universal `arm64`/`x86_64`
+`libfractal-menu.dylib` during `process-classes` and includes it in the application
+JAR. Both `mvn javafx:run` and `mvn package` run this phase. Building requires the
+macOS SDK and Xcode Command Line Tools; running the packaged library does not.
+A direct IDE launch should first run `mvn process-classes` so the library exists
+in the output directory. Besides native access, custom launchers need:
+
+```text
+--enable-native-access=javafx.graphics,org.lwjgl,com.shangin.fractal
+--add-exports=javafx.graphics/com.sun.javafx.stage=com.shangin.fractal
+--add-exports=javafx.graphics/com.sun.javafx.tk=com.shangin.fractal
+```
+
+The library is extracted to a process-specific temporary file and scheduled for
+removal at JVM exit. The normal Maven launch and shared macOS run configuration
+already grant the JavaFX peer access. Distribution signing/notarization must
+include this library along with the other native dependencies.
+
+See [AppKit popup positioning](https://developer.apple.com/documentation/appkit/nsmenu/popup(positioning:at:in:)?language=objc)
+and [native tracking cancellation](https://developer.apple.com/documentation/appkit/nsmenu/canceltrackingwithoutanimation()).
 
 Coordinates and custom gradients use owner-associated dialogs with explicit
 Go/Apply and Cancel actions. Coordinate validation keeps invalid input visible
@@ -140,6 +179,52 @@ AppKit or SwiftUI. Scene controls are grouped under their task menus; there
 are currently no separate application-wide preferences.
 
 ## Validation
+
+Native canvas menu checks (require an unlocked, focused desktop session):
+
+```sh
+mvn -Dfractal.fx.tests=true -Dtest=MacContextMenuFxTest \
+    -Djavafx.cachedir=/tmp/fractalui-javafx-cache test
+mvn -Dfractal.fx.tests=true -Dfractal.fx.fullscreen=true -Dtest=MacContextMenuFxTest \
+    -Djavafx.cachedir=/tmp/fractalui-javafx-cache test
+mvn -Dfractal.fx.tests=true \
+    '-Dtest=FractalResizeFxTest#contextMenuDismissesWithoutSwallowingCanvasInput' \
+    -Djavafx.cachedir=/tmp/fractalui-javafx-cache test
+```
+
+The native suite checks AppKit target/action, cancellation, suppression of stale
+selection callbacks, scene detachment, window resize, repeated close and live
+render publication during menu tracking. Its optional full-screen test visits
+every attached display and enters/exits full screen. It uses a test-only FFM
+probe to inspect the tracking session and invoke NSMenu actions; it does not
+substitute a JavaFX popup or synthesize global keyboard input. The existing
+JavaFX-menu test exercises the fallback directly. Run these classes in separate
+processes (or use `-DreuseForks=false`) because they shut down JavaFX at the end.
+
+2026-09-10 validation: macOS 26.6.2, Apple M3 Pro, JDK 26.0.2 and JavaFX 26.0.2,
+using the built-in Liquid Retina XDR display (3456×2234). The three native tests
+and the existing JavaFX fallback test passed in separate JVMs. This includes
+actual frame completion and publication while NSMenu is tracking, window resize,
+scene detachment, stale-selection suppression, immediate menu replacement,
+native target/action, and full-screen entry/exit. The action probe no longer
+issues a separate cancellation: the production action must finish tracking.
+
+In the running application, right-click exposed a native accessibility `menu`
+with the Objective-C `choose:` action. Escape, outside click and application
+focus switching dismissed it. Keyboard selection and direct accessibility
+activation both closed the menu and updated the clipboard. Reading the result
+in a temporary coordinate-dialog field confirmed current exact coordinates and
+`Zoom: 1.25` after zooming, and `Zoom: 1` after restarting at the initial view;
+the test dialog was cancelled without applying the pasted text.
+
+The Maven build packages both arm64 and x86_64 slices in the JAR. Native runtime
+checks were performed on arm64; Intel and Windows runtime checks were not run.
+Final `mvn package`: 405 tests, 0 failures/errors, 42 opt-in tests skipped.
+The separate GUI run passed all four selected tests without skips; its reports
+were retained in `target/native-menu-validation/`. `git diff --check` passed.
+Only one physical display was attached. Multi-display/mixed-DPI placement and
+negative screen origins remain a separate hardware-validation item in the
+roadmap; the single-display test is not evidence for those cases.
 
 Resize regression checks: `mvn -Dfractal.fx.tests=true -Dtest=FractalResizeFxTest test`.
 Add `-Dfractal.fx.fullscreen=true` to exercise two native full-screen/window cycles
@@ -192,3 +277,37 @@ Hovering shows the mode description and the latest viewport render duration
 Enabling deep antialiasing after completion adds refinement time to the base
 render duration without counting the intervening idle time. Palette animation
 and export do not replace the viewport timing.
+
+### JavaFX dialog appearance
+
+Coordinate and palette editors, Help, errors and export-completion messages now
+share a system-font stylesheet, light/dark backgrounds and inputs, and the JavaFX
+platform's system accent color. Appearance updates while a dialog is open;
+preference listeners are removed when it closes. Buttons use consistent spacing
+with the primary action on the right. Enter confirms, Escape cancels, and the
+initial editable value is selected. Closing restores the owner's previous focus
+when the owner is active.
+
+Coordinate validation retains exact decimal input, highlights the invalid field
+and focuses it without closing the dialog. Palette Apply commits the current
+typed positions even without a preceding Enter; invalid or out-of-range drafts
+remain visible and cannot be applied. Inline errors clear after correction.
+Horizontal padding belongs to content rather than the DialogPane itself so
+wrapped validation text is measured correctly and stays clear of the buttons.
+
+Validation on macOS (2026-09-11): three graphical regression tests passed with
+no skips, covering light/dark appearance, system accent, button order, initial
+and restored focus, exact coordinates, invalid palette drafts, Apply and Escape.
+Snapshots for both editors, Help and alerts were visually reviewed and are saved
+in `target/dialog-qa/`, alongside the graphical test report. Manual keyboard
+checks also confirmed coordinate validation with Return and correction with Tab.
+
+```sh
+mvn -q -Dfractal.fx.tests=true -Dtest=FractalDialogsFxTest -Djavafx.cachedir=/tmp/fractalui-javafx-cache test
+mvn -q package
+```
+
+The package build passed: 408 tests, zero failures/errors, 45 opt-in tests skipped.
+These are owner-associated JavaFX WINDOW_MODAL dialogs. The roadmap separately
+tracks reduced modality and native AppKit sheets; this appearance step does not
+implement those later changes. Windows runtime verification remains outstanding.

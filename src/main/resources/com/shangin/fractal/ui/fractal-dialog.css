@@ -1,0 +1,64 @@
+.fractal-dialog {
+    -fx-font-family: "System";
+    -fx-font-size: 13px;
+    -fx-background-color: -dialog-background;
+    -fx-base: -dialog-background;
+    -fx-background: -dialog-background;
+    -fx-control-inner-background: -dialog-input;
+    -fx-text-base-color: -dialog-text;
+    -fx-text-background-color: -dialog-text;
+    -fx-focus-color: -fx-accent;
+    -fx-faint-focus-color: transparent;
+    /* DialogPane measures content using its outer width. Keep horizontal
+       insets on the content so wrapping and preferred height agree. */
+    -fx-padding: 20 0 20 0;
+}
+.fractal-dialog > .content { -fx-padding: 0 20 18 20; }
+.fractal-dialog > .dialog-body { -fx-padding: 0 20 18 20; }
+.fractal-dialog > .button-bar > .container { -fx-padding: 0 20 0 20; -fx-spacing: 8; }
+.fractal-dialog > .header-panel { -fx-background-color: transparent; -fx-padding: 0 20 16 20; }
+.fractal-dialog > .header-panel .label { -fx-font-size: 15px; -fx-font-weight: bold; }
+.fractal-dialog .label { -fx-text-fill: -dialog-text; }
+.fractal-dialog .color-picker .color-picker-label { -fx-text-fill: -dialog-text; }
+.fractal-dialog .dialog-hint { -fx-text-fill: -dialog-muted; }
+.fractal-dialog .dialog-error { -fx-text-fill: -dialog-error; }
+.fractal-dialog .text-field {
+    -fx-background-color: -dialog-input;
+    -fx-background-radius: 5;
+    -fx-border-color: -dialog-border;
+    -fx-border-radius: 5;
+    -fx-padding: 5 8;
+    -fx-text-fill: -dialog-text;
+    -fx-prompt-text-fill: -dialog-muted;
+    -fx-highlight-fill: -fx-accent;
+    -fx-highlight-text-fill: -dialog-accent-text;
+}
+.fractal-dialog .text-field:focused { -fx-border-color: -fx-accent; -fx-effect: dropshadow(gaussian, -fx-accent, 3, 0.35, 0, 0); }
+.fractal-dialog .text-field:invalid { -fx-border-color: -dialog-error; }
+.fractal-dialog .text-field:readonly { -fx-background-color: -dialog-background; }
+.fractal-dialog .button, .fractal-dialog .color-picker {
+    -fx-background-color: -dialog-input;
+    -fx-background-radius: 6;
+    -fx-border-color: -dialog-border;
+    -fx-border-radius: 6;
+    -fx-padding: 5 12;
+    -fx-text-fill: -dialog-text;
+}
+.fractal-dialog .button:hover, .fractal-dialog .color-picker:hover { -fx-background-color: derive(-dialog-input, -6%); }
+.fractal-dialog .button:armed { -fx-background-color: derive(-dialog-input, -12%); }
+.fractal-dialog .button:focused, .fractal-dialog .color-picker:focused { -fx-border-color: -fx-accent; }
+.fractal-dialog .button:default {
+    -fx-background-color: -fx-accent;
+    -fx-border-color: -fx-accent;
+    -fx-text-fill: -dialog-accent-text;
+}
+.fractal-dialog .button:default:hover { -fx-background-color: derive(-fx-accent, -8%); }
+.fractal-dialog .button:default:armed { -fx-background-color: derive(-fx-accent, -16%); }
+.fractal-dialog .button:disabled { -fx-opacity: 0.5; }
+.fractal-dialog .scroll-pane, .fractal-dialog .scroll-pane > .viewport { -fx-background-color: -dialog-background; }
+.fractal-dialog .scroll-pane { -fx-padding: 0; -fx-background-insets: 0; }
+.fractal-dialog .spinner { -fx-background-color: transparent; }
+.fractal-dialog .spinner .increment-arrow-button, .fractal-dialog .spinner .decrement-arrow-button {
+    -fx-background-color: -dialog-input;
+    -fx-border-color: -dialog-border;
+}

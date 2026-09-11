@@ -58,15 +58,25 @@ Remaining items in this section are deferred while rendering-engine work is prio
 - Add keyboard navigation and render progress/status.
 - Show user-facing errors instead of printing stack traces.
 - Add copyable/shareable viewport presets.
-- [ ] Replace the macOS canvas context menu with a native AppKit `NSMenu` for
+- [x] Replace the macOS canvas context menu with a native AppKit `NSMenu` for
   system-managed appearance and behavior. Add a small Objective-C/JNI bridge
   and package its native library, retaining the JavaFX menu on other platforms.
   Validate command callbacks, main-thread coordination, focus and dismissal,
   uninterrupted rendering, Retina/multiple-display positioning, and full screen.
-- [ ] First unify JavaFX dialog appearance with macOS: system fonts, light/dark
+  Implemented with a packaged universal JNI library and JavaFX fallback.
+  Native callbacks, accessibility activation, cancellation/replacement, live
+  rendering and full-screen entry/exit passed on the built-in Retina display;
+  see `MACOS_UI.md` for validation details and reproducible commands.
+- [ ] Complete native context-menu positioning validation across multiple displays,
+  including mixed DPI, negative screen origins and display edges. Only one
+  physical display was available for the initial implementation checks.
+- [x] First unify JavaFX dialog appearance with macOS: system fonts, light/dark
   backgrounds, system accent colors, restrained input styling, and consistent
   spacing. Place the primary action on the right; support Enter to confirm,
   Escape to cancel, and predictable keyboard focus and validation.
+  Shared appearance now covers coordinate/palette editors, Help and alerts;
+  GUI regressions cover theme changes, exact input, draft validation and focus.
+  See `MACOS_UI.md` for validation details.
 - [ ] Reduce unnecessary modality: use a compact owner-associated sheet for
   Go to Coordinates, a nonmodal palette editor with live preview, and a nonmodal
   Help window. Show export completion unobtrusively inside the application;
