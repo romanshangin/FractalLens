@@ -39,6 +39,19 @@ public final class FractalCamera {
         reset(width, height);
     }
 
+    /** Replaces center and scale together without passing through a home frame. */
+    public void goTo(Viewport destination, int width, int height, int renderWidth, int renderHeight) {
+        validateDimensions(width, height);
+        validateDimensions(renderWidth, renderHeight);
+        Objects.requireNonNull(destination);
+        if (mustRemainInDirectPrecision(destination, renderWidth, renderHeight)) {
+            throw new IllegalArgumentException("Destination exceeds this fractal's precision limit");
+        }
+        viewport = destination;
+        viewportWidth = width;
+        viewportHeight = height;
+    }
+
     public Viewport defaultViewport(
             int width,
             int height

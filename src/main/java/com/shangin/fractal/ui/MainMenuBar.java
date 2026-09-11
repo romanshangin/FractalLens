@@ -4,6 +4,7 @@ import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.formula.FractalDestination;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.SamplingPattern;
@@ -32,6 +33,7 @@ final class MainMenuBar extends MenuBar {
     private final Stage stage;
     private final FractalView fractalView;
     private final MenuItem export;
+    private final Menu goTo = new Menu("Go to");
     private final Menu color = new Menu("Color");
     private final Menu render = new Menu("Render");
     private final CheckMenuItem animation = new CheckMenuItem("Animate Palette");
@@ -75,6 +77,7 @@ final class MainMenuBar extends MenuBar {
         view.getItems().addAll(new SeparatorMenuItem(), fullScreen);
         Menu fractal = choices("Fractal", FractalPreset.values(), initialFractal, new ToggleGroup(), preset -> {
             fractalView.setFractal(preset);
+            updateDestinations(preset);
             stage.setTitle(preset + " — FractalUI");
         });
         Menu palette = choices("Palette", PalettePreset.values(), initialPalette, palettes, preset -> {
@@ -106,7 +109,8 @@ final class MainMenuBar extends MenuBar {
                 command("Minimize", shortcut(KeyCode.M), () -> stage.setIconified(true)),
                 command("Zoom", null, () -> stage.setMaximized(!stage.isMaximized())));
         Menu help = new Menu("Help", null, command("FractalUI Help", null, () -> FractalDialogs.help(stage)));
-        getMenus().setAll(file, editMenu(), view, fractal, color, render, window, help);
+        updateDestinations(initialFractal);
+        getMenus().setAll(file, editMenu(), view, fractal, goTo, color, render, window, help);
         stage.sceneProperty().addListener((observable, oldScene, scene) -> {
             if (scene != null) {
                 // Also accept the unshifted +/= key and the numeric keypad.
@@ -132,6 +136,13 @@ final class MainMenuBar extends MenuBar {
         fractalView.setOnColorCyclingStopped(() -> animation.setSelected(false));
         file.setOnShowing(event -> updateAvailability());
         updateAvailability();
+    }
+
+    private void updateDestinations(FractalPreset preset) {
+        goTo.getItems().setAll(FractalDestination.forPreset(preset).stream()
+                .map(destination -> command(destination.name(), null,
+                        () -> fractalView.goTo(destination.viewport())))
+                .toList());
     }
 
     void setExportInProgress(boolean active) {

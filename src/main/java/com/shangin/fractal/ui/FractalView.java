@@ -196,6 +196,23 @@ public class FractalView extends StackPane {
         recalculate();
     }
 
+    /** A bookmark is a scene replacement, including cancellation of queued gestures. */
+    public void goTo(Viewport destination) {
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+        if (width < 2 || height < 2) return;
+        camera.goTo(destination, width, height,
+                Math.max(2, fractalSurface.renderWidth()), Math.max(2, fractalSurface.renderHeight()));
+        dismissContextMenu();
+        stopColorCyclingForSceneChange();
+        interactionRender.cancel();
+        renderController.cancelCurrent();
+        showLoadingScreen();
+        scene = scene.withViewport(camera.viewport());
+        resetPriority();
+        recalculate();
+    }
+
     private void dismissContextMenu() {
         if (contextMenu != null) contextMenu.hide();
     }

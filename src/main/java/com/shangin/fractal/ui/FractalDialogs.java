@@ -133,7 +133,8 @@ final class FractalDialogs {
                 + "Scroll with a mouse to zoom toward the pointer.\n"
                 + "On a trackpad, pinch to zoom and scroll with two fingers to pan.\n\n"
                 + "Use View to zoom, reset the view, enter coordinates, or go full screen.\n"
-                + "Choose a formula in Fractal, a palette in Color, and antialiasing in Render.\n"
+                + "Choose a formula in Fractal, then use Go to for interesting places in that fractal.\n"
+                + "Choose a palette in Color and antialiasing in Render.\n"
                 + "Deep Zoom Antialiasing becomes available when zooming deeply into Mandelbrot.\n"
                 + "Animate Palette is available when Histogram Coloring and Orbit Trap are off.\n\n"
                 + "Use File → Export PNG… to save the rendered image.");
