@@ -29,13 +29,28 @@ public final class Viewport {
     }
 
     public Viewport(PreciseComplex center, BigDecimal scale) {
+        this(center, scale, null);
+    }
+
+    private Viewport(PreciseComplex center, BigDecimal scale, MathContext inherited) {
         this.center = Objects.requireNonNull(center, "Center must not be null");
         Objects.requireNonNull(scale, "Scale must not be null");
         if (scale.signum() <= 0) {
             throw new IllegalArgumentException("Scale must be positive");
         }
         this.scale = scale.stripTrailingZeros();
-        this.mathContext = precisionFor(center, this.scale);
+        this.mathContext = inherited == null ? precisionFor(center, this.scale) : inherited;
+    }
+
+    /** Carries the existing working precision into coordinates calculated from this view. */
+    public Viewport withCalculatedValues(PreciseComplex nextCenter, BigDecimal nextScale) {
+        int depth = Math.max(0, nextScale.scale() - nextScale.precision() + 1);
+        int integerDigits = Math.max(integerDigits(nextCenter.real()), integerDigits(nextCenter.imaginary()));
+        // Computed coordinates already contain guard digits. Add guards only for
+        // newly reached depth, not again to the previous result on each gesture.
+        MathContext context = new MathContext(Math.max(mathContext.getPrecision(),
+                integerDigits + depth + GUARD_DIGITS), RoundingMode.HALF_EVEN);
+        return new Viewport(nextCenter, nextScale, context);
     }
 
     private static BigDecimal finitePositive(double value) {
@@ -165,7 +180,7 @@ public final class Viewport {
     public Viewport zoom(BigDecimal factor) {
         Objects.requireNonNull(factor);
         if (factor.signum() <= 0) throw new IllegalArgumentException("Zoom factor must be positive");
-        return new Viewport(center, scale.multiply(factor, mathContext));
+        return withCalculatedValues(center, scale.multiply(factor, mathContext));
     }
 
     public Viewport pan(double deltaReal, double deltaImaginary) {
@@ -173,7 +188,7 @@ public final class Viewport {
     }
 
     public Viewport pan(BigDecimal deltaReal, BigDecimal deltaImaginary) {
-        return new Viewport(new PreciseComplex(
+        return withCalculatedValues(new PreciseComplex(
                 center.real().add(deltaReal, mathContext),
                 center.imaginary().add(deltaImaginary, mathContext)), scale);
     }
@@ -187,7 +202,7 @@ public final class Viewport {
         BigDecimal contentAspect = width.divide(height, mathContext);
         BigDecimal fittedScale = windowAspect.compareTo(contentAspect) < 0
                 ? width.divide(windowAspect, mathContext) : height;
-        return new Viewport(center, fittedScale);
+        return withCalculatedValues(center, fittedScale);
     }
 
     public Viewport zoomAt(double x, double y, int width, int height, double factor) {
@@ -207,7 +222,7 @@ public final class Viewport {
         BigDecimal newImaginary = targetImaginary.add(
                 center.imaginary().subtract(targetImaginary, mathContext).multiply(factor, mathContext),
                 mathContext);
-        return new Viewport(new PreciseComplex(newReal, newImaginary),
+        return withCalculatedValues(new PreciseComplex(newReal, newImaginary),
                 scale.multiply(factor, mathContext));
     }
 
@@ -235,7 +250,7 @@ public final class Viewport {
                 .multiply(shiftX, mathContext);
         BigDecimal imaginaryShift = imaginaryUnitsPerPixelExact(height)
                 .multiply(shiftY, mathContext);
-        return new Viewport(new PreciseComplex(
+        return withCalculatedValues(new PreciseComplex(
                 center.real().subtract(realShift, mathContext),
                 center.imaginary().add(imaginaryShift, mathContext)), scale);
     }

@@ -85,6 +85,27 @@ public enum FractalPreset {
         return defaultHeight;
     }
 
+    public boolean supportsDeepZoom() {
+        return this == MANDELBROT || this == JULIA;
+    }
+
+    /** Includes the first Julia orbit step, whose derivative vanishes near z0 = 0. */
+    public boolean hasSufficientDirectPrecision(Viewport viewport, int width, int height) {
+        if (!viewport.hasSufficientPrecision(width, height, minimumUlpsPerPixel)) return false;
+        if (this != JULIA) return true;
+        double step = Math.min(viewport.realUnitsPerPixel(width, height), viewport.imaginaryUnitsPerPixel(height));
+        double nearestReal = Math.max(0.0, Math.abs(viewport.centerReal())
+                - viewport.visibleWidth(width, height) * 0.5);
+        double nearestImaginary = Math.max(0.0, Math.abs(viewport.centerImaginary()) - viewport.scale() * 0.5);
+        double firstStepSeparation = step * Math.max(step, 2.0 * Math.hypot(nearestReal, nearestImaginary));
+        double maxCoordinate = Math.max(Math.abs(viewport.minReal(width, height)),
+                Math.max(Math.abs(viewport.maxReal(width, height)),
+                        Math.max(Math.abs(viewport.minImaginary()), Math.abs(viewport.maxImaginary()))));
+        // Orbit values include c even when initial coordinates are tiny.
+        double orbitUlp = Math.ulp(Math.max(1.0, 2.0 * maxCoordinate * maxCoordinate));
+        return Math.min(step, firstStepSeparation) / orbitUlp >= minimumUlpsPerPixel;
+    }
+
     /** Precision reserve required before allowing another hardware-double zoom. */
     public double minimumUlpsPerPixel() {
         return minimumUlpsPerPixel;

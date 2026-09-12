@@ -54,7 +54,7 @@ class FractalDestinationTest {
 
     @Test
     void directPrecisionFailureDoesNotChangeCamera() {
-        var camera = new FractalCamera(FractalPreset.JULIA);
+        var camera = new FractalCamera(FractalPreset.TRICORN);
         camera.reset(1000, 700);
         var before = camera.viewport();
         assertThrows(IllegalArgumentException.class, () -> camera.goTo(

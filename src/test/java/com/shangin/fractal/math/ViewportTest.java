@@ -13,6 +13,16 @@ public class ViewportTest {
     private static final double DELTA = 1e-10;
 
     @Test
+    void repeatedZoomsDoNotAddAnotherGuardBudgetOnEveryGesture() {
+        Viewport viewport = new Viewport("0.00005452997649", "-0.00002039968643", "0.001");
+        for (int n = 0; n < 500; n++) {
+            viewport = viewport.zoomAt(421, 271, 1000, 700, 0.99);
+        }
+        assertTrue(viewport.mathContext().getPrecision() < 64,
+                "Navigation must not accumulate thousands of guard digits");
+    }
+
+    @Test
     void leftPixelShouldMapToMinReal() {
         Viewport viewport = new Viewport(0.0, 0.0, 2.4);
 

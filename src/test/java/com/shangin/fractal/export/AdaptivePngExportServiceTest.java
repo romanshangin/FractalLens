@@ -178,6 +178,36 @@ class AdaptivePngExportServiceTest {
         assertEquals(height, image.getHeight());
     }
 
+    @Test
+    void deepJuliaExportKeepsSubpixelCoordinatesBeyondDoublePrecision() throws Exception {
+        var job = new com.shangin.fractal.render.RenderJob(
+                com.shangin.fractal.render.FormulaDefinition.forPreset(FractalPreset.JULIA,
+                        com.shangin.fractal.coloring.OrbitTrap.NONE),
+                new com.shangin.fractal.math.Viewport("2", "0", "1e-80"), 5, 5, 20);
+        RenderFrame frame;
+        try (var backend = new com.shangin.fractal.render.JuliaDeepZoomRenderBackend()) {
+            frame = backend.render(RenderFrame.create(job), () -> false, ignored -> {}, null);
+        }
+        Path target = tempDirectory.resolve("deep-julia.png");
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        try (var service = new AdaptivePngExportService()) {
+            service.export(frame, (iterations, smooth, escaped, maximum) ->
+                            iterations == 0 ? 0xFF000000 : 0xFFFFFFFF,
+                    target, ignored -> completed.countDown(), failure -> {
+                        error.set(failure);
+                        completed.countDown();
+                    });
+            assertTrue(completed.await(10, TimeUnit.SECONDS));
+        }
+        assertNull(error.get());
+        var image = ImageIO.read(target.toFile());
+        assertTrue((image.getRGB(0, 2) & 255) > 250);
+        assertTrue((image.getRGB(4, 2) & 255) < 5);
+        int edge = image.getRGB(2, 2) & 255;
+        assertTrue(edge > 100 && edge < 240, "Boundary pixel must mix precise subsamples");
+    }
+
     private record FixedDistanceFormula(double distance) implements DistanceEstimatingFormula {
         @Override
         public FractalSample calculate(double real, double imaginary, int maxIterations) {

@@ -167,13 +167,13 @@ public final class FractalCamera {
         return true;
     }
 
-    /** Mandelbrot has a dedicated perturbation backend; other formulas remain direct-only. */
+    /** Only formulas with a dedicated precise backend may cross the double limit. */
     private boolean mustRemainInDirectPrecision(
             Viewport candidate,
             int renderWidth,
             int renderHeight
     ) {
-        return preset != FractalPreset.MANDELBROT
+        return !preset.supportsDeepZoom()
                 && !candidate.hasSufficientPrecision(
                 renderWidth,
                 renderHeight,
@@ -216,9 +216,9 @@ public final class FractalCamera {
 
         if (isDefaultView()) {
             viewport = defaultViewport(width, height);
-        } else {
+        } else if (oldRenderHeight >= 2) {
             BigDecimal step = viewport.imaginaryUnitsPerPixelExact(oldRenderHeight);
-            viewport = new Viewport(viewport.center(), step.multiply(
+            viewport = viewport.withCalculatedValues(viewport.center(), step.multiply(
                     BigDecimal.valueOf(newRenderHeight - 1L), viewport.mathContext()));
         }
         viewportWidth = width;
@@ -263,7 +263,7 @@ public final class FractalCamera {
             return false;
         }
 
-        viewport = new Viewport(newCenter, viewport.scaleExact());
+        viewport = viewport.withCalculatedValues(newCenter, viewport.scaleExact());
 
         return true;
     }

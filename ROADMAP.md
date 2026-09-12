@@ -197,6 +197,35 @@ existing behavior is covered by tests.
 
 This phase should remain separate from the current pan-reuse optimization.
 
+### 7.7. Julia deep zoom
+
+- [x] Define Julia semantics separately: the exact pixel is `z0`; the fixed `c`
+  retains the binary-double parameter value used by the standard formula.
+- [x] Add a tiled, cancellable BigDecimal backend using viewport precision,
+  ready-pixel reuse, initial-radius testing, and the existing iteration-cap convention.
+- [x] Enable precision-independent Julia navigation, Deep Zoom presentation,
+  optional precise AA, orbit traps, and precise adaptive PNG export.
+- [x] Cover sub-double and subnormal coordinate steps, higher-precision oracle
+  conformance, cancellation, reuse, AA, export, and camera precision transitions.
+- [x] Accelerate Julia using its own reference-orbit perturbation recurrence
+  (`delta z0 = pixel - reference`, `delta c = 0`), two-component deltas, conservative error checks,
+  bounded worker-local recovery references, and a BigDecimal fallback.
+- [x] Add a regression that requires one shared exact orbit for thousands of
+  coherent pixels, fixed-point conformance across several depths and traps,
+  and a window-size JavaFX completion/loading-layer regression.
+- [x] Include Julia's first-step contraction near the critical point in the
+  shared backend/presentation/export precision gate. Preserve the reported
+  decimal coordinates in `src/test/resources/julia/reported-pixelation.txt`.
+- [x] Stop accumulating guard digits on every navigation operation; bound
+  render arithmetic to pixel depth while preserving authoritative input values.
+- [ ] Extend the perturbation fast path to deltas below the normal-double range;
+  these currently retain the exact fallback.
+
+Julia uses shared reference perturbation in base rendering, deep AA, and export.
+It does not apply Mandelbrot cardioid tests, critical-point rebasing, or BLA.
+Unreliable and subnormal deltas retain the slower arbitrary-precision fallback.
+See `docs/JULIA_DEEP_ZOOM_PERFORMANCE.md` for the latency regression and measurements.
+
 ## 8. Add GPU rendering
 
 The GPU work starts only after the deep-zoom correctness gate. Each subsection

@@ -170,7 +170,7 @@ class FractalCameraTest {
 
     @Test
     void zoomInStopsBeforeDoublePrecisionBecomesInsufficient() {
-        FractalCamera camera = new FractalCamera(FractalPreset.JULIA);
+        FractalCamera camera = new FractalCamera(FractalPreset.TRICORN);
         int logicalWidth = 1000;
         int logicalHeight = 700;
         int renderWidth = 2000;
@@ -203,7 +203,7 @@ class FractalCameraTest {
         assertTrue(camera.viewport().hasSufficientPrecision(
                 renderWidth,
                 renderHeight,
-                FractalPreset.JULIA.minimumUlpsPerPixel()
+                FractalPreset.TRICORN.minimumUlpsPerPixel()
         ));
         assertFalse(camera.zoomIn(
                 logicalWidth / 2.0,
@@ -240,6 +240,34 @@ class FractalCameraTest {
                 renderWidth,
                 renderHeight,
                 FractalPreset.MANDELBROT.minimumUlpsPerPixel()
+        ));
+    }
+
+    @Test
+    void juliaZoomContinuesIntoDeepZoomPrecision() {
+        FractalCamera camera = new FractalCamera(FractalPreset.JULIA);
+        int logicalWidth = 1000;
+        int logicalHeight = 700;
+        int renderWidth = 2000;
+        int renderHeight = 1400;
+        camera.resize(logicalWidth, logicalHeight);
+
+        for (int zoom = 0; zoom < 200; zoom++) {
+            assertTrue(camera.zoomBy(
+                    logicalWidth / 2.0,
+                    logicalHeight / 2.0,
+                    0.8,
+                    logicalWidth,
+                    logicalHeight,
+                    renderWidth,
+                    renderHeight
+            ));
+        }
+
+        assertFalse(camera.viewport().hasSufficientPrecision(
+                renderWidth,
+                renderHeight,
+                FractalPreset.JULIA.minimumUlpsPerPixel()
         ));
     }
 

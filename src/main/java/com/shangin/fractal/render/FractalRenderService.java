@@ -47,7 +47,8 @@ public final class FractalRenderService implements AutoCloseable {
 
     private static RenderBackend defaultBackend(GpuRuntime runtime) {
         RenderBackend cpu = new PrecisionSelectingRenderBackend(new DirectDoubleRenderBackend(),
-                new MandelbrotPerturbationRenderBackend());
+                new PrecisionSelectingRenderBackend(new MandelbrotPerturbationRenderBackend(),
+                        new JuliaDeepZoomRenderBackend()));
         return Boolean.getBoolean("fractal.gpu.mandelbrot.enabled")
                 ? new com.shangin.fractal.gpu.GpuMandelbrotRenderBackend(runtime, cpu) : cpu;
     }

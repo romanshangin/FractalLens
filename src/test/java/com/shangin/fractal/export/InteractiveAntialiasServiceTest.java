@@ -596,6 +596,29 @@ class InteractiveAntialiasServiceTest {
         return mask;
     }
 
+    @Test
+    void juliaDeepRefinementCompletesThroughSharedPreciseSampler() throws Exception {
+        var job = new RenderJob(FormulaDefinition.forPreset(FractalPreset.JULIA,
+                com.shangin.fractal.coloring.OrbitTrap.NONE),
+                new com.shangin.fractal.math.Viewport("2", "0", "1e-80"), 5, 5, 20);
+        RenderFrame frame;
+        try (var backend = new com.shangin.fractal.render.JuliaDeepZoomRenderBackend()) {
+            frame = backend.render(RenderFrame.create(job), () -> false, ignored -> {}, null);
+        }
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        AtomicInteger published = new AtomicInteger();
+        try (var service = new InteractiveAntialiasService()) {
+            service.refineDeep(frame, new SmoothPaletteColoring(PalettePreset.ICE.palette()),
+                    SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(5, 5), Runnable::run,
+                    (region, colors) -> published.incrementAndGet(), completed::countDown,
+                    failure -> { error.set(failure); completed.countDown(); });
+            assertTrue(completed.await(10, TimeUnit.SECONDS));
+        }
+        assertNull(error.get());
+        assertTrue(published.get() > 0);
+    }
+
     private static RenderFrame renderDeepFrame() throws InterruptedException {
         RenderJob job = new RenderJob(
                 FormulaDefinition.forPreset(FractalPreset.MANDELBROT,

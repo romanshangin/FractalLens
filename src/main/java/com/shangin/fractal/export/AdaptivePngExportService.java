@@ -10,6 +10,10 @@ import com.shangin.fractal.render.RenderFrame;
 import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.scene.SamplingPattern;
 
+import com.shangin.fractal.render.PreciseFractalSampler;
+import com.shangin.fractal.render.PreciseRenderGrid;
+import java.math.BigDecimal;
+import java.util.function.BooleanSupplier;
 import java.io.IOException;
 import java.nio.IntBuffer;
 import java.nio.file.Path;
@@ -142,6 +146,12 @@ public final class AdaptivePngExportService implements AutoCloseable {
         int height = frame.samplePlane().height();
         List<Future<?>> tasks = new ArrayList<>((height + ROWS_PER_TASK - 1) / ROWS_PER_TASK);
 
+        boolean deep = frame.job().formula().preset() != null
+                && frame.job().formula().preset().supportsDeepZoom()
+                && !frame.job().formula().preset().hasSufficientDirectPrecision(
+                frame.job().viewport(), frame.job().width(), frame.job().height());
+        PreciseFractalSampler sampler = deep ? PreciseFractalSampler.create(
+                frame.job(), () -> shouldCancel(exportId)).orElseThrow(CancellationException::new) : null;
         for (int yFrom = 0; yFrom < height; yFrom += ROWS_PER_TASK) {
             int firstRow = yFrom;
             int lastRow = Math.min(yFrom + ROWS_PER_TASK, height);
@@ -153,7 +163,8 @@ public final class AdaptivePngExportService implements AutoCloseable {
                     baseColors,
                     output,
                     firstRow,
-                    lastRow
+                    lastRow,
+                    sampler
             )));
         }
 
@@ -167,7 +178,8 @@ public final class AdaptivePngExportService implements AutoCloseable {
             int[] baseColors,
             int[] output,
             int yFrom,
-            int yTo
+            int yTo,
+            PreciseFractalSampler sampler
     ) {
         SamplePlane data = frame.samplePlane();
         RenderGrid grid = frame.renderGrid();
@@ -180,7 +192,10 @@ public final class AdaptivePngExportService implements AutoCloseable {
 
             for (int x = 0; x < data.width(); x++) {
                 int index = y * data.width() + x;
-                int color = samplePixel(
+                int color = sampler != null ? samplePrecisePixel(sampler, coloring,
+                        grid.preciseGrid() != null ? grid.preciseGrid() : frame.job().preciseGrid(),
+                        frame.job().maxIterations(), data, baseColors, x, y,
+                        () -> shouldCancel(exportId)) : samplePixel(
                         calculator,
                         coloring,
                         grid,
@@ -195,6 +210,30 @@ public final class AdaptivePngExportService implements AutoCloseable {
                         ? dither(color, x, y)
                         : color;
             }
+        }
+    }
+
+    static int samplePrecisePixel(PreciseFractalSampler sampler, ColoringStrategy coloring,
+                                  PreciseRenderGrid grid, int maxIterations,
+                                  SamplePlane data, int[] baseColors, int x, int y,
+                                  BooleanSupplier cancelled) {
+        int firstSize = isBaseEdge(data, baseColors, x, y) ? MAX_SAMPLE_GRID : MIN_SAMPLE_GRID;
+        for (int size = firstSize; ; size *= 2) {
+            ColorAccumulator accumulator = new ColorAccumulator();
+            for (int sy = 0; sy < size; sy++) for (int sx = 0; sx < size; sx++) {
+                BigDecimal ox = BigDecimal.valueOf((sx + 0.5) / size - 0.5);
+                BigDecimal oy = BigDecimal.valueOf((sy + 0.5) / size - 0.5);
+                FractalSample sample = sampler.sample(
+                        grid.realAt(x).add(grid.realStep().multiply(ox, grid.mathContext()), grid.mathContext()),
+                        grid.imaginaryAt(y).subtract(grid.imaginaryStep().multiply(oy, grid.mathContext()), grid.mathContext()),
+                        cancelled);
+                if (sample == null) throw new CancellationException();
+                accumulator.add(coloring.color(sample.iterations(), sample.smoothIterations(),
+                        sample.escaped(), maxIterations, sample.orbitTrapDistance()));
+            }
+            SampleResult result = accumulator.result();
+            double threshold = size == MIN_SAMPLE_GRID ? TWO_BY_TWO_THRESHOLD : FOUR_BY_FOUR_THRESHOLD;
+            if (size == MAX_SAMPLE_GRID || result.contrast() <= threshold) return result.color();
         }
     }
 

@@ -14,7 +14,7 @@ import com.shangin.fractal.render.RefinedPixelSnapshot;
 import com.shangin.fractal.render.AntialiasSampleCache;
 import com.shangin.fractal.render.PixelShift;
 import com.shangin.fractal.render.BaseColorPhaseCache;
-import com.shangin.fractal.render.MandelbrotPerturbationRenderBackend;
+import com.shangin.fractal.render.PreciseFractalSampler;
 import com.shangin.fractal.render.PreciseRenderGrid;
 import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.scene.SamplingPattern;
@@ -215,8 +215,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             int[] cachedColors = retained.size() == 0 ? null : new int[data.size()];
             if (cachedColors != null) retained.recolorInto(cachedColors, lookup);
             if (profiling) profile.cachePreparationNanos = System.nanoTime() - cacheStarted;
-            MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler = deepZoom
-                    ? MandelbrotPerturbationRenderBackend.createPreciseSampler(
+            PreciseFractalSampler preciseSampler = deepZoom
+                    ? PreciseFractalSampler.create(
                     frame.job(), () -> shouldCancel(refinementId)).orElseThrow(
                     () -> new CancellationException("Deep AA reference orbit was cancelled"))
                     : null;
@@ -279,7 +279,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             RenderRegion tile,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
-            MandelbrotPerturbationRenderBackend.PreciseSampler preciseSampler,
+            PreciseFractalSampler preciseSampler,
             MutableProfile profile
     ) {
         SamplePlane data = frame.samplePlane();
@@ -509,7 +509,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     }
 
     private static FractalSample[] sampleDeepGrid(
-            MandelbrotPerturbationRenderBackend.PreciseSampler sampler,
+            PreciseFractalSampler sampler,
             PreciseRenderGrid grid,
             SamplePlane data,
             int pixelX,

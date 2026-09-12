@@ -22,11 +22,9 @@ public final class DirectDoubleRenderBackend implements RenderBackend {
     @Override
     public boolean supports(RenderJob job) {
         Objects.requireNonNull(job);
-        double minimumUlps = job.formula().preset() == null
-                ? DEFAULT_MINIMUM_ULPS_PER_PIXEL
-                : job.formula().preset().minimumUlpsPerPixel();
-        return job.viewport().hasSufficientPrecision(
-                job.width(), job.height(), minimumUlps);
+        if (job.formula().preset() != null)
+            return job.formula().preset().hasSufficientDirectPrecision(job.viewport(), job.width(), job.height());
+        return job.viewport().hasSufficientPrecision(job.width(), job.height(), DEFAULT_MINIMUM_ULPS_PER_PIXEL);
     }
 
     @Override

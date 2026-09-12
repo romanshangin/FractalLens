@@ -41,6 +41,31 @@ class FractalResizeFxTest {
         return task.get(15, TimeUnit.SECONDS);
     }
 
+    @Test
+    void deepJuliaCompletesAndRevealsTheCanvasAtWindowResolution() throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.JULIA, PalettePreset.ICE, true));
+        FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+        Viewport destination = com.shangin.fractal.render.ReportedJuliaFixture.viewport();
+        try {
+            changeView(view, surface, () -> {
+                view.resize(1200, 780);
+                view.layout();
+                view.goTo(destination);
+                assertFalse(surface.isVisible());
+            }, 30);
+            fx(() -> {
+                assertTrue(surface.hasCompletedFrame());
+                assertTrue(surface.isVisible(), "Completed Julia must be visible after the loading layer closes");
+                assertEquals(2, view.getChildrenUnmodifiable().size());
+                assertEquals(destination, surface.completedRender().frame().job().viewport());
+                assertFalse(FractalPreset.JULIA.hasSufficientDirectPrecision(destination, 1200, 780));
+                return null;
+            });
+        } finally {
+            fx(() -> { view.close(); return null; });
+        }
+    }
+
     @ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
     void loadingScreenWaitsForFullRenderAndReturnsOnlyForSceneChanges(boolean macStartup) throws Exception {
