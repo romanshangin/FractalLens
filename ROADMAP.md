@@ -8,6 +8,99 @@ CPU AA synchronization, improve CPU/deep-zoom work, then test different GPU
 algorithms. Completed and rejected experiments below remain historical evidence;
 new unchecked items are proposals, not measured speedups.
 
+## 0. Prioritized backlog
+
+This section is the execution order for all unfinished work below. The detailed
+sections remain the source of requirements and acceptance criteria. A lower
+priority does not cancel an item; it means that its dependencies, evidence or
+delivery foundation should be completed first.
+
+### P0. Infrastructure and delivery foundation — do first
+
+1. **Make the build continuously reproducible.** Add CI for the portable
+   CPU-default build and tests on macOS and Windows, with dependency caching,
+   clean-checkout execution and uploaded test reports. Keep hardware-native GPU
+   suites in explicit opt-in jobs because ordinary CI runners do not prove GPU
+   conformance.
+2. **Produce installable, smoke-tested runtime artifacts.** Define a versioned
+   `jlink`/`jpackage`-style pipeline for the macOS app and Windows application,
+   including JavaFX/LWJGL natives, the AppKit bridge where applicable, icons,
+   launch options, licenses and CPU fallback. Record artifact provenance and a
+   clean-machine launch checklist. Signing/notarization may remain a separate
+   release step, but packaging must be automated and repeatable.
+3. **Close the current measurement gate before starting another optimization.**
+   Finish the open 9.1 paired-decision item and the already implemented 9.3
+   bounded-`ValidityMask` candidate with fixed power conditions, fresh output
+   directories, at least 30 alternating pairs and multiple process starts.
+   Retain or reject the candidate explicitly; do not leave production code in a
+   permanently provisional state.
+4. **Turn reproducibility into a product contract.** Implement section 5 JSON
+   scene serialization and last-session restore before undo/redo, shareable
+   presets or new export variants. Version the schema and test migration,
+   malformed input, precise decimal coordinates and atomic recovery after an
+   interrupted write.
+5. **Define platform validation lanes.** Treat the Windows runtime work in 8.7
+   and Intel/AMD Mac work in 8.8 as hardware-backed infrastructure tracks.
+   They may run when hardware is available and do not block the CPU-default
+   macOS artifact, but they must precede enabling GPU modes on those platforms.
+
+P0 exit criterion: a clean checkout is tested automatically, produces a
+traceable installable artifact, restores a versioned scene safely, and the
+current bounded-mask candidate has a recorded retain/reject decision.
+
+### P1. Production reliability and measured latency
+
+1. Replace user-visible stack traces with in-application errors, then add render
+   progress/status and keyboard navigation from section 4.
+2. Run the retained-snapshot preparation experiment in 9.2; accept it only if
+   first-tile and full-frame behavior both pass.
+3. Measure JavaFX dirty rectangles, callback coalescing, staging reuse and
+   redundant copies from 9.3. This is the next end-to-end publication candidate
+   after the validity-mask decision.
+4. Profile the concrete allocation candidates at the start of 9.4, especially
+   immutable reference conversions and precise AA coordinate construction.
+5. Promote every retained change through the portable/native/FX and sustained
+   gates in 9.9; this is part of the change, not a later cleanup phase.
+
+### P2. Product foundation and user workflows
+
+1. Complete iteration/Julia editing and the zoom/iteration presentation in
+   section 4.
+2. Build undo/redo and bookmarks on the versioned scene format, then add
+   copyable/shareable viewport presets.
+3. Consolidate the duplicate section 5/6 export requirements into one tiled,
+   cancellable high-resolution/off-screen pipeline based on `FractalScene` and
+   an independent `RenderTarget`.
+4. Reduce dialog modality, then extend the AppKit bridge only where a native
+   sheet materially improves behavior. Finish multi-display context-menu
+   validation when suitable hardware is available.
+5. Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
+   exact fallback is a material user-visible cost.
+
+### P3. Conditional CPU research
+
+After P0/P1, take the remaining 9.2–9.5 experiments one bounded spike at a time:
+candidate sidecars and adaptive sampling; scalar interleaving/SIMD/scheduling;
+BLA/reference sharing and scaled-exponent work; then alternative numeric or
+spatial engines. Each spike needs a predeclared workload, correctness gate and
+retain/reject result. Do not batch speculative algorithms into one change.
+
+### P4. Conditional GPU expansion and hardware alternatives
+
+The order is 9.6 diagnostic GPU perturbation/BLA, then 9.7 selection/scheduling,
+then the production gates in 9.9. Only a passing result may reopen the unchecked
+8.6 residency work. Section 9.8 API/hardware alternatives stay last and require
+a new measured bottleneck. The failed 8.4–8.6 gates mean that GPU AA storage,
+feature parity, resident caching and GPU export are not near-term tasks.
+
+### Newly explicit infrastructure tasks
+
+- [ ] Add portable macOS/Windows CI for the CPU-default build and test suite,
+  plus opt-in native hardware lanes with retained reports.
+- [ ] Add reproducible macOS and Windows runtime packaging and clean-machine
+  smoke checks; document artifact provenance and the separate signing/release
+  boundary.
+
 ## 1. Restore a stable green build
 
 - [x] Fix compilation and run the complete test suite.
@@ -47,17 +140,17 @@ Exit criterion: `mvn test` succeeds and temporary profiling code is isolated fro
 
 ## 4. Strengthen user interaction
 
-Remaining items in this section are deferred while rendering-engine work is prioritized.
+Remaining items in this section follow the cross-section order in section 0.
 
 - [x] Replace the crowded top control row with a global toolbar, left inspector, canvas, and bottom render status area.
 - [x] Add Reset View.
 - [x] Display and edit center coordinates where appropriate.
 - [x] Support native macOS trackpad pinch zoom, continuous two-finger panning, and directional swipe panning.
-- Display zoom and iteration count.
-- Add iteration controls and editable Julia parameters.
-- Add keyboard navigation and render progress/status.
-- Show user-facing errors instead of printing stack traces.
-- Add copyable/shareable viewport presets.
+- [ ] Display zoom and iteration count.
+- [ ] Add iteration controls and editable Julia parameters.
+- [ ] Add keyboard navigation and render progress/status.
+- [ ] Show user-facing errors instead of printing stack traces.
+- [ ] Add copyable/shareable viewport presets.
 - [x] Replace the macOS canvas context menu with a native AppKit `NSMenu` for
   system-managed appearance and behavior. Add a small Objective-C/JNI bridge
   and package its native library, retaining the JavaFX menu on other platforms.
@@ -92,9 +185,9 @@ Remaining items in this section are deferred while rendering-engine work is prio
 
 - [x] Introduce an immutable `FractalScene` containing formula, viewport, iteration settings, and coloring, and pair every completed frame with the exact scene snapshot it represents.
 - [x] Keep transient output dimensions and scheduling priority in a separate immutable `RenderTarget` so window resizes do not alter scene history.
-- Add undo/redo and bookmarks based on `FractalScene` snapshots.
-- Add JSON serialization and last-session restore.
-- Add arbitrary-resolution export by combining a scene snapshot with an independent render target.
+- [ ] Add undo/redo and bookmarks based on `FractalScene` snapshots.
+- [ ] Add JSON serialization and last-session restore.
+- [ ] Add arbitrary-resolution export by combining a scene snapshot with an independent render target.
 
 ## 6. Expand the rendering engine
 
@@ -120,7 +213,7 @@ Remaining items in this section are deferred while rendering-engine work is prio
   Preserve unchanged pixel spacing, formula, sample accuracy and iteration
   limits; cover partial frames and resize-then-drag regressions. Measure its
   application-level benefit in 9.1 rather than repeating the completed work.
-- Add a separate high-resolution/off-screen export pipeline.
+- [ ] Add a separate high-resolution/off-screen export pipeline.
 
 ## 7. Implement deep zoom
 
@@ -414,11 +507,12 @@ this section's failed gates as passed.
 ## 9. Pursue CPU/GPU optimization from the measured bottlenecks
 
 Use [the analysis](CPU_GPU_OPTIMIZATION_ANALYSIS.md) for the evidence, current
-code entry points, alternative approaches and rejected experiments. Start with
-9.1 and 9.2. Sections 9.3–9.5 are CPU follow-ups selected from the resulting
-profiles. Section 9.6 is the preferred new GPU algorithm experiment; 9.7 and
-9.8 are conditional alternatives. Production GPU expansion remains gated by
-8.6 and the final checks in 9.9. Windows and Intel/AMD Mac work stays in 8.7/8.8.
+code entry points, alternative approaches and rejected experiments. Follow the
+cross-section priority order in section 0: close the open 9.1/9.3 decision
+first, then take selected 9.2–9.5 CPU follow-ups. Section 9.6 is the preferred
+new GPU algorithm experiment; 9.7 and 9.8 are conditional alternatives.
+Production GPU expansion remains gated by 8.6 and the final checks in 9.9.
+Windows and Intel/AMD Mac work stays in 8.7/8.8.
 
 ### 9.1. Establish comparable baselines and close profiling gaps
 
