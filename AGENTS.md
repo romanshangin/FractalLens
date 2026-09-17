@@ -50,9 +50,13 @@ Before changing code, inspect the sources relevant to the task:
   established measurement protocols and evidence;
 - existing tests for the executable behavioral contract.
 
-Follow the unfinished priorities at the beginning of `ROADMAP.md`. Do not start
-a lower-priority optimization while its dependencies or decision gates remain
-open.
+A direct user request defines the current task and takes precedence over
+autonomously selecting the next item from `ROADMAP.md`. Within the scope of that
+request, use the roadmap as the source of requirements, dependencies, and
+acceptance criteria. When the user asks to continue without naming a task,
+follow the unfinished priorities at the beginning of `ROADMAP.md`. Do not
+autonomously start a lower-priority optimization while its dependencies or
+decision gates remain open.
 
 Do not rewrite historical benchmark results as though they describe a new
 implementation. Record new experiments separately and include the environment,
@@ -99,6 +103,26 @@ GPU code must not become a prerequisite for CPU execution.
 - Add or update tests whenever observable behavior changes.
 - Fix root causes rather than only masking symptoms.
 - Preserve unrelated and pre-existing working-tree changes.
+
+## Planning
+
+Create and communicate a short implementation plan before making a non-trivial
+change. A change is non-trivial when it spans multiple components, changes
+observable behavior, affects architecture, concurrency, numerical precision,
+performance, native integration, or has unclear acceptance criteria.
+
+The plan must:
+
+- state the intended outcome and the boundaries of the change;
+- identify the relevant existing flow and files to inspect;
+- call out important risks and invariants;
+- define the test and validation strategy before implementation;
+- break the work into independently verifiable steps when appropriate.
+
+Keep the plan current when evidence changes the approach. Do not continue with a
+known-invalid plan merely because implementation has started. Planning must not
+become ceremony for a trivial, localized, low-risk edit such as a spelling or
+documentation-only correction.
 
 ## Numerical correctness and deep zoom
 
@@ -257,17 +281,20 @@ Choose validation proportional to the risk of the change.
 
 ### Targeted tests
 
-Run the nearest tests first during development:
+Run the nearest tests first during development to get fast feedback while
+iterating:
 
 ```shell
 mvn -Dtest=RelevantTest test
 ```
 
-List multiple related test classes with a comma when necessary.
+List multiple related test classes with a comma when necessary. Passing targeted
+tests is an intermediate development check; it does not replace the required
+pre-handoff suite.
 
 ### Portable test suite
 
-Production-code changes normally require:
+Before handing off a production-code change, run the full portable suite:
 
 ```shell
 mvn test
@@ -280,8 +307,12 @@ possible, use:
 mvn clean test
 ```
 
-Do not substitute a targeted test for the full suite after broad changes to the
-renderer, controller lifecycle, scene model, or build configuration.
+Do not substitute targeted tests for the full portable suite before handoff.
+Also run any relevant opt-in JavaFX, GPU, native, or benchmark validation called
+for by the changed subsystem. Documentation-only changes do not require the
+application test suite. If the full suite cannot run because of an environment
+failure or an explicit user constraint, report that limitation and the exact
+checks that did run; do not imply full validation.
 
 ### JavaFX tests
 
@@ -375,6 +406,32 @@ present a proposal or expected speedup as a completed feature.
 
 ## Code review
 
+When the user asks for a review, audit, or assessment, enter Review mode. Review
+mode is read-only: inspect the code, diff, tests, and relevant documentation, but
+do not modify files, apply fixes, create commits, or push changes unless the user
+explicitly asks for implementation after or as part of the review.
+
+You may and should recommend a concrete remediation for each finding.
+
+Report findings first, ordered by severity, with precise file and line evidence.
+Focus each finding on an actionable defect or risk and explain its impact. If no
+findings are identified, say so explicitly and list residual risks or validation
+gaps. Do not treat stylistic preferences as findings unless they materially harm
+correctness or maintainability.
+
+Use these severity levels:
+
+- **Critical**: causes or can realistically cause data loss, security exposure,
+  unrecoverable corruption, application-wide failure, fundamentally incorrect
+  rendering, or a release-blocking failure with no reasonable workaround.
+- **Major**: causes incorrect behavior, a significant regression, broken
+  platform or fallback behavior, a concurrency or resource-lifecycle defect, or
+  a substantial performance/UX failure in a supported workflow. A workaround
+  may exist, but the change should not be accepted without addressing the issue.
+- **Minor**: a localized correctness, robustness, test-coverage, documentation,
+  or maintainability issue with limited impact that does not invalidate the main
+  workflow. Suggestions with no concrete impact are not Minor findings.
+
 During review, prioritize correctness and regressions:
 
 1. Mathematical errors or loss of decimal precision.
@@ -394,6 +451,9 @@ maintainability.
 ## Git and delivery
 
 - Check `git status` before editing.
+- If the working tree is already dirty, inspect the existing diff before editing
+  so that pre-existing user changes can be distinguished from changes made for
+  the current task.
 - Treat existing changes as user-owned.
 - Do not delete or overwrite unrelated changes.
 - Do not use destructive commands such as `git reset --hard`.
