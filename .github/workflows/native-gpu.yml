@@ -47,12 +47,12 @@ jobs:
         run: |
           system_profiler SPHardwareDataType SPSoftwareDataType SPDisplaysDataType
           java --version
-          mvn --version
+          ./mvnw --version
 
       - name: Run native GPU smoke tests
         shell: bash
         run: >-
-          bash scripts/run-ci-tests mvn --batch-mode --no-transfer-progress
+          bash scripts/run-ci-tests ./mvnw --batch-mode --no-transfer-progress
           -Pgpu-smoke test
 
       - name: Upload native test reports
@@ -89,6 +89,20 @@ jobs:
             throw "The checkout is not clean."
           }
 
+      - name: Configure Maven cache archive prerequisites
+        shell: pwsh
+        run: |
+          if (-not (Get-Command gzip.exe -ErrorAction SilentlyContinue)) {
+            $gitUsrBin = Join-Path $env:ProgramFiles 'Git\usr\bin'
+            $gzipPath = Join-Path $gitUsrBin 'gzip.exe'
+            if (-not (Test-Path -LiteralPath $gzipPath)) {
+              throw "gzip.exe must be installed for Maven cache archives."
+            }
+            $gitUsrBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $env:Path = "$gitUsrBin;$env:Path"
+          }
+          gzip.exe --version
+
       - name: Set up Java 25 and Maven cache
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
@@ -103,12 +117,12 @@ jobs:
           Get-CimInstance Win32_Processor | Format-List Name, NumberOfCores, NumberOfLogicalProcessors
           Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion
           java --version
-          mvn --version
+          ./mvnw.cmd --version
 
       - name: Validate the disabled Windows runtime and CPU fallback
         shell: pwsh
         run: |
-          ./scripts/run-ci-tests.ps1 -Executable mvn -CommandArguments @(
+          ./scripts/run-ci-tests.ps1 -Executable ./mvnw.cmd -CommandArguments @(
             '--batch-mode',
             '--no-transfer-progress',
             '-Pgpu-smoke',

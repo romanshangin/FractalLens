@@ -21,15 +21,17 @@ pushes to `main`, and can also be started manually. Its macOS and Windows jobs:
 - start from a clean checkout and verify that it has no changes;
 - install Temurin Java 25;
 - cache Maven dependencies using `pom.xml` as part of the cache key;
-- run `mvn --batch-mode --no-transfer-progress
+- run `./mvnw --batch-mode --no-transfer-progress
   -Dfractal.gpu.enabled=false clean test`;
 - retain `target/surefire-reports` for 30 days, including reports from failed
   test runs.
 
 The portable jobs deliberately do not run the opt-in JavaFX, benchmark, or
 native GPU profiles. They verify the CPU-default build without requiring a
-display or Vulkan device. Third-party workflow actions are pinned to immutable
-commit SHAs, with their release tags recorded beside each pin.
+display or Vulkan device. The checked-in Maven Wrapper pins Maven 3.9.16 and
+removes a preinstalled-Maven requirement from hosted and self-hosted runners.
+Third-party workflow actions are pinned to immutable commit SHAs, with their
+release tags recorded beside each pin.
 
 All CI test commands run through `scripts/run-ci-tests` (or its PowerShell
 equivalent). The complete Maven output is retained as `target/ci-test.log`. A
@@ -48,7 +50,7 @@ console limit, both retained edges and the reported omission size.
 `.github/workflows/native-gpu.yml` is manual-only. It routes the selected lane
 to a self-hosted runner with real target hardware, records hardware and runtime
 provenance in the job log, and retains Surefire reports for 30 days. The Apple
-Silicon lane runs `mvn -Pgpu-smoke test` as a native conformance smoke test.
+Silicon lane runs `./mvnw -Pgpu-smoke test` as a native conformance smoke test.
 Until the Windows runtime work in roadmap 8.7 is implemented, the Windows lane
 requires the runtime to remain unavailable and verifies exact CPU fallback; it
 must not be reported as Windows GPU conformance.
@@ -61,7 +63,13 @@ The runner labels are:
 | Windows x64 fallback | `self-hosted`, `Windows`, `X64`, `fractalui-gpu` |
 
 A self-hosted machine must run GitHub Actions Runner 2.329.0 or newer because
-the pinned actions use the current Node.js action runtime.
+the pinned actions use the current Node.js action runtime. A Windows runner
+must also provide `gzip.exe`; the Maven cache uses it to create the archive at
+the end of a job. The workflow accepts it on `PATH` or in the standard Git for
+Windows directory `C:\Program Files\Git\usr\bin`, which it adds to subsequent
+steps through `GITHUB_PATH`. Verify the installation with `Get-Command gzip.exe`
+or `Test-Path 'C:\Program Files\Git\usr\bin\gzip.exe'`. The Windows job checks
+this contract before Java and Maven cache setup.
 
 A queued job means that no online runner matches all required labels. A passing
 hosted portable job must not be reported as native GPU conformance. GPU

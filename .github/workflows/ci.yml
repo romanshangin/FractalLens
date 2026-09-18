@@ -31,7 +31,7 @@ jobs:
       - name: Run tests
         shell: bash
         run: >-
-          bash scripts/run-ci-tests mvn --batch-mode --no-transfer-progress test
+          bash scripts/run-ci-tests ./mvnw --batch-mode --no-transfer-progress test
 
       - name: Upload test reports
         if: always()
