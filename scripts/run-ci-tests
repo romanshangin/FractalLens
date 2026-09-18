@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+set -eu
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: run-ci-tests <command> [arguments...]" >&2
+    exit 2
+fi
+
+readonly console_limit=8000
+readonly marker_budget=160
+readonly status_line='Running test command; output is buffered and retained in target/ci-test.log.'
+readonly status_size=$((${#status_line} + 1))
+temporary_log="$(mktemp "${TMPDIR:-/tmp}/fractalui-ci-test.XXXXXX")"
+trap 'rm -f "$temporary_log"' EXIT
+
+printf '%s\n' "$status_line"
+set +e
+"$@" >"$temporary_log" 2>&1
+exit_code=$?
+set -e
+
+mkdir -p target
+cp "$temporary_log" target/ci-test.log
+
+output_size="$(wc -c <"$temporary_log" | tr -d ' ')"
+if [[ $exit_code -eq 0 || $((status_size + output_size)) -le $console_limit ]]; then
+    cat "$temporary_log"
+else
+    excerpt_limit=$((console_limit - status_size - marker_budget))
+    head_size=$((excerpt_limit / 2))
+    tail_size=$((excerpt_limit - head_size))
+    head -c "$head_size" "$temporary_log"
+    omitted=$((output_size - excerpt_limit))
+    printf '\n... [%d bytes omitted; full output: target/ci-test.log] ...\n' "$omitted"
+    tail -c "$tail_size" "$temporary_log"
+fi
+
+exit "$exit_code"

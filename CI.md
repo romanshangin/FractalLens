@@ -12,6 +12,9 @@ conformance or performance.
 
 ## Portable build
 
+`.github/workflows/ci.yml` runs the CPU-default suite on Ubuntu for pull
+requests targeting `main` and pushes to `codex/**` branches.
+
 `.github/workflows/portable-ci.yml` runs automatically for pull requests and
 pushes to `main`, and can also be started manually. Its macOS and Windows jobs:
 
@@ -27,6 +30,18 @@ The portable jobs deliberately do not run the opt-in JavaFX, benchmark, or
 native GPU profiles. They verify the CPU-default build without requiring a
 display or Vulkan device. Third-party workflow actions are pinned to immutable
 commit SHAs, with their release tags recorded beside each pin.
+
+All CI test commands run through `scripts/run-ci-tests` (or its PowerShell
+equivalent). The complete Maven output is retained as `target/ci-test.log`. A
+failed run prints at most 8,000 output units to the job console, including the
+status line and truncation marker, while preserving both ends. The Bash runner
+counts bytes; the PowerShell runner counts .NET characters. The uploaded log
+and Surefire reports retain the complete diagnostics.
+
+The hosted lanes run `scripts/test-run-ci-tests` and the Windows-specific
+PowerShell counterpart before Maven. These contract checks use a deterministic
+failing process to verify exit-code propagation, complete log retention, the
+console limit, both retained edges and the reported omission size.
 
 ## Native GPU validation
 
