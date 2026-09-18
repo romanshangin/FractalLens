@@ -8,6 +8,9 @@ CPU AA synchronization, improve CPU/deep-zoom work, then test different GPU
 algorithms. Completed and rejected experiments below remain historical evidence;
 new unchecked items are proposals, not measured speedups.
 
+Checkboxes represent acceptance state: a parent item remains open until every
+required implementation and validation step beneath it is complete.
+
 ## 0. Prioritized backlog
 
 This section is the execution order for all unfinished work below. The detailed
@@ -17,81 +20,85 @@ delivery foundation should be completed first.
 
 ### P0. Infrastructure and delivery foundation — do first
 
-1. **Make the build continuously reproducible.** Add CI for the portable
-   CPU-default build and tests on macOS and Windows, with dependency caching,
-   clean-checkout execution and uploaded test reports. Keep hardware-native GPU
-   suites in explicit opt-in jobs because ordinary CI runners do not prove GPU
-   conformance.
-2. **Produce installable, smoke-tested runtime artifacts.** Define a versioned
-   `jlink`/`jpackage`-style pipeline for the macOS app and Windows application,
-   including JavaFX/LWJGL natives, the AppKit bridge where applicable, icons,
-   launch options, licenses and CPU fallback. Record artifact provenance and a
-   clean-machine launch checklist. Signing/notarization may remain a separate
-   release step, but packaging must be automated and repeatable.
-3. **Close the current measurement gate before starting another optimization.**
-   Finish the open 9.1 paired-decision item and the already implemented 9.3
-   bounded-`ValidityMask` candidate with fixed power conditions, fresh output
-   directories, at least 30 alternating pairs and multiple process starts.
-   Retain or reject the candidate explicitly; do not leave production code in a
-   permanently provisional state.
-4. **Turn reproducibility into a product contract.** Implement section 5 JSON
-   scene serialization and last-session restore before undo/redo, shareable
-   presets or new export variants. Version the schema and test migration,
-   malformed input, precise decimal coordinates and atomic recovery after an
-   interrupted write.
-5. **Define platform validation lanes.** Treat the Windows runtime work in 8.7
-   and Intel/AMD Mac work in 8.8 as hardware-backed infrastructure tracks.
-   They may run when hardware is available and do not block the CPU-default
-   macOS artifact, but they must precede enabling GPU modes on those platforms.
+- [ ] **P0.1. Make the build continuously reproducible.** Add CI for the
+  portable CPU-default build and tests on macOS and Windows, with dependency
+  caching, clean-checkout execution and uploaded test reports. Keep
+  hardware-native GPU suites in explicit opt-in jobs because ordinary CI
+  runners do not prove GPU conformance.
+- [ ] **P0.2. Produce installable, smoke-tested runtime artifacts.** Define a
+  versioned `jlink`/`jpackage`-style pipeline for the macOS app and Windows
+  application, including JavaFX/LWJGL natives, the AppKit bridge where
+  applicable, icons, launch options, licenses and CPU fallback. Record artifact
+  provenance and a clean-machine launch checklist. Signing/notarization may
+  remain a separate release step, but packaging must be automated and
+  repeatable.
+- [ ] **P0.3. Close the current measurement gate before starting another
+  optimization.** Finish the open 9.1 paired-decision item and the already
+  implemented 9.3 bounded-`ValidityMask` candidate with fixed power conditions,
+  fresh output directories, at least 30 alternating pairs and multiple process
+  starts. Retain or reject the candidate explicitly; do not leave production
+  code in a permanently provisional state.
+- [ ] **P0.4. Turn reproducibility into a product contract.** Implement section
+  5 JSON scene serialization and last-session restore before undo/redo,
+  shareable presets or new export variants. Version the schema and test
+  migration, malformed input, precise decimal coordinates and atomic recovery
+  after an interrupted write.
+- [ ] **P0.5. Define platform validation lanes.** Treat the Windows runtime
+  work in 8.7 and Intel/AMD Mac work in 8.8 as hardware-backed infrastructure
+  tracks. They may run when hardware is available and do not block the
+  CPU-default macOS artifact, but they must precede enabling GPU modes on those
+  platforms.
 
-P0 exit criterion: a clean checkout is tested automatically, produces a
-traceable installable artifact, restores a versioned scene safely, and the
-current bounded-mask candidate has a recorded retain/reject decision.
+- [ ] **P0 exit criterion:** a clean checkout is tested automatically, produces a
+  traceable installable artifact, restores a versioned scene safely, and the
+  current bounded-mask candidate has a recorded retain/reject decision.
 
 ### P1. Production reliability and measured latency
 
-1. Replace user-visible stack traces with in-application errors, then add render
-   progress/status and keyboard navigation from section 4.
-2. Run the retained-snapshot preparation experiment in 9.2; accept it only if
-   first-tile and full-frame behavior both pass.
-3. Measure JavaFX dirty rectangles, callback coalescing, staging reuse and
-   redundant copies from 9.3. This is the next end-to-end publication candidate
-   after the validity-mask decision.
-4. Profile the concrete allocation candidates at the start of 9.4, especially
-   immutable reference conversions and precise AA coordinate construction.
-5. Promote every retained change through the portable/native/FX and sustained
-   gates in 9.9; this is part of the change, not a later cleanup phase.
+- [ ] **P1.1.** Replace user-visible stack traces with in-application errors,
+  then add render progress/status and keyboard navigation from section 4.
+- [ ] **P1.2.** Run the retained-snapshot preparation experiment in 9.2; accept
+  it only if first-tile and full-frame behavior both pass.
+- [ ] **P1.3.** Measure JavaFX dirty rectangles, callback coalescing, staging
+  reuse and redundant copies from 9.3. This is the next end-to-end publication
+  candidate after the validity-mask decision.
+- [ ] **P1.4.** Profile the concrete allocation candidates at the start of 9.4,
+  especially immutable reference conversions and precise AA coordinate
+  construction.
+- [ ] **P1.5.** Promote every retained change through the portable/native/FX
+  and sustained gates in 9.9; this is part of the change, not a later cleanup
+  phase.
 
 ### P2. Product foundation and user workflows
 
-1. Complete iteration/Julia editing and the zoom/iteration presentation in
-   section 4.
-2. Build undo/redo and bookmarks on the versioned scene format, then add
-   copyable/shareable viewport presets.
-3. Consolidate the duplicate section 5/6 export requirements into one tiled,
-   cancellable high-resolution/off-screen pipeline based on `FractalScene` and
-   an independent `RenderTarget`.
-4. Reduce dialog modality, then extend the AppKit bridge only where a native
-   sheet materially improves behavior. Finish multi-display context-menu
-   validation when suitable hardware is available.
-5. Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
-   exact fallback is a material user-visible cost.
+- [ ] **P2.1.** Complete iteration/Julia editing and the zoom/iteration presentation in
+  section 4.
+- [ ] **P2.2.** Build undo/redo and bookmarks on the versioned scene format, then add
+  copyable/shareable viewport presets.
+- [ ] **P2.3.** Consolidate the duplicate section 5/6 export requirements into one tiled,
+  cancellable high-resolution/off-screen pipeline based on `FractalScene` and
+  an independent `RenderTarget`.
+- [ ] **P2.4.** Reduce dialog modality, then extend the AppKit bridge only where a native
+  sheet materially improves behavior. Finish multi-display context-menu
+  validation when suitable hardware is available.
+- [ ] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
+  exact fallback is a material user-visible cost.
 
 ### P3. Conditional CPU research
 
-After P0/P1, take the remaining 9.2–9.5 experiments one bounded spike at a time:
-candidate sidecars and adaptive sampling; scalar interleaving/SIMD/scheduling;
-BLA/reference sharing and scaled-exponent work; then alternative numeric or
-spatial engines. Each spike needs a predeclared workload, correctness gate and
-retain/reject result. Do not batch speculative algorithms into one change.
+- [ ] After P0/P1, take the remaining 9.2–9.5 experiments one bounded spike at a time:
+  candidate sidecars and adaptive sampling; scalar interleaving/SIMD/scheduling;
+  BLA/reference sharing and scaled-exponent work; then alternative numeric or
+  spatial engines. Each spike needs a predeclared workload, correctness gate and
+  retain/reject result. Do not batch speculative algorithms into one change.
 
 ### P4. Conditional GPU expansion and hardware alternatives
 
-The order is 9.6 diagnostic GPU perturbation/BLA, then 9.7 selection/scheduling,
-then the production gates in 9.9. Only a passing result may reopen the unchecked
-8.6 residency work. Section 9.8 API/hardware alternatives stay last and require
-a new measured bottleneck. The failed 8.4–8.6 gates mean that GPU AA storage,
-feature parity, resident caching and GPU export are not near-term tasks.
+- [ ] The order is 9.6 diagnostic GPU perturbation/BLA, then 9.7 selection/scheduling,
+  then the production gates in 9.9. Only a passing result may reopen the unchecked
+  8.6 residency work. Section 9.8 API/hardware alternatives stay last and require
+  a new measured bottleneck. The failed 8.4–8.6 gates mean that GPU AA storage,
+  feature parity, resident caching and GPU export are not near-term tasks.
 
 ### Newly explicit infrastructure tasks
 
@@ -103,6 +110,13 @@ feature parity, resident caching and GPU export are not near-term tasks.
   limited to P0 item 1 and does not satisfy the P0 exit criterion: packaging,
   scene restore and the open measurement decision remain separate required
   work.
+  - [x] Implement the portable and opt-in native workflow definitions, clean
+    checkout checks, dependency caching, bounded diagnostics and retained test
+    reports.
+  - [x] Pass the hosted macOS and Windows CPU-default jobs and retain their
+    reports in [Portable CI run 35303673925](https://github.com/romzesthefirst/fractal-ui/actions/runs/35303673925).
+  - [ ] Run the configured self-hosted native hardware lanes and retain their
+    reports; no `Native GPU Validation` run has been recorded yet.
 - [ ] Add reproducible macOS and Windows runtime packaging and clean-machine
   smoke checks; document artifact provenance and the separate signing/release
   boundary.
@@ -117,7 +131,8 @@ feature parity, resident caching and GPU export are not near-term tasks.
 - [x] Isolate temporary profiling from the normal rendering pipeline.
 - [x] Split the current optimization work into focused commits.
 
-Exit criterion: `mvn test` succeeds and temporary profiling code is isolated from the main rendering pipeline.
+- [x] **Exit criterion:** `mvn test` succeeds and temporary profiling code is
+  isolated from the main rendering pipeline.
 
 ## 2. Prove the effectiveness of frame reuse
 
@@ -591,8 +606,8 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   pass, but the aggregate 5% timing-control budget is still inconclusive, so
   this decision item remains open.
 
-Exit criterion: a current, scope-matched baseline identifies the dominant costs
-and defines the correctness/performance gate before each implementation spike.
+- [ ] **Exit criterion:** a current, scope-matched baseline identifies the dominant costs
+  and defines the correctness/performance gate before each implementation spike.
 
 ### 9.2. Reduce CPU antialiasing synchronization and repeated work
 
@@ -630,9 +645,9 @@ and defines the correctness/performance gate before each implementation spike.
   as a quality-policy change with dense-reference image comparisons, stable
   jitter, palette-independent caches and exact export semantics.
 
-Exit criterion: unchanged-quality work passes sample/color and retention tests,
-with a confirmed full-AA improvement under the 9.1 gate and no material first
-publication regression. Sampling-quality experiments have a separate decision.
+- [ ] **Exit criterion:** unchanged-quality work passes sample/color and retention tests,
+  with a confirmed full-AA improvement under the 9.1 gate and no material first
+  publication regression. Sampling-quality experiments have a separate decision.
 
 ### 9.3. Improve CPU batching, scheduling and publication
 
@@ -669,8 +684,8 @@ publication regression. Sampling-quality experiments have a separate decision.
   Preserve refined pixels, exact reused spans and resize behavior. Validate
   through JavaFX; a faster kernel or direct buffer alone is insufficient.
 
-Exit criterion: each retained change improves its declared workloads and keeps
-overview, deep scenes, interaction and cancellation within the control budget.
+- [ ] **Exit criterion:** each retained change improves its declared workloads and keeps
+  overview, deep scenes, interaction and cancellation within the control budget.
 
 ### 9.4. Extend the successful CPU perturbation/BLA path
 
@@ -694,9 +709,9 @@ overview, deep scenes, interaction and cancellation within the control budget.
   the shallow boundary where current BLA skips nothing; reject tolerance
   relaxation and do not repeat the failed cubic/loose-radius trials unchanged.
 
-Exit criterion: BigDecimal controls and full scalar comparisons retain exact
-escape/iteration behavior and existing deep smooth tolerance; gains include
-reference/table setup and AA, with no stale-bound or navigation regression.
+- [ ] **Exit criterion:** BigDecimal controls and full scalar comparisons retain exact
+  escape/iteration behavior and existing deep smooth tolerance; gains include
+  reference/table setup and AA, with no stale-bound or navigation regression.
 
 ### 9.5. Investigate conditional CPU numerical and spatial algorithms
 
@@ -722,8 +737,8 @@ reference/table setup and AA, with no stale-bound or navigation regression.
   demonstrated hot loop. Include portability, build/runtime costs and full
   pipeline checks; a language or UI rewrite is not an established speedup.
 
-Exit criterion: a bounded spike demonstrates a worthwhile gain over the current
-optimized CPU path before adding a second production numerical engine.
+- [ ] **Exit criterion:** a bounded spike demonstrates a worthwhile gain over the current
+  optimized CPU path before adding a second production numerical engine.
 
 ### 9.6. Test GPU perturbation/BLA as a different algorithm
 
@@ -744,9 +759,9 @@ optimized CPU path before adding a second production numerical engine.
   exists. Preserve generation cancellation, device-loss fallback and memory
   ceilings; never substitute a sampled pilot for per-result validation.
 
-Exit criterion: pass native sample conformance and a predeclared paired
-performance gate, then production-service/JavaFX/AA validation in 9.9. This is
-unmeasured research and does not enable GPU calculation by default.
+- [ ] **Exit criterion:** pass native sample conformance and a predeclared paired
+  performance gate, then production-service/JavaFX/AA validation in 9.9. This is
+  unmeasured research and does not enable GPU calculation by default.
 
 ### 9.7. Evaluate selective residency and CPU/GPU scheduling
 
@@ -764,10 +779,10 @@ unmeasured research and does not enable GPU calculation by default.
 - [ ] Evaluate warmed large-AA GPU palette animation as an independent narrow
   policy, including initialization, invalidation, small buffers and CPU fallback.
 
-Exit criterion: predeclare eligible classes and require at least 15% confirmed
-gain on selected cases, no more than 5% regression on controls and bounded first
-publication/cancellation. Passing this new selector experiment does not rewrite
-the failed six-case resident GPU gate or automatically authorize 8.6 expansion.
+- [ ] **Exit criterion:** predeclare eligible classes and require at least 15% confirmed
+  gain on selected cases, no more than 5% regression on controls and bounded first
+  publication/cancellation. Passing this new selector experiment does not rewrite
+  the failed six-case resident GPU gate or automatically authorize 8.6 expansion.
 
 ### 9.8. Keep hardware and API alternatives conditional
 
@@ -787,8 +802,8 @@ the failed six-case resident GPU gate or automatically authorize 8.6 expansion.
   opportunity. The failed all-rejection double-single route stays closed;
   additional float limbs or API replacement are not presumed remedies.
 
-Exit criterion: retain an alternative only when its benefit exceeds added
-runtime/packaging complexity and passes the same numerical and application gates.
+- [ ] **Exit criterion:** retain an alternative only when its benefit exceeds added
+  runtime/packaging complexity and passes the same numerical and application gates.
 
 ### 9.9. Promote only validated improvements; separate preview and export
 
@@ -811,10 +826,11 @@ runtime/packaging complexity and passes the same numerical and application gates
   gates after the stable interactive path. Include tile seams, storage/encoding,
   transfers and cancellation; do not report batch gains as interaction gains.
 
-Exit criterion: publish reproducible before/after results and an explicit
-retain/reject decision for each completed experiment; only demonstrated,
-compatible improvements enter production.
+- [ ] **Exit criterion:** publish reproducible before/after results and an explicit
+  retain/reject decision for each completed experiment; only demonstrated,
+  compatible improvements enter production.
 
 ## Target milestone
 
-Deliver a stable interactive Mandelbrot/Julia explorer with smooth pan/zoom, measured frame reuse, PNG export, documentation, CI, and a packaged runtime.
+- [ ] Deliver a stable interactive Mandelbrot/Julia explorer with smooth pan/zoom,
+  measured frame reuse, PNG export, documentation, CI, and a packaged runtime.
