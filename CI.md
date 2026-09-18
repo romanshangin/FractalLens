@@ -64,11 +64,12 @@ The runner labels are:
 
 A self-hosted machine must run GitHub Actions Runner 2.329.0 or newer because
 the pinned actions use the current Node.js action runtime. A Windows runner
-must also expose `gzip.exe` on the runner service account's `PATH`; the Maven
-cache uses it to create the archive at the end of a job. Verify the requirement
-from that account with `Get-Command gzip.exe` and `gzip.exe --version`, and
-restart the runner after changing `PATH`. The Windows job checks this contract
-before Java and Maven cache setup.
+must also provide `gzip.exe`; the Maven cache uses it to create the archive at
+the end of a job. The workflow accepts it on `PATH` or in the standard Git for
+Windows directory `C:\Program Files\Git\usr\bin`, which it adds to subsequent
+steps through `GITHUB_PATH`. Verify the installation with `Get-Command gzip.exe`
+or `Test-Path 'C:\Program Files\Git\usr\bin\gzip.exe'`. The Windows job checks
+this contract before Java and Maven cache setup.
 
 A queued job means that no online runner matches all required labels. A passing
 hosted portable job must not be reported as native GPU conformance. GPU
