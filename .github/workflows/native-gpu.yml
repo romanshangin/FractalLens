@@ -1,0 +1,118 @@
+name: Native GPU Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Hardware lane to run
+        required: true
+        type: choice
+        options:
+          - macos-arm64
+          - windows-x64
+
+permissions:
+  contents: read
+
+jobs:
+  macos-arm64:
+    if: inputs.platform == 'macos-arm64'
+    name: Native GPU smoke tests (macOS ARM64)
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+      - fractalui-gpu
+    timeout-minutes: 30
+    steps:
+      - name: Check out clean source tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          clean: true
+          persist-credentials: false
+
+      - name: Verify clean checkout
+        shell: bash
+        run: test -z "$(git status --porcelain)"
+
+      - name: Set up Java 25 and Maven cache
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Record hardware and runtime provenance
+        shell: bash
+        run: |
+          system_profiler SPHardwareDataType SPSoftwareDataType SPDisplaysDataType
+          java --version
+          mvn --version
+
+      - name: Run native GPU smoke tests
+        shell: bash
+        run: mvn --batch-mode --no-transfer-progress -Pgpu-smoke test
+
+      - name: Upload native test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-gpu-reports-macos-arm64-${{ github.run_attempt }}
+          path: target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 30
+
+  windows-x64:
+    if: inputs.platform == 'windows-x64'
+    name: GPU-unavailable CPU fallback (Windows x64)
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - fractalui-gpu
+    timeout-minutes: 30
+    steps:
+      - name: Check out clean source tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          clean: true
+          persist-credentials: false
+
+      - name: Verify clean checkout
+        shell: pwsh
+        run: |
+          if (git status --porcelain) {
+            throw "The checkout is not clean."
+          }
+
+      - name: Set up Java 25 and Maven cache
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Record hardware and runtime provenance
+        shell: pwsh
+        run: |
+          Get-CimInstance Win32_OperatingSystem | Format-List Caption, Version, OSArchitecture
+          Get-CimInstance Win32_Processor | Format-List Name, NumberOfCores, NumberOfLogicalProcessors
+          Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion
+          java --version
+          mvn --version
+
+      - name: Validate the disabled Windows runtime and CPU fallback
+        shell: pwsh
+        run: >-
+          mvn --batch-mode --no-transfer-progress -Pgpu-smoke
+          -Dfractal.gpu.expectUnavailable=true
+          -Dfractal.gpu.residentNative=false test
+
+      - name: Upload native test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-gpu-reports-windows-x64-${{ github.run_attempt }}
+          path: target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 30

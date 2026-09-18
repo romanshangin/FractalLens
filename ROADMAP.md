@@ -96,7 +96,13 @@ feature parity, resident caching and GPU export are not near-term tasks.
 ### Newly explicit infrastructure tasks
 
 - [ ] Add portable macOS/Windows CI for the CPU-default build and test suite,
-  plus opt-in native hardware lanes with retained reports.
+  plus opt-in native hardware lanes with retained reports. The workflows and
+  runner contract are implemented in `.github/workflows` and `CI.md`; keep this
+  item open until the hosted macOS/Windows jobs and configured self-hosted lane
+  have produced retained reports from the repository. This implementation is
+  limited to P0 item 1 and does not satisfy the P0 exit criterion: packaging,
+  scene restore and the open measurement decision remain separate required
+  work.
 - [ ] Add reproducible macOS and Windows runtime packaging and clean-machine
   smoke checks; document artifact provenance and the separate signing/release
   boundary.

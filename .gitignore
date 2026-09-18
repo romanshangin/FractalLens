@@ -9,6 +9,7 @@ target/
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.idea/c_cpp_properties.json
 *.iws
 *.iml
 *.ipr
