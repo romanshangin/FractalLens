@@ -460,11 +460,13 @@ maintainability.
 - Do not include IDE metadata, temporary files, generated output, or unrelated
   benchmark artifacts unless they are explicitly part of the task.
 - Do not create commits or push changes unless the user explicitly asks.
-- When the user requests a separate branch, use the `codex/` prefix.
+- All implementation changes must be pushed to a task branch using the
+  `codex/` prefix.
 - When the user explicitly asks to publish validated changes to `main`, commit,
   fast-forward merge, push, and verify local/remote `main` parity.
 - In the final report, list changed files, executed checks and their results,
   and anything that remains unverified.
 - Never push directly to `main` unless the user explicitly requests it.
-- Prefer pushing validated work to a task branch and opening a pull request.
-- Do not merge a pull request unless explicitly asked.
+- Merge into `main` only through a pull request.
+- Do not create, merge, or close a pull request unless explicitly asked.
+- Do not bypass CI failures.
