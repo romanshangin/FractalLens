@@ -20,7 +20,7 @@ delivery foundation should be completed first.
 
 ### P0. Infrastructure and delivery foundation — do first
 
-- [ ] **P0.1. Make the build continuously reproducible.** Add CI for the
+- [x] **P0.1. Make the build continuously reproducible.** Add CI for the
   portable CPU-default build and tests on macOS and Windows, with dependency
   caching, clean-checkout execution and uploaded test reports. Keep
   hardware-native GPU suites in explicit opt-in jobs because ordinary CI
@@ -102,7 +102,7 @@ delivery foundation should be completed first.
 
 ### Newly explicit infrastructure tasks
 
-- [ ] Add portable macOS/Windows CI for the CPU-default build and test suite,
+- [x] Add portable macOS/Windows CI for the CPU-default build and test suite,
   plus opt-in native hardware lanes with retained reports. The workflows and
   runner contract are implemented in `.github/workflows` and `CI.md`; keep this
   item open until the hosted macOS/Windows jobs and configured self-hosted lane
@@ -115,14 +115,16 @@ delivery foundation should be completed first.
     reports.
   - [x] Pass the hosted macOS and Windows CPU-default jobs and retain their
     reports in [Portable CI run 35303673925](https://github.com/romzesthefirst/fractal-ui/actions/runs/35303673925).
-  - [ ] Run the configured self-hosted native hardware lanes and retain their
+  - [x] Run the configured self-hosted native hardware lanes and retain their
     reports.
     - [x] Pass the Apple Silicon macOS lane on an Apple M3 Pro with macOS 27.0:
       5 native GPU smoke tests passed and the reports were retained in
       [Native GPU Validation run 35373192709](https://github.com/romzesthefirst/fractal-ui/actions/runs/35373192709).
-    - [ ] Pass the Windows x64 CPU-fallback lane on a matching self-hosted
-      runner and retain its reports; no Windows self-hosted runner is currently
-      registered for the repository.
+    - [x] Pass the Windows x64 CPU-fallback lane on Windows 11: the runtime
+      remained unavailable as required, 5 native smoke tests completed with no
+      failures or errors and one expected resident-GPU skip, and the reports
+      were retained in
+      [Native GPU Validation run 35391711180](https://github.com/romzesthefirst/fractal-ui/actions/runs/35391711180).
 - [ ] Add reproducible macOS and Windows runtime packaging and clean-machine
   smoke checks; document artifact provenance and the separate signing/release
   boundary.
