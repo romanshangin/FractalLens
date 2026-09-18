@@ -20,7 +20,7 @@ delivery foundation should be completed first.
 
 ### P0. Infrastructure and delivery foundation — do first
 
-- [x] **P0.1. Make the build continuously reproducible.** Add CI for the
+- [ ] **P0.1. Make the build continuously reproducible.** Add CI for the
   portable CPU-default build and tests on macOS and Windows, with dependency
   caching, clean-checkout execution and uploaded test reports. Keep
   hardware-native GPU suites in explicit opt-in jobs because ordinary CI
@@ -102,7 +102,7 @@ delivery foundation should be completed first.
 
 ### Newly explicit infrastructure tasks
 
-- [x] Add portable macOS/Windows CI for the CPU-default build and test suite,
+- [ ] Add portable macOS/Windows CI for the CPU-default build and test suite,
   plus opt-in native hardware lanes with retained reports. The workflows and
   runner contract are implemented in `.github/workflows` and `CI.md`; keep this
   item open until the hosted macOS/Windows jobs and configured self-hosted lane
@@ -114,13 +114,13 @@ delivery foundation should be completed first.
     checkout checks, dependency caching, bounded diagnostics and retained test
     reports.
   - [x] Pass the hosted macOS and Windows CPU-default jobs and retain their
-    reports in [Portable CI run 35303673925](https://github.com/romzesthefirst/fractal-ui/actions/runs/35303673925).
-  - [x] Run the configured self-hosted native hardware lanes and retain their
+    reports in [Portable CI run 35392879380](https://github.com/romzesthefirst/fractal-ui/actions/runs/35392879380).
+  - [ ] Run the configured self-hosted native hardware lanes and retain their
     reports.
     - [x] Pass the Apple Silicon macOS lane on an Apple M3 Pro with macOS 27.0:
       5 native GPU smoke tests passed and the reports were retained in
       [Native GPU Validation run 35373192709](https://github.com/romzesthefirst/fractal-ui/actions/runs/35373192709).
-    - [x] Pass the Windows x64 CPU-fallback lane on Windows 11: the runtime
+    - [ ] Pass the Windows x64 CPU-fallback lane on Windows 11: the runtime
       remained unavailable as required, 5 native smoke tests completed with no
       failures or errors and one expected resident-GPU skip, and the reports
       were retained in

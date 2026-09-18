@@ -89,6 +89,14 @@ jobs:
             throw "The checkout is not clean."
           }
 
+      - name: Verify Maven cache archive prerequisites
+        shell: pwsh
+        run: |
+          if (-not (Get-Command gzip.exe -ErrorAction SilentlyContinue)) {
+            throw "gzip.exe must be available on PATH for Maven cache archives."
+          }
+          gzip.exe --version
+
       - name: Set up Java 25 and Maven cache
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:

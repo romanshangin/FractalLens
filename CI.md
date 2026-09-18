@@ -63,7 +63,12 @@ The runner labels are:
 | Windows x64 fallback | `self-hosted`, `Windows`, `X64`, `fractalui-gpu` |
 
 A self-hosted machine must run GitHub Actions Runner 2.329.0 or newer because
-the pinned actions use the current Node.js action runtime.
+the pinned actions use the current Node.js action runtime. A Windows runner
+must also expose `gzip.exe` on the runner service account's `PATH`; the Maven
+cache uses it to create the archive at the end of a job. Verify the requirement
+from that account with `Get-Command gzip.exe` and `gzip.exe --version`, and
+restart the runner after changing `PATH`. The Windows job checks this contract
+before Java and Maven cache setup.
 
 A queued job means that no online runner matches all required labels. A passing
 hosted portable job must not be reported as native GPU conformance. GPU
