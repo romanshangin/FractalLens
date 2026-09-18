@@ -65,3 +65,5 @@ exit 37
 } finally {
     Remove-Item $consoleLog, $fixture -Force -ErrorAction SilentlyContinue
 }
+
+exit 0
