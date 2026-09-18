@@ -116,7 +116,13 @@ delivery foundation should be completed first.
   - [x] Pass the hosted macOS and Windows CPU-default jobs and retain their
     reports in [Portable CI run 35303673925](https://github.com/romzesthefirst/fractal-ui/actions/runs/35303673925).
   - [ ] Run the configured self-hosted native hardware lanes and retain their
-    reports; no `Native GPU Validation` run has been recorded yet.
+    reports.
+    - [x] Pass the Apple Silicon macOS lane on an Apple M3 Pro with macOS 27.0:
+      5 native GPU smoke tests passed and the reports were retained in
+      [Native GPU Validation run 35373192709](https://github.com/romzesthefirst/fractal-ui/actions/runs/35373192709).
+    - [ ] Pass the Windows x64 CPU-fallback lane on a matching self-hosted
+      runner and retain its reports; no Windows self-hosted runner is currently
+      registered for the repository.
 - [ ] Add reproducible macOS and Windows runtime packaging and clean-machine
   smoke checks; document artifact provenance and the separate signing/release
   boundary.

@@ -56,7 +56,7 @@ jobs:
       - name: Run portable CPU-default tests
         shell: bash
         run: >-
-          bash scripts/run-ci-tests mvn --batch-mode --no-transfer-progress
+          bash scripts/run-ci-tests ./mvnw --batch-mode --no-transfer-progress
           -Dfractal.gpu.enabled=false clean test
 
       - name: Upload test reports

@@ -47,12 +47,12 @@ jobs:
         run: |
           system_profiler SPHardwareDataType SPSoftwareDataType SPDisplaysDataType
           java --version
-          mvn --version
+          ./mvnw --version
 
       - name: Run native GPU smoke tests
         shell: bash
         run: >-
-          bash scripts/run-ci-tests mvn --batch-mode --no-transfer-progress
+          bash scripts/run-ci-tests ./mvnw --batch-mode --no-transfer-progress
           -Pgpu-smoke test
 
       - name: Upload native test reports
@@ -103,12 +103,12 @@ jobs:
           Get-CimInstance Win32_Processor | Format-List Name, NumberOfCores, NumberOfLogicalProcessors
           Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion
           java --version
-          mvn --version
+          ./mvnw.cmd --version
 
       - name: Validate the disabled Windows runtime and CPU fallback
         shell: pwsh
         run: |
-          ./scripts/run-ci-tests.ps1 -Executable mvn -CommandArguments @(
+          ./scripts/run-ci-tests.ps1 -Executable ./mvnw.cmd -CommandArguments @(
             '--batch-mode',
             '--no-transfer-progress',
             '-Pgpu-smoke',
