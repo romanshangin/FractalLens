@@ -465,3 +465,6 @@ maintainability.
   fast-forward merge, push, and verify local/remote `main` parity.
 - In the final report, list changed files, executed checks and their results,
   and anything that remains unverified.
+- Never push directly to `main` unless the user explicitly requests it.
+- Prefer pushing validated work to a task branch and opening a pull request.
+- Do not merge a pull request unless explicitly asked.
