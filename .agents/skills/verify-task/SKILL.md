@@ -17,8 +17,8 @@ Follow the testing rules, subsystem constraints, and acceptance criteria in
 3. Identify affected behavior, platforms, modules, fallbacks, and roadmap or
    document acceptance criteria.
 4. Choose the smallest set of checks that proves those behaviors, while still
-   running the full portable suite required by `AGENTS.md` before handing off a
-   production-code change.
+   running the full portable suite required by `AGENTS.md` for a production-code
+   change.
 5. For documentation-only changes, do not run unrelated application tests.
 
 ## Run and assess checks
@@ -44,7 +44,8 @@ a test defect, or an environment failure. Rerun only when there is a concrete
 reason the rerun can distinguish those cases; do not hide or suppress a failure.
 Do not implement a fix unless the user also authorized implementation.
 Do not expand verification into unrelated investigation. Record unrelated
-failures separately unless they prevent verification of the requested change.
+failures separately unless they prevent verification of the requested change;
+do not attribute them to the change without evidence.
 
 ## Repository hygiene
 
@@ -64,10 +65,11 @@ user-owned changes.
 State:
 
 - the exact commands or manual checks executed and whether each passed, failed,
-  or was skipped;
+  was skipped, or could not be verified;
 - the behavior and acceptance criteria those checks cover;
 - any environment limitation and the evidence for that classification;
 - every relevant behavior, platform, or manual check that remains unverified.
 
-Do not call the task complete if a required check failed, was not run, or if a
-required visible behavior was not inspected.
+Do not call the task complete if a required check failed, was not run, was
+skipped, could not be verified, or if required visible behavior was not
+inspected.
