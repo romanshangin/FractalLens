@@ -10,13 +10,16 @@ Follow the testing rules, subsystem constraints, and acceptance criteria in
 
 ## Define the verification scope
 
-1. Inspect the requested change and complete relevant diff.
-2. Identify affected behavior, platforms, modules, fallbacks, and roadmap or
+1. Check the current branch and working tree before running verification.
+   Record pre-existing changes and treat them as user-owned.
+2. Inspect the requested change and its complete repository diff against the
+   appropriate base, including related tests and documentation.
+3. Identify affected behavior, platforms, modules, fallbacks, and roadmap or
    document acceptance criteria.
-3. Choose the smallest set of checks that proves those behaviors, while still
+4. Choose the smallest set of checks that proves those behaviors, while still
    running the full portable suite required by `AGENTS.md` before handing off a
    production-code change.
-4. For documentation-only changes, do not run unrelated application tests.
+5. For documentation-only changes, do not run unrelated application tests.
 
 ## Run and assess checks
 
@@ -27,15 +30,21 @@ Follow the testing rules, subsystem constraints, and acceptance criteria in
 - For UI, native, launcher, GPU, packaging, or clean-machine acceptance, record
   the actual environment and do not generalize results to an untested platform
   or device.
+- If a required check cannot run because its platform, hardware, credentials,
+  toolchain, or external dependency is unavailable, classify it as unverified
+  due to an environment limitation, not as passed or as a product failure.
 - For performance acceptance, use the fixed control/candidate protocol and
   evidence requirements from the relevant benchmark document. Timing alone is
-  not a correctness check.
+  not a correctness check. Do not claim a performance improvement from a
+  candidate-only measurement.
 - Treat a skipped test as skipped, not passed.
 
 When a check fails, determine whether the evidence identifies a product defect,
 a test defect, or an environment failure. Rerun only when there is a concrete
 reason the rerun can distinguish those cases; do not hide or suppress a failure.
 Do not implement a fix unless the user also authorized implementation.
+Do not expand verification into unrelated investigation. Record unrelated
+failures separately unless they prevent verification of the requested change.
 
 ## Repository hygiene
 
@@ -54,7 +63,8 @@ user-owned changes.
 
 State:
 
-- the exact checks executed and whether each passed, failed, or was skipped;
+- the exact commands or manual checks executed and whether each passed, failed,
+  or was skipped;
 - the behavior and acceptance criteria those checks cover;
 - any environment limitation and the evidence for that classification;
 - every relevant behavior, platform, or manual check that remains unverified.
