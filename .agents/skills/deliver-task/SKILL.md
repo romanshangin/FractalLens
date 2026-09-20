@@ -1,9 +1,9 @@
 ---
-name: deliver-pr
-description: Deliver validated FractalUI changes on a codex task branch through a pull request, with scoped staging, English commit text, CI evidence, and publication checks. Use only when the user explicitly asks to commit, push, create or update a PR, merge, or publish changes.
+name: deliver-task
+description: Perform explicitly authorized FractalUI delivery actions—commit, push, pull-request creation or update, merge, or close—with scoped staging, validation provenance, CI evidence, and publication checks. Use only for those actions, not for implementation, review, or verification alone.
 ---
 
-# Deliver a FractalUI pull request
+# Deliver FractalUI changes
 
 Follow the Git policy in `AGENTS.md`. This workflow does not grant permission to
 commit, push, create, update, merge, or close a pull request: perform only the
