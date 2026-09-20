@@ -11,8 +11,9 @@
   Russian localization.
 - State conclusions concretely: explain what changed, why it changed, how it was
   verified, and what remains unverified.
-- Do not call work complete when required tests were not run, failed, or when
-  relevant visible behavior was not checked.
+- Do not call work fully verified when required tests were not run, failed, or
+  relevant visible behavior was not checked. Implementation may be complete
+  while verification remains incomplete; state that distinction explicitly.
 - Distinguish product defects from environment failures and provide concrete
   evidence for that distinction.
 - Short requests such as "Continue" mean proceeding to the next clear item in
@@ -23,8 +24,7 @@
 FractalUI is a modular desktop application for exploring fractals. The current
 stack and major capabilities are:
 
-- Java 25;
-- JavaFX 26;
+- Java and JavaFX versions defined by `pom.xml`;
 - Maven;
 - JUnit Jupiter;
 - the Java module `com.shangin.fractal`;
@@ -33,6 +33,11 @@ stack and major capabilities are:
 - arbitrary-precision Mandelbrot and Julia deep zoom;
 - native macOS integration through AppKit, Objective-C, and a small launcher;
 - progressive rendering, frame reuse, antialiasing, and PNG export.
+
+Portable Java, JavaFX, and CPU-rendering functionality must remain compatible
+with macOS, Windows, and Linux. Packaging and hardware-backed acceptance
+targets are defined by `ROADMAP.md`. Native AppKit integration is macOS-specific
+and must degrade safely elsewhere.
 
 The project sources of truth are:
 
@@ -44,6 +49,12 @@ The project sources of truth are:
   established measurement protocols and evidence;
 - existing tests for the executable behavioral contract.
 
+If sources of truth disagree, do not silently choose one. Determine whether the
+discrepancy is stale documentation, a stale test, or an intentional change in
+the current task. Prefer the source that explicitly owns the disputed contract
+and report the conflict when it affects the implementation or verification
+result.
+
 Treat `pom.xml` as the source of truth for dependency and plugin versions. Do
 not duplicate version declarations in new files without a specific reason.
 
@@ -54,6 +65,9 @@ acceptance criteria. When the user asks to continue without naming a task,
 follow the unfinished priorities at the beginning of `ROADMAP.md`. Do not
 autonomously start a lower-priority optimization while its dependencies or
 decision gates remain open.
+
+Task-specific workflows may add stricter steps, but they must not weaken or
+override the project-wide constraints in this file.
 
 Do not rewrite historical benchmark results as though they describe a new
 implementation. Record new experiments separately and include the environment,
@@ -68,13 +82,17 @@ inputs, code state, and decision.
 - Reuse existing abstractions instead of implementing parallel logic.
 - Do not add a dependency when the JDK or an existing dependency can reasonably
   solve the problem.
-- Any new dependency must be justified, compatible with the modular build, and
-  checked on supported platforms.
+- Any new dependency must be justified and compatible with the modular build.
+  Assess its compatibility with all supported platforms, run available
+  platform-specific checks, and explicitly report any platform that was not
+  actually verified.
 - Prefer readable code over clever code.
 - Keep methods and classes focused.
 - Do not leave temporary diagnostics, experimental switches, or benchmark code
   in the production path without an explicit purpose.
-- Do not suppress failures, warnings, or failing tests.
+- Do not hide failures, failing tests, or unexpected warnings merely to make
+  validation pass. Use targeted warning suppression only when the warning is
+  understood, unavoidable, and the reason is documented.
 - Add or update tests whenever observable behavior changes.
 - Fix root causes rather than only masking symptoms.
 - Preserve unrelated and pre-existing working-tree changes.
@@ -108,8 +126,9 @@ GPU code must not become a prerequisite for CPU execution.
 
 ### Rendering and concurrency
 
-Rendering is asynchronous and cancellable. Every change must account for races
-between old and new scenes.
+Rendering is asynchronous and cancellable. Changes that affect rendering,
+render orchestration, scene transitions, publication, cancellation, or
+lifecycle must account for races between old and new scenes.
 
 - Never publish a tile, progress event, or completed frame after its render
   generation has been cancelled or superseded.
@@ -122,8 +141,8 @@ between old and new scenes.
 - Modify the JavaFX scene graph only on the JavaFX Application Thread.
 - Native callbacks arriving outside the JavaFX Application Thread must dispatch
   application actions through `Platform.runLater`.
-- Close `AutoCloseable` resources, executors, native handles, and listeners
-  explicitly.
+- Close `AutoCloseable` resources, executors, and native handles explicitly.
+  Remove or unregister listeners when their owning lifecycle ends.
 - Verify idempotent close and cancellation during partially completed work.
 - A cancelled coordinator `Future` is not fully drained until its registered
   worker tasks have actually stopped.
@@ -263,16 +282,14 @@ Automated model tests are not sufficient evidence for visible UI changes.
 JavaFX integration tests are opt-in:
 
 ```shell
-mvn \
-  -Dfractal.fx.tests=true \
-  -Djavafx.cachedir=/tmp/fractalui-javafx-<task> \
-  -DreuseForks=false \
-  -Dtest=RelevantFxTest \
-  test
+mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=TASK_SPECIFIC_TEMP_DIRECTORY" -DreuseForks=false -Dtest=RelevantFxTest test
 ```
 
-- Run JavaFX tests in an active graphical macOS session.
-- Use a separate JavaFX cache directory for independent runs.
+- Run portable JavaFX tests in an active graphical session.
+- Run macOS-specific JavaFX or native-integration tests in an active graphical
+  macOS session.
+- Replace `TASK_SPECIFIC_TEMP_DIRECTORY` with a task-specific directory under
+  the platform's temporary directory.
 - Use `-DreuseForks=false` when suites that call `Platform.exit()` run together.
 - `No toolkit found`, Prism failures, CVDisplayLink failures,
   `Screen.getMainScreen` failures, and cache `.lock` failures can be environment
@@ -323,22 +340,25 @@ Manually verify Dock identity and any affected system behavior.
 
 ## Git policy
 
-- Unless the user explicitly names another base, create every new task branch
-  from `main`. Before creating it, switch to `main` and verify the new branch's
-  merge base; do not branch from the currently active task branch by default.
 - Check `git status` before editing.
 - If the working tree is already dirty, inspect the existing diff before editing
   so that pre-existing user changes can be distinguished from changes made for
   the current task.
+- When the task requires creating a new branch, create it from `main` unless the
+  user explicitly specifies another base. Verify the selected base and the new
+  branch's merge base.
+- When the agent creates a task branch, use the `codex/` prefix.
+- Do not switch branches when doing so would overwrite, move, or otherwise
+  disturb pre-existing user changes.
+- When the user has already selected or created the task branch, preserve and
+  use that branch unless it is `main`.
 - Treat existing changes as user-owned.
 - Do not delete or overwrite unrelated changes.
 - Do not use destructive commands such as `git reset --hard`.
 - Do not include IDE metadata, temporary files, generated output, or unrelated
   benchmark artifacts unless they are explicitly part of the task.
 - Do not create commits or push changes unless the user explicitly asks.
-- All implementation changes must be pushed to a task branch using the
-  `codex/` prefix.
-- Never push directly to `main` unless the user explicitly requests it.
+- Never push directly to `main`.
 - Merge into `main` only through a pull request.
 - Do not create, merge, or close a pull request unless explicitly asked.
 - Do not bypass CI failures.
@@ -349,9 +369,10 @@ Manually verify Dock identity and any affected system behavior.
   unrecoverable corruption, application-wide failure, fundamentally incorrect
   rendering, or a release-blocking failure with no reasonable workaround.
 - **Major**: causes incorrect behavior, a significant regression, broken
-  platform or fallback behavior, a concurrency or resource-lifecycle defect, or
-  a substantial performance/UX failure in a supported workflow. A workaround
-  may exist, but the change should not be accepted without addressing the issue.
+  platform or fallback behavior, a concurrency or resource-lifecycle defect
+  with meaningful correctness, stability, leak, or supported-workflow impact,
+  or a substantial performance/UX failure. A workaround may exist, but the
+  change should not be accepted without addressing the issue.
 - **Minor**: a localized correctness, robustness, test-coverage, documentation,
   or maintainability issue with limited impact that does not invalidate the main
   workflow. Suggestions with no concrete impact are not Minor findings.

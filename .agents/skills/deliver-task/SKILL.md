@@ -28,12 +28,14 @@ report the required action.
    changed content, change candidate context, or merge, perform local candidate
    preflight:
    - Confirm the current branch, its merge base, remotes, and working-tree
-     status. New work must use a `codex/` task branch created from the intended
-     current base revision, normally the refreshed `origin/main`, unless the user
-     explicitly selected another base. Safely refresh the relevant remote refs
-     before relying on them; if that is not possible, report their freshness as
-     unverified instead of describing a local remote-tracking ref as current. Do
-     not require local `main` to be current merely to establish the task branch.
+     status. Preserve a task branch already selected by the user unless it is
+     `main`. When a new task branch is required, create a `codex/` branch from
+     the intended current base revision, normally the refreshed `origin/main`,
+     unless the user explicitly selected another base. Safely refresh the
+     relevant remote refs before relying on them; if that is not possible,
+     report their freshness as unverified instead of describing a local
+     remote-tracking ref as current. Do not require local `main` to be current
+     merely to establish the task branch.
      If intended uncommitted changes are on the base branch, create the task
      branch without discarding or stashing them when Git can do so safely. Do
      not stash, reset, overwrite with checkout, or relocate user-owned changes
