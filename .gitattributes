@@ -1,0 +1,2 @@
+# Preserve pinned third-party license texts verbatim, including upstream whitespace.
+packaging/licenses/** -whitespace

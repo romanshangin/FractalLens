@@ -1,0 +1,59 @@
+FractalUI runtime third-party license inventory
+===============================================
+
+This directory contains the license and notice texts for every third-party
+runtime component added by the FractalUI packaging pipeline. The source
+revision is pinned to the binary version or embedded native revision.
+
+OpenJFX 26.0.2
+---------------
+
+Source tag: 26.0.2+3
+Source commit: 96af634d010c917a6a4adf33da5508576b9bdb18
+Files:
+
+* OpenJFX-LICENSE.txt
+* OpenJFX-ADDITIONAL_LICENSE_INFO.txt
+* OpenJFX-ASSEMBLY_EXCEPTION.txt
+* OpenJFX-graphics-gcc.md
+* OpenJFX-graphics-jpeg_fx.md
+* OpenJFX-graphics-mesa3d.md
+* OpenJFX-graphics-pipewire.md
+
+LWJGL 3.4.2
+-----------
+
+Source tag: 3.4.2
+File:
+
+* LWJGL-LICENSE.txt
+
+MoltenVK bundled by lwjgl-vulkan 3.4.2 on macOS
+------------------------------------------------
+
+The native JAR identifies the embedded source revision in its adjacent `.git`
+metadata entry.
+
+Source commit: 973bb08a84004e0263bc898eaa110fe31e1094d0
+File:
+
+* MoltenVK-LICENSE.txt
+
+Shaderc bundled by lwjgl-shaderc 3.4.2
+----------------------------------------
+
+The native JARs identify the embedded source revision in their adjacent `.git`
+metadata entries. Shaderc's two third-party license files are included with its
+own license.
+
+Source commit: d5f08ae5c5a9a45165578445cbd0f9adf0223448
+Files:
+
+* Shaderc-LICENSE.txt
+* Shaderc-LICENSE.glslang.txt
+* Shaderc-LICENSE.spirv-tools.txt
+
+The linked JDK runtime retains its own legal notices under the runtime image's
+`legal` directory. FractalUI itself currently has no repository-level license;
+these third-party texts do not grant rights to redistribute FractalUI
+application code.

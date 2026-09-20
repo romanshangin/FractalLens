@@ -31,7 +31,10 @@ delivery foundation should be completed first.
   applicable, icons, launch options, licenses and CPU fallback. Record artifact
   provenance and a clean-machine launch checklist. Signing/notarization may
   remain a separate release step, but packaging must be automated and
-  repeatable.
+  repeatable. The pipeline and build-machine launcher smoke are implemented in
+  `scripts/package_runtime.py` and `.github/workflows/runtime-artifacts.yml`;
+  keep this item open until both hosted platform jobs and the recorded
+  clean-machine checklist pass.
 - [ ] **P0.3. Close the current measurement gate before starting another
   optimization.** Finish the open 9.1 paired-decision item and the already
   implemented 9.3 bounded-`ValidityMask` candidate with fixed power conditions,
@@ -125,9 +128,9 @@ delivery foundation should be completed first.
       failures or errors and one expected resident-GPU skip, the Maven cache
       was saved successfully, and the reports were retained in
       [Native GPU Validation run 35393710276](https://github.com/romzesthefirst/fractal-ui/actions/runs/35393710276).
-- [ ] Add reproducible macOS and Windows runtime packaging and clean-machine
-  smoke checks; document artifact provenance and the separate signing/release
-  boundary.
+- [ ] Pass the macOS and Windows runtime-artifact workflow and record the
+  clean-machine launch checklist; packaging, provenance and the separate
+  signing/release boundary are documented in `RUNTIME_PACKAGING.md`.
 
 ## 1. Restore a stable green build
 
