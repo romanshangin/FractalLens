@@ -101,7 +101,7 @@ class PackageRuntimeContractTest(unittest.TestCase):
             capture_output=True, text=True, env=environment)
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn(f"javafx.cachedir = {cache}", result.stderr)
+        self.assertIn(f"javafx.cachedir = {cache.as_posix()}", result.stderr)
 
 
 if __name__ == "__main__":

@@ -1,2 +1,2 @@
 # Preserve pinned third-party license texts verbatim, including upstream whitespace.
-packaging/licenses/** -whitespace
+packaging/licenses/** text eol=lf -whitespace
