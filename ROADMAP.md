@@ -25,16 +25,21 @@ delivery foundation should be completed first.
   caching, clean-checkout execution and uploaded test reports. Keep
   hardware-native GPU suites in explicit opt-in jobs because ordinary CI
   runners do not prove GPU conformance.
-- [ ] **P0.2. Produce installable, smoke-tested runtime artifacts.** Define a
+- [x] **P0.2. Produce installable, smoke-tested runtime artifacts.** Define a
   versioned `jlink`/`jpackage`-style pipeline for the macOS app and Windows
   application, including JavaFX/LWJGL natives, the AppKit bridge where
   applicable, icons, launch options, licenses and CPU fallback. Record artifact
   provenance and a clean-machine launch checklist. Signing/notarization may
   remain a separate release step, but packaging must be automated and
   repeatable. The pipeline and build-machine launcher smoke are implemented in
-  `scripts/package_runtime.py` and `.github/workflows/runtime-artifacts.yml`;
-  keep this item open until both hosted platform jobs and the recorded
-  clean-machine checklist pass.
+  `scripts/package_runtime.py` and `.github/workflows/runtime-artifacts.yml`.
+  Both hosted jobs and the Windows clean-machine checklist passed. The owner
+  accepted P0.2 with an explicit macOS VirtualBuddy/Sonoma exception: the
+  default Finder launch crashes in the virtual Metal pipeline, while the
+  software-pipeline launch and manual functionality checks pass. This is not a
+  passing default macOS clean-machine launch; physical macOS clean-machine
+  behavior remains unverified. See `RUNTIME_PACKAGING.md` for the evidence and
+  release boundary.
 - [ ] **P0.3. Close the current measurement gate before starting another
   optimization.** Finish the open 9.1 paired-decision item and the already
   implemented 9.3 bounded-`ValidityMask` candidate with fixed power conditions,
@@ -128,9 +133,12 @@ delivery foundation should be completed first.
       failures or errors and one expected resident-GPU skip, the Maven cache
       was saved successfully, and the reports were retained in
       [Native GPU Validation run 35393710276](https://github.com/romzesthefirst/fractal-ui/actions/runs/35393710276).
-- [ ] Pass the macOS and Windows runtime-artifact workflow and record the
-  clean-machine launch checklist; packaging, provenance and the separate
-  signing/release boundary are documented in `RUNTIME_PACKAGING.md`.
+- [x] Pass the macOS and Windows runtime-artifact workflow and record the
+  clean-machine launch checklist, including the owner's explicit acceptance of
+  the failed default launch on macOS Sonoma in VirtualBuddy. Windows passed;
+  macOS passed only with a software-pipeline override, not the default Finder
+  launch. Packaging, provenance, the exception, and the separate signing/release
+  boundary are documented in `RUNTIME_PACKAGING.md`.
 
 ## 1. Restore a stable green build
 

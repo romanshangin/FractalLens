@@ -71,6 +71,51 @@ Record the workflow run URL, artifact checksum, provenance file, target machine,
 installation result and checklist result. Do not describe a build-machine smoke
 test as a completed clean-machine check.
 
+## P0.2 acceptance record
+
+The owner accepted P0.2 with the macOS virtual-machine exception below. This
+decision closes the roadmap packaging item; it does not turn the failed default
+macOS launch into a passing check or establish support for that environment.
+
+- [Runtime Artifacts run 35557346815](https://github.com/romzesthefirst/fractal-ui/actions/runs/35557346815)
+  passed its hosted macOS ARM64 and Windows X64 packaging, packaged-launcher
+  smoke, and artifact-upload jobs. The PR head was
+  `cdeff9d4181f69031b4a8e14236381659d1d38ad`; artifact provenance records
+  the PR merge revision `3331e33c7babf3635cd4f1ade1e75cff0a8595fc`,
+  version `1.0.3`, and `working_tree_dirty=false` on both platforms.
+- The macOS artifact `FractalUI-1.0.3.dmg` had SHA-256
+  `71d2dfb9a6d6c3513aabfbb51077e0b3b40641e44a425f765eee7ac7cf02a0e7`.
+  On a VirtualBuddy macOS Sonoma 14.8.9 (23J631) ARM64 guest without JDK or
+  Maven, the downloaded artifact checksum was independently verified and
+  provenance checks passed in the guest. The app installed, and the unsigned-app
+  Gatekeeper exception was granted. The default Finder launch
+  showed the loading screen and then crashed with `NSInvalidArgumentException`:
+  `AppleParavirtDevice newArgumentEncoderWithLayout:` in `libprism_mtl.dylib`.
+  An explicit ES2 launch could not initialize `MacGLFactory`. With
+  `JAVA_TOOL_OPTIONS="-Dprism.order=sw -Dprism.verbose=true"`, the installed app
+  initialized `SWPipeline`, displayed the completed Mandelbrot frame, and
+  passed Dock tooltip, pan, zoom, Reset View, AppKit context menu/Escape, PNG
+  export, and app-icon checks. The default Finder launch failed; a physical
+  clean Apple Silicon Mac was unavailable, so physical macOS launch behavior
+  remains unverified. The software-pipeline result is a diagnostic control,
+  not a general macOS graphics default or a pass for the default-launch step.
+- The Windows artifact `FractalUI-1.0.3.exe` had SHA-256
+  `b18c687b666452414b9574021ac1c6d539471671056d254383db9da6f08a4826`.
+  On a Windows 11 Home 10.0.26200 x64 laptop, Java and Maven were removed
+  before testing; a fresh PowerShell session found no `java.exe`, `javac.exe`,
+  or `mvn.cmd`, and `JAVA_HOME` was empty. The SHA-256 matched the provenance
+  artifact hash. Provenance recorded `machine=AMD64`, `cpu_default=true`, and
+  successful JavaFX and CPU-fallback/render smoke checks. The owner reported
+  successful installation, launch from the Start menu, initial render, pan,
+  zoom, Reset View, JavaFX canvas context menu, PNG export, and close/reopen.
+  This was a machine with development tools removed, not a newly installed OS.
+
+The macOS virtual Metal crash remains an unresolved compatibility limitation.
+Do not describe the Sonoma/VirtualBuddy default launch as validated, infer
+physical Mac behavior from the VM, or treat these unsigned CI artifacts as
+public release candidates. Signing and notarization remain separate release
+work as described below.
+
 ## Signing and release boundary
 
 CI artifacts are intentionally unsigned. Building and smoke testing are
