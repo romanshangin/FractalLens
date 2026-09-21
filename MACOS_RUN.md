@@ -30,6 +30,10 @@ It is not a standalone distribution or a Finder launcher. In an IDE, use the
 same Maven goal to obtain the Dock name; a direct Java Application run bypasses
 the bundle. Windows and Linux keep the normal Java launcher.
 
+For the self-contained Finder application and DMG installer, use the pipeline
+documented in `RUNTIME_PACKAGING.md`. That artifact includes its own runtime and
+does not use this development launcher.
+
 For a manual check, launch the application and hover over its Dock icon:
 the tooltip must say **FractalUI**. Checking only the running process's
 `localizedName` is insufficient: it can be FractalUI while Dock still says java.

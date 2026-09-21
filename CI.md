@@ -1,10 +1,10 @@
 # Continuous integration
 
-This document covers only item 1 of the P0 infrastructure and delivery
-foundation in `ROADMAP.md`: continuously reproducible CI. It does not complete
-P0 or its exit criterion. Runtime packaging and clean-machine smoke tests,
-scene serialization and restore, the open measurement decision, and the
-remaining hardware validation work are separate open roadmap items.
+This document covers item 1 of the P0 infrastructure and delivery foundation in
+`ROADMAP.md`: continuously reproducible CI. Runtime artifact CI is described in
+`RUNTIME_PACKAGING.md`. Scene serialization and restore, the open measurement
+decision, clean-machine checklist execution and the remaining hardware
+validation work are separate open roadmap items.
 
 FractalUI separates portable CPU-default validation from hardware-native GPU
 validation. Hosted runners establish portability; they do not establish GPU

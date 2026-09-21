@@ -7,6 +7,8 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 import javafx.stage.Screen;
 
+import java.nio.file.Path;
+
 public class FractalApplication extends Application {
 
     private MainView mainView;
@@ -17,6 +19,15 @@ public class FractalApplication extends Application {
 
     @Override
     public void start(Stage stage) {
+        var smokeReport = getParameters().getRaw().stream()
+                .filter(argument -> argument.startsWith("--package-smoke-test="))
+                .map(argument -> Path.of(argument.substring(argument.indexOf('=') + 1)))
+                .findFirst();
+        if (smokeReport.isPresent()) {
+            RuntimeArtifactSmoke.start(stage, smokeReport.orElseThrow());
+            return;
+        }
+
         ApplicationIcon.install(stage);
         mainView = new MainView(stage);
 
