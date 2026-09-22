@@ -9,9 +9,13 @@ Follow all project-wide rules and constraints in `AGENTS.md`.
 
 ## Establish the task
 
-1. Check the current branch and working tree before editing. Inspect existing
-   tracked modifications, staged changes, and untracked files. Treat all
-   pre-existing work as user-owned.
+1. Before making any change, inspect the current branch and working tree as a
+   read-only baseline. Inspect existing tracked modifications, staged changes,
+   and untracked files, then create a new dedicated task branch. Unless the
+   user explicitly specifies another base or branch name, create the branch
+   from `main` with the `codex/` prefix. Treat all pre-existing work as
+   user-owned and preserve it while creating the branch. Do not edit files
+   until the new branch has been created and its base has been verified.
 2. Resolve the requested outcome and boundaries. Distinguish required behavior,
    explicitly requested cleanup, and incidental improvements. Do not expand the
    scope for unrelated cleanup, modernization, formatting, or architectural
