@@ -26,8 +26,8 @@ match the recorded controller hashes.
 
 ## JavaFX calibration
 
-Raw data: [FX campaign](benchmarks/baseline-9-1-pairs-fx-calibration-20260909/analysis.json),
-[declared policy](benchmarks/policies/9-1-pairs-fx-calibration.json).
+Raw data: [FX campaign](baseline-9-1-pairs-fx-calibration-20260909/analysis.json),
+[declared policy](policies/9-1-pairs-fx-calibration.json).
 Two fixtures at 480x270 render pixels, both FAST and REFINED: eight metric
 groups and 240 metric pairs. All six JVMs completed their exact-control
 validation and wrote `SUCCESS`; the campaign validator passed. ES2 selected
@@ -50,8 +50,8 @@ as the eventual large-frame ValidityMask publication gate.
 
 ## Large-frame headless calibration
 
-Raw data: [headless campaign](benchmarks/baseline-9-1-pairs-validity-calibration-20260909/analysis.json),
-[declared policy](benchmarks/policies/9-1-validity-headless-calibration.json).
+Raw data: [headless campaign](baseline-9-1-pairs-validity-calibration-20260909/analysis.json),
+[declared policy](policies/9-1-validity-headless-calibration.json).
 Five sequences / eight steps at 3024x1964 render pixels: 11 metric groups and
 330 metric pairs. Six JVMs produced 672 cold/warmup/measured rows; coverage,
 runtime, workload and non-cancelled fingerprint checks all passed.

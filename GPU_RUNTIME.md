@@ -86,7 +86,7 @@ inherited pan grid is used for certification and recovery.
 
 The grid must pass the 1/16-pixel error and distinct-neighbor checks. Unsupported
 jobs retain the existing CPU selection, including deep-zoom perturbation.
-Accepted samples need the interval certificate in `GPU_FP32_NATIVE.md`; rejected
+Accepted samples need the interval certificate in `benchmarks/GPU_FP32_NATIVE.md`; rejected
 samples are recomputed with the original CPU-double coordinates. Raw uncertified
 values are never marked ready or admitted into caches.
 
@@ -115,7 +115,7 @@ optimized repeat of the numeric/performance gate on M3 Pro. Retina base overview
 improves from 592.52 to 238.67 ms on GPU, but remains behind its paired 71.93 ms
 CPU baseline; Refined + AA is 1534.89 versus 1378.67 ms. CPU remains the default
 and GPU residency expansion is still deferred. See
-[GPU_RENDER_BENCHMARK_8_5_RESULTS.md](GPU_RENDER_BENCHMARK_8_5_RESULTS.md) for
+[GPU_RENDER_BENCHMARK_8_5_RESULTS.md](benchmarks/GPU_RENDER_BENCHMARK_8_5_RESULTS.md) for
 raw runs, host/kernel profiles, memory accounting and display limitations; the
 original 8.4 result remains archived separately.
 
@@ -142,7 +142,7 @@ work, the candidate time accumulated by the busiest worker, and pixel/sample
 counts. Per-pixel timestamps exist only in this diagnostic mode. The M3 Pro gate
 found that even free candidate detection would not close the current GPU
 base-frame deficit, so AA remains on CPU. See
-[GPU_RESIDENCY_8_6_DECISION.md](GPU_RESIDENCY_8_6_DECISION.md).
+[GPU_RESIDENCY_8_6_DECISION.md](benchmarks/GPU_RESIDENCY_8_6_DECISION.md).
 
 The follow-up 8.6 whole-frame residency spike is also isolated from production
 backend selection. It keeps a palette-independent four-word sample record per
@@ -163,7 +163,7 @@ of stopping at the first conformance failure. The M3 Pro gate found meaningful w
 Retina overview and exterior, but a correction-heavy seahorse view remained
 24.1% slower than CPU. This fails the required 15% win in every representative
 scene, so the spike remains an opt-in experiment. See
-[GPU_RESIDENT_SPIKE_RESULTS.md](GPU_RESIDENT_SPIKE_RESULTS.md).
+[GPU_RESIDENT_SPIKE_RESULTS.md](benchmarks/GPU_RESIDENT_SPIKE_RESULTS.md).
 
 The rejection buffer also carries bounded diagnostic counters. The follow-up
 Retina seahorse profile attributes 51.16% of rejected pixels to an uncertain
@@ -172,14 +172,14 @@ error contract; every other category is zero. This rules out palette-phase and
 iteration-matching tweaks as useful next work. A further calculation experiment
 must apply a higher-precision certificate only to rejected pixels. The raw
 profile is in
-[GPU_RESIDENT_REJECTION_PROFILE.csv](GPU_RESIDENT_REJECTION_PROFILE.csv).
+[GPU_RESIDENT_REJECTION_PROFILE.csv](benchmarks/GPU_RESIDENT_REJECTION_PROFILE.csv).
 
 A follow-up centered-error FP32 certificate was tested only on first-stage
 rejections. It preserved conformance but certified zero additional pixels at
 both benchmark sizes and all three native smoke scenes. On Retina seahorse its
 extra arithmetic raised median GPU calculation from 27.06 to 46.65 ms. The
 second pass was removed; its measurements remain in
-[GPU_RESIDENT_SECOND_STAGE_PROFILE.csv](GPU_RESIDENT_SECOND_STAGE_PROFILE.csv).
+[GPU_RESIDENT_SECOND_STAGE_PROFILE.csv](benchmarks/GPU_RESIDENT_SECOND_STAGE_PROFILE.csv).
 Any later certificate experiment must use a genuinely higher-precision numeric
 representation rather than reshaping the same FP32 bounds.
 
@@ -190,7 +190,7 @@ zero CPU recovery it fails the performance gate: Retina seahorse is 37.3% slower
 than CPU and Retina overview is only 4.3% faster. It also fails conformance, with
 54 Retina seahorse outliers and a maximum channel error of 189. The emulation
 path was removed. Raw results are in
-[GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv](GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv).
+[GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv](benchmarks/GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv).
 
 ## Palette recoloring integration
 
@@ -236,7 +236,7 @@ upload, dispatch, readback, FX queue delay and publication. Dispatch is host wal
 time for command encoding, submission and fence wait, not a GPU timestamp query.
 Total recolor time includes all orchestration and fallback overhead. Publication
 measures the shared `SurfaceBuffer.publish` array copy and PixelBuffer update;
-it does not claim to measure display scanout. See `PALETTE_BENCHMARK_RESULTS.md`
+it does not claim to measure display scanout. See `benchmarks/PALETTE_BENCHMARK_RESULTS.md`
 for the reproducible JavaFX benchmark and its limitations.
 
 ## Packaging and diagnostics
@@ -333,10 +333,10 @@ The palette benchmark was repeated on 2026-09-03 with LWJGL 3.4.2 / FFM: an
 original-length 12/40 run and a 30/120 confirmation run both passed per-frame
 conformance without GPU fallback or Unsafe warnings. GPU won only the large-AA
 workload (3% and 16% lower time through the JavaFX buffer, respectively); CPU
-remains the default. `PALETTE_BENCHMARK_RESULTS.md` reports the current samples
+remains the default. `benchmarks/PALETTE_BENCHMARK_RESULTS.md` reports the current samples
 and retains the older data separately. The initial CPU-only FP32 study is in
-`GPU_FP32_PRECISION.md`. Actual Mandelbrot shader validation and the per-pixel
-interval acceptance contract are in `GPU_FP32_NATIVE.md`. The optional production
+`benchmarks/GPU_FP32_PRECISION.md`. Actual Mandelbrot shader validation and the per-pixel
+interval acceptance contract are in `benchmarks/GPU_FP32_NATIVE.md`. The optional production
 backend and standalone diagnostic now share the validated kernel and gate. The
 production path uses the existing runtime owner.
 

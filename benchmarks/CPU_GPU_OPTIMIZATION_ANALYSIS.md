@@ -20,8 +20,8 @@ The integrated GPU calculation path currently accepts only certified Mandelbrot
 jobs without orbit traps, with 1–1000 iterations and a supported coordinate
 grid. Deep zoom and unsupported work use CPU. A future GPU perturbation path
 must establish its own higher-iteration contract; the existing FP32 gate does
-not cover it. See [runtime modes](GPU_RUNTIME.md#platform-and-numeric-requirements)
-and [backend eligibility](src/main/java/com/shangin/fractal/gpu/GpuMandelbrotRenderBackend.java).
+not cover it. See [runtime modes](../GPU_RUNTIME.md#platform-and-numeric-requirements)
+and [backend eligibility](../src/main/java/com/shangin/fractal/gpu/GpuMandelbrotRenderBackend.java).
 
 This analysis covers the relevant families of optimization: avoiding work,
 reducing iteration work, numerical representations, SIMD and scheduling,
@@ -38,7 +38,7 @@ experiments have smaller sample counts and older runtimes than the recent GPU
 gates; their outcomes are evidence about those implementations and workloads,
 not universal hardware limits.
 
-The executable follow-up is [roadmap section 9](ROADMAP.md#9-pursue-cpugpu-optimization-from-the-measured-bottlenecks).
+The executable follow-up is [roadmap section 9](../ROADMAP.md#9-pursue-cpugpu-optimization-from-the-measured-bottlenecks).
 Existing sections 8.7 and 8.8 retain the separate Windows and Intel/AMD Mac work.
 
 ## What has already been tested
@@ -55,7 +55,7 @@ Existing sections 8.7 and 8.8 retain the separate Windows and Intel/AMD Mac work
 | Naive double-only perturbation | About 1.8x slower, with iteration mismatches. | Do not move ordinary views to a delta recurrence without a different amortization and precision argument. [Early experiment](FORMULA_BENCHMARK_RESULTS.md#perturbation-and-reference-orbit-investigation). |
 | Deep modified rebasing | Cached 480x270 glitch workload: 515.89 → 175.14 ms; additional references eliminated in that case. | Successful production optimization; preserve it in future CPU/GPU algorithms. [Rebasing results](FORMULA_BENCHMARK_RESULTS.md#modified-perturbation-rebasing). |
 | Conservative CPU BLA | At scale `1e-30`, cached 180.83 → 57.33 ms (3.15x); 1,755 scalar steps become one 1,753-step block plus two scalar steps. No useful blocks at the shallower glitch workload. | Extend coverage and lower setup/storage cost; do not extrapolate one uniform-escape view to all deep scenes. [BLA results](FORMULA_BENCHMARK_RESULTS.md#conservative-bla-blocks). |
-| Cubic series / looser BLA radius | Safe series skips gained only 1–3%; longer skips violated smooth tolerance. BLA `2^-32` failed a boundary control; production uses `2^-52`. | Higher-order or bounded-error approaches need a new argument and gate; loosening tolerances is not an optimization. [Roadmap 7.6](ROADMAP.md#76-x-evaluate-secondary-deep-zoom-optimizations), [BLA results](FORMULA_BENCHMARK_RESULTS.md#conservative-bla-blocks). |
+| Cubic series / looser BLA radius | Safe series skips gained only 1–3%; longer skips violated smooth tolerance. BLA `2^-32` failed a boundary control; production uses `2^-52`. | Higher-order or bounded-error approaches need a new argument and gate; loosening tolerances is not an optimization. [Roadmap 7.6](../ROADMAP.md#76-x-evaluate-secondary-deep-zoom-optimizations), [BLA results](FORMULA_BENCHMARK_RESULTS.md#conservative-bla-blocks). |
 | GPU palette residency | Large-AA recoloring through the JavaFX buffer: 5.633 ms CPU vs 4.717 ms GPU; three other workloads favor CPU. First GPU use costs 147.5 ms in the longer run. | A possible narrow warmed-use policy, not a global GPU default. [Palette results](PALETTE_BENCHMARK_RESULTS.md). |
 | Integrated GPU 8.4 → 8.5 | Host recovery/conversion parallelization, single smooth conversion, certified interior shortcuts and 192x192 batches substantially improved GPU time. All ten repeated CPU/GPU cases still lose. | Those optimizations are already done. Work on a different bottleneck. [8.4](GPU_RENDER_BENCHMARK_RESULTS.md), [8.5](GPU_RENDER_BENCHMARK_8_5_RESULTS.md). |
 | GPU candidate-detection proposal | Even subtracting the complete measured candidate critical path leaves the hybrid AA pipeline 1.03–1.07x slower. | Moving detection alone cannot justify expansion of the current hybrid backend. [8.6 decision](GPU_RESIDENCY_8_6_DECISION.md). |
@@ -84,8 +84,8 @@ The resident benchmark instead ends at a returned ARGB array. It uses fixed 300
 iterations and ICE coloring, with no JavaFX publication, AA, pan reuse or input
 latency. Its conformance comparison checks colors, not the full sample plane.
 These limits follow directly from
-[`GpuResidentRenderBenchmark`](src/main/java/com/shangin/fractal/ui/GpuResidentRenderBenchmark.java)
-and its [native test](src/test/java/com/shangin/fractal/gpu/GpuResidentMandelbrotNativeTest.java).
+[`GpuResidentRenderBenchmark`](../src/main/java/com/shangin/fractal/ui/GpuResidentRenderBenchmark.java)
+and its [native test](../src/test/java/com/shangin/fractal/gpu/GpuResidentMandelbrotNativeTest.java).
 
 | Retina workload | CPU to ARGB | Resident GPU to ARGB | Recovery fraction | Decision |
 | --- | ---: | ---: | ---: | --- |
@@ -114,9 +114,9 @@ elapsed times measured using `System.nanoTime`, not process CPU utilization;
 they overlap and must not be added to or subtracted from frame time as if
 they were sequential stages.
 
-[`InteractiveAntialiasService.refineTile`](src/main/java/com/shangin/fractal/export/InteractiveAntialiasService.java)
+[`InteractiveAntialiasService.refineTile`](../src/main/java/com/shangin/fractal/export/InteractiveAntialiasService.java)
 calls `sampleCache.color(...)` before candidate timing for every traversed
-pixel. [`AntialiasSampleCache`](src/main/java/com/shangin/fractal/render/AntialiasSampleCache.java)
+pixel. [`AntialiasSampleCache`](../src/main/java/com/shangin/fractal/render/AntialiasSampleCache.java)
 uses a synchronized access-order `LinkedHashMap`; insertion and the subsequent
 color lookup also acquire that monitor. The initial lookup and its contention
 are outside `aa_cache_color_cpu_ms`. Millions of cache misses can therefore
@@ -132,7 +132,7 @@ The old scalar `FractalSample` escape-analysis experiment does not cover
 `FractalSample[16]` objects passed to the AA cache.
 
 Candidate detection also reruns a derivative orbit for non-edge pixels in
-[`AdaptivePngExportService`](src/main/java/com/shangin/fractal/export/AdaptivePngExportService.java).
+[`AdaptivePngExportService`](../src/main/java/com/shangin/fractal/export/AdaptivePngExportService.java).
 Compare retaining a distance/candidate sidecar during an AA-enabled base pass
 with this second pass. Account for its known 1.4–2x base arithmetic cost and
 possible delay to first publication. Keep the image-space detector: exterior
@@ -140,10 +140,10 @@ distance estimates alone miss interior-centered boundary pixels.
 
 ### Deep zoom: successful skipping changes the next bottleneck
 
-The current [BLA table](src/main/java/com/shangin/fractal/render/MandelbrotBlaTable.java)
+The current [BLA table](../src/main/java/com/shangin/fractal/render/MandelbrotBlaTable.java)
 uses objects per block, a generation-wide delta bound and a strict radius. It
 does not accelerate the scaled-exponent path or retries against additional
-references. The [perturbation backend](src/main/java/com/shangin/fractal/render/MandelbrotPerturbationRenderBackend.java)
+references. The [perturbation backend](../src/main/java/com/shangin/fractal/render/MandelbrotPerturbationRenderBackend.java)
 caches exact-match primary orbits but keeps additional references and BLA
 tables local to a generation.
 
@@ -175,7 +175,7 @@ on that scene or pass the existing cross-scene GPU gate.
 
 ### Presentation: optimize it as its own measured stage
 
-[`SurfaceBuffer`](src/main/java/com/shangin/fractal/ui/SurfaceBuffer.java) owns a
+[`SurfaceBuffer`](../src/main/java/com/shangin/fractal/ui/SurfaceBuffer.java) owns a
 heap `IntBuffer`, copies complete arrays in `publish`, and reports the entire
 buffer dirty via `updateBuffer(... -> null)`. Compare bounded dirty rectangles,
 callback coalescing after the first ready region, reusable output buffers and
@@ -377,4 +377,4 @@ The BLA-disable property affects the benchmark's base backend only; its later
 AA sampler still uses the production BLA policy. See
 [formula benchmark instructions](FORMULA_BENCHMARK.md),
 [8.5 reproduction](GPU_RENDER_BENCHMARK_8_5_RESULTS.md#reproduce) and
-[runtime validation](GPU_RUNTIME.md) for native/FX prerequisites and limits.
+[runtime validation](../GPU_RUNTIME.md) for native/FX prerequisites and limits.

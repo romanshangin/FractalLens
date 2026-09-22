@@ -62,8 +62,12 @@ def main():
     source = output / "source"
     source.mkdir()
     archive = output / "source.tar"
+    manifest = "benchmarks/BASELINE_FIXTURES.csv"
+    if subprocess.run(["git", "cat-file", "-e", revision + ":" + manifest],
+                      cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+        manifest = "BASELINE_FIXTURES.csv"
     with archive.open("xb") as f:
-        subprocess.run(["git", "archive", revision, "pom.xml", "src", "BASELINE_FIXTURES.csv"], cwd=ROOT, stdout=f, check=True)
+        subprocess.run(["git", "archive", revision, "pom.xml", "src", manifest], cwd=ROOT, stdout=f, check=True)
     with tarfile.open(archive) as tar:
         # Explicit safe subset works on the system Python 3.9 too.
         for member in tar.getmembers():

@@ -1,7 +1,7 @@
 # FractalUI development roadmap
 
 CPU/GPU optimization review (2026-09-05):
-[analysis, experiment inventory and validation rules](CPU_GPU_OPTIMIZATION_ANALYSIS.md).
+[analysis, experiment inventory and validation rules](benchmarks/CPU_GPU_OPTIMIZATION_ANALYSIS.md).
 Keep CPU as the default after the failed 8.5 and resident 8.6 gates. The next
 optimization work is section 9: establish comparable measurements, investigate
 CPU AA synchronization, improve CPU/deep-zoom work, then test different GPU
@@ -48,7 +48,7 @@ delivery foundation should be completed first.
   code in a permanently provisional state. Two fresh 30-process-pair campaigns
   confirmed the retained-frame gain, but the aggregate control budget remained
   inconclusive. The candidate was rejected and removed; see
-  [the final decision](VALIDITY_MASK_OPTIMIZATION.md).
+  [the final decision](benchmarks/VALIDITY_MASK_OPTIMIZATION.md).
 - [ ] **P0.4. Turn reproducibility into a product contract.** Implement section
   5 JSON scene serialization and last-session restore before undo/redo,
   shareable presets or new export variants. Version the schema and test
@@ -399,7 +399,7 @@ Mac validation in 8.8; preserve portable contracts throughout the GPU work.
   measure upload, dispatch, readback, and presentation costs separately.
 - [x] Validate the macOS/Apple Silicon prototype against the parallel CPU
   baseline, including palette/AA/frame invalidation and fallback. Run a paired
-  Retina benchmark with warmup and saved samples (`PALETTE_BENCHMARK_RESULTS.md`).
+  Retina benchmark with warmup and saved samples (`benchmarks/PALETTE_BENCHMARK_RESULTS.md`).
   GPU remains opt-in: measured gains do not justify replacing CPU by default.
 - [x] Repeat the paired Retina benchmark after the LWJGL 3.4.2 / FFM update,
   retain raw samples, and refresh the performance decision. Both 12/40 and
@@ -409,13 +409,13 @@ Mac validation in 8.8; preserve portable contracts throughout the GPU work.
 
 - [x] Define initial FP32 numeric tolerances and screen coordinate rounding,
   orbit divergence and iteration limits against the direct-double CPU reference
-  (`GPU_FP32_PRECISION.md`). Reject automatic selection by scale alone: even
+  (`benchmarks/GPU_FP32_PRECISION.md`). Reject automatic selection by scale alone: even
   overview frames fail; whole-frame FP32 is not accepted.
 - [x] Validate actual FP32 shader arithmetic in a verification-only MoltenVK
   Mandelbrot probe across full Retina frames, boundary sweeps, panned grids and
   iteration limits. An outward-rounded interval certificate accepts 89.65% of
   the overview Retina frame with zero false accepts in the recorded gate; raw
-  FP32 has 1,352 wrong escaped classifications (`GPU_FP32_NATIVE.md`).
+  FP32 has 1,352 wrong escaped classifications (`benchmarks/GPU_FP32_NATIVE.md`).
 - [x] Integrate interval-based rejection and precision-preserving CPU recovery
   into the production Mandelbrot GPU backend; retain whole-job CPU fallback for
   unsupported grids, features and native failures.
@@ -437,7 +437,7 @@ Mac validation in 8.8; preserve portable contracts throughout the GPU work.
   frames satisfy exact iterations/escape and smooth error <= 0.01.
 - [x] Benchmark kernel time, transfer cost, first published region, full base/AA
   frame time, memory use and Retina JavaFX publication overhead. Save paired
-  uninstrumented and separately profiled results in `GPU_RENDER_BENCHMARK_RESULTS.md`.
+  uninstrumented and separately profiled results in `benchmarks/GPU_RENDER_BENCHMARK_RESULTS.md`.
   Physical scanout/vsync latency is not measured by this publication gate.
 - [x] Make the continuation decision from end-to-end results: **do not expand
   GPU rendering yet**. All ten workload/size cases are slower on GPU; Retina
@@ -466,7 +466,7 @@ interval kernel about 139 ms; these costs overlap. CPU remains the default.
   component profiling separately. The repeated M3 Pro gate passes conformance
   but fails performance: all ten cases remain slower on GPU. Retina overview
   improves from 592.52 to 238.67 ms but remains behind CPU at 71.93 ms; see
-  `GPU_RENDER_BENCHMARK_8_5_RESULTS.md`. Keep CPU default and 8.6 deferred.
+  `benchmarks/GPU_RENDER_BENCHMARK_8_5_RESULTS.md`. Keep CPU default and 8.6 deferred.
 
 ### 8.6. Expand GPU residency incrementally only when justified
 
@@ -481,7 +481,7 @@ below remain conditional rather than the next implementation step.
   moving it. The 8.6 M3 Pro profile shows a 17-19 ms candidate critical path at
   1512x982 and 72-74 ms at 3024x1964, smaller than the GPU base-frame deficit in
   every paired AA case. Even zero-cost GPU detection would remain 1.03-1.07x
-  slower end to end; see `GPU_RESIDENCY_8_6_DECISION.md`.
+  slower end to end; see `benchmarks/GPU_RESIDENCY_8_6_DECISION.md`.
 - [x] Build an isolated whole-frame residency feasibility spike: keep canonical
   samples on GPU, read back only the FP32 rejection list, upload exact CPU
   corrections, color on GPU, and return ARGB. At that pre-JavaFX boundary on
@@ -490,26 +490,26 @@ below remain conditional rather than the next implementation step.
   CPU recovery. These fixed-300-iteration, base/color-only measurements exclude
   AA and progressive presentation; their color comparison is not a full sample
   conformance gate. The strict 15% cross-scene gate therefore fails; see
-  `GPU_RESIDENT_SPIKE_RESULTS.md` and the scope audit in
-  `CPU_GPU_OPTIMIZATION_ANALYSIS.md`.
+  `benchmarks/GPU_RESIDENT_SPIKE_RESULTS.md` and the scope audit in
+  `benchmarks/CPU_GPU_OPTIMIZATION_ANALYSIS.md`.
 - [x] Classify resident certificate rejections before changing the kernel. In
   the Retina seahorse view, 51.16% of rejections come from an uncertain escape
   interval and 48.84% from a smooth-value interval wider than the contract;
   iteration, boundedness, validity, palette-phase and catch-all mismatches are
   all zero. Palette or dispatch tuning cannot remove this bottleneck. See
-  `GPU_RESIDENT_REJECTION_PROFILE.csv`.
+  `benchmarks/GPU_RESIDENT_REJECTION_PROFILE.csv`.
 - [x] Prototype a tighter centered-error FP32 certificate only for first-stage
   rejections. Its outward-rounded error recurrence certifies zero additional
   pixels in overview, exterior, and seahorse, while raising the Retina seahorse
   calculation median from 27.06 to 46.65 ms. Remove the second pass; a future
   attempt needs a genuinely higher-precision representation, not another FP32
-  interval shape. See `GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`.
+  interval shape. See `benchmarks/GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`.
 - [x] Measure the accuracy and performance ceiling of double-single GPU recovery
   for every FP32 rejection before investing in its certificate. It removes CPU
   recovery, but fails both gates: Retina seahorse is 37.3% slower than CPU and
   has 54 color outliers with a maximum channel error of 189; Retina overview is
   only 4.3% faster and has 46 outliers. Remove the emulation path and retain its
-  diagnostic results in `GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`.
+  diagnostic results in `benchmarks/GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`.
 - [ ] Move adaptive edge/distance candidate detection onto the GPU only after a
   repeated gate shows an end-to-end win including dispatch, synchronization,
   storage and exact fallback costs.
@@ -549,7 +549,7 @@ this section's failed gates as passed.
 
 ## 9. Pursue CPU/GPU optimization from the measured bottlenecks
 
-Use [the analysis](CPU_GPU_OPTIMIZATION_ANALYSIS.md) for the evidence, current
+Use [the analysis](benchmarks/CPU_GPU_OPTIMIZATION_ANALYSIS.md) for the evidence, current
 code entry points, alternative approaches and rejected experiments. Follow the
 cross-section priority order in section 0: close the open 9.1/9.3 decision
 first, then take selected 9.2–9.5 CPU follow-ups. Section 9.6 is the preferred
@@ -568,59 +568,59 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   sample accuracy and cache state. Include Mandelbrot/Julia, other formulas,
   direct/deep transitions, glitch-heavy and BLA-friendly scenes, scaled-exponent
   zoom, pan overlap, reverse navigation, resize-then-drag and cancellation.
-  The versioned [matrix and headless runner](BASELINE_BENCHMARK.md) contain
+  The versioned [matrix and headless runner](benchmarks/BASELINE_BENCHMARK.md) contain
   28 sequences / 37 steps at three render sizes, with a pinned exact manifest
-  and behavioral regressions. See [validation](BASELINE_VALIDATION.md).
+  and behavioral regressions. See [validation](benchmarks/BASELINE_VALIDATION.md).
 - [x] Measure formula/backend, returned-ARGB, JavaFX base/AA publication and
   input-to-visible-update scopes separately. Record first useful region,
   cold/warm full-frame time and cancellation tails; label physical scanout as
   unmeasured until a dedicated display experiment exists.
   Headless backend, returned-ARGB, first useful sample region, production AA
   and post-first-region cancellation scopes share the 9.1 matrix. The
-  [JavaFX publication runner](BASELINE_FX_BENCHMARK.md) now uses the same inputs
+  [JavaFX publication runner](benchmarks/BASELINE_FX_BENCHMARK.md) now uses the same inputs
   for Fast/Refined base/AA publication and request-bound post-layout observations,
-  with exact sample/ARGB controls. See [validation](BASELINE_FX_VALIDATION.md).
-  The [production input runner](BASELINE_INPUT_BENCHMARK.md) now connects scroll,
+  with exact sample/ARGB controls. See [validation](benchmarks/BASELINE_FX_VALIDATION.md).
+  The [production input runner](benchmarks/BASELINE_INPUT_BENCHMARK.md) now connects scroll,
   pinch, trackpad, drag, resize and input-driven replacement to the same fixtures.
   Exact actual camera/controller jobs and generation-bound traces distinguish UI
   policy from canonical requests; sample/ARGB controls preserve verified reuse.
-  See [input validation](BASELINE_INPUT_VALIDATION.md). The matrix also exposed
+  See [input validation](benchmarks/BASELINE_INPUT_VALIDATION.md). The matrix also exposed
   and regression-tested scaled-exponent pan grid-snap overflow. Handler-entry
   timestamps and post-layout observations are not physical input/display latency.
 - [x] Add a headless production-AA benchmark, an explicit CPU-only JavaFX
   comparison mode, and cache preparation/merge timing and batch counters.
   Record separate contention profiles and 30-sample comparisons across three
-  fresh process pairs in [CPU AA results](CPU_AA_OPTIMIZATION_RESULTS.md).
+  fresh process pairs in [CPU AA results](benchmarks/CPU_AA_OPTIMIZATION_RESULTS.md).
 - [x] Measure production scroll/pinch/drag handler latency with generation-aware
   callback/publication tracing, no-screen controls and a calibrated screen-marker
   capture proxy. Isolate the roughly 1.82 s fully-ready validity-mask scan at
   2400x1520; physical scanout remains unmeasured. See
-  [interaction latency results](INTERACTION_LATENCY_RESULTS.md).
+  [interaction latency results](benchmarks/INTERACTION_LATENCY_RESULTS.md).
 - [x] Add opt-in CPU base-task planning, queue and cancellation-drain diagnostics
   to the canonical matrix and real-input trace. Preserve request/input generation
   through worker exit, including workers outliving cancelled coordinator Futures.
-  See [the contract](BASELINE_SCHEDULING_BENCHMARK.md) and
-  [validation](BASELINE_SCHEDULING_VALIDATION.md). Per-worker intervals overlap;
+  See [the contract](benchmarks/BASELINE_SCHEDULING_BENCHMARK.md) and
+  [validation](benchmarks/BASELINE_SCHEDULING_VALIDATION.md). Per-worker intervals overlap;
   they are not additive frame costs or process CPU utilization.
 - [x] Extend diagnostics to allocation and long-duration memory/thermal behavior.
   The long FX matrix exposed detached surfaces retained by Scene/Window scale
   listeners; unsubscribe-on-detach is now regression-tested. FX rows also record
-  heap/GC observations; see [the ownership fix](BASELINE_FX_VALIDATION.md).
-  The [allocation and sustained-memory driver](BASELINE_MEMORY_BENCHMARK.md)
+  heap/GC observations; see [the ownership fix](benchmarks/BASELINE_FX_VALIDATION.md).
+  The [allocation and sustained-memory driver](benchmarks/BASELINE_MEMORY_BENCHMARK.md)
   separates navigation from exact CPU controls and adds JFR allocation attribution,
   RSS, NMT, GC checkpoints and macOS thermal pressure. The selected eight-fixture
   validation covers 288 exact trials, including a 13.24-minute 1512x982 run with
-  stable detached-heap checkpoints; see [results and limits](BASELINE_MEMORY_VALIDATION.md).
+  stable detached-heap checkpoints; see [results and limits](benchmarks/BASELINE_MEMORY_VALIDATION.md).
   Physical temperature, energy and all-platform/full-matrix soaks remain unmeasured.
 - [x] Use uninstrumented alternating pairs for decisions and separate JFR/native
   profiles for attribution. Confirm promising changes with at least 30 measured
   pairs and multiple process starts; record median/tails, hardware/runtime,
   memory/GC and sustained thermal behavior. Do not run competing timing suites
   simultaneously or overwrite historical CSVs.
-  The [frozen-build paired runner](BASELINE_PAIRS_BENCHMARK.md) now enforces
+  The [frozen-build paired runner](benchmarks/BASELINE_PAIRS_BENCHMARK.md) now enforces
   declared targets/controls, matching samples and alternating process starts.
-  [A/A calibration](BASELINE_PAIRS_VALIDATION.md) validates the protocol on
-  identical builds. The first [bounded-mask candidate](VALIDITY_MASK_OPTIMIZATION.md)
+  [A/A calibration](benchmarks/BASELINE_PAIRS_VALIDATION.md) validates the protocol on
+  identical builds. The first [bounded-mask candidate](benchmarks/VALIDITY_MASK_OPTIMIZATION.md)
   received 30 alternating process pairs in both headless and JavaFX scopes on
   fixed AC power. Exact controls and the retained-frame target passed; the
   aggregate 5% timing-control budget stayed inconclusive. The explicit
@@ -649,7 +649,7 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   **1393.72 → 283.65 ms** (Refined + AA). Refined first publication improves;
   Fast base publication shifts by less than 1 ms before AA starts.
   Deep-AA follow-up shows no meaningful gain. See
-  [CPU AA results](CPU_AA_OPTIMIZATION_RESULTS.md) for scopes, tails, memory
+  [CPU AA results](benchmarks/CPU_AA_OPTIMIZATION_RESULTS.md) for scopes, tails, memory
   observations and supplementary controls.
 - [ ] Reduce the retained-snapshot color preparation barrier without restoring
   shared-cache contention. The 30-sample retained-Julia follow-up completes
@@ -674,7 +674,7 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
 
 - [ ] Bound reusable `ValidityMask.missingRowSpans` scans to their row/region,
   avoid repeated complete-frame scans, and check cancellation during task
-  preparation. The [9.1 scheduling probe](BASELINE_SCHEDULING_VALIDATION.md)
+  preparation. The [9.1 scheduling probe](benchmarks/BASELINE_SCHEDULING_VALIDATION.md)
   attributes roughly 5 seconds at 3024x1964 to planning with zero worker tasks,
   including a similar cancellation tail. Add exact-mask/reuse and deterministic
   cancellation regressions, then apply the 30-pair/multiple-process gate before
@@ -686,7 +686,7 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   FX campaign changed power source; the final 30-pair headless and FX campaigns
   held observed AC power, confirmed the retained-frame target gain, but left
   overview, pan and short-latency controls inconclusive. The
-  [P0.3 decision](VALIDITY_MASK_OPTIMIZATION.md) rejected and removed this
+  [P0.3 decision](benchmarks/VALIDITY_MASK_OPTIMIZATION.md) rejected and removed this
   candidate. A new implementation and its tests must pass the full gate.
 - [ ] Benchmark interleaved independent scalar orbits and modest unrolling on
   Mandelbrot, Julia and AA samples. Inspect JIT/allocation profiles; preserve
@@ -712,7 +712,7 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
 - [ ] Profile BLA preparation/lookup, block objects, coordinate setup and sample
   publication once skipping dominates. Compare primitive block arrays and
   tile-local delta bounds while retaining the existing strict accuracy controls.
-  The [9.1 allocation profile](BASELINE_MEMORY_VALIDATION.md) identifies repeated
+  The [9.1 allocation profile](benchmarks/BASELINE_MEMORY_VALIDATION.md) identifies repeated
   precise AA coordinate construction and `ReferenceOrbit.cRealAsDouble` /
   `cImaginaryAsDouble` conversions as concrete allocation candidates. First
   evaluate caching immutable reference conversions and reusing exact coordinate

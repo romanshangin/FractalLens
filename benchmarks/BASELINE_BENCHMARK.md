@@ -17,7 +17,7 @@ to preserve declared policies, individual matching samples and process order.
 ## Workloads and contracts
 
 The executable source is
-[`BaselineFixtures`](src/test/java/com/shangin/fractal/render/BaselineFixtures.java).
+[`BaselineFixtures`](../src/test/java/com/shangin/fractal/render/BaselineFixtures.java).
 The runner uses production CPU backends, frame reuse, coloring and AA. It never
 dispatches GPU work. All base samples require `CPU_REFERENCE`; there is no
 approximate preview, symmetry override, palette animation or export in this run.

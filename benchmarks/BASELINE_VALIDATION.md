@@ -24,10 +24,10 @@ matching performance controls; each launch records its actual VM.
 
 Artifacts are preserved together:
 
-- [Executed exact manifest](benchmarks/baseline-9-1-validation/manifest.csv)
-- [Runtime, arguments and cache metadata](benchmarks/baseline-9-1-validation/environment.txt)
-- [Raw samples](benchmarks/baseline-9-1-validation/samples.csv)
-- [Per-scope summary](benchmarks/baseline-9-1-validation/summary.csv)
+- [Executed exact manifest](baseline-9-1-validation/manifest.csv)
+- [Runtime, arguments and cache metadata](baseline-9-1-validation/environment.txt)
+- [Raw samples](baseline-9-1-validation/samples.csv)
+- [Per-scope summary](baseline-9-1-validation/summary.csv)
 
 ## Observed checks
 
