@@ -21,10 +21,17 @@ public final class FractalCamera {
     private FractalPreset preset;
     private int viewportWidth = -1;
     private int viewportHeight = -1;
+    private boolean preserveViewportAtInitialSize;
 
     public FractalCamera(FractalPreset preset) {
         this.preset = Objects.requireNonNull(preset, "Preset must not be null");
         this.viewport = preset.defaultViewport();
+    }
+
+    public FractalCamera(FractalPreset preset, Viewport restoredViewport) {
+        this.preset = Objects.requireNonNull(preset, "Preset must not be null");
+        this.viewport = Objects.requireNonNull(restoredViewport, "Viewport must not be null");
+        this.preserveViewportAtInitialSize = true;
     }
 
     public Viewport viewport() {
@@ -36,6 +43,7 @@ public final class FractalCamera {
             int width,
             int height) {
         this.preset = Objects.requireNonNull(preset, "Preset must not be null");
+        preserveViewportAtInitialSize = false;
         reset(width, height);
     }
 
@@ -50,6 +58,7 @@ public final class FractalCamera {
         viewport = destination;
         viewportWidth = width;
         viewportHeight = height;
+        preserveViewportAtInitialSize = false;
     }
 
     public Viewport defaultViewport(
@@ -69,6 +78,7 @@ public final class FractalCamera {
         viewport = defaultViewport(width, height);
         viewportWidth = width;
         viewportHeight = height;
+        preserveViewportAtInitialSize = false;
     }
 
     /** Zooms toward a logical screen point, entering Mandelbrot deep zoom when needed. */
@@ -205,7 +215,13 @@ public final class FractalCamera {
     public void resize(int width, int height, int oldRenderHeight, int newRenderHeight) {
         validateDimensions(width, height);
         if (viewportWidth < 2 || viewportHeight < 2) {
-            reset(width, height);
+            if (preserveViewportAtInitialSize) {
+                viewportWidth = width;
+                viewportHeight = height;
+                preserveViewportAtInitialSize = false;
+            } else {
+                reset(width, height);
+            }
             return;
         }
 

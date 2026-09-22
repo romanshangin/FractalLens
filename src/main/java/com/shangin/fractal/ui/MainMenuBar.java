@@ -7,6 +7,7 @@ import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalDestination;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.InteractiveRenderMode;
+import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
 import javafx.scene.control.CheckMenuItem;
@@ -41,7 +42,7 @@ final class MainMenuBar extends MenuBar {
     private final CheckMenuItem deepAntialiasing = new CheckMenuItem("Deep Zoom Antialiasing");
     private final ToggleGroup palettes = new ToggleGroup();
     private List<ColorStop> paletteStops;
-    private OrbitTrap orbitTrap = OrbitTrap.NONE;
+    private OrbitTrap orbitTrap;
     private Viewport viewport;
     private BigDecimal zoom = BigDecimal.ONE;
     private boolean deepZoom;
@@ -50,10 +51,18 @@ final class MainMenuBar extends MenuBar {
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalPreset initialFractal,
                 PalettePreset initialPalette, Runnable onExport) {
+        this(stage, fractalView, FractalScene.create(initialFractal, initialPalette), onExport);
+    }
+
+    MainMenuBar(Stage stage, FractalView fractalView, FractalScene initialScene,
+                Runnable onExport) {
         this.stage = stage;
         this.fractalView = fractalView;
-        this.paletteStops = initialPalette.stops();
-        this.viewport = initialFractal.defaultViewport();
+        FractalPreset initialFractal = initialScene.fractal();
+        PalettePreset initialPalette = initialScene.coloring().palette();
+        this.paletteStops = initialScene.coloring().paletteStops();
+        this.orbitTrap = initialScene.coloring().orbitTrap();
+        this.viewport = initialScene.viewport();
         setUseSystemMenuBar(true);
         export = command("Export PNG…", shortcut(KeyCode.E, KeyCombination.SHIFT_DOWN), onExport);
         export.setDisable(true);
@@ -84,12 +93,16 @@ final class MainMenuBar extends MenuBar {
             paletteStops = preset.stops();
             fractalView.setPalette(preset);
         });
+        if (!paletteStops.equals(initialPalette.stops())) {
+            palettes.selectToggle(null);
+        }
         Menu trap = choices("Orbit Trap", OrbitTrap.values(), orbitTrap, new ToggleGroup(), selected -> {
             orbitTrap = selected;
             fractalView.setOrbitTrap(selected);
             updateAvailability();
         });
         animation.setOnAction(event -> fractalView.setColorCycling(animation.isSelected()));
+        histogram.setSelected(initialScene.coloring().histogramColoring());
         histogram.setOnAction(event -> {
             fractalView.setHistogramColoring(histogram.isSelected());
             updateAvailability();
@@ -100,9 +113,11 @@ final class MainMenuBar extends MenuBar {
         deepAntialiasing.setDisable(true);
         deepAntialiasing.setOnAction(event -> fractalView.setDeepAntialiasing(deepAntialiasing.isSelected()));
         render.getItems().setAll(
-                choices("Display Quality", InteractiveRenderMode.values(), InteractiveRenderMode.REFINED,
+                choices("Display Quality", InteractiveRenderMode.values(),
+                        initialScene.antialiasing().renderMode(),
                         new ToggleGroup(), fractalView::setInteractiveRenderMode),
-                choices("Antialiasing Pattern", SamplingPattern.values(), SamplingPattern.REGULAR,
+                choices("Antialiasing Pattern", SamplingPattern.values(),
+                        initialScene.antialiasing().samplingPattern(),
                         new ToggleGroup(), fractalView::setSamplingPattern),
                 new SeparatorMenuItem(), deepAntialiasing);
         Menu window = new Menu("Window", null,

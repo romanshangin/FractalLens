@@ -25,6 +25,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Opt-in integration checks: mvn -Dfractal.fx.tests=true -Dtest=FractalResizeFxTest test */
 @EnabledIfSystemProperty(named = "fractal.fx.tests", matches = "true")
 class FractalResizeFxTest {
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path temporaryDirectory;
+
     @BeforeAll
     static void startFx() throws Exception {
         CountDownLatch started = new CountDownLatch(1);
@@ -39,6 +42,62 @@ class FractalResizeFxTest {
         FutureTask<T> task = new FutureTask<>(action);
         Platform.runLater(task);
         return task.get(15, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void mainViewRestoresTheSavedSceneBeforeItsFirstRender() throws Exception {
+        var restored = new FractalScene(
+                FractalPreset.JULIA,
+                new Viewport(
+                        "-0.743643887037151000000000000000000000000000000000000000000001",
+                        "0.131825904205330000000000000000000000000000000000000000000007",
+                        "1.2E-75"),
+                new com.shangin.fractal.scene.IterationSettings(420, 70),
+                new com.shangin.fractal.scene.ColoringSettings(PalettePreset.FIRE),
+                new AntialiasSettings(SamplingPattern.DETERMINISTIC_JITTER,
+                        InteractiveRenderMode.FAST));
+        var store = new com.shangin.fractal.app.LastSessionStore(
+                temporaryDirectory.resolve("last-session.json"));
+        store.save(restored);
+        var stage = fx(javafx.stage.Stage::new);
+        var main = fx(() -> new MainView(stage, store));
+        try {
+            var view = fx(() -> (FractalView) main.getCenter());
+            assertEquals(restored, fx(view::sceneSnapshot));
+            assertEquals("Julia — FractalUI", fx(stage::getTitle));
+        } finally {
+            fx(() -> {
+                main.close();
+                stage.close();
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void mainViewFitsTheDefaultFallbackSceneToTheInitialAspectRatio() throws Exception {
+        var store = new com.shangin.fractal.app.LastSessionStore(
+                temporaryDirectory.resolve("missing-session.json"));
+        var stage = fx(javafx.stage.Stage::new);
+        var main = fx(() -> new MainView(stage, store));
+        var view = fx(() -> (FractalView) main.getCenter());
+        var surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+        try {
+            changeView(view, surface, () -> {
+                view.resize(600, 900);
+                view.layout();
+            });
+
+            Viewport expected = new FractalCamera(FractalPreset.MANDELBROT)
+                    .defaultViewport(600, 900);
+            assertEquals(expected, fx(view::sceneSnapshot).viewport());
+        } finally {
+            fx(() -> {
+                main.close();
+                stage.close();
+                return null;
+            });
+        }
     }
 
     @Test
