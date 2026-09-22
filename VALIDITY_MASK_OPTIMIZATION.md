@@ -1,5 +1,13 @@
 # Bounded validity scans and cancellable CPU planning
 
+**Final P0.3 decision (2026-09-21): reject.** The candidate's large retained-frame
+gain is reproducible, but the predeclared aggregate control budget remains
+inconclusive after 30 fresh process pairs in each headless and JavaFX campaign.
+The bounded-mask and direct-planning changes have been removed from the working
+production tree. The later Julia backend still needs a cancellation-aware
+`missingRowSpans` overload, so that API remains on the original `BitSet` mask.
+Overflow-safe region validation also remains as an independent correctness fix.
+
 Candidate source: `9778ac9` on `codex/validity-mask-bounded-scans`.
 Baseline source: `1a33e6f` (the same production code calibrated in
 [the paired protocol validation](BASELINE_PAIRS_VALIDATION.md)).
@@ -257,3 +265,128 @@ result alone does not establish the complete control budget or promote the
 candidate. Timing, memory and input results must be interpreted within their
 recorded workloads and hardware. These measurements are macOS evidence;
 Windows and physical compositor/scanout measurements remain separate work.
+
+## P0.3 final paired decision — 2026-09-21
+
+The [headless policy](benchmarks/policies/9-3-validity-headless-p0-3.json) and
+[JavaFX policy](benchmarks/policies/9-3-validity-fx-p0-3.json) preserved the
+original fixtures, 0.90 target limit and 1.05 control limit. Each scheduled
+30 alternating AB/BA process pairs, one measured sequence and three warmups per
+side, yielding 30 matched observations for every declared metric group. The
+same frozen `1a33e6f` control and `9778ac9` candidate were rebuilt with
+OpenJDK 26.0.2. Their compiled identities match the earlier campaign exactly:
+`03204a7d9dbcbbf4754756c0e4746ce171404d328e05499435602bdc43352a75`
+and `c8dff651c71ca7ef1220df412cdd03f7834063ce2f4c3aeb96db27854331334f`.
+The three candidate production classes are unchanged between `9778ac9` and the
+pre-decision `main` revision `506ac1f`. Later Julia changes are outside these
+frozen builds, so the paired timing claims apply to the declared revisions and
+workloads, while current-tree correctness needs separate tests.
+
+Exact preparation and campaign commands (each output path was new):
+
+```shell
+python3 scripts/prepare_baseline_build.py 1a33e6f /tmp/fractalui-p0-3-build-a --java /opt/homebrew/opt/openjdk/bin/java
+python3 scripts/prepare_baseline_build.py 9778ac9 /tmp/fractalui-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java
+SWIFT_MODULE_CACHE_PATH=/tmp/fractalui-p0-3-swift-cache CLANG_MODULE_CACHE_PATH=/tmp/fractalui-p0-3-swift-cache swiftc scripts/baseline_thermal.swift -o /tmp/fractalui-p0-3-thermal
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/run_baseline_pairs.py benchmarks/policies/9-3-validity-headless-p0-3.json benchmarks/baseline-p0-3-validity-headless-20260921 --a /tmp/fractalui-p0-3-build-a --b /tmp/fractalui-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java --thermal /tmp/fractalui-p0-3-thermal
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_baseline_pairs.py benchmarks/baseline-p0-3-validity-headless-20260921
+python3 scripts/run_baseline_pairs.py benchmarks/policies/9-3-validity-fx-p0-3.json benchmarks/baseline-p0-3-validity-fx-desktop-20260921 --a /tmp/fractalui-p0-3-build-a --b /tmp/fractalui-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java --thermal /tmp/fractalui-p0-3-thermal
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_baseline_pairs.py benchmarks/baseline-p0-3-validity-fx-desktop-20260921
+```
+
+The compiled snapshots remain locally available at the `/tmp` paths above;
+their identities and complete file hashes are retained in both campaigns'
+`build-A.json` and `build-B.json`. Repeating the commands requires fresh output
+paths. The JavaFX command needs an active macOS graphical desktop session.
+
+Both campaigns ran on the same Apple M3 Pro (Mac15,7), 12 logical CPUs,
+18 GiB RAM, macOS 27.0 and a fixed 4 GiB Java heap. Headless ran in the normal
+process sandbox; JavaFX ran in the graphical desktop session with ES2 selected
+in all 60 JVMs. All 120 before/after power observations in **each** campaign
+reported AC power, and all 120 thermal-pressure observations reported
+`nominal`. The probes bracket each JVM; they do not continuously measure
+physical temperature or prove no transient power event within a process.
+There were no competing build, test or profiler runs. Headless JVM wall time
+totaled 4064.1 s; JavaFX totaled 2254.0 s. Peak process RSS ranged from
+2.078–2.992 GiB (headless A), 2.011–2.932 GiB (headless B),
+1.504–1.961 GiB (JavaFX A) and 1.485–1.991 GiB (JavaFX B). These process peaks
+cannot be assigned to one fixture and do not establish a memory improvement.
+Across measured rows, headless A/B recorded 366/370 GC events and
+1000/1257 ms of GC time (240 rows per side); JavaFX A/B recorded 152/163
+events and 338/355 ms (360 rows per side). Median post-row heap was
+907.5/905.7 MiB headless and 780.1/682.6 MiB JavaFX. These are descriptive
+whole-campaign observations, not per-fixture allocation or leak estimates.
+The separate accepted 13.37-minute candidate soak above remains historical
+evidence; it was not repeated for the rejected production state.
+
+The [headless analysis](benchmarks/baseline-p0-3-validity-headless-20260921/analysis.json)
+passed strict launch, workload and matching sample/ARGB fingerprint validation.
+Seven of 11 metric groups passed; four controls were inconclusive. Values below
+are milliseconds, with descriptive p95 in parentheses and the bootstrap 95%
+interval for the matched B/A ratio:
+
+| Scope | A median (p95) | B median (p95) | B/A interval | Gate |
+| --- | ---: | ---: | ---: | --- |
+| Retained reverse, returned ARGB | 4979.390 (5095.334) | 35.935 (60.211) | 0.00700–0.00755 | Pass |
+| Overview, returned ARGB | 49.905 (53.380) | 52.390 (57.185) | 1.001–1.098 | Inconclusive |
+| Overview, first region | 4.930 (9.015) | 7.164 (10.155) | 0.804–1.690 | Inconclusive |
+| Julia AA, first tile | 11.513 (20.169) | 11.941 (32.134) | 0.868–1.062 | Inconclusive |
+| Cancellation tail | 0.381 (1.789) | 0.411 (2.833) | 0.683–1.709 | Inconclusive |
+
+The retained-frame backend median itself fell from 4943.218 to 0.036 ms.
+Direct, deep, Julia full-operation and both pan completion controls passed;
+all group medians, p95 values, per-process ratios and intervals are in the
+linked analysis. The analyzer's static `confidence_method` sentence mentions
+three clusters from the earlier calibration. The actual policy, launch records,
+and every metric's `process_pairs` field show **30** clusters; the bootstrap
+calculation uses those 30 process IDs.
+
+The [JavaFX analysis](benchmarks/baseline-p0-3-validity-fx-desktop-20260921/analysis.json)
+passed all 60 exact-control JVM runs, strict paired validation and the same
+fingerprint check. Thirteen of 18 metric groups passed; five controls were
+inconclusive:
+
+| Scope | A median (p95) | B median (p95) | B/A interval | Gate |
+| --- | ---: | ---: | ---: | --- |
+| Retained reverse full publication, FAST | 327.929 (337.369) | 15.708 (21.601) | 0.04730–0.04982 | Pass |
+| Retained reverse full publication, REFINED | 327.221 (333.795) | 15.717 (21.331) | 0.04744–0.04898 | Pass |
+| Julia AA, FAST first publication | 8.842 (15.847) | 7.795 (15.349) | 0.644–1.211 | Inconclusive |
+| Pan, FAST first publication | 8.964 (9.991) | 9.317 (13.251) | 0.993–1.093 | Inconclusive |
+| Pan, FAST full publication | 14.432 (16.877) | 15.036 (19.916) | 0.996–1.124 | Inconclusive |
+| Pan, REFINED first publication | 8.691 (9.906) | 9.160 (10.422) | 1.004–1.054 | Inconclusive |
+| Pan, REFINED full publication | 14.005 (16.313) | 14.508 (16.524) | 1.004–1.058 | Inconclusive |
+
+The initial FX attempt in the process sandbox is retained as an
+[environment failure](benchmarks/baseline-p0-3-validity-fx-sandbox-failure-20260921/pair-00-A.log):
+Prism could not obtain a main screen and the first JVM was stopped. It is not
+a benchmark sample. The complete desktop campaign used a fresh directory and
+unchanged policy, builds and metrics.
+
+**Decision: reject the `9778ac9` candidate.** Both 30-pair aggregate verdicts
+are `inconclusive`; none of the unresolved controls can be silently treated as
+passing or removed after seeing its result. The experiment budget for this
+candidate is exhausted. The large retained-frame completion gain is real in
+these workloads, but the predeclared 5% control budget has not been established.
+The rejected code has been removed, restoring the known long fully reused
+planning wait. A redesigned candidate may address that wait only through a new
+predeclared, complete correctness and timing gate. The result does not change
+the earlier conclusion that physical gesture-to-display latency remains
+unmeasured.
+
+### Final-tree verification
+
+After removing the rejected code, `mvn clean test` passed 427 tests with zero
+failures/errors and 48 opt-in skips. The targeted mask, direct-planner,
+diagnostics and Julia deep-zoom tests passed before the full suite. The
+graphical `FractalResizeFxTest`, `BaselineFxBenchmarkTest` and
+`BaselineInputBenchmarkTest` suite passed 43 tests with zero failures/errors
+and two separately gated full-screen skips in the desktop session. All 39
+Python baseline-validator tests passed. The initial graphical suite exposed a
+stale exact-viewport assertion that also failed on pristine `506ac1f`; the
+[test-contract correction](BASELINE_INPUT_VALIDATION.md) now checks the physical
+grid within `10^-25` of a pixel while retaining exact scale, dimensions,
+iteration-budget and independent pixel controls. No canonical fixture or
+historical timing result was edited. The current reverted tree was not itself
+timed in a new 30-pair campaign; the measured control binary is the earlier
+frozen revision, and the known planning wait is inferred from the restored
+mask/planner implementation.

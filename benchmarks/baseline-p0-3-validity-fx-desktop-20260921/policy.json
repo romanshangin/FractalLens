@@ -1,0 +1,77 @@
+{
+  "version": "9.1-pairs-v1",
+  "purpose": "candidate",
+  "runner": "fx",
+  "sizes": "1512x982",
+  "fixtures": "direct-deep-reverse,pan-25,julia-aa-regular",
+  "process_pairs": 30,
+  "samples": 1,
+  "warmups": 3,
+  "timeout_seconds": 1800,
+  "metrics": [
+    {
+      "fixture": "direct-deep-reverse",
+      "step": "reverse",
+      "metric": "full_publish_ms",
+      "role": "target",
+      "max_ratio": 0.9
+    },
+    {
+      "fixture": "direct-deep-reverse",
+      "step": "reverse",
+      "metric": "first_visible_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "direct-deep-reverse",
+      "step": "direct",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "direct-deep-reverse",
+      "step": "deep",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "pan-25",
+      "step": "source",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "pan-25",
+      "step": "pan",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "pan-25",
+      "step": "pan",
+      "metric": "first_visible_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "julia-aa-regular",
+      "step": "render",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "julia-aa-regular",
+      "step": "render",
+      "metric": "first_visible_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    }
+  ],
+  "modes": "FAST,REFINED"
+}

@@ -40,12 +40,15 @@ delivery foundation should be completed first.
   passing default macOS clean-machine launch; physical macOS clean-machine
   behavior remains unverified. See `RUNTIME_PACKAGING.md` for the evidence and
   release boundary.
-- [ ] **P0.3. Close the current measurement gate before starting another
+- [x] **P0.3. Close the current measurement gate before starting another
   optimization.** Finish the open 9.1 paired-decision item and the already
   implemented 9.3 bounded-`ValidityMask` candidate with fixed power conditions,
   fresh output directories, at least 30 alternating pairs and multiple process
   starts. Retain or reject the candidate explicitly; do not leave production
-  code in a permanently provisional state.
+  code in a permanently provisional state. Two fresh 30-process-pair campaigns
+  confirmed the retained-frame gain, but the aggregate control budget remained
+  inconclusive. The candidate was rejected and removed; see
+  [the final decision](VALIDITY_MASK_OPTIMIZATION.md).
 - [ ] **P0.4. Turn reproducibility into a product contract.** Implement section
   5 JSON scene serialization and last-session restore before undo/redo,
   shareable presets or new export variants. Version the schema and test
@@ -609,7 +612,7 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   validation covers 288 exact trials, including a 13.24-minute 1512x982 run with
   stable detached-heap checkpoints; see [results and limits](BASELINE_MEMORY_VALIDATION.md).
   Physical temperature, energy and all-platform/full-matrix soaks remain unmeasured.
-- [ ] Use uninstrumented alternating pairs for decisions and separate JFR/native
+- [x] Use uninstrumented alternating pairs for decisions and separate JFR/native
   profiles for attribution. Confirm promising changes with at least 30 measured
   pairs and multiple process starts; record median/tails, hardware/runtime,
   memory/GC and sustained thermal behavior. Do not run competing timing suites
@@ -617,13 +620,12 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   The [frozen-build paired runner](BASELINE_PAIRS_BENCHMARK.md) now enforces
   declared targets/controls, matching samples and alternating process starts.
   [A/A calibration](BASELINE_PAIRS_VALIDATION.md) validates the protocol on
-  identical builds. This item stays open until a production candidate has a
-  confirmed, scope-matched A/B result; calibration is not an optimization gain.
-  The first [bounded-mask candidate](VALIDITY_MASK_OPTIMIZATION.md) now has
-  six-process-pair A/B evidence: retained-frame returned pixels improve about
-  145x at 3024x1964 and full FX publication about 22x at 1512x982. Exact controls
-  pass, but the aggregate 5% timing-control budget is still inconclusive, so
-  this decision item remains open.
+  identical builds. The first [bounded-mask candidate](VALIDITY_MASK_OPTIMIZATION.md)
+  received 30 alternating process pairs in both headless and JavaFX scopes on
+  fixed AC power. Exact controls and the retained-frame target passed; the
+  aggregate 5% timing-control budget stayed inconclusive. The explicit
+  candidate decision is reject, with the candidate removed from production.
+  This closes the current paired decision, not the open 9.3 optimization item.
 
 - [ ] **Exit criterion:** a current, scope-matched baseline identifies the dominant costs
   and defines the correctness/performance gate before each implementation spike.
@@ -677,16 +679,15 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   including a similar cancellation tail. Add exact-mask/reuse and deterministic
   cancellation regressions, then apply the 30-pair/multiple-process gate before
   claiming an interaction or throughput gain.
-  Implemented in candidate `9778ac9`: bounded bitmap-word scans, an exact cached
-  readiness count, complete-frame early exit and cancellation before task
-  submission. Pixel-oracle, near-complete Retina and deterministic request-drain
-  regressions pass. The [candidate report](VALIDITY_MASK_OPTIMIZATION.md)
-  confirms the retained-frame target gain; final acceptance remains open on the
-  unresolved overview, pan and short-latency timing controls.
-  A separate 13.37-minute input/memory soak passes 108 exact trials and three
-  whole rounds, with stable detached heap near 126.8 MB. A prior clock-shifted
-  soak is explicitly rejected. Keep power source fixed for the next timing
-  campaign; the last FX control process changed from battery to AC power.
+  Historical candidate `9778ac9` added bounded bitmap-word scans, an exact
+  cached readiness count, complete-frame early exit and cancellation before
+  task submission. Its exact-mask/reuse and deterministic request-drain tests
+  passed, as did a separate 13.37-minute input/memory soak. The first six-pair
+  FX campaign changed power source; the final 30-pair headless and FX campaigns
+  held observed AC power, confirmed the retained-frame target gain, but left
+  overview, pan and short-latency controls inconclusive. The
+  [P0.3 decision](VALIDITY_MASK_OPTIMIZATION.md) rejected and removed this
+  candidate. A new implementation and its tests must pass the full gate.
 - [ ] Benchmark interleaved independent scalar orbits and modest unrolling on
   Mandelbrot, Julia and AA samples. Inspect JIT/allocation profiles; preserve
   arithmetic order and bounded cancellation. Do not repeat rejected manual
