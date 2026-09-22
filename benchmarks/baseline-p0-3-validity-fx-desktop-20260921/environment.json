@@ -1,0 +1,25 @@
+{
+  "jdk": {
+    "returncode": 0,
+    "stdout": "",
+    "stderr": "Property settings:\n    file.encoding = UTF-8\n    file.separator = /\n    ftp.nonProxyHosts = local|*.local|169.254/16|*.169.254/16\n    http.nonProxyHosts = local|*.local|169.254/16|*.169.254/16\n    java.class.path = \n    java.class.version = 70.0\n    java.home = /opt/homebrew/Cellar/openjdk/26.0.2/libexec/openjdk.jdk/Contents/Home\n    java.io.tmpdir = ${TEMP_DIR}\n    java.library.path = ${USER_HOME}/Library/Java/Extensions\n        /Library/Java/Extensions\n        /Network/Library/Java/Extensions\n        /System/Library/Java/Extensions\n        /usr/lib/java\n        .\n    java.runtime.name = OpenJDK Runtime Environment\n    java.runtime.version = 26.0.2\n    java.specification.name = Java Platform API Specification\n    java.specification.vendor = Oracle Corporation\n    java.specification.version = 26\n    java.vendor = Homebrew\n    java.vendor.url = https://github.com/Homebrew/homebrew-core/issues\n    java.vendor.url.bug = https://github.com/Homebrew/homebrew-core/issues\n    java.vendor.version = Homebrew\n    java.version = 26.0.2\n    java.version.date = 2026-07-21\n    java.vm.compressedOopsMode = Non-zero disjoint base\n    java.vm.info = mixed mode, sharing\n    java.vm.name = OpenJDK 64-Bit Server VM\n    java.vm.specification.name = Java Virtual Machine Specification\n    java.vm.specification.vendor = Oracle Corporation\n    java.vm.specification.version = 26\n    java.vm.vendor = Homebrew\n    java.vm.version = 26.0.2\n    jdk.debug = release\n    line.separator = \\n \n    native.encoding = UTF-8\n    os.arch = aarch64\n    os.name = Mac OS X\n    os.version = 27.0\n    path.separator = :\n    socksNonProxyHosts = local|*.local|169.254/16|*.169.254/16\n    stderr.encoding = UTF-8\n    stdin.encoding = UTF-8\n    stdout.encoding = UTF-8\n    sun.arch.data.model = 64\n    sun.boot.library.path = /opt/homebrew/Cellar/openjdk/26.0.2/libexec/openjdk.jdk/Contents/Home/lib\n    sun.cpu.endian = little\n    sun.io.unicode.encoding = UnicodeBig\n    sun.java.launcher = SUN_STANDARD\n    sun.jnu.encoding = UTF-8\n    sun.management.compiler = HotSpot 64-Bit Tiered Compilers\n    user.country = MX\n    user.dir = ${PROJECT_DIR}\n    user.home = ${USER_HOME}\n    user.language = en\n    user.name = ${USER_NAME}\n\nopenjdk version \"26.0.2\" 2026-07-21\nOpenJDK Runtime Environment Homebrew (build 26.0.2)\nOpenJDK 64-Bit Server VM Homebrew (build 26.0.2, mixed mode, sharing)\n"
+  },
+  "system": {
+    "returncode": 0,
+    "stdout": "Darwin ${HOST_NAME} 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:06:24 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6030 arm64\n",
+    "stderr": ""
+  },
+  "hardware": {
+    "returncode": 0,
+    "stdout": "hw.model: Mac15,7\nhw.memsize: 19327352832\nhw.ncpu: 12\nmachdep.cpu.brand_string: Apple M3 Pro\n",
+    "stderr": ""
+  },
+  "controller_sha256": {
+    "run_baseline_pairs.py": "c6338f1836d49245d66c1867d1c2d3b594afa409df00c7604a7f430e350ac903",
+    "summarize_baseline_pairs.py": "5f1281acd23e07aca439be3201df788a2b3e77f579c883565d988dca96dc596d"
+  },
+  "global_lock": "${TEMP_DIR}/fractalui-baseline-benchmark.lock",
+  "thermal_during_runs": "unmeasured; observations only before and after each process",
+  "publication_scope": "fx",
+  "physical_scanout": "unmeasured"
+}

@@ -69,7 +69,16 @@ class BaselineInputBenchmarkTest {
             for (var step : fixture.steps().subList(1, 3)) {
                 var r = measure(ui, fixture, step, InteractiveRenderMode.FAST, "sequence", 1);
                 verify(r);
-                assertEquals(step.job().viewport(), r.actual.job().viewport());
+                var expected = step.job().viewport();
+                var actual = r.actual.job().viewport();
+                assertEquals(expected.scaleExact(), actual.scaleExact());
+                // Gesture calculations retain bounded guard digits; their grid
+                // must still agree far more closely than one pixel.
+                var maxCenterError = expected.imaginaryUnitsPerPixelExact(step.job().height()).movePointLeft(25);
+                assertTrue(expected.center().real().subtract(actual.center().real()).abs()
+                        .compareTo(maxCenterError) <= 0, "Real grid center drifted");
+                assertTrue(expected.center().imaginary().subtract(actual.center().imaginary()).abs()
+                        .compareTo(maxCenterError) <= 0, "Imaginary grid center drifted");
                 assertEquals(step.job().width(), r.actual.job().width());
                 assertEquals(step.job().height(), r.actual.job().height());
                 assertEquals(cap, r.actual.job().maxIterations());

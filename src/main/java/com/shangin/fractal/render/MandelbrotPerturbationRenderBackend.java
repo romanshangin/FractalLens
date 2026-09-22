@@ -157,11 +157,9 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 frame.job(), grid.mathContext(), reference, bla);
 
         RenderDiagnostics.mark("planning_start");
-        List<RenderRegion> queuedTiles = new ArrayList<>();
-        for (RenderRegion tile : orderedTiles(frame.job())) {
-            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) return frame;
-            if (!frame.validity().isRegionReady(tile)) queuedTiles.add(tile);
-        }
+        List<RenderRegion> queuedTiles = orderedTiles(frame.job()).stream()
+                .filter(tile -> !frame.validity().isRegionReady(tile))
+                .toList();
         java.util.concurrent.ConcurrentLinkedQueue<RenderRegion> tileQueue =
                 new java.util.concurrent.ConcurrentLinkedQueue<>(queuedTiles);
         int workerTaskCount = Math.min(workerCount, queuedTiles.size());
@@ -252,7 +250,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             LongAdder executedIterations,
             LongAdder highPrecisionFallbackPixels
     ) {
-        for (RenderRegion span : frame.validity().missingRowSpans(tile, cancelled)) {
+        for (RenderRegion span : frame.validity().missingRowSpans(tile)) {
             SpanCalculation calculation = calculateSpan(
                     frame, deltas, referencePool, span, cancelled);
             calculatedPixels.add(calculation.pixelCount());
@@ -264,7 +262,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             frame.validity().markReady(span);
             regionCompleted.accept(span);
         }
-        return !cancelled.getAsBoolean() && !Thread.currentThread().isInterrupted();
+        return true;
     }
 
     private static SpanCalculation calculateSpan(

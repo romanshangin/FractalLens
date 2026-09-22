@@ -1,7 +1,6 @@
 package com.shangin.fractal.render;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Objects;
@@ -13,10 +12,7 @@ public final class ValidityMask {
     private final int height;
     private final int totalPixels;
 
-    // Flat words allow bounded scans without allocating a BitSet for each tile row.
-    // Both words and the exact (overlap-safe) count are protected by this mask's lock.
-    private final long[] ready;
-    private int readyPixels;
+    private final BitSet ready;
 
     public ValidityMask(
             int width,
@@ -30,7 +26,7 @@ public final class ValidityMask {
         this.height = height;
         this.totalPixels = Math.multiplyExact(width, height);
 
-        ready = new long[(int) ((totalPixels + 63L) / 64)];
+        ready = new BitSet(totalPixels);
     }
 
     public int width() {
@@ -49,16 +45,7 @@ public final class ValidityMask {
             int from = y * width + region.x();
             int to = from + region.width();
 
-            int firstWord = from >>> 6;
-            int lastWord = (to - 1) >>> 6;
-            for (int word = firstWord; word <= lastWord; word++) {
-                long bits = -1L;
-                if (word == firstWord) bits &= -1L << from;
-                // Java masks long shift distances: a word-aligned end keeps all bits.
-                if (word == lastWord) bits &= -1L >>> -to;
-                readyPixels += Long.bitCount(bits & ~ready[word]);
-                ready[word] |= bits;
-            }
+            ready.set(from, to);
         }
     }
 
@@ -70,8 +57,7 @@ public final class ValidityMask {
             throw new IndexOutOfBoundsException();
         }
 
-        int pixel = y * width + x;
-        return (ready[pixel >>> 6] & (1L << pixel)) != 0;
+        return ready.get(y * width + x);
     }
 
     public synchronized boolean isRegionReady(RenderRegion region) {
@@ -82,7 +68,7 @@ public final class ValidityMask {
             int from = y * width + region.x();
             int to = from + region.width();
 
-            int firstMissing = nextBit(from, to, false);
+            int firstMissing = ready.nextClearBit(from);
 
             if (firstMissing < to) {
                 return false;
@@ -101,16 +87,15 @@ public final class ValidityMask {
     }
 
     /** Cancellation discards the partial plan; callers must not submit it. */
-    public synchronized List<RenderRegion> missingRowSpans(
-            RenderRegion region, BooleanSupplier cancelled
-    ) {
+    public synchronized List<RenderRegion> missingRowSpans(RenderRegion region, BooleanSupplier cancelled) {
         Objects.requireNonNull(cancelled);
         return missingRowSpansSnapshot(region, cancelled);
     }
 
     private List<RenderRegion> missingRowSpansSnapshot(RenderRegion region, BooleanSupplier cancelled) {
         validateRegion(region);
-        if (scanCancelled(cancelled) || readyPixels == totalPixels) return List.of();
+        if (scanCancelled(cancelled)) return List.of();
+
         List<RenderRegion> missing = new ArrayList<>();
 
         for (int y = region.y(); y < region.y() + region.height(); y++) {
@@ -118,11 +103,14 @@ public final class ValidityMask {
             int rowOffset = y * width;
             int rowFrom = rowOffset + region.x();
             int rowTo = rowFrom + region.width();
-            int missingFrom = nextBit(rowFrom, rowTo, false);
+            int missingFrom = ready.nextClearBit(rowFrom);
 
             while (missingFrom < rowTo) {
-                int nextReady = nextBit(missingFrom, rowTo, true);
-                int missingTo = nextReady;
+                if (scanCancelled(cancelled)) return List.of();
+                int nextReady = ready.nextSetBit(missingFrom);
+                int missingTo = nextReady < 0
+                        ? rowTo
+                        : Math.min(nextReady, rowTo);
 
                 missing.add(new RenderRegion(
                         missingFrom - rowOffset,
@@ -131,39 +119,41 @@ public final class ValidityMask {
                         1
                 ));
 
-                if (nextReady >= rowTo) {
+                if (nextReady < 0 || nextReady >= rowTo) {
                     break;
                 }
 
-                missingFrom = nextBit(nextReady, rowTo, false);
+                missingFrom = ready.nextClearBit(nextReady);
             }
         }
 
         return List.copyOf(missing);
     }
 
+    private static boolean scanCancelled(BooleanSupplier cancelled) {
+        return cancelled != null && (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted());
+    }
+
     public synchronized boolean isComplete() {
-        return readyPixels == totalPixels;
+        return ready.nextClearBit(0) >= totalPixels;
     }
 
     public synchronized int readyPixelCount() {
-        return readyPixels;
+        return ready.cardinality();
     }
 
     public synchronized void clear() {
-        Arrays.fill(ready, 0L);
-        readyPixels = 0;
+        ready.clear();
     }
 
     public synchronized ValidityMask copy() {
         ValidityMask copy = new ValidityMask(width, height);
-        System.arraycopy(ready, 0, copy.ready, 0, ready.length);
-        copy.readyPixels = readyPixels;
+        copy.ready.or(ready);
         return copy;
     }
 
     synchronized BitSet readyBitsCopy() {
-        return BitSet.valueOf(ready);
+        return (BitSet) ready.clone();
     }
 
     /** Returns a compact row-major snapshot local to one region. */
@@ -173,8 +163,8 @@ public final class ValidityMask {
         for (int y = region.y(); y < region.y() + region.height(); y++) {
             int rowFrom = y * width + region.x();
             int rowTo = rowFrom + region.width();
-            for (int pixel = nextBit(rowFrom, rowTo, true); pixel < rowTo;
-                 pixel = nextBit(pixel + 1, rowTo, true)) {
+            for (int pixel = ready.nextSetBit(rowFrom); pixel >= 0 && pixel < rowTo;
+                 pixel = ready.nextSetBit(pixel + 1)) {
                 copy.set((y - region.y()) * region.width() + pixel - rowFrom);
             }
         }
@@ -215,25 +205,6 @@ public final class ValidityMask {
                         1
                 ));
             }
-        }
-    }
-
-    private static boolean scanCancelled(BooleanSupplier cancelled) {
-        return cancelled != null && (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted());
-    }
-
-    /** Searches only words intersecting [from, to); returns to when absent. */
-    private int nextBit(int from, int to, boolean set) {
-        if (from >= to) return to;
-        int word = from >>> 6;
-        int lastWord = (to - 1) >>> 6;
-        long bits = (set ? ready[word] : ~ready[word]) & (-1L << from);
-        while (true) {
-            if (word == lastWord) bits &= -1L >>> -to;
-            if (bits != 0) return (word << 6) + Long.numberOfTrailingZeros(bits);
-            if (word == lastWord) return to;
-            word++;
-            bits = set ? ready[word] : ~ready[word];
         }
     }
 

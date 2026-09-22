@@ -48,10 +48,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/run_baseline_pairs.py POLICY.json NEW_
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_baseline_pairs.py NEW_OUTPUT
 ```
 
-The provided policies use three fresh process pairs, ten measured sequences per
-build per process, three warmups and one additional cold sequence. Launch order
-is AB, BA, AB; larger campaigns continue alternating. Sample 0 of A pairs with
-sample 0 of B within the same process pair, fixture, step, dimensions and mode.
+The calibration policies use three fresh process pairs and ten measured
+sequences per build per process. The original bounded-mask candidate policies
+use six process pairs and five measured sequences; the final P0.3 policies use
+30 process pairs and one measured sequence. All use three warmups and one
+additional cold sequence. Launch order starts AB, BA, AB and continues
+alternating. Sample 0 of A pairs with sample 0 of B within the same process
+pair, fixture, step, dimensions and mode.
 These are blocks of JVM runs, not a new JVM for each sample. With an odd number
 of process pairs the two launch orders are not equally represented; the report
 preserves order and per-process statistics to expose drift.
@@ -87,9 +90,9 @@ excluded; cancellation trigger/tail measurements must exist.
 all declared pairs; `analysis.json` records medians, descriptive p95 values,
 median matched B/A ratios, per-process ratios and a seeded hierarchical bootstrap
 interval (5,000 resamples, process pairs first and then samples within them).
-Three process clusters give limited uncertainty resolution; 30 samples do not
-establish a stable p95 guarantee. Inspect process/order effects and use a new,
-larger predeclared campaign when necessary, preserving earlier results.
+Uncertainty resolution depends on the number of process clusters; 30 samples
+do not establish a stable p95 guarantee. Inspect process/order effects and use
+a new, larger predeclared campaign when necessary, preserving earlier results.
 
 For candidates a timing metric passes only when the upper interval bound is
 within its limit, fails when the lower bound exceeds it, and is otherwise

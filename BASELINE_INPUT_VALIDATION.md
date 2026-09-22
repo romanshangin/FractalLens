@@ -147,3 +147,18 @@ Allocation attribution, internal task scheduling, worker cancellation tails at
 additional phases, sustained native-memory/thermal behavior and alternating
 30-pair/multiple-start performance decisions remain open in roadmap 9.1. The
 new runner and grid-alignment fix are not claims that those gates have passed.
+
+## 2026-09-21 test-contract correction
+
+The opt-in `resizeThenDragKeepsPhysicalGridAndIterationBudget` regression failed
+on pristine `506ac1f` after `Viewport.withCalculatedValues` began carrying a
+bounded arithmetic context across gestures. Its old assertion demanded exact
+equality with a canonical fixture that reconstructs a fresh context and retains
+additional guard digits. The actual and expected scales, dimensions and
+iteration limits matched; their center difference was in decimal digits far
+below one render pixel. The test now requires exact scale and center agreement
+within `10^-25` of one pixel step on each axis, while its existing independent
+sample/pixel verification remains unchanged. The versioned fixture CSV and
+historical measurements were not altered. The isolated regression and the
+43-test graphical resize/publication/input suite pass after this correction;
+the suite has two separately gated full-screen skips.

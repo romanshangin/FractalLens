@@ -40,3 +40,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+# Temporary benchmark process locks
+benchmarks/**/tmp/fractalui-baseline-benchmark.lock
