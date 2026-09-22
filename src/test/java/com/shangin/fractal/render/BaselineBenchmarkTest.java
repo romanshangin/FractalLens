@@ -33,7 +33,7 @@ class BaselineBenchmarkTest {
                 assertEquals(632, fixture(matrix, "seahorse-adaptive").steps().getFirst().job().maxIterations());
             }
         }
-        String manifest = Files.readString(Path.of("BASELINE_FIXTURES.csv"))
+        String manifest = Files.readString(Path.of("benchmarks", "BASELINE_FIXTURES.csv"))
                 .replace("\r\n", "\n")
                 .replace('\r', '\n');
         assertEquals(expected.toString(), manifest,

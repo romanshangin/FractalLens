@@ -172,13 +172,13 @@ Validation on the recorded revision:
 
 ```sh
 # Main run (the archived initial run predates addition of overview-refined).
-JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.benchmark.scenes=overview,exterior,seahorse,overview-aa -Dfractal.benchmark.output=GPU_RENDER_BENCHMARK_RESULTS.csv' mvn -Pgpu-render-benchmark javafx:run
+JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.benchmark.scenes=overview,exterior,seahorse,overview-aa -Dfractal.benchmark.output=benchmarks/GPU_RENDER_BENCHMARK_RESULTS.csv' mvn -Pgpu-render-benchmark javafx:run
 
 # Default Refined presentation mode, same primary sample counts.
-JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.benchmark.scenes=overview-refined -Dfractal.benchmark.output=GPU_RENDER_BENCHMARK_REFINED.csv' mvn -Pgpu-render-benchmark javafx:run
+JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.benchmark.scenes=overview-refined -Dfractal.benchmark.output=benchmarks/GPU_RENDER_BENCHMARK_REFINED.csv' mvn -Pgpu-render-benchmark javafx:run
 
 # Separate diagnostic run; not the basis for the primary latency table.
-JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.gpu.mandelbrot.profile=true -Dfractal.benchmark.samples=5 -Dfractal.benchmark.scenes=overview,exterior,seahorse -Dfractal.benchmark.output=GPU_RENDER_BENCHMARK_PROFILE.csv' mvn -Pgpu-render-benchmark javafx:run
+JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.gpu.mandelbrot.profile=true -Dfractal.benchmark.samples=5 -Dfractal.benchmark.scenes=overview,exterior,seahorse -Dfractal.benchmark.output=benchmarks/GPU_RENDER_BENCHMARK_PROFILE.csv' mvn -Pgpu-render-benchmark javafx:run
 
 mvn clean test
 mvn -Pgpu-smoke -Dfractal.gpu.fp32Native=true -Dfp32.native.full=true -Dfractal.gpu.mandelbrot.profile=true '-Dtest=GpuRuntimeNativeTest,PaletteRecolorNativeTest,GpuMandelbrotRenderBackendNativeTest,MandelbrotPrecisionNativeTest' test

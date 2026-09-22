@@ -11,7 +11,7 @@ all pixels at the existing seahorse center at 100× zoom and 300 iterations.
 This contract is now integrated with the optional production Mandelbrot backend
 and CPU recovery. The subsequent [8.4 decision gate](GPU_RENDER_BENCHMARK_RESULTS.md)
 passes numeric conformance but finds the hybrid backend slower in all measured
-workloads. CPU rendering remains the default; see `GPU_RUNTIME.md` for
+workloads. CPU rendering remains the default; see `../GPU_RUNTIME.md` for
 the enable command, selection, ownership and reuse rules. The initial CPU experiment is in [GPU_FP32_PRECISION.md](GPU_FP32_PRECISION.md).
 
 ## Allowed inputs and output tolerance

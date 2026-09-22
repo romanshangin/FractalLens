@@ -72,6 +72,6 @@ accepted pixel counts, and subpixel sample count.
 ## Reproduce
 
 ```sh
-JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.aa.profile=true -Dfractal.benchmark.warmup=2 -Dfractal.benchmark.samples=5 -Dfractal.benchmark.scenes=overview-aa,overview-refined -Dfractal.benchmark.output=GPU_RESIDENCY_8_6_PROFILE.csv' mvn -Pgpu-render-benchmark javafx:run
+JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.aa.profile=true -Dfractal.benchmark.warmup=2 -Dfractal.benchmark.samples=5 -Dfractal.benchmark.scenes=overview-aa,overview-refined -Dfractal.benchmark.output=benchmarks/GPU_RESIDENCY_8_6_PROFILE.csv' mvn -Pgpu-render-benchmark javafx:run
 ```
 

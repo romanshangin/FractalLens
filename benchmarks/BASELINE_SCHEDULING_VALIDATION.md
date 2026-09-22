@@ -24,7 +24,7 @@ an explicit Java executable and record it with the run.
 
 The input run used JavaFX 26.0.2+3, 2x output scale, native
 `com.sun.prism.es2.ES2Pipeline`, Apple M3 Pro renderer and vsync, verified in its
-[launch log](benchmarks/baseline-9-1-scheduling-input-20260908/launch.log).
+[launch log](baseline-9-1-scheduling-input-20260908/launch.log).
 GPU fractal calculation was disabled. Suites ran sequentially, without a
 concurrent rendering benchmark or JFR/native profiler. Background activity,
 thermal state and OS/physical display latency were not measured. Diagnostic
@@ -33,10 +33,10 @@ conformance runs, not 30-pair optimization gates.
 
 ## Canonical CPU base matrix
 
-[480x270 data](benchmarks/baseline-9-1-scheduling-final-20260908/samples.csv),
-[raw diagnostics](benchmarks/baseline-9-1-scheduling-final-20260908/diagnostics.csv),
-[derived intervals](benchmarks/baseline-9-1-scheduling-final-20260908/scheduling-summary.csv),
-[environment](benchmarks/baseline-9-1-scheduling-final-20260908/environment.txt).
+[480x270 data](baseline-9-1-scheduling-final-20260908/samples.csv),
+[raw diagnostics](baseline-9-1-scheduling-final-20260908/diagnostics.csv),
+[derived intervals](baseline-9-1-scheduling-final-20260908/scheduling-summary.csv),
+[environment](baseline-9-1-scheduling-final-20260908/environment.txt).
 
 Six fixtures cover seahorse, direct/deep/reverse, 25% pan, resize/drag and direct
 and deep cancellation. Their 11 steps produce **44 validated requests**: one
@@ -60,9 +60,9 @@ that first region. It cannot diagnose cancellation during a long planning scan.
 
 ## Fully reused Retina frame and cancellation during planning
 
-[3024x1964 data](benchmarks/baseline-9-1-scheduling-retina-final-20260908/samples.csv),
-[raw diagnostics](benchmarks/baseline-9-1-scheduling-retina-final-20260908/diagnostics.csv),
-[derived intervals](benchmarks/baseline-9-1-scheduling-retina-final-20260908/scheduling-summary.csv).
+[3024x1964 data](baseline-9-1-scheduling-retina-final-20260908/samples.csv),
+[raw diagnostics](baseline-9-1-scheduling-retina-final-20260908/diagnostics.csv),
+[derived intervals](baseline-9-1-scheduling-retina-final-20260908/scheduling-summary.csv).
 
 One first sequence and one sample run the canonical direct/deep/reverse fixture.
 After each fully reused reverse, an additional request is cancelled after
@@ -89,11 +89,11 @@ The result therefore does not mean every real zoom or pan incurs five seconds.
 
 ## Real input and generation identity
 
-[Input data](benchmarks/baseline-9-1-scheduling-input-20260908/samples.csv),
-[raw trace](benchmarks/baseline-9-1-scheduling-input-20260908/events.csv),
-[actual jobs](benchmarks/baseline-9-1-scheduling-input-20260908/actual-manifest.csv),
-[input summary](benchmarks/baseline-9-1-scheduling-input-20260908/summary.csv),
-[scheduling summary](benchmarks/baseline-9-1-scheduling-input-20260908/scheduling-summary.csv).
+[Input data](baseline-9-1-scheduling-input-20260908/samples.csv),
+[raw trace](baseline-9-1-scheduling-input-20260908/events.csv),
+[actual jobs](baseline-9-1-scheduling-input-20260908/actual-manifest.csv),
+[input summary](baseline-9-1-scheduling-input-20260908/summary.csv),
+[scheduling summary](baseline-9-1-scheduling-input-20260908/scheduling-summary.csv).
 
 Five fixtures cover wheel/pinch, pan-25, resize/drag and direct/deep replacement,
 in both requested Fast/Refined modes. One first sequence and one sample give
@@ -113,11 +113,11 @@ excluding untimed seed/control work. Canonical manifests still match `9.1-v1`.
 ## Regression and validation evidence
 
 - Final `mvn clean test`: **394 tests, zero failures/errors, 37 skipped**.
-  [Saved log](benchmarks/baseline-9-1-scheduling-final-20260908/clean-test.log).
+  [Saved log](baseline-9-1-scheduling-final-20260908/clean-test.log).
 - Opt-in graphical `BaselineInputBenchmarkTest`: **16 tests passed**, including
   replacement identity and exact real-handler output. Its deliberately injected
   asynchronous timer failure is expected regression output.
-  [Saved log](benchmarks/baseline-9-1-scheduling-input-20260908/fx-tests.log).
+  [Saved log](baseline-9-1-scheduling-input-20260908/fx-tests.log).
 - Python validators: **11 tests passed**. All three final datasets also pass
   the scheduling validator; the input dataset passes the full input validator.
 - New deterministic regressions hold an interrupted worker alive after backend

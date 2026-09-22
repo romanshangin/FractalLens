@@ -13,7 +13,7 @@ large `Result` locals in the long-running main method. The earlier allocation
 profile remains useful for allocation attribution; its detached-memory values
 are not the final sustained ownership evidence.
 The earlier driver and launcher are retained in
-[source snapshots](benchmarks/baseline-9-1-memory-allocation-20260908/source-snapshots);
+[source snapshots](baseline-9-1-memory-allocation-20260908/source-snapshots);
 their SHA-256 values exactly match the allocation run's recorded manifest.
 
 ## Environment and boundaries
@@ -38,10 +38,10 @@ controlled. These runs cannot isolate a thermal cause of timing variation.
 
 ## Allocation attribution
 
-[Raw scopes and trials](benchmarks/baseline-9-1-memory-allocation-20260908/workload),
-[process observations](benchmarks/baseline-9-1-memory-allocation-20260908/process.csv),
-[scope summary](benchmarks/baseline-9-1-memory-allocation-20260908/summary.json),
-[allocation groups](benchmarks/baseline-9-1-memory-allocation-20260908/allocations-by-fixture.json).
+[Raw scopes and trials](baseline-9-1-memory-allocation-20260908/workload),
+[process observations](baseline-9-1-memory-allocation-20260908/process.csv),
+[scope summary](baseline-9-1-memory-allocation-20260908/summary.json),
+[allocation groups](baseline-9-1-memory-allocation-20260908/allocations-by-fixture.json).
 
 Eight selected fixtures, 480x270, both requested modes, two navigation cycles
 per view and two complete rounds produce **144 verified trials in 80.47 s**.
@@ -84,10 +84,10 @@ so treating every `int[]` allocation as a pixel-buffer copy would be incorrect.
 
 ## Sustained run
 
-[Final summary](benchmarks/baseline-9-1-memory-sustained-final-20260908/summary.json),
-[raw scopes](benchmarks/baseline-9-1-memory-sustained-final-20260908/workload/scopes.csv),
-[RSS/thermal observations](benchmarks/baseline-9-1-memory-sustained-final-20260908/process.csv),
-[final NMT difference](benchmarks/baseline-9-1-memory-sustained-final-20260908/nmt-final.json).
+[Final summary](baseline-9-1-memory-sustained-final-20260908/summary.json),
+[raw scopes](baseline-9-1-memory-sustained-final-20260908/workload/scopes.csv),
+[RSS/thermal observations](baseline-9-1-memory-sustained-final-20260908/process.csv),
+[final NMT difference](baseline-9-1-memory-sustained-final-20260908/nmt-final.json).
 
 The final JFR-free run uses 1512x982, both requested modes and one navigation
 cycle per view. Four complete rounds produce **144 verified trials in 794.69 s
@@ -116,7 +116,7 @@ primarily because of heap decommit. Code and metaspace commitments rise by
 independent proof of native leak absence. The checkpoint does not force all
 JavaFX peer/resource cleanup to complete on a particular pulse.
 
-![RSS and detached heap checkpoints](benchmarks/baseline-9-1-memory-sustained-final-20260908/memory.svg)
+![RSS and detached heap checkpoints](baseline-9-1-memory-sustained-final-20260908/memory.svg)
 
 Exact-target timing groups are saved per round. For example, deep-AA pinch
 Fast completion is 5156.50 / 5107.67 / 5012.09 / 5055.69 ms, while the Fast
@@ -136,18 +136,18 @@ rounds, scope overlap, short runs and failed native captures. JFR tests cover
 nanosecond timestamps with timezone offsets and allocation scope boundaries.
 
 - `mvn clean test`: **394 tests, zero failures/errors, 37 skipped**.
-  [Saved log](benchmarks/baseline-9-1-memory-sustained-final-20260908/clean-test.log).
+  [Saved log](baseline-9-1-memory-sustained-final-20260908/clean-test.log).
 - Python baseline validators: **22 tests passed**.
-  [Saved log](benchmarks/baseline-9-1-memory-sustained-final-20260908/python-tests.log).
+  [Saved log](baseline-9-1-memory-sustained-final-20260908/python-tests.log).
 - Graphical `BaselineInputBenchmarkTest`: **16 tests passed**.
-  [Summary](benchmarks/baseline-9-1-memory-sustained-final-20260908/fx-test-summary.txt),
-  [log](benchmarks/baseline-9-1-memory-sustained-final-20260908/fx-tests.log).
+  [Summary](baseline-9-1-memory-sustained-final-20260908/fx-test-summary.txt),
+  [log](baseline-9-1-memory-sustained-final-20260908/fx-tests.log).
   The logged injected timer failure is the expected asynchronous-failure regression.
 - Both accepted datasets pass the strict memory/event/drain validator:
   **288 trials total**, excluding seed and independent control work.
   A short-run regression also verifies that the monitor waits for its initial
   NMT capture even when the workload finishes first.
-  [Validation record](benchmarks/baseline-9-1-memory-sustained-final-20260908/validation.txt).
+  [Validation record](baseline-9-1-memory-sustained-final-20260908/validation.txt).
 
 The first restricted graphical probe failed to access a display/NMT. Temporary
 development probes under `target` are excluded from accepted datasets and are

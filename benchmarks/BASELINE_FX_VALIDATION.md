@@ -51,10 +51,10 @@ subscription. The renderer's calculation, AA and presentation policies are
 unchanged. Both regressions pass with the fix.
 
 The failed run is preserved as diagnostic evidence, including
-[its environment](benchmarks/baseline-9-1-fx-20260907/environment.txt),
-[partial rows](benchmarks/baseline-9-1-fx-20260907/samples.csv),
-[OOM log](benchmarks/baseline-9-1-fx-20260907/launch.log) and
-[failing regression output](benchmarks/baseline-9-1-fx-20260907/listener-regressions-before.log).
+[its environment](baseline-9-1-fx-20260907/environment.txt),
+[partial rows](baseline-9-1-fx-20260907/samples.csv),
+[OOM log](baseline-9-1-fx-20260907/launch.log) and
+[failing regression output](baseline-9-1-fx-20260907/listener-regressions-before.log).
 It has no `SUCCESS` marker and must not enter baseline summaries or decisions.
 The repeat completed the whole matrix using the same 4 GiB limit in a new output
 directory. Its after-step used-heap observations range from about 0.016 to
@@ -62,16 +62,16 @@ directory. Its after-step used-heap observations range from about 0.016 to
 
 ## Completed datasets and measured scopes
 
-- [Headless raw data](benchmarks/baseline-9-1-headless-20260907/samples.csv),
-  [summary](benchmarks/baseline-9-1-headless-20260907/summary.csv),
-  [environment](benchmarks/baseline-9-1-headless-20260907/environment.txt):
+- [Headless raw data](baseline-9-1-headless-20260907/samples.csv),
+  [summary](baseline-9-1-headless-20260907/summary.csv),
+  [environment](baseline-9-1-headless-20260907/environment.txt):
   555 rows, including 525 completed frames and 30 cancellation cases.
-- [JavaFX raw data after the fix](benchmarks/baseline-9-1-fx-fixed-20260907/samples.csv),
-  [summary](benchmarks/baseline-9-1-fx-fixed-20260907/summary.csv),
-  [environment](benchmarks/baseline-9-1-fx-fixed-20260907/environment.txt),
-  [graphics/launch log](benchmarks/baseline-9-1-fx-fixed-20260907/launch.log):
+- [JavaFX raw data after the fix](baseline-9-1-fx-fixed-20260907/samples.csv),
+  [summary](baseline-9-1-fx-fixed-20260907/summary.csv),
+  [environment](baseline-9-1-fx-fixed-20260907/environment.txt),
+  [graphics/launch log](baseline-9-1-fx-fixed-20260907/launch.log):
   1,110 rows, including 1,050 completed frames and 60 cancellation cases.
-- [Conformance marker](benchmarks/baseline-9-1-fx-fixed-20260907/SUCCESS):
+- [Conformance marker](baseline-9-1-fx-fixed-20260907/SUCCESS):
   all 210 non-cancelled final-sequence steps passed per-sample and per-ARGB-pixel
   comparison against fresh same-grid CPU controls. All 1,050 completed FX rows
   also match the corresponding headless sample/ARGB fingerprints across modes
@@ -114,8 +114,8 @@ about every real navigation gesture.
 `mvn clean test`: 374 tests, zero failures/errors, 27 opt-in skips. A separate
 graphical run passes all eight new JavaFX baseline/lifetime tests and 14 existing
 resize/input tests (two further explicitly gated cases remain skipped).
-[Baseline regression summary](benchmarks/baseline-9-1-fx-fixed-20260907/fx-regressions.txt),
-[resize regression summary](benchmarks/baseline-9-1-fx-fixed-20260907/resize-regressions.txt).
+[Baseline regression summary](baseline-9-1-fx-fixed-20260907/fx-regressions.txt),
+[resize regression summary](baseline-9-1-fx-fixed-20260907/resize-regressions.txt).
 
 Coverage includes hidden Refined base publication, complete retained-frame return
 with no new region, cancelled-generation suppression, same-frame AA preparation,

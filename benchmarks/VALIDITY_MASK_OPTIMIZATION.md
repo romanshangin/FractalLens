@@ -59,9 +59,9 @@ AA sample policy and CPU/GPU dispatch rules are unchanged.
 
 ## Predeclared measurement design
 
-The [headless policy](benchmarks/policies/9-3-validity-headless-candidate.json)
+The [headless policy](policies/9-3-validity-headless-candidate.json)
 uses 3024x1964 and preserves all 11 target/control metrics from calibration.
-The [FX policy](benchmarks/policies/9-3-validity-fx-candidate.json) uses
+The [FX policy](policies/9-3-validity-fx-candidate.json) uses
 1512x982 with FAST and REFINED requested modes. Fully reused reverse full
 publication is the FX target; first publication is a control because ready
 pixels may be displayed before backend completion.
@@ -97,7 +97,7 @@ unconfounded general performance or production-promotion decision.
 
 ## Headless results
 
-[Raw campaign and analysis](benchmarks/baseline-9-3-validity-headless-20260909/analysis.json)
+[Raw campaign and analysis](baseline-9-3-validity-headless-20260909/analysis.json)
 passed strict pair, workload and non-cancelled sample/ARGB fingerprint validation.
 Every metric has 30 matched samples across six process pairs.
 
@@ -130,7 +130,7 @@ in the linked analysis; the ratio of separate medians is not the paired estimate
 
 ## JavaFX publication results
 
-[Raw FX campaign and analysis](benchmarks/baseline-9-3-validity-fx-20260909/analysis.json)
+[Raw FX campaign and analysis](baseline-9-3-validity-fx-20260909/analysis.json)
 passed all 12 JVM exact-control runs and the strict paired validator. Each of
 the 18 metric groups has 30 matching observations across six process pairs.
 
@@ -171,7 +171,7 @@ classes, so these counts must not be added as a unique-test total. All **39
 Python baseline-validator tests** pass. Production class hashes after the clean
 build match the measured candidate snapshot.
 
-The [test logs and production-class hash check](benchmarks/baseline-9-3-validity-headless-20260909/test-evidence)
+The [test logs and production-class hash check](baseline-9-3-validity-headless-20260909/test-evidence)
 are retained with the results. The two graphical skips are optional native
 fullscreen cases requiring the separate `fractal.fx.fullscreen` setting.
 
@@ -192,7 +192,7 @@ both normal and diagnostic execution paths.
 
 ## Rejected diagnostic memory run
 
-The first [memory run](benchmarks/baseline-9-3-validity-memory-20260909)
+The first [memory run](baseline-9-3-validity-memory-20260909)
 completed 108 exact trials but is **not accepted**: one scope's wall duration
 was 107.868 ms shorter than its monotonic duration. The independent JVM GC log
 also shows a persistent wall/uptime offset change across that scope:
@@ -211,7 +211,7 @@ driver or production change was needed to repeat the soak in a fresh directory.
 
 ## Accepted sustained-memory validation
 
-The fresh [final memory run](benchmarks/baseline-9-3-validity-memory-final-20260909/summary.json)
+The fresh [final memory run](baseline-9-3-validity-memory-final-20260909/summary.json)
 passes the unchanged strict validator: **108 exact trials, three complete
 rounds, 802.084 seconds (13.37 minutes)**. It uses all eight default memory
 fixtures at 1512x982, FAST/REFINED, one cycle per fixture per round, a 600-second
@@ -268,8 +268,8 @@ Windows and physical compositor/scanout measurements remain separate work.
 
 ## P0.3 final paired decision — 2026-09-21
 
-The [headless policy](benchmarks/policies/9-3-validity-headless-p0-3.json) and
-[JavaFX policy](benchmarks/policies/9-3-validity-fx-p0-3.json) preserved the
+The [headless policy](policies/9-3-validity-headless-p0-3.json) and
+[JavaFX policy](policies/9-3-validity-fx-p0-3.json) preserved the
 original fixtures, 0.90 target limit and 1.05 control limit. Each scheduled
 30 alternating AB/BA process pairs, one measured sequence and three warmups per
 side, yielding 30 matched observations for every declared metric group. The
@@ -319,7 +319,7 @@ whole-campaign observations, not per-fixture allocation or leak estimates.
 The separate accepted 13.37-minute candidate soak above remains historical
 evidence; it was not repeated for the rejected production state.
 
-The [headless analysis](benchmarks/baseline-p0-3-validity-headless-20260921/analysis.json)
+The [headless analysis](baseline-p0-3-validity-headless-20260921/analysis.json)
 passed strict launch, workload and matching sample/ARGB fingerprint validation.
 Seven of 11 metric groups passed; four controls were inconclusive. Values below
 are milliseconds, with descriptive p95 in parentheses and the bootstrap 95%
@@ -341,7 +341,7 @@ three clusters from the earlier calibration. The actual policy, launch records,
 and every metric's `process_pairs` field show **30** clusters; the bootstrap
 calculation uses those 30 process IDs.
 
-The [JavaFX analysis](benchmarks/baseline-p0-3-validity-fx-desktop-20260921/analysis.json)
+The [JavaFX analysis](baseline-p0-3-validity-fx-desktop-20260921/analysis.json)
 passed all 60 exact-control JVM runs, strict paired validation and the same
 fingerprint check. Thirteen of 18 metric groups passed; five controls were
 inconclusive:
@@ -357,7 +357,7 @@ inconclusive:
 | Pan, REFINED full publication | 14.005 (16.313) | 14.508 (16.524) | 1.004–1.058 | Inconclusive |
 
 The initial FX attempt in the process sandbox is retained as an
-[environment failure](benchmarks/baseline-p0-3-validity-fx-sandbox-failure-20260921/pair-00-A.log):
+[environment failure](baseline-p0-3-validity-fx-sandbox-failure-20260921/pair-00-A.log):
 Prism could not obtain a main screen and the first JVM was stopped. It is not
 a benchmark sample. The complete desktop campaign used a fresh directory and
 unchanged policy, builds and metrics.

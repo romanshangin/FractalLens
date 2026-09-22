@@ -34,9 +34,9 @@ The agreement with the application trace identifies a concrete cached-frame plan
 bottleneck independent of JavaFX. Partial frames can have different scan costs.
 
 [Raw mask benchmark](INTERACTION_LATENCY_VALIDITY_SCAN.csv). Reproduction:
-[ValidityScanBenchmark](src/test/java/com/shangin/fractal/render/ValidityScanBenchmark.java).
-Affected code: [ValidityMask](src/main/java/com/shangin/fractal/render/ValidityMask.java)
-and [ParallelFractalCalculator](src/main/java/com/shangin/fractal/render/ParallelFractalCalculator.java).
+[ValidityScanBenchmark](../src/test/java/com/shangin/fractal/render/ValidityScanBenchmark.java).
+Affected code: [ValidityMask](../src/main/java/com/shangin/fractal/render/ValidityMask.java)
+and [ParallelFractalCalculator](../src/main/java/com/shangin/fractal/render/ParallelFractalCalculator.java).
 
 ## Production gestures without screen capture
 
