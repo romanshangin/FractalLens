@@ -39,6 +39,19 @@ class FractalCameraTest {
     }
 
     @Test
+    void firstResizeShouldPreserveRestoredViewportExactly() {
+        Viewport restored = new Viewport(
+                "-0.743643887037151000000000000000000000000000000000000000000001",
+                "0.131825904205330000000000000000000000000000000000000000000007",
+                "1.2E-75");
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT, restored);
+
+        camera.resize(1000, 700);
+
+        assertEquals(restored, camera.viewport());
+    }
+
+    @Test
     void resizeAtDefaultShouldFitNewWindow() {
         FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
 

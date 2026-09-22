@@ -49,11 +49,13 @@ delivery foundation should be completed first.
   confirmed the retained-frame gain, but the aggregate control budget remained
   inconclusive. The candidate was rejected and removed; see
   [the final decision](benchmarks/VALIDITY_MASK_OPTIMIZATION.md).
-- [ ] **P0.4. Turn reproducibility into a product contract.** Implement section
+- [x] **P0.4. Turn reproducibility into a product contract.** Implement section
   5 JSON scene serialization and last-session restore before undo/redo,
   shareable presets or new export variants. Version the schema and test
   migration, malformed input, precise decimal coordinates and atomic recovery
-  after an interrupted write.
+  after an interrupted write. The version 2 format, version 1 migration,
+  platform session locations and recovery contract are documented in
+  `SESSION_FORMAT.md`.
 - [ ] **P0.5. Define platform validation lanes.** Treat the Windows runtime
   work in 8.7 and Intel/AMD Mac work in 8.8 as hardware-backed infrastructure
   tracks. They may run when hardware is available and do not block the
@@ -229,7 +231,8 @@ Remaining items in this section follow the cross-section order in section 0.
 - [x] Introduce an immutable `FractalScene` containing formula, viewport, iteration settings, and coloring, and pair every completed frame with the exact scene snapshot it represents.
 - [x] Keep transient output dimensions and scheduling priority in a separate immutable `RenderTarget` so window resizes do not alter scene history.
 - [ ] Add undo/redo and bookmarks based on `FractalScene` snapshots.
-- [ ] Add JSON serialization and last-session restore.
+- [x] Add JSON serialization and last-session restore. The current versioned
+  schema and atomic recovery behavior are documented in `SESSION_FORMAT.md`.
 - [ ] Add arbitrary-resolution export by combining a scene snapshot with an independent render target.
 
 ## 6. Expand the rendering engine

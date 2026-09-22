@@ -1,8 +1,10 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.LastSessionStore;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.scene.FractalScene;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.scene.layout.BorderPane;
@@ -10,6 +12,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Locale;
 
@@ -17,20 +20,45 @@ public class MainView extends BorderPane {
 
     private final FractalView fractalView;
     private final MainMenuBar menuBar;
+    private final LastSessionStore sessionStore;
     private boolean closed;
     private final AdaptivePngExportService exportService =
             new AdaptivePngExportService();
 
     public MainView(Stage stage) {
-        FractalPreset initialFractal = FractalPreset.MANDELBROT;
-        PalettePreset initialPalette = PalettePreset.ICE;
-        fractalView = new FractalView(initialFractal, initialPalette);
-        menuBar = new MainMenuBar(stage, fractalView, initialFractal, initialPalette, this::exportPng);
+        this(stage, LastSessionStore.systemDefault());
+    }
+
+    MainView(Stage stage, LastSessionStore sessionStore) {
+        this.sessionStore = java.util.Objects.requireNonNull(sessionStore);
+        InitialScene initial = loadInitialScene(sessionStore);
+        FractalScene initialScene = initial.scene();
+        fractalView = new FractalView(initialScene, initial.restored());
+        menuBar = new MainMenuBar(stage, fractalView, initialScene, this::exportPng);
         // JavaFX gives this bar zero height when macOS installs it in the system menu bar.
         setTop(menuBar);
         setCenter(fractalView);
-        stage.setTitle(initialFractal + " — FractalUI");
+        stage.setTitle(initialScene.fractal() + " — FractalUI");
     }
+
+    private static InitialScene loadInitialScene(LastSessionStore sessionStore) {
+        try {
+            return sessionStore.load()
+                    .map(scene -> new InitialScene(scene, true))
+                    .orElseGet(MainView::defaultInitialScene);
+        } catch (IOException exception) {
+            System.err.println("Could not restore the last FractalUI session: "
+                    + exception.getMessage());
+            return defaultInitialScene();
+        }
+    }
+
+    private static InitialScene defaultInitialScene() {
+        return new InitialScene(
+                FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE), false);
+    }
+
+    private record InitialScene(FractalScene scene, boolean restored) {}
 
     private void exportPng() {
         if (!fractalView.hasCompletedFrame()) {
@@ -107,6 +135,12 @@ public class MainView extends BorderPane {
             return;
         }
         closed = true;
+        try {
+            sessionStore.save(fractalView.sceneSnapshot());
+        } catch (IOException exception) {
+            System.err.println("Could not save the last FractalUI session: "
+                    + exception.getMessage());
+        }
         exportService.close();
         fractalView.close();
     }

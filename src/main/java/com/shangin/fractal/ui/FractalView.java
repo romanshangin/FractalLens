@@ -97,14 +97,34 @@ public class FractalView extends StackPane {
             FractalPreset initialFractal,
             PalettePreset initialPalette
     ) {
-        this(initialFractal, initialPalette, System.getProperty("os.name", "").startsWith("Mac"));
+        this(FractalScene.create(initialFractal, initialPalette),
+                System.getProperty("os.name", "").startsWith("Mac"), false);
     }
 
     FractalView(FractalPreset initialFractal, PalettePreset initialPalette, boolean loadingScreenEnabled) {
+        this(FractalScene.create(initialFractal, initialPalette), loadingScreenEnabled, false);
+    }
+
+    public FractalView(FractalScene restoredScene) {
+        this(restoredScene, System.getProperty("os.name", "").startsWith("Mac"), true);
+    }
+
+    FractalView(FractalScene initialScene, boolean restored) {
+        this(initialScene, System.getProperty("os.name", "").startsWith("Mac"), restored);
+    }
+
+    private FractalView(
+            FractalScene initialScene,
+            boolean loadingScreenEnabled,
+            boolean restored
+    ) {
         this.loadingScreenEnabled = loadingScreenEnabled;
-        scene = FractalScene.create(initialFractal, initialPalette);
-        camera = new FractalCamera(initialFractal);
-        configurePalette(initialPalette);
+        scene = java.util.Objects.requireNonNull(initialScene, "Initial scene must not be null");
+        camera = restored
+                ? new FractalCamera(scene.fractal(), scene.viewport())
+                : new FractalCamera(scene.fractal());
+        colorCycleOffset = scene.coloring().offset();
+        configurePalette(scene.coloring().paletteStops());
         configureResize();
         configureZoom();
         configurePan();
@@ -836,6 +856,10 @@ public class FractalView extends StackPane {
         resizeRender.stop();
         colorCycleTimer.stop();
         renderController.close();
+    }
+
+    FractalScene sceneSnapshot() {
+        return scene.withViewport(camera.viewport());
     }
 
     public boolean hasCompletedFrame() {
