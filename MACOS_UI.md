@@ -100,7 +100,8 @@ The native JavaFX regression checks can be run with
 | Help | FractalUI Help, including pointer and keyboard navigation |
 
 On other platforms the platform shortcut modifier replaces Command.
-Arrow keys pan the focused canvas. Pointer-centered scrolling, dragging, and
+Arrow keys pan the focused canvas after zooming in. Page Up and Page Down zoom
+around the center, and Home resets the view. Pointer-centered scrolling, dragging, and
 trackpad gestures remain available. Menu and keyboard zoom preserve the center.
 Right-clicking the canvas opens a single **Copy Coordinates and Zoom** command.
 It copies the current center's real and imaginary coordinates and zoom together
@@ -271,12 +272,21 @@ of the viewport. A blue dot marks **Standard** rendering; a soft coral dot marks
 **Deep Zoom**, following the controller's actual precision policy. The badge is
 informational, with no click action, and is not included in PNG exports.
 
-Hovering shows the mode description and the latest viewport render duration
-(including enabled antialiasing). A new render replaces the previous timing with
-`Rendering…`; cancelled or failed work never appears as a completed duration.
+The badge shows the base-render percentage, refinement state, and latest viewport
+render duration without requiring hover. The percentage counts exact ready pixels,
+including samples reused from a previous frame. Hovering adds the mode description
+and antialiasing details. Cancelled or failed work never appears as a completed
+duration; current render and recolor failures show an in-application error.
 Enabling deep antialiasing after completion adds refinement time to the base
 render duration without counting the intervening idle time. Palette animation
 and export do not replace the viewport timing.
+
+P1.1 validation on an active macOS 27.0 desktop: a Page Up render from a restored
+deep Mandelbrot scene visibly advanced through 0%, 30%, and 68% before showing
+`Complete 7.50 s`. The opt-in JavaFX regression starts from a completed frame,
+injects a recolor failure on the worker path, and checks the error dialog's
+message in the application window. This is functional evidence, not a render
+performance measurement.
 
 ### JavaFX dialog appearance
 

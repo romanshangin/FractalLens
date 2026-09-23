@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RenderActivityTrackerTest {
 
@@ -36,10 +38,14 @@ class RenderActivityTrackerTest {
         List<RenderStatus> statuses = new ArrayList<>();
         tracker.setStatusListener(statuses::add);
         long cancelled = tracker.begin();
+        assertTrue(tracker.isCurrent(cancelled));
         tracker.cancel();
+        assertFalse(tracker.isCurrent(cancelled));
         tracker.finish(cancelled);
         long failed = tracker.begin();
-        tracker.fail(failed);
+        assertFalse(tracker.fail(cancelled));
+        assertTrue(tracker.fail(failed));
+        assertFalse(tracker.fail(failed));
         tracker.finish(failed);
         assertEquals(List.of(RenderStatus.State.IDLE, RenderStatus.State.RENDERING,
                 RenderStatus.State.CANCELLED, RenderStatus.State.RENDERING,

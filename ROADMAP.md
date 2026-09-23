@@ -71,8 +71,11 @@ delivery foundation should be completed first.
 
 ### P1. Production reliability and measured latency
 
-- [ ] **P1.1.** Replace user-visible stack traces with in-application errors,
+- [x] **P1.1.** Replace user-visible stack traces with in-application errors,
   then add render progress/status and keyboard navigation from section 4.
+  Current render and recolor failures use the application error dialog. The
+  viewport badge shows exact base-frame progress and completion/refinement
+  status; arrow keys, Page Up/Down, and Home navigate the focused canvas.
 - [ ] **P1.2.** Run the retained-snapshot preparation experiment in 9.2; accept
   it only if first-tile and full-frame behavior both pass.
 - [ ] **P1.3.** Measure JavaFX dirty rectangles, callback coalescing, staging
@@ -196,8 +199,8 @@ Remaining items in this section follow the cross-section order in section 0.
 - [x] Support native macOS trackpad pinch zoom, continuous two-finger panning, and directional swipe panning.
 - [ ] Display zoom and iteration count.
 - [ ] Add iteration controls and editable Julia parameters.
-- [ ] Add keyboard navigation and render progress/status.
-- [ ] Show user-facing errors instead of printing stack traces.
+- [x] Add keyboard navigation and render progress/status.
+- [x] Show user-facing errors instead of printing stack traces.
 - [ ] Add copyable/shareable viewport presets.
 - [x] Replace the macOS canvas context menu with a native AppKit `NSMenu` for
   system-managed appearance and behavior. Add a small Objective-C/JNI bridge

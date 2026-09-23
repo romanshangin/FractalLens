@@ -2,8 +2,10 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.app.LastSessionStore;
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.render.FractalRenderService;
 import com.shangin.fractal.scene.FractalScene;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
@@ -30,10 +32,22 @@ public class MainView extends BorderPane {
     }
 
     MainView(Stage stage, LastSessionStore sessionStore) {
+        this(stage, sessionStore, new FractalRenderService());
+    }
+
+    MainView(Stage stage, LastSessionStore sessionStore, FractalRenderService renderService) {
+        this(stage, sessionStore, renderService, null);
+    }
+
+    MainView(Stage stage, LastSessionStore sessionStore, FractalRenderService renderService,
+             FractalRenderController.RecolorOperation recolorOperation) {
         this.sessionStore = java.util.Objects.requireNonNull(sessionStore);
         InitialScene initial = loadInitialScene(sessionStore);
         FractalScene initialScene = initial.scene();
-        fractalView = new FractalView(initialScene, initial.restored());
+        fractalView = recolorOperation == null
+                ? new FractalView(initialScene, initial.restored(), renderService)
+                : new FractalView(initialScene, initial.restored(), renderService, recolorOperation);
+        fractalView.setOnRenderError(this::renderFailed);
         menuBar = new MainMenuBar(stage, fractalView, initialScene, this::exportPng);
         // JavaFX gives this bar zero height when macOS installs it in the system menu bar.
         setTop(menuBar);
@@ -128,6 +142,14 @@ public class MainView extends BorderPane {
                 "Export failed",
                 "The PNG image could not be saved: " + exception.getMessage()
         );
+    }
+
+    private void renderFailed(Throwable exception) {
+        if (closed) return;
+        String detail = exception.getMessage();
+        showError("Render failed", detail == null || detail.isBlank()
+                ? "The image could not be rendered. Try changing the view or settings."
+                : "The image could not be rendered: " + detail);
     }
 
     public void close() {
