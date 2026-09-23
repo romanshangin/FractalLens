@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - macos-arm64
+          - macos-x64
           - windows-x64
 
 permissions:
@@ -60,6 +61,60 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: native-gpu-reports-macos-arm64-${{ github.run_attempt }}
+          path: |
+            target/ci-test.log
+            target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 30
+
+  macos-x64:
+    if: inputs.platform == 'macos-x64'
+    name: Native GPU smoke tests (physical Intel Mac)
+    runs-on:
+      - self-hosted
+      - macOS
+      - X64
+      - fractalui-gpu
+    timeout-minutes: 30
+    steps:
+      - name: Check out clean source tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          clean: true
+          persist-credentials: false
+
+      - name: Verify clean checkout and physical Intel Mac
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain)"
+          test "$(uname -m)" = x86_64
+          test "$(sysctl -n hw.optional.arm64 2>/dev/null || true)" != 1
+
+      - name: Set up Java 25 and Maven cache
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Record hardware and runtime provenance
+        shell: bash
+        run: |
+          system_profiler SPHardwareDataType SPSoftwareDataType SPDisplaysDataType
+          java --version
+          ./mvnw --version
+
+      - name: Run native GPU smoke tests
+        shell: bash
+        run: >-
+          bash scripts/run-ci-tests ./mvnw --batch-mode --no-transfer-progress
+          -Pgpu-smoke test
+
+      - name: Upload native test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-gpu-reports-macos-x64-${{ github.run_attempt }}
           path: |
             target/ci-test.log
             target/surefire-reports/

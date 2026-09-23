@@ -1,10 +1,9 @@
 # Continuous integration
 
-This document covers item 1 of the P0 infrastructure and delivery foundation in
-`ROADMAP.md`: continuously reproducible CI. Runtime artifact CI is described in
-`RUNTIME_PACKAGING.md`. Scene serialization and restore, the open measurement
-decision, clean-machine checklist execution and the remaining hardware
-validation work are separate open roadmap items.
+This document covers the portable CI and hardware validation lanes in the P0
+infrastructure and delivery foundation of `ROADMAP.md`. Runtime artifact CI is
+described in `RUNTIME_PACKAGING.md`. The Windows GPU runtime implementation and
+Intel/AMD Mac acceptance work remain in roadmap 8.7 and 8.8.
 
 FractalUI separates portable CPU-default validation from hardware-native GPU
 validation. Hosted runners establish portability; they do not establish GPU
@@ -49,17 +48,25 @@ console limit, both retained edges and the reported omission size.
 
 `.github/workflows/native-gpu.yml` is manual-only. It routes the selected lane
 to a self-hosted runner with real target hardware, records hardware and runtime
-provenance in the job log, and retains Surefire reports for 30 days. The Apple
-Silicon lane runs `./mvnw -Pgpu-smoke test` as a native conformance smoke test.
+provenance in the job log, and retains the full test log and Surefire reports for
+30 days. The Apple Silicon and Intel Mac lanes run `./mvnw -Pgpu-smoke test` as
+native conformance smoke tests. The Intel lane requires an x64 JVM on a physical
+Intel Mac; its checkout step rejects an ARM64 host running an x64 process through
+Rosetta. A passing smoke run is evidence for the selected device only, not for
+all Intel or AMD GPUs, paired performance, or a packaged application.
+
 Until the Windows runtime work in roadmap 8.7 is implemented, the Windows lane
-requires the runtime to remain unavailable and verifies exact CPU fallback; it
-must not be reported as Windows GPU conformance.
+requires the runtime to remain unavailable and verifies CPU fallback. It must
+not be reported as Windows GPU conformance. This lane runs on Windows 10/11 x64
+hardware while the Windows GPU runtime is unavailable; enabling a Windows GPU mode
+requires a separate hardware-backed native lane after the runtime exists.
 
 The runner labels are:
 
 | Lane | Required labels |
 | --- | --- |
 | Apple Silicon macOS | `self-hosted`, `macOS`, `ARM64`, `fractalui-gpu` |
+| Physical Intel Mac, x64 JVM | `self-hosted`, `macOS`, `X64`, `fractalui-gpu` |
 | Windows x64 fallback | `self-hosted`, `Windows`, `X64`, `fractalui-gpu` |
 
 A self-hosted machine must run GitHub Actions Runner 2.329.0 or newer because
@@ -71,7 +78,15 @@ steps through `GITHUB_PATH`. Verify the installation with `Get-Command gzip.exe`
 or `Test-Path 'C:\Program Files\Git\usr\bin\gzip.exe'`. The Windows job checks
 this contract before Java and Maven cache setup.
 
-A queued job means that no online runner matches all required labels. A passing
-hosted portable job must not be reported as native GPU conformance. GPU
-promotion still requires the correctness and performance gates in
-`ROADMAP.md` on the supported target hardware.
+A queued job means that no online runner matches all required labels. Before
+accepting an Intel Mac result, retain the run URL, commit, selected-device
+capability report, host model, GPU and driver details, Java/Maven versions, and
+Surefire artifact. Run the packaged macOS x64 launcher on the same hardware and
+record its CPU fallback and visible JavaFX behavior separately. Then complete
+roadmap 8.8's missing-native, palette, calculation, paired timing, and transfer
+gates. For Windows, complete 8.7's runtime, failure-path, palette, calculation,
+and paired timing gates on actual Windows hardware before adding a GPU-conformance
+lane or enabling a GPU mode there. A passing hosted portable job or build-machine
+packaging smoke is not native GPU conformance. Neither hardware track blocks the
+CPU-default macOS artifact; GPU promotion requires the correctness and
+performance gates in `ROADMAP.md` on each supported target device.
