@@ -32,10 +32,19 @@ import java.util.concurrent.Semaphore;
 public final class FractalRenderController implements AutoCloseable {
 
     private final FractalSurface surface;
-    private final FractalRenderService renderService = new FractalRenderService();
+    private final FractalRenderService renderService;
     private final InteractiveAntialiasService antialiasService =
             new InteractiveAntialiasService();
     private final PaletteRecolorBackend paletteRecolorBackend;
+    private final RecolorOperation recolorOperation;
+
+    @FunctionalInterface
+    public interface RecolorOperation {
+        PaletteRecolorTiming apply(InteractiveAntialiasService antialiasService,
+                                   RenderFrame frame, ColoringStrategy coloring,
+                                   int[] colors, PaletteRecolorBackend backend)
+                throws InterruptedException;
+    }
 
     private FormulaDefinition formulaDefinition;
     private RenderFrame activeFrame;
@@ -61,19 +70,35 @@ public final class FractalRenderController implements AutoCloseable {
     /** Monotonic animation frame id; newer requests do not invalidate work in flight. */
     private final AtomicLong recolorSequence = new AtomicLong();
     private final AtomicLong publishedRecolorSequence = new AtomicLong();
+    private final RecolorFailureGate recolorFailureGate = new RecolorFailureGate();
     private final Semaphore recolorBufferSlots = new Semaphore(2);
     private final ConcurrentLinkedDeque<int[]> recolorBuffers = new ConcurrentLinkedDeque<>();
     private final AtomicReference<PaletteRecolorTiming> lastPaletteRecolorTiming =
             new AtomicReference<>();
 
     public FractalRenderController(FractalSurface surface) {
+        this(surface, new FractalRenderService());
+    }
+
+    public FractalRenderController(FractalSurface surface, FractalRenderService renderService) {
+        this(surface, renderService, InteractiveAntialiasService::recolorCachedInto);
+    }
+
+    public FractalRenderController(FractalSurface surface, FractalRenderService renderService,
+                                   RecolorOperation recolorOperation) {
         this.surface = Objects.requireNonNull(surface);
+        this.renderService = Objects.requireNonNull(renderService);
+        this.recolorOperation = Objects.requireNonNull(recolorOperation);
         renderService.setDiagnosticsListener(diagnostics -> surface.latency().attachDiagnostics(diagnostics.completion()));
         this.paletteRecolorBackend = renderService.paletteRecolorBackend();
     }
 
     private Consumer<BigDecimal> zoomChangedHandler = ignored -> {};
     private Consumer<Boolean> deepZoomChangedHandler = ignored -> {};
+    private Consumer<Double> progressHandler = ignored -> {};
+    private Consumer<Throwable> errorHandler = error ->
+            System.getLogger(FractalRenderController.class.getName())
+                    .log(System.Logger.Level.ERROR, "Render failed", error);
 
     public void cancelCurrent() {
         recolorEpoch.incrementAndGet();
@@ -110,8 +135,8 @@ public final class FractalRenderController implements AutoCloseable {
             int[] ready = acquireRecolorBuffer(frame.samplePlane().size());
             PaletteRecolorTiming timing;
             try {
-                timing = antialiasService.recolorCachedInto(
-                        frame, coloring, ready, paletteRecolorBackend);
+                timing = recolorOperation.apply(
+                        antialiasService, frame, coloring, ready, paletteRecolorBackend);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 recolorBuffers.offerFirst(ready);
@@ -120,7 +145,14 @@ public final class FractalRenderController implements AutoCloseable {
             } catch (RuntimeException error) {
                 recolorBuffers.offerFirst(ready);
                 recolorBufferSlots.release();
-                throw error;
+                Platform.runLater(() -> {
+                    if (recolorFailureGate.shouldReport(epoch, recolorEpoch.get(), request,
+                            recolorSequence.get(), publishedRecolorSequence.get(),
+                            frame == activeFrame)) {
+                        errorHandler.accept(error);
+                    }
+                });
+                return;
             }
             long queued = System.nanoTime();
             Platform.runLater(() -> {
@@ -173,6 +205,7 @@ public final class FractalRenderController implements AutoCloseable {
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
         surface.latency().renderStarted();
+        progressHandler.accept(0.0);
         long renderGeneration = renderActivity.begin();
         recolorEpoch.incrementAndGet();
         antialiasService.cancelCurrent();
@@ -365,10 +398,15 @@ public final class FractalRenderController implements AutoCloseable {
                             coloring,
                             presentationMode
                     );
+                    if (renderActivity.isCurrent(renderGeneration)) {
+                        progressHandler.accept((double) progress.frame().validity().readyPixelCount()
+                                / ((long) target.width() * target.height()));
+                    }
                 },
 
                 completedFrame -> {
                     surface.latency().mark("base_complete");
+                    if (renderActivity.isCurrent(renderGeneration)) progressHandler.accept(1.0);
 
                     frameCache.put(completedFrame);
 
@@ -401,8 +439,7 @@ public final class FractalRenderController implements AutoCloseable {
                                             completedFrame, completedColoring);
                                     surface.completeProgressiveRender(completedFrame, scene);
                                     initialFramePending = false;
-                                    renderActivity.fail(renderGeneration);
-                                    error.printStackTrace();
+                                    reportFailure(renderGeneration, error);
                                 }
                         );
                         return;
@@ -448,16 +485,14 @@ public final class FractalRenderController implements AutoCloseable {
                             ),
                             () -> renderActivity.finish(renderGeneration),
                             error -> {
-                                renderActivity.fail(renderGeneration);
-                                error.printStackTrace();
+                                reportFailure(renderGeneration, error);
                             }
                     );
 
                 },
 
                 error -> {
-                    renderActivity.fail(renderGeneration);
-                    error.printStackTrace();
+                    reportFailure(renderGeneration, error);
                 }
         );
     }
@@ -511,8 +546,7 @@ public final class FractalRenderController implements AutoCloseable {
                     renderActivity.finish(renderGeneration);
                 },
                 error -> {
-                    renderActivity.fail(renderGeneration);
-                    error.printStackTrace();
+                    reportFailure(renderGeneration, error);
                 }
         );
     }
@@ -522,6 +556,18 @@ public final class FractalRenderController implements AutoCloseable {
             if (status.state() == RenderStatus.State.COMPLETE) surface.latency().mark("complete");
             handler.accept(status);
         });
+    }
+
+    public void setOnRenderProgressChanged(Consumer<Double> handler) {
+        progressHandler = Objects.requireNonNull(handler);
+    }
+
+    public void setOnRenderError(Consumer<Throwable> handler) {
+        errorHandler = Objects.requireNonNull(handler);
+    }
+
+    private void reportFailure(long renderGeneration, Throwable error) {
+        if (renderActivity.fail(renderGeneration)) errorHandler.accept(error);
     }
 
     public void setOnRenderingChanged(Consumer<Boolean> handler) {

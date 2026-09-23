@@ -13,6 +13,7 @@ import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.CompletedRender;
 import com.shangin.fractal.render.RenderPriority;
+import com.shangin.fractal.render.FractalRenderService;
 import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
@@ -66,7 +67,7 @@ public class FractalView extends StackPane {
     private final RenderModeIndicator modeIndicator = new RenderModeIndicator();
     private Consumer<Boolean> deepZoomChangedHandler = ignored -> {};
     private final FractalSurface fractalSurface = new FractalSurface();
-    private final FractalRenderController renderController = new FractalRenderController(fractalSurface);
+    private final FractalRenderController renderController;
     private final FractalCamera camera;
     private final FractalContextMenu contextMenu;
     private FractalScene scene;
@@ -113,11 +114,44 @@ public class FractalView extends StackPane {
         this(initialScene, System.getProperty("os.name", "").startsWith("Mac"), restored);
     }
 
+    FractalView(FractalScene initialScene, boolean restored, FractalRenderService renderService) {
+        this(initialScene, System.getProperty("os.name", "").startsWith("Mac"),
+                restored, renderService);
+    }
+
+    FractalView(FractalScene initialScene, boolean restored, FractalRenderService renderService,
+                FractalRenderController.RecolorOperation recolorOperation) {
+        this(initialScene, System.getProperty("os.name", "").startsWith("Mac"),
+                restored, renderService, recolorOperation);
+    }
+
     private FractalView(
             FractalScene initialScene,
             boolean loadingScreenEnabled,
             boolean restored
     ) {
+        this(initialScene, loadingScreenEnabled, restored, new FractalRenderService());
+    }
+
+    private FractalView(
+            FractalScene initialScene,
+            boolean loadingScreenEnabled,
+            boolean restored,
+            FractalRenderService renderService
+    ) {
+        this(initialScene, loadingScreenEnabled, restored, renderService, null);
+    }
+
+    private FractalView(
+            FractalScene initialScene,
+            boolean loadingScreenEnabled,
+            boolean restored,
+            FractalRenderService renderService,
+            FractalRenderController.RecolorOperation recolorOperation
+    ) {
+        renderController = recolorOperation == null
+                ? new FractalRenderController(fractalSurface, renderService)
+                : new FractalRenderController(fractalSurface, renderService, recolorOperation);
         this.loadingScreenEnabled = loadingScreenEnabled;
         scene = java.util.Objects.requireNonNull(initialScene, "Initial scene must not be null");
         camera = restored
@@ -132,7 +166,7 @@ public class FractalView extends StackPane {
         contextMenu = new FractalContextMenu(this, this::copyCoordinatesAndZoom);
         setFocusTraversable(true);
         setAccessibleText("Fractal canvas");
-        setAccessibleHelp("Use the View menu to zoom or go to coordinates. Drag to pan, scroll to zoom, or pinch on a trackpad.");
+        setAccessibleHelp("Use arrow keys to pan, Page Up and Page Down to zoom, or Home to reset. Drag to pan, scroll to zoom, or pinch on a trackpad.");
         setOnKeyPressed(event -> {
             if (event.isShortcutDown() || event.isAltDown() || event.isControlDown()) {
                 return;
@@ -142,6 +176,9 @@ public class FractalView extends StackPane {
                 case RIGHT -> panBySwipe(-SWIPE_PAN_FRACTION, 0.0);
                 case UP -> panBySwipe(0.0, SWIPE_PAN_FRACTION);
                 case DOWN -> panBySwipe(0.0, -SWIPE_PAN_FRACTION);
+                case PAGE_UP -> zoom(true);
+                case PAGE_DOWN -> zoom(false);
+                case HOME -> resetView();
                 default -> { return; }
             }
             event.consume();
@@ -162,6 +199,7 @@ public class FractalView extends StackPane {
                 modeIndicator.setVisible(true);
             }
         });
+        renderController.setOnRenderProgressChanged(modeIndicator::setProgress);
         renderController.setOnDeepZoomChanged(active -> {
             modeIndicator.setDeepZoom(active);
             deepZoomChangedHandler.accept(active);
@@ -519,6 +557,10 @@ public class FractalView extends StackPane {
         renderingChangedHandler = java.util.Objects.requireNonNull(handler);
     }
 
+    public void setOnRenderError(Consumer<Throwable> handler) {
+        renderController.setOnRenderError(handler);
+    }
+
     private void configureResize() {
         resizeRender.setOnFinished(event -> {
             layout();
@@ -723,8 +765,10 @@ public class FractalView extends StackPane {
     private void panBySwipe(double horizontalFraction, double verticalFraction) {
         int width = (int) getWidth();
         int height = (int) getHeight();
+        int renderWidth = fractalSurface.renderWidth();
+        int renderHeight = fractalSurface.renderHeight();
 
-        if (width < 2 || height < 2) {
+        if (width < 2 || height < 2 || renderWidth < 2 || renderHeight < 2) {
             return;
         }
 
@@ -746,8 +790,8 @@ public class FractalView extends StackPane {
         fractalSurface.showPreview(camera.viewport());
         camera.snapToRenderGrid(
                 sourceViewport,
-                fractalSurface.renderWidth(),
-                fractalSurface.renderHeight()
+                renderWidth,
+                renderHeight
         );
         resetPriority();
         recalculate(true);

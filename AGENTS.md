@@ -288,12 +288,16 @@ mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=TASK_SPECIFIC_TEMP_DIRECTORY" -Dr
 - Run portable JavaFX tests in an active graphical session.
 - Run macOS-specific JavaFX or native-integration tests in an active graphical
   macOS session.
+- If the current sandbox is known to have no display, do not attempt JavaFX
+  integration tests there; run them directly in the active desktop session.
 - Replace `TASK_SPECIFIC_TEMP_DIRECTORY` with a task-specific directory under
   the platform's temporary directory.
 - Use `-DreuseForks=false` when suites that call `Platform.exit()` run together.
 - `No toolkit found`, Prism failures, CVDisplayLink failures,
   `Screen.getMainScreen` failures, and cache `.lock` failures can be environment
-  problems. Confirm this by rerunning in a valid desktop session.
+  problems. If an unexpected sandbox run reaches `Screen.getMainScreen` with an
+  empty screen list, rerun the unchanged test in a desktop session and record
+  the sandbox failure as an environment limit.
 - Do not report a skipped test as passed.
 
 ### GPU tests

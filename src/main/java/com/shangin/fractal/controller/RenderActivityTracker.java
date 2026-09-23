@@ -56,11 +56,17 @@ final class RenderActivityTracker {
         }
     }
 
-    void fail(long renderGeneration) {
+    boolean fail(long renderGeneration) {
         if (active && renderGeneration == generation) {
             publish(RenderStatus.State.FAILED, 0);
             setActive(false);
+            return true;
         }
+        return false;
+    }
+
+    boolean isCurrent(long renderGeneration) {
+        return active && renderGeneration == generation;
     }
 
     void cancel() {

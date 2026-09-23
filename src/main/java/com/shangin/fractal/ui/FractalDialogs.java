@@ -129,7 +129,7 @@ final class FractalDialogs {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("FractalUI Help");
         Label content = new Label("Explore the fractal\n\n"
-                + "Drag to move. Use the arrow keys to pan with the keyboard.\n"
+                + "Drag to move. Use arrow keys to pan, Page Up and Page Down to zoom, and Home to reset the view.\n"
                 + "Scroll with a mouse to zoom toward the pointer.\n"
                 + "On a trackpad, pinch to zoom and scroll with two fingers to pan.\n\n"
                 + "Use View to zoom, reset the view, enter coordinates, or go full screen.\n"

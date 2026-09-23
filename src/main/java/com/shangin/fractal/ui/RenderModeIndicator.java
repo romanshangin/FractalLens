@@ -24,6 +24,7 @@ final class RenderModeIndicator extends Label {
     private boolean deepZoom;
     private boolean deepAntialiasing;
     private RenderStatus status = new RenderStatus(RenderStatus.State.IDLE, 0);
+    private double progress;
 
     RenderModeIndicator() {
         // Reserve the same space for both states so the capsule does not jump.
@@ -71,9 +72,24 @@ final class RenderModeIndicator extends Label {
         update();
     }
 
+    void setProgress(double progress) {
+        double bounded = Math.max(0.0, Math.min(1.0, progress));
+        if ((int) (this.progress * 100) == (int) (bounded * 100)) return;
+        this.progress = bounded;
+        update();
+    }
+
     private void update() {
         String mode = deepZoom ? "Deep Zoom" : "Standard";
-        setText(mode);
+        String state = switch (status.state()) {
+            case IDLE -> "Waiting";
+            case RENDERING -> progress >= 1.0 ? "Refining…"
+                    : "Rendering " + (int) (progress * 100) + "%";
+            case COMPLETE -> "Complete " + formatElapsed(status.elapsedNanos());
+            case CANCELLED -> "Interrupted";
+            case FAILED -> "Failed";
+        };
+        setText(mode + " · " + state);
         String color = deepZoom ? "#e89a91" : "#7dc9e8";
         dot.setFill(Color.web(color));
         spinner.setStyle("-fx-progress-color: " + color + "; -fx-padding: 0;");
@@ -82,7 +98,7 @@ final class RenderModeIndicator extends Label {
         dot.setVisible(!rendering);
         String timing = switch (status.state()) {
             case IDLE -> "Waiting for the first render";
-            case RENDERING -> "Rendering…";
+            case RENDERING -> state;
             case COMPLETE -> "Render time: " + formatElapsed(status.elapsedNanos());
             case CANCELLED -> "Render interrupted";
             case FAILED -> "Render could not be completed";

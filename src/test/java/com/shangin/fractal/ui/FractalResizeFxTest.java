@@ -2,23 +2,38 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.controller.FractalRenderController;
+import com.shangin.fractal.controller.RenderStatus;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.render.RenderPriority;
+import com.shangin.fractal.render.FractalRenderService;
+import com.shangin.fractal.render.RenderBackend;
+import com.shangin.fractal.render.RenderFrame;
+import com.shangin.fractal.render.RenderRegion;
+import com.shangin.fractal.render.TileTimingStats;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
+import javafx.collections.ListChangeListener;
+import javafx.scene.Scene;
+import javafx.scene.control.DialogPane;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.stage.Stage;
+import javafx.stage.Window;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.concurrent.*;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -42,6 +57,196 @@ class FractalResizeFxTest {
         FutureTask<T> task = new FutureTask<>(action);
         Platform.runLater(task);
         return task.get(15, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void renderBadgeShowsProgressAndLatestOutcomeWithoutHover() throws Exception {
+        fx(() -> {
+            RenderModeIndicator badge = new RenderModeIndicator();
+            badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
+            badge.setProgress(0.42);
+            assertTrue(badge.getText().contains("Rendering 42%"));
+            badge.setProgress(1.0);
+            assertTrue(badge.getText().contains("Refining"));
+            badge.setRenderStatus(new RenderStatus(RenderStatus.State.FAILED, 0));
+            assertTrue(badge.getText().contains("Failed"));
+            badge.setRenderStatus(new RenderStatus(RenderStatus.State.COMPLETE, 15_000_000));
+            assertTrue(badge.getText().contains("Complete 15 ms"));
+            badge.setProgress(0.0);
+            badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
+            assertTrue(badge.getText().contains("Rendering 0%"));
+            return null;
+        });
+    }
+
+    @Test
+    void canvasKeyboardNavigationUsesCameraAndIgnoresModifiedKeys() throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE, false));
+        var stage = fx(javafx.stage.Stage::new);
+        try {
+            fx(() -> {
+                stage.setScene(new javafx.scene.Scene(view, 320, 240));
+                stage.show();
+                return null;
+            });
+            FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+            awaitSurfaceComplete(surface);
+            fx(() -> {
+                Viewport initial = view.sceneSnapshot().viewport();
+                view.fireEvent(key(KeyCode.PAGE_UP, false));
+                Viewport zoomed = view.sceneSnapshot().viewport();
+                assertNotEquals(initial, zoomed);
+                view.fireEvent(key(KeyCode.RIGHT, false));
+                assertNotEquals(zoomed, view.sceneSnapshot().viewport());
+                Viewport panned = view.sceneSnapshot().viewport();
+                view.fireEvent(key(KeyCode.LEFT, true));
+                assertEquals(panned, view.sceneSnapshot().viewport());
+                view.fireEvent(key(KeyCode.HOME, false));
+                assertEquals(initial, view.sceneSnapshot().viewport());
+                view.fireEvent(key(KeyCode.PAGE_UP, false));
+                assertNotEquals(initial, view.sceneSnapshot().viewport());
+                Viewport zoomedAgain = view.sceneSnapshot().viewport();
+                view.fireEvent(key(KeyCode.PAGE_DOWN, false));
+                assertNotEquals(zoomedAgain, view.sceneSnapshot().viewport());
+                return null;
+            });
+        } finally {
+            fx(() -> { view.close(); stage.close(); return null; });
+        }
+    }
+
+    private static KeyEvent key(KeyCode code, boolean shortcut) {
+        return new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code,
+                false, shortcut, false, shortcut);
+    }
+
+    @Test
+    void renderFailureShowsFailedStatusAndApplicationError() throws Exception {
+        RenderBackend failingBackend = new RenderBackend() {
+            @Override
+            public RenderFrame render(RenderFrame frame, BooleanSupplier cancelled,
+                                      Consumer<RenderRegion> regionCompleted,
+                                      Consumer<TileTimingStats> timingCompleted) {
+                throw new IllegalStateException("Controlled render failure");
+            }
+
+            @Override
+            public void close() {}
+        };
+        var store = new com.shangin.fractal.app.LastSessionStore(
+                temporaryDirectory.resolve("failure-session.json"));
+        Stage stage = fx(Stage::new);
+        MainView main = fx(() -> new MainView(stage, store,
+                new FractalRenderService(failingBackend)));
+        CountDownLatch dialogShown = new CountDownLatch(1);
+        ListChangeListener<Window> listener = change -> {
+            while (change.next()) {
+                for (Window added : change.getAddedSubList()) {
+                    if (added instanceof Stage alert && "Render failed".equals(alert.getTitle())) {
+                        dialogShown.countDown();
+                    }
+                }
+            }
+        };
+        try {
+            fx(() -> {
+                Window.getWindows().addListener(listener);
+                stage.setScene(new Scene(main, 320, 240));
+                stage.show();
+                return null;
+            });
+            assertTrue(dialogShown.await(10, TimeUnit.SECONDS),
+                    "A failed render must open an application error dialog");
+            fx(() -> {
+                Stage alert = Window.getWindows().stream()
+                        .filter(window -> window instanceof Stage shown
+                                && "Render failed".equals(shown.getTitle()))
+                        .map(window -> (Stage) window).findFirst().orElseThrow();
+                DialogPane pane = (DialogPane) alert.getScene().getRoot();
+                assertEquals("Render failed", pane.getHeaderText());
+                assertEquals("The image could not be rendered: Controlled render failure",
+                        pane.getContentText());
+                FractalView view = (FractalView) main.getCenter();
+                RenderModeIndicator badge = view.getChildrenUnmodifiable().stream()
+                        .filter(RenderModeIndicator.class::isInstance)
+                        .map(RenderModeIndicator.class::cast).findFirst().orElseThrow();
+                assertTrue(badge.getText().contains("Failed"));
+                return null;
+            });
+        } finally {
+            fx(() -> {
+                Window.getWindows().removeListener(listener);
+                Window.getWindows().stream()
+                        .filter(window -> window instanceof Stage alert
+                                && "Render failed".equals(alert.getTitle()))
+                        .toList().forEach(Window::hide);
+                main.close();
+                stage.close();
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void recolorFailureShowsApplicationErrorAfterCompletedRender() throws Exception {
+        var store = new com.shangin.fractal.app.LastSessionStore(
+                temporaryDirectory.resolve("recolor-failure-session.json"));
+        Stage stage = fx(Stage::new);
+        MainView main = fx(() -> new MainView(stage, store, new FractalRenderService(),
+                (service, frame, coloring, colors, backend) -> {
+                    throw new IllegalStateException("Controlled recolor failure");
+                }));
+        FractalView view = (FractalView) main.getCenter();
+        CountDownLatch dialogShown = new CountDownLatch(1);
+        ListChangeListener<Window> listener = change -> {
+            while (change.next()) {
+                for (Window added : change.getAddedSubList()) {
+                    if (added instanceof Stage alert && "Render failed".equals(alert.getTitle())) {
+                        dialogShown.countDown();
+                    }
+                }
+            }
+        };
+        try {
+            fx(() -> {
+                stage.setScene(new Scene(main, 320, 240));
+                stage.show();
+                return null;
+            });
+            FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+            awaitSurfaceComplete(surface);
+            fx(() -> {
+                Window.getWindows().addListener(listener);
+                view.setPalette(PalettePreset.FIRE);
+                return null;
+            });
+            assertTrue(dialogShown.await(10, TimeUnit.SECONDS),
+                    "A failed recolor must open an application error dialog");
+            fx(() -> {
+                Stage alert = Window.getWindows().stream()
+                        .filter(window -> window instanceof Stage shown
+                                && "Render failed".equals(shown.getTitle()))
+                        .map(window -> (Stage) window).findFirst().orElseThrow();
+                DialogPane pane = (DialogPane) alert.getScene().getRoot();
+                assertEquals("Render failed", pane.getHeaderText());
+                assertEquals("The image could not be rendered: Controlled recolor failure",
+                        pane.getContentText());
+                assertTrue(surface.hasCompletedFrame(),
+                        "A recolor error must leave the completed frame available");
+                return null;
+            });
+        } finally {
+            fx(() -> {
+                Window.getWindows().removeListener(listener);
+                Window.getWindows().stream()
+                        .filter(window -> window instanceof Stage alert
+                                && "Render failed".equals(alert.getTitle()))
+                        .toList().forEach(Window::hide);
+                main.close();
+                stage.close();
+                return null;
+            });
+        }
     }
 
     @Test
