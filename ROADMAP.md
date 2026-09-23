@@ -56,13 +56,16 @@ delivery foundation should be completed first.
   after an interrupted write. The version 2 format, version 1 migration,
   platform session locations and recovery contract are documented in
   `SESSION_FORMAT.md`.
-- [ ] **P0.5. Define platform validation lanes.** Treat the Windows runtime
+- [x] **P0.5. Define platform validation lanes.** Treat the Windows runtime
   work in 8.7 and Intel/AMD Mac work in 8.8 as hardware-backed infrastructure
   tracks. They may run when hardware is available and do not block the
   CPU-default macOS artifact, but they must precede enabling GPU modes on those
-  platforms.
+  platforms. The manual native workflow now has a physical Intel Mac x64 lane;
+  the Windows x64 lane remains a CPU-fallback contract until its GPU runtime is
+  implemented. `CI.md` defines the runner, evidence, and promotion boundaries.
+  Neither 8.7 nor 8.8 hardware acceptance is complete.
 
-- [ ] **P0 exit criterion:** a clean checkout is tested automatically, produces a
+- [x] **P0 exit criterion:** a clean checkout is tested automatically, produces a
   traceable installable artifact, restores a versioned scene safely, and the
   current bounded-mask candidate has a recorded retain/reject decision.
 
@@ -119,10 +122,10 @@ delivery foundation should be completed first.
   plus opt-in native hardware lanes with retained reports. The workflows and
   runner contract are implemented in `.github/workflows` and `CI.md`; keep this
   item open until the hosted macOS/Windows jobs and configured self-hosted lane
-  have produced retained reports from the repository. This implementation is
-  limited to P0 item 1 and does not satisfy the P0 exit criterion: packaging,
-  scene restore and the open measurement decision remain separate required
-  work.
+  have produced retained reports from the repository. That implementation was
+  limited to P0 item 1 and did not satisfy the P0 exit criterion at that stage:
+  packaging, scene restore and the open measurement decision were separate
+  required work.
   - [x] Implement the portable and opt-in native workflow definitions, clean
     checkout checks, dependency caching, bounded diagnostics and retained test
     reports.
