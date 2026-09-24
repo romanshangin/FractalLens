@@ -54,6 +54,8 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--java", type=Path, required=True)
     parser.add_argument("--maven", default="mvn")
+    parser.add_argument("--working-tree", action="store_true",
+                        help="Freeze the current tracked source files, including uncommitted edits")
     args = parser.parse_args()
     java = args.java.absolute()
     revision = subprocess.check_output(["git", "rev-parse", "--verify", args.revision + "^{commit}"], cwd=ROOT, text=True).strip()
@@ -61,21 +63,41 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     source = output / "source"
     source.mkdir()
-    archive = output / "source.tar"
     manifest = "benchmarks/BASELINE_FIXTURES.csv"
     if subprocess.run(["git", "cat-file", "-e", revision + ":" + manifest],
                       cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
         manifest = "BASELINE_FIXTURES.csv"
-    with archive.open("xb") as f:
-        subprocess.run(["git", "archive", revision, "pom.xml", "src", manifest], cwd=ROOT, stdout=f, check=True)
-    with tarfile.open(archive) as tar:
-        # Explicit safe subset works on the system Python 3.9 too.
-        for member in tar.getmembers():
-            path = Path(member.name)
-            if path.is_absolute() or ".." in path.parts or not (member.isdir() or member.isfile()):
-                raise ValueError("Unsafe archive member: " + member.name)
-        tar.extractall(source)
-    archive.unlink()
+    if args.working_tree:
+        paths = subprocess.check_output(["git", "ls-files", "-z", "--", "pom.xml", "src", manifest,
+                                         "scripts/build-macos-menu"], cwd=ROOT)
+        for raw in paths.split(b"\0"):
+            if not raw:
+                continue
+            relative = Path(os.fsdecode(raw))
+            path = ROOT / relative
+            if path.is_file():
+                destination = source / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, destination)
+        source_hash = hashlib.sha256(json.dumps(files_digest(source), sort_keys=True).encode()).hexdigest()
+        revision += "+worktree-" + source_hash[:16]
+    else:
+        archive = output / "source.tar"
+        archive_paths = ["pom.xml", "src", manifest]
+        # Older benchmark revisions predate the native menu build script.
+        if subprocess.run(["git", "cat-file", "-e", revision + ":scripts/build-macos-menu"],
+                          cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            archive_paths.append("scripts/build-macos-menu")
+        with archive.open("xb") as f:
+            subprocess.run(["git", "archive", revision, *archive_paths], cwd=ROOT, stdout=f, check=True)
+        with tarfile.open(archive) as tar:
+            # Explicit safe subset works on the system Python 3.9 too.
+            for member in tar.getmembers():
+                path = Path(member.name)
+                if path.is_absolute() or ".." in path.parts or not (member.isdir() or member.isfile()):
+                    raise ValueError("Unsafe archive member: " + member.name)
+            tar.extractall(source)
+        archive.unlink()
     env = clean_environment(java)
     command = [args.maven, "-o", "-q", "-DskipTests", "test-compile", "dependency:build-classpath",
                "-Dmdep.includeScope=test", "-Dmdep.outputFile=target/baseline-classpath.txt"]
