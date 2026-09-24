@@ -76,8 +76,10 @@ delivery foundation should be completed first.
   Current render and recolor failures use the application error dialog. The
   viewport badge shows exact base-frame progress and completion/refinement
   status; arrow keys, Page Up/Down, and Home navigate the focused canvas.
-- [ ] **P1.2.** Run the retained-snapshot preparation experiment in 9.2; accept
-  it only if first-tile and full-frame behavior both pass.
+- [x] **P1.2.** Run the retained-snapshot preparation experiment in 9.2; accept
+  it only if first-tile and full-frame behavior both pass. The on-demand
+  tile-coloring candidate was rejected: exact pixels matched, but the joint
+  timing gate did not pass. See [the decision](benchmarks/RETAINED_SNAPSHOT_PREPARATION.md).
 - [ ] **P1.3.** Measure JavaFX dirty rectangles, callback coalescing, staging
   reuse and redundant copies from 9.3. This is the next end-to-end publication
   candidate after the validity-mask decision.
@@ -664,7 +666,10 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   shared-cache contention. The 30-sample retained-Julia follow-up completes
   about 10x faster, but the first tile arrives about 5 ms later. Compare
   on-demand tile coloring with a compact immutable lookup; verify palette
-  reuse, additional memory and first/full publication together.
+  reuse, additional memory and first/full publication together. The on-demand
+  tile-coloring candidate preserved exact pixels but missed the joint timing
+  gate in 30 headless process pairs, so it was rejected and removed. The
+  preparation barrier remains; see [the P1.2 experiment](benchmarks/RETAINED_SNAPSHOT_PREPARATION.md).
 - [ ] Compare an AA-enabled distance/candidate sidecar in the base pass with the
   current second derivative-orbit calculation for non-edge pixels. Include
   base-pass/first-publication cost and keep image-space edge detection for
