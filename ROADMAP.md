@@ -80,9 +80,11 @@ delivery foundation should be completed first.
   it only if first-tile and full-frame behavior both pass. The on-demand
   tile-coloring candidate was rejected: exact pixels matched, but the joint
   timing gate did not pass. See [the decision](benchmarks/RETAINED_SNAPSHOT_PREPARATION.md).
-- [ ] **P1.3.** Measure JavaFX dirty rectangles, callback coalescing, staging
-  reuse and redundant copies from 9.3. This is the next end-to-end publication
-  candidate after the validity-mask decision.
+- [x] **P1.3.** Measure JavaFX dirty rectangles, callback coalescing, staging
+  reuse and redundant copies from 9.3. A visible JavaFX probe characterized
+  local update/copy/buffer costs. The 30-pair end-to-end queued-callback
+  candidate failed its timing targets and was removed; no production change was
+  retained. See [the P1.3 decision](benchmarks/FX_PUBLICATION_P1_3.md).
 - [x] **P1.4.** Profile the concrete allocation candidates at the start of 9.4,
   especially immutable reference conversions and precise AA coordinate
   construction. The current-source JFR profile confirms both as substantial
@@ -719,6 +721,9 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   coalescing, reusable output/staging and avoided redundant recoloring/copies.
   Preserve refined pixels, exact reused spans and resize behavior. Validate
   through JavaFX; a faster kernel or direct buffer alone is insufficient.
+  The [P1.3 publication experiment](benchmarks/FX_PUBLICATION_P1_3.md)
+  characterized the local costs and rejected queued-callback coalescing at
+  the 30-pair end-to-end gate. A retained improvement remains open.
 
 - [ ] **Exit criterion:** each retained change improves its declared workloads and keeps
   overview, deep scenes, interaction and cancellation within the control budget.
