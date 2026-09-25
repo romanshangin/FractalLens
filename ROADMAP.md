@@ -83,9 +83,11 @@ delivery foundation should be completed first.
 - [ ] **P1.3.** Measure JavaFX dirty rectangles, callback coalescing, staging
   reuse and redundant copies from 9.3. This is the next end-to-end publication
   candidate after the validity-mask decision.
-- [ ] **P1.4.** Profile the concrete allocation candidates at the start of 9.4,
+- [x] **P1.4.** Profile the concrete allocation candidates at the start of 9.4,
   especially immutable reference conversions and precise AA coordinate
-  construction.
+  construction. The current-source JFR profile confirms both as substantial
+  deep-render allocation sites; see [the profile](benchmarks/ALLOCATION_PROFILE_9_4.md).
+  Optimization and its retain/reject gate remain open in 9.4.
 - [ ] **P1.5.** Promote every retained change through the portable/native/FX
   and sustained gates in 9.9; this is part of the change, not a later cleanup
   phase.
@@ -728,9 +730,11 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   tile-local delta bounds while retaining the existing strict accuracy controls.
   The [9.1 allocation profile](benchmarks/BASELINE_MEMORY_VALIDATION.md) identifies repeated
   precise AA coordinate construction and `ReferenceOrbit.cRealAsDouble` /
-  `cImaginaryAsDouble` conversions as concrete allocation candidates. First
-  evaluate caching immutable reference conversions and reusing exact coordinate
-  components; preserve BigDecimal operation order and the same sample controls.
+  `cImaginaryAsDouble` conversions as concrete allocation candidates. The
+  [P1.4 profile](benchmarks/ALLOCATION_PROFILE_9_4.md) confirms their current
+  scope and fixture concentration. First evaluate caching immutable reference
+  conversions and reusing exact coordinate components; preserve BigDecimal
+  operation order and the same sample controls.
 - [ ] Evaluate reference and sampler/BLA sharing across base/AA and compatible
   navigation, plus bounded additional-reference reuse. Make ownership,
   precision, iteration capacity, coverage and eviction explicit; recompute
