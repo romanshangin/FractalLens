@@ -34,6 +34,12 @@ Follow all project-wide rules and constraints in `AGENTS.md`.
 4. When practical, establish whether the relevant tests pass before editing. If
    a relevant test already fails, record it as a baseline failure and do not
    attribute it to the new change unless evidence shows otherwise.
+5. Treat benchmark drivers that initialize JavaFX, including those launched by
+   scripts, as graphical runs under the `AGENTS.md` display rule. Before the
+   first JavaFX test or benchmark run, use an active desktop session when the
+   current sandbox is known to have no display; do not probe that sandbox by
+   waiting for JavaFX to fail. If desktop access is unavailable, report the
+   check as unverified.
 
 ## Plan non-trivial work
 

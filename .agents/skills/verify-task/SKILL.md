@@ -20,6 +20,11 @@ Follow the testing rules, subsystem constraints, and acceptance criteria in
    running the full portable suite required by `AGENTS.md` for a production-code
    change.
 5. For documentation-only changes, do not run unrelated application tests.
+6. Identify planned tests and benchmark scripts that initialize JavaFX before
+   executing them. Apply the `AGENTS.md` display rule to both: if the current
+   sandbox is known to have no display, run in an active desktop session from
+   the first attempt. If desktop access is unavailable, classify the check as
+   unverified without first attempting it in that sandbox.
 
 ## Run and assess checks
 
