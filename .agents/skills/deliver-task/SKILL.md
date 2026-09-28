@@ -20,6 +20,12 @@ rebasing, updating, pushing, or force-pushing the head branch. If a requested
 action depends on an unauthorized protected mutation, stop at that boundary and
 report the required action.
 
+When a short request says only "deliver" or names a roadmap item, treat the
+protected action set as unspecified. Complete read-only preflight, then ask
+which of commit, push, pull-request creation/update, merge, or close is
+authorized before performing any of those mutations. Do not infer the missing
+authorization from the existence of a task branch or a likely PR workflow.
+
 ## Preflight
 
 1. Inspect the state of every resource affected by the requested protected
@@ -43,6 +49,12 @@ report the required action.
      established safely, stop before mutating Git state and report the blocker.
    - Inspect the full diff and separate intended task changes from pre-existing
      or unrelated user-owned changes.
+   - Audit untracked content before staging. Benchmark output directories can
+     contain thousands of raw logs and process artifacts. Check file count,
+     aggregate size, generated-file policy, and whether each artifact is
+     required for reproducibility. Do not stage an entire directory merely
+     because its top-level name matches the task; stage an explicit reviewed
+     evidence set when raw output retention is not required.
    - Apply the verification gate when committing or delivering changed content
      and before merging. Confirm that `verify-task` completed the checks required
      by `AGENTS.md`. If a required check failed or remains unrun, report that gap
@@ -63,7 +75,16 @@ report the required action.
      validation-relevant files changed; documentation-only changes may reuse
      prior verification only when they cannot affect the validated behavior.
    - Run the final repository-hygiene checks and exclude generated output, IDE
-     metadata, temporary files, and unrelated benchmark artifacts.
+     metadata, temporary files, and unrelated benchmark artifacts. Run
+     `git diff --cached --check` after staging, not only before staging, and
+     classify whitespace findings in generated logs. Preserve a finding only
+     when the log is an intentional retained evidence artifact and document
+     that hygiene exception; otherwise remove the artifact before committing.
+   - If the sandbox cannot write `.git/index.lock`, `.git/FETCH_HEAD`, or other
+     repository metadata, request the minimal approved Git operation with
+     escalation rather than working around Git state files. Afterwards rerun
+     status and relevant SHA/ref checks; do not describe remote freshness as
+     verified when `git fetch` did not succeed.
 3. For metadata-only pull-request updates or close operations that do not change
    candidate context, inspect the pull request and required remote state only.
    Do not require unrelated local repository preflight or allow unrelated local
