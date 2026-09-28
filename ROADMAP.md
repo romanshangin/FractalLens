@@ -114,6 +114,55 @@ delivery foundation should be completed first.
   The first-tile optimization opportunity remains open in 9.2; see
   [the P1.5 assessment](benchmarks/P1_5_PROMOTION_VALIDATION.md).
 
+### P1.6. Triage the full-project IntelliJ inspection report
+
+- [ ] **P1.6. Triage the full-project IntelliJ inspection report.** The
+  2026-09-28 `Inspect Code` run used the `Project Default` profile, whole
+  project scope, and included test sources. IDEA displayed 25,829 items. Its
+  SARIF export contains 25,810 results (18 errors, 293 warnings, and 25,499
+  notes); 19 displayed items are absent from the export and must be reconciled
+  before claiming complete item-by-item closure. Most results come from
+  proofreading benchmark outputs, retained source snapshots, and historical
+  evidence rather than production code. Treat inspection levels as tool
+  severity only; confirm runtime and product impact before assigning a fix.
+  Work in this order:
+  - [ ] Audit possible correctness and lifecycle findings first: module API
+    visibility (62), JavaFX reflective access (8), nullability/data flow (6),
+    unmanaged `AutoCloseable` use (33), exact `BigDecimal.divide` calls (2),
+    waits in loops (3), ignored return values (1), and always-returning
+    methods (2). Trace each warning to its caller and lifecycle; fix confirmed
+    defects and add focused regression coverage. Record intentional contracts
+    and false positives without weakening module, precision, or resource
+    guarantees.
+  - [ ] Resolve framework and markup findings: validate the 12 CSS parser
+    errors against JavaFX CSS (`:focused` and `derive(...)` are framework
+    constructs), the 81 unknown-property warnings, and 28 unused selectors
+    against actual dialog styles; inspect 6 XML errors in retained benchmark
+    SVGs and preserve historical evidence. Fix product defects or adjust the
+    inspection scope/profile for unsupported dialects and historical artifacts.
+  - [ ] Review remaining maintainability warnings in production and benchmark
+    code, including visibility leaks (62), parameter/dataflow warnings (10
+    same-value parameters, 6 field mutability, 4 field-to-local), exception
+    printing (5), unused declarations/parameters (3), redundant string
+    conversions (3), `Optional` fields/parameters (4), and the remaining
+    low-count style/API suggestions. Apply only changes that preserve public
+    contracts and measured benchmark behavior.
+  - [ ] Reduce report noise by excluding generated benchmark outputs and
+    retained controller-source snapshots from proofreading, and by limiting
+    language-specific inspections to supported source dialects. The captured
+    report includes 25,178 spelling notes, 96 grammar notes, 124 style notes,
+    72 Markdown table notes, and 11 HTTP-link notes (mostly in vendored
+    license text); review English repository prose selectively instead of
+    applying bulk spelling changes to machine output, snapshots, or licenses.
+  - [ ] Rerun the documented project inspection after triage, export the result,
+    reconcile IDEA and SARIF totals, and record fixed findings plus accepted
+    false positives/noise. Close this item only when every high-impact
+    candidate is resolved or evidenced as intentional and remaining actionable
+    findings have an explicit disposition.
+  - The complete exported rule inventory, grouped by criticality with counts
+    and example locations, is in
+    [the IntelliJ inspection report](benchmarks/INTELLIJ_INSPECTION_20260928.md).
+
 ### P2. Product foundation and user workflows
 
 - [ ] **P2.1.** Complete iteration/Julia editing and the zoom/iteration presentation in
