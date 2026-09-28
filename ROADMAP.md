@@ -90,9 +90,29 @@ delivery foundation should be completed first.
   construction. The current-source JFR profile confirms both as substantial
   deep-render allocation sites; see [the profile](benchmarks/ALLOCATION_PROFILE_9_4.md).
   Optimization and its retain/reject gate remain open in 9.4.
-- [ ] **P1.5.** Promote every retained change through the portable/native/FX
+- [x] **P1.5.** Promote every retained change through the portable/native/FX
   and sustained gates in 9.9; this is part of the change, not a later cleanup
-  phase.
+  phase. The retained CPU AA path passed a current-source 652-second exact
+  navigation/memory diagnostic and applicable portable/macOS FX tests; an
+  initial native run passed and a final native rerun passed in an active
+  desktop session.
+  Seven current-source first-tile candidates were measured against a frozen
+  control. D passed headless and cold-startup gates but its 120-pair JavaFX
+  confirmation left two fresh-AA first-tile controls inconclusive. E and F
+  each passed the retained first-tile target, but their predeclared screens
+  left retained full AA inconclusive against the 5% limit. G failed the
+  retained first-tile target in its 60-pair headless screen. All were removed.
+  The owner explicitly accepted the original retained-Julia first-tile cost
+  (about 5 ms) as an exception for the existing cache optimization. Exact
+  output, portable, applicable macOS FX/native and sustained checks passed.
+  A current-source comparison against the pre-optimization AA path passed all
+  eight headless timing groups and all 16 JavaFX AA groups. Three base-only
+  publication controls were initially inconclusive; a predeclared 240-pair
+  confirmation passed all four base-only controls and four AA controls. The
+  before/after 30-pair AC cold-startup gate also passed. This closes promotion
+  of the retained CPU AA change under the accepted first-tile exception.
+  The first-tile optimization opportunity remains open in 9.2; see
+  [the P1.5 assessment](benchmarks/P1_5_PROMOTION_VALIDATION.md).
 
 ### P2. Product foundation and user workflows
 
@@ -674,6 +694,8 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   tile-coloring candidate preserved exact pixels but missed the joint timing
   gate in 30 headless process pairs, so it was rejected and removed. The
   preparation barrier remains; see [the P1.2 experiment](benchmarks/RETAINED_SNAPSHOT_PREPARATION.md).
+  P1.5 accepts the existing cache's first-tile cost by owner exception; this
+  item remains open for any future improvement.
 - [ ] Compare an AA-enabled distance/candidate sidecar in the base pass with the
   current second derivative-orbit calculation for non-edge pixels. Include
   base-pass/first-publication cost and keep image-space edge detection for

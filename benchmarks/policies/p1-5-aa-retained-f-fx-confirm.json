@@ -1,0 +1,77 @@
+{
+  "version": "9.1-pairs-v1",
+  "purpose": "candidate",
+  "runner": "fx",
+  "sizes": "1512x982",
+  "fixtures": "julia-aa-retained,mandelbrot-aa-regular,julia-aa-regular,mandelbrot-overview",
+  "modes": "FAST,REFINED",
+  "process_pairs": 240,
+  "samples": 10,
+  "warmups": 3,
+  "timeout_seconds": 1800,
+  "metrics": [
+    {
+      "fixture": "julia-aa-retained",
+      "step": "render",
+      "metric": "first_aa_tile_ms",
+      "role": "target",
+      "max_ratio": 0.9
+    },
+    {
+      "fixture": "julia-aa-retained",
+      "step": "render",
+      "metric": "aa_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "julia-aa-retained",
+      "step": "render",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "mandelbrot-aa-regular",
+      "step": "render",
+      "metric": "first_aa_tile_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "mandelbrot-aa-regular",
+      "step": "render",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "julia-aa-regular",
+      "step": "render",
+      "metric": "first_aa_tile_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "julia-aa-regular",
+      "step": "render",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "mandelbrot-overview",
+      "step": "render",
+      "metric": "first_visible_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "mandelbrot-overview",
+      "step": "render",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    }
+  ]
+}

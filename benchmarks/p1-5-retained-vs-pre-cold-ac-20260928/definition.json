@@ -1,0 +1,14 @@
+{
+  "builds": {
+    "A": "f9280359f7d7ce943dac3686393a0485080719a4795f1116f3cb4b2d22fd86f7",
+    "B": "78128cad55c3ccd15d8183ed0b45baa1ed7591446fd92d1b9b984ba5a90c17d6"
+  },
+  "java_sha256": "a91e35c95afe1846984eeba5d11998f11dceb0843aec35802705a31ce970655a",
+  "probe_sha256": "6ca76e0b0ec133854a2653320084ac749f3403a28bad6375eb62ea90be02d13a",
+  "runner_sha256": "59efec74af5292313f88495264e2aaf3fdc7e2b006bb08b73e675209aea2def5",
+  "probe_class": "com/shangin/fractal/app/ColdStartupBenchmark.class",
+  "pairs": 30,
+  "max_ratio": 1.05,
+  "confidence": "5000 seeded paired bootstrap medians",
+  "scope": "process launch to Stage.show and first JavaFX layout pulse; no physical scanout"
+}

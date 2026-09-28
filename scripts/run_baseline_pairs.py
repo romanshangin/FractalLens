@@ -81,6 +81,7 @@ def main():
         raise ValueError("Benchmark driver changed between builds")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
+    (output / ".gitignore").write_text("javafx-cache-*/\n")
     (output / "tmp").mkdir()
     (output / "policy.json").write_text(json.dumps(policy, indent=2) + "\n")
     for label, manifest in manifests.items():
@@ -137,7 +138,7 @@ def main():
                 else:
                     command += ["--module-path", str(build / "classes") + os.pathsep + cp,
                                 "--patch-module", "com.shangin.fractal=" + str(build / "test-classes"),
-                                "--enable-native-access=javafx.graphics,org.lwjgl", "-Djavafx.cachedir=/tmp/fractalui-javafx-cache",
+                                "--enable-native-access=javafx.graphics,org.lwjgl", "-Djavafx.cachedir=" + str(output / ("javafx-cache-" + name)),
                                 "-Dprism.verbose=true", "-Dbaseline.fx.modes=" + policy["modes"],
                                 "-m", "com.shangin.fractal/com.shangin.fractal.render.BaselineFxBenchmark"]
                 record = dict(process_pair=pair, order=order, label=label, directory=name, command=command,

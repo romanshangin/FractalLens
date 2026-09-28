@@ -1,0 +1,21 @@
+{
+  "verdict": "pass",
+  "metrics": [
+    {
+      "metric": "stage_shown_ms_from_launch",
+      "median_ratio": 0.9926363514578278,
+      "ci95_low": 0.967752023530314,
+      "ci95_high": 1.0339611667906554,
+      "max_ratio": 1.05,
+      "verdict": "pass"
+    },
+    {
+      "metric": "first_layout_pulse_ms_from_launch",
+      "median_ratio": 0.993334160485533,
+      "ci95_low": 0.9603287419212658,
+      "ci95_high": 1.041743551755443,
+      "max_ratio": 1.05,
+      "verdict": "pass"
+    }
+  ]
+}
