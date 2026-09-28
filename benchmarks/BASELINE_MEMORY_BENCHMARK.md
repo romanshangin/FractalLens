@@ -111,6 +111,8 @@ Output directories and summaries must be new. `workload/SUCCESS` establishes
 frame conformance; `MONITOR_SUCCESS` additionally requires successful JVM exit
 and both NMT captures. Only the strict summary validates complete scope/event
 coverage. Failure leaves its evidence intact and cannot pass the monitor gate.
+The runner extracts JavaFX natives into a cache inside its fresh output directory;
+the generated `.gitignore` excludes those binaries from the saved evidence.
 
 The default eight fixtures cover seahorse, Julia AA, deep AA, direct/deep/reverse,
 25% overlap pan, resize/drag, direct cancellation and deep cancellation. This

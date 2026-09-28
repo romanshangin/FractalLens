@@ -36,7 +36,7 @@ def main():
         p.error("Positive seconds/cycles required")
     output = a.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    (output / ".gitignore").write_text("allocation.jfr\nallocation-events.json\n")
+    (output / ".gitignore").write_text("allocation.jfr\nallocation-events.json\njavafx-cache/\n")
     cp = (ROOT / "target/baseline-classpath.txt").read_text().strip()
     java = a.java.absolute()  # Keep the caller's selected JDK, never /usr/bin/java fallback.
     jcmd = java.parent / "jcmd"
@@ -44,7 +44,7 @@ def main():
     args = [str(java), "-Xmx4g", "-XX:NativeMemoryTracking=summary", "-Xlog:gc*:file=" + str(output / "gc.log") + ":time,uptime,level,tags",
             "--module-path", str(ROOT / "target/classes") + ":" + cp,
             "--patch-module", "com.shangin.fractal=" + str(ROOT / "target/test-classes"),
-            "--enable-native-access=javafx.graphics,org.lwjgl", "-Djavafx.cachedir=/tmp/fractalui-javafx-cache",
+            "--enable-native-access=javafx.graphics,org.lwjgl", "-Djavafx.cachedir=" + str(output / "javafx-cache"),
             "-Dprism.verbose=true", "-Dfractal.render.diagnostics=true", "-Dbaseline.output=" + str(output / "workload"),
             "-Dbaseline.revision=" + revision, "-Dbaseline.sizes=" + a.sizes,
             "-Dbaseline.fixtures=" + a.fixtures, "-Dbaseline.fx.modes=" + a.modes,

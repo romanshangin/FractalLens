@@ -23,7 +23,7 @@ import java.util.function.*;
 /** CPU fixture publication through production JavaFX buffers. No input-handler or scanout timer. */
 public final class BaselineFxBenchmark {
     private BaselineFxBenchmark() {}
-    static final String HEADER = "fixture,step,width,height,requested_mode,effective_mode,phase,run,request,backend,cap,reused_pixels,reuse_source,fx_dispatch_ms,plan_ms,first_backend_region_ms,backend_ms,base_complete_ms,first_base_publish_ms,base_full_publish_ms,aa_prepare_ms,aa_ms,first_aa_publish_ms,first_visible_publish_ms,full_publish_ms,first_post_layout_ms,full_post_layout_ms,cancel_request_ms,cancel_tail_ms,base_fx_work_ms,aa_fx_work_ms,complete,sample_hash,argb_hash,heap_before_bytes,heap_after_bytes,gc_count_delta,gc_ms_delta";
+    static final String HEADER = "fixture,step,width,height,requested_mode,effective_mode,phase,run,request,backend,cap,reused_pixels,reuse_source,fx_dispatch_ms,plan_ms,first_backend_region_ms,backend_ms,base_complete_ms,first_base_publish_ms,base_full_publish_ms,aa_prepare_ms,aa_ms,first_aa_publish_ms,first_aa_tile_ms,first_visible_publish_ms,full_publish_ms,first_post_layout_ms,full_post_layout_ms,cancel_request_ms,cancel_tail_ms,base_fx_work_ms,aa_fx_work_ms,complete,sample_hash,argb_hash,heap_before_bytes,heap_after_bytes,gc_count_delta,gc_ms_delta";
 
     public static void main(String[] args) throws Exception {
         int warmups = Integer.getInteger("baseline.warmups", 1), runs = Integer.getInteger("baseline.runs", 3);
@@ -181,7 +181,7 @@ public final class BaselineFxBenchmark {
                     "" + step.job().maxIterations(), "" + reused, reuseSource));
             for (long value : new long[]{delta(fxStart, start), delta(planned, fxStart), delta(firstRegion.get(), start),
                     delta(backendEnd, backendStart), delta(baseComplete, start), delta(firstBase, start), delta(baseFull, start),
-                    aaPrepare, delta(aaEnd, aaStart), delta(firstAa, start), delta(firstVisible, start), delta(fullPublish, start),
+                    aaPrepare, delta(aaEnd, aaStart), delta(firstAa, start), delta(firstAa, aaStart), delta(firstVisible, start), delta(fullPublish, start),
                     delta(firstPostLayout, start), delta(fullPostLayout, start), delta(cancel.get(), start),
                     cancel.get() < 0 ? -1 : delta(backendEnd, cancel.get()), baseFxWork, aaFxWork}) {
                 fields.add(value < 0 ? "-1" : String.format(Locale.ROOT, "%.6f", value / 1e6));

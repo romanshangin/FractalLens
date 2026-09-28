@@ -197,8 +197,8 @@ def summarize(directory):
     decision = "calibration_only" if policy["purpose"] == "calibration" else "pass" if all(s["timing_verdict"] == "pass" for s in summaries) else "fail" if any(s["timing_verdict"] == "fail" for s in summaries) else "inconclusive"
     result = dict(purpose=policy["purpose"], timing_verdict=decision, production_promotion="not_evaluated",
                   policy_sha256=hashlib.sha256((directory / "policy.json").read_bytes()).hexdigest(),
-                  confidence_method="Seeded hierarchical percentile bootstrap: resample process pairs, then matched samples within each selected pair; 5000 resamples. Three clusters give limited uncertainty resolution.",
-                  caveats="Fingerprints are not sample-by-sample conformance. Separate numerical/lifecycle checks and JavaFX/input/thermal evidence remain required for promotion. No stable p95 guarantee from only 30 samples.", metrics=summaries)
+                  confidence_method="Seeded hierarchical percentile bootstrap: resample process pairs, then matched samples within each selected pair; 5000 resamples. Process-pair counts are recorded per metric.",
+                  caveats="Fingerprints are not sample-by-sample conformance. Separate numerical/lifecycle checks and JavaFX/input/thermal evidence remain required for promotion. P95 stability depends on the recorded sample and process-pair counts.", metrics=summaries)
     with (directory / "pairs.csv").open("x", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=pairs[0], lineterminator="\n"); writer.writeheader(); writer.writerows(pairs)
     with (directory / "analysis.json").open("x") as f:

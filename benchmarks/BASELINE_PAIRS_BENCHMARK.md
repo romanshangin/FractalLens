@@ -63,7 +63,9 @@ The launcher strips injected Java/Maven option variables, fixes the heap at
 4 GiB, disables AA/scheduling instrumentation, GPU dispatch and native-memory
 tracking, and launches Java directly after building. Selected-JDK and fixture
 preflights run before timing. JavaFX requires graphical-session access; its log
-records the selected Prism pipeline.
+records the selected Prism pipeline. Each JavaFX JVM uses a fresh native cache
+inside its output directory. The cache files are ignored by that directory's
+`.gitignore`; the launch record preserves the path.
 
 A parent POSIX record lock holds the default Java benchmark lock for the entire
 campaign. Children use a private temporary directory for their own lock. Other

@@ -9,7 +9,7 @@ from pathlib import Path
 
 KEY = ("fixture", "step", "width", "height")
 SCOPES = ("fx_dispatch_ms", "plan_ms", "first_backend_region_ms", "backend_ms", "base_complete_ms",
-          "first_base_publish_ms", "base_full_publish_ms", "aa_prepare_ms", "aa_ms", "first_aa_publish_ms",
+          "first_base_publish_ms", "base_full_publish_ms", "aa_prepare_ms", "aa_ms", "first_aa_publish_ms", "first_aa_tile_ms",
           "first_visible_publish_ms", "full_publish_ms", "first_post_layout_ms", "full_post_layout_ms",
           "cancel_request_ms", "cancel_tail_ms", "base_fx_work_ms", "aa_fx_work_ms")
 
@@ -59,6 +59,9 @@ def summarize(directory):
                   or values["first_post_layout_ms"] < values["first_visible_publish_ms"]
                   or values["full_post_layout_ms"] < values["full_publish_ms"]):
                 raise ValueError(f"Missing or reversed publication boundaries: {key}")
+            if values["first_aa_tile_ms"] >= 0 and (values["aa_ms"] < values["first_aa_tile_ms"]
+                    or values["first_aa_publish_ms"] < values["first_aa_tile_ms"]):
+                raise ValueError(f"Invalid first AA tile boundary: {key}")
         measured = [r for r in rows if r["phase"] == "sample"]
         fingerprints = {(r["sample_hash"], r["argb_hash"]) for r in rows}
         if not cancelled and len(fingerprints) != 1:

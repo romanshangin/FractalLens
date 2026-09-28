@@ -75,6 +75,7 @@ generation cannot be attributed to its successor.
 | `aa_prepare_ms` | Same-frame cache preparation, when requested |
 | `aa_ms` | Measured AA call → success callback on FX, including tile publication |
 | `first_aa_publish_ms` | Request → first measured AA tile published |
+| `first_aa_tile_ms` | Measured AA call → first AA tile published, excluding same-frame cache preparation |
 | `first_visible_publish_ms` | Request → first target base, AA or promoted-frame publication |
 | `full_publish_ms` | Request → complete target publication, including enabled AA/preparation |
 | `first_post_layout_ms` / `full_post_layout_ms` | Request → next scene post-layout observation after the corresponding software publication |
