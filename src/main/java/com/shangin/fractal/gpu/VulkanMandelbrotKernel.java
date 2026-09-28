@@ -154,7 +154,8 @@ final class VulkanMandelbrotKernel implements AutoCloseable {
                 throw new GpuException("Mandelbrot shader compilation failed: "
                         + (result == 0 ? "no result" : shaderc_result_get_error_message(result)), false);
             }
-            ByteBuffer code = shaderc_result_get_bytes(result);
+            ByteBuffer code = CompiledShader.requireBytes(
+                    shaderc_result_get_bytes(result), "mandelbrot-precision.comp");
             shaderHash = verifySpirv(code);
             LongBuffer handle = stack.callocLong(1);
             check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default()

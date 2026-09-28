@@ -131,7 +131,8 @@ final class VulkanResidentMandelbrotKernel implements AutoCloseable {
                 throw new GpuException("Resident shader compilation failed: "
                         + (result == 0 ? "no result" : shaderc_result_get_error_message(result)), false);
             }
-            ByteBuffer code = shaderc_result_get_bytes(result);
+            ByteBuffer code = CompiledShader.requireBytes(
+                    shaderc_result_get_bytes(result), "mandelbrot-resident.comp");
             LongBuffer handle = stack.callocLong(1);
             check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack)
                     .sType$Default().pCode(code), null, handle), "resident shader module");
