@@ -401,7 +401,7 @@ public class FractalView extends StackPane {
         }
     }
 
-    public void setIterations(IterationSettings settings) {
+    void setIterations(IterationSettings settings) {
         dismissContextMenu();
         scene = scene.withIterations(settings);
         renderController.cancelCurrent();
@@ -409,7 +409,7 @@ public class FractalView extends StackPane {
         recalculate();
     }
 
-    public void setJuliaParameters(JuliaParameters parameters) {
+    void setJuliaParameters(JuliaParameters parameters) {
         dismissContextMenu();
         scene = scene.withJuliaParameters(parameters);
         if (scene.fractal() == FractalPreset.JULIA) {
