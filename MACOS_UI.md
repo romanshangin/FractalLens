@@ -95,9 +95,12 @@ The native JavaFX regression checks can be run with
 | View | Zoom In (⌘+, also ⌘=), Zoom Out (⌘−), Reset View (⌘0), Go to Coordinates… (⌘L), Enter/Exit Full Screen (⌃⌘F) |
 | Fractal | Mandelbrot, Julia, Multibrot, Burning Ship, Tricorn |
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette |
-| Render | Display Quality, Antialiasing Pattern, Deep Zoom Antialiasing |
+| Render | Display Quality, Antialiasing Pattern, Edit Iteration Settings…, Edit Julia Parameters…, Deep Zoom Antialiasing |
 | Window | Minimize (⌘M), Zoom |
 | Help | FractalUI Help, including pointer and keyboard navigation |
+
+Edit Iteration Settings is available for every fractal when rendering is idle.
+Edit Julia Parameters is enabled only for Julia.
 
 On other platforms the platform shortcut modifier replaces Command.
 Arrow keys pan the focused canvas after zooming in. Page Up and Page Down zoom
@@ -274,9 +277,13 @@ informational, with no click action, and is not included in PNG exports.
 
 The badge shows the base-render percentage, refinement state, and latest viewport
 render duration without requiring hover. The percentage counts exact ready pixels,
-including samples reused from a previous frame. Hovering adds the mode description
-and antialiasing details. Cancelled or failed work never appears as a completed
-duration; current render and recolor failures show an in-application error.
+including samples reused from a previous frame. Hovering adds the mode description,
+antialiasing details, current zoom, and the effective iteration limit. Zoom and
+iteration values below one million are shown as whole numbers; larger values use
+three significant digits in powers of ten, with an approximation mark when rounded.
+The hover text does not repeat the render duration. Cancelled or failed work
+never appears as a completed duration; current render and recolor failures show
+an in-application error.
 Enabling deep antialiasing after completion adds refinement time to the base
 render duration without counting the intervening idle time. Palette animation
 and export do not replace the viewport timing.

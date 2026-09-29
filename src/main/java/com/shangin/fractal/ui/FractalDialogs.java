@@ -3,6 +3,7 @@ package com.shangin.fractal.ui;
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.scene.JuliaParameters;
 import javafx.event.ActionEvent;
 import javafx.scene.Node;
 import javafx.scene.control.ButtonBar.ButtonData;
@@ -80,6 +81,57 @@ final class FractalDialogs {
         return dialog;
     }
 
+    static Optional<JuliaParameters> juliaParameters(Window owner, JuliaParameters current) {
+        return juliaParametersDialog(owner, current).showAndWait();
+    }
+
+    static Dialog<JuliaParameters> juliaParametersDialog(Window owner, JuliaParameters current) {
+        Dialog<JuliaParameters> dialog = new Dialog<>();
+        dialog.setTitle("Julia Parameters");
+        TextField real = new TextField(Double.toString(current.real()));
+        TextField imaginary = new TextField(Double.toString(current.imaginary()));
+        real.setId("julia-real");
+        imaginary.setId("julia-imaginary");
+        GridPane fields = new GridPane(12, 12);
+        fields.addRow(0, label("Real", real), real);
+        fields.addRow(1, label("Imaginary", imaginary), imaginary);
+        GridPane.setHgrow(real, Priority.ALWAYS);
+        GridPane.setHgrow(imaginary, Priority.ALWAYS);
+        Label error = errorLabel();
+        VBox content = new VBox(14, fields, error);
+        content.getStyleClass().add("dialog-body");
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().setPrefWidth(480);
+        ButtonType reset = new ButtonType("Reset to Defaults", ButtonData.OTHER);
+        ButtonType apply = new ButtonType("Apply", ButtonData.OK_DONE);
+        DialogAppearance.install(dialog, owner, () -> real);
+        Button confirm = DialogAppearance.buttons(dialog, apply, reset, ButtonType.CANCEL);
+        Button resetButton = (Button) dialog.getDialogPane().lookupButton(reset);
+        resetButton.addEventFilter(ActionEvent.ACTION, event -> {
+            event.consume();
+            JuliaParameters defaults = new JuliaParameters();
+            real.setText(Double.toString(defaults.real()));
+            imaginary.setText(Double.toString(defaults.imaginary()));
+            validateJuliaParameters(dialog, real, imaginary, error, false);
+            real.requestFocus();
+            real.selectAll();
+        });
+        confirm.addEventFilter(ActionEvent.ACTION, event -> {
+            if (!validateJuliaParameters(dialog, real, imaginary, error, true)) event.consume();
+        });
+        real.setOnAction(event -> { confirm.fire(); event.consume(); });
+        imaginary.setOnAction(event -> { confirm.fire(); event.consume(); });
+        for (TextField field : List.of(real, imaginary)) {
+            field.textProperty().addListener(ignored -> {
+                if (error.isVisible()) validateJuliaParameters(dialog, real, imaginary, error, false);
+            });
+        }
+        dialog.setResultConverter(button -> button == apply
+                ? new JuliaParameters(Double.parseDouble(real.getText().trim()),
+                        Double.parseDouble(imaginary.getText().trim())) : null);
+        return dialog;
+    }
+
     static Optional<List<ColorStop>> palette(Window owner, List<ColorStop> stops) {
         return paletteDialog(owner, stops).showAndWait();
     }
@@ -135,6 +187,7 @@ final class FractalDialogs {
                 + "Use View to zoom, reset the view, enter coordinates, or go full screen.\n"
                 + "Choose a formula in Fractal, then use Go to for interesting places in that fractal.\n"
                 + "Choose a palette in Color and antialiasing in Render.\n"
+                + "Edit iteration settings in Render. For Julia, edit both constant components there; Reset to Defaults restores -0.8 and 0.156 before Apply.\n"
                 + "Deep Zoom Antialiasing becomes available when zooming deeply into Mandelbrot.\n"
                 + "Animate Palette is available when Histogram Coloring and Orbit Trap are off.\n\n"
                 + "Use File → Export PNG… to save the rendered image.");
@@ -185,6 +238,32 @@ final class FractalDialogs {
         showError(dialog, error, "Enter a number for each coordinate. Scientific notation, such as 1.5e-12, is supported.");
         if (focus) { firstInvalid.requestFocus(); firstInvalid.selectAll(); }
         return false;
+    }
+
+    private static boolean validateJuliaParameters(Dialog<?> dialog, TextField real, TextField imaginary,
+                                                    Label error, boolean focus) {
+        TextField firstInvalid = null;
+        for (TextField field : List.of(real, imaginary)) {
+            boolean invalid = !isFiniteDouble(field.getText());
+            field.pseudoClassStateChanged(PseudoClass.getPseudoClass("invalid"), invalid);
+            field.setAccessibleHelp(invalid ? "Enter a finite number." : null);
+            if (invalid && firstInvalid == null) firstInvalid = field;
+        }
+        if (firstInvalid == null) {
+            clearError(dialog, error);
+            return true;
+        }
+        showError(dialog, error, "Enter finite real and imaginary values.");
+        if (focus) { firstInvalid.requestFocus(); firstInvalid.selectAll(); }
+        return false;
+    }
+
+    private static boolean isFiniteDouble(String text) {
+        try {
+            return Double.isFinite(Double.parseDouble(text.trim()));
+        } catch (NumberFormatException exception) {
+            return false;
+        }
     }
 
     private static void showError(Dialog<?> dialog, Label error, String message) {

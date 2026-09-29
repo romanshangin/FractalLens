@@ -23,6 +23,8 @@ then falls back to the default Mandelbrot scene.
 - the fractal preset;
 - viewport center and scale as decimal strings;
 - base and per-zoom iteration settings;
+- Julia constant real and imaginary components (defaulting to -0.8 and 0.156
+  when absent from older version 2 sessions);
 - palette identity, editable ARGB stops, color scale, offset, histogram mode
   and orbit trap;
 - interactive sampling pattern and render mode.

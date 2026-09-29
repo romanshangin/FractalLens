@@ -3,6 +3,7 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.formula.FractalFormula;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.scene.FractalScene;
 
 import java.util.Objects;
 import java.util.Map;
@@ -51,6 +52,20 @@ public final class FormulaDefinition {
         return new FormulaDefinition(
                 preset.name(), preset, orbitTrap, parameters,
                 preset::createFormula, preset);
+    }
+
+    public static FormulaDefinition forScene(FractalScene scene) {
+        Objects.requireNonNull(scene);
+        if (scene.fractal() != FractalPreset.JULIA) {
+            return forPreset(scene.fractal(), scene.coloring().orbitTrap());
+        }
+        double real = scene.juliaParameters().real();
+        double imaginary = scene.juliaParameters().imaginary();
+        return new FormulaDefinition(
+                scene.fractal().name(), scene.fractal(), scene.coloring().orbitTrap(),
+                Map.of("cReal", real, "cImaginary", imaginary),
+                () -> new com.shangin.fractal.formula.JuliaFormula(real, imaginary),
+                scene.fractal());
     }
 
     /** Compatibility factory for tests and extension formulas outside presets. */

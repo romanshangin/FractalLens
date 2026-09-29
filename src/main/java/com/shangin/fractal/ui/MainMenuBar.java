@@ -9,6 +9,7 @@ import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.SamplingPattern;
+import com.shangin.fractal.scene.IterationSettings;
 import javafx.application.Platform;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Menu;
@@ -17,6 +18,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextInputControl;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -48,6 +50,7 @@ final class MainMenuBar extends MenuBar {
     private boolean deepZoom;
     private boolean exporting;
     private boolean rendering = true;
+    private FractalPreset currentFractal;
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalPreset initialFractal,
                 PalettePreset initialPalette, Runnable onExport) {
@@ -59,6 +62,7 @@ final class MainMenuBar extends MenuBar {
         this.stage = stage;
         this.fractalView = fractalView;
         FractalPreset initialFractal = initialScene.fractal();
+        currentFractal = initialFractal;
         PalettePreset initialPalette = initialScene.coloring().palette();
         this.paletteStops = initialScene.coloring().paletteStops();
         this.orbitTrap = initialScene.coloring().orbitTrap();
@@ -85,6 +89,7 @@ final class MainMenuBar extends MenuBar {
                 fullScreen.setText(active ? "Exit Full Screen" : "Enter Full Screen"));
         view.getItems().addAll(new SeparatorMenuItem(), fullScreen);
         Menu fractal = choices("Fractal", FractalPreset.values(), initialFractal, new ToggleGroup(), preset -> {
+            currentFractal = preset;
             fractalView.setFractal(preset);
             updateDestinations(preset);
             stage.setTitle(preset + " — FractalUI");
@@ -119,6 +124,9 @@ final class MainMenuBar extends MenuBar {
                 choices("Antialiasing Pattern", SamplingPattern.values(),
                         initialScene.antialiasing().samplingPattern(),
                         new ToggleGroup(), fractalView::setSamplingPattern),
+                new SeparatorMenuItem(),
+                command("Edit Iteration Settings…", null, this::showIterations),
+                command("Edit Julia Parameters…", null, this::showJuliaParameters),
                 new SeparatorMenuItem(), deepAntialiasing);
         Menu window = new Menu("Window", null,
                 command("Minimize", shortcut(KeyCode.M), () -> stage.setIconified(true)),
@@ -172,6 +180,39 @@ final class MainMenuBar extends MenuBar {
         export.setDisable(exporting || !fractalView.hasCompletedFrame());
         deepAntialiasing.setDisable(!deepZoom);
         animation.setDisable(histogram.isSelected() || orbitTrap != OrbitTrap.NONE);
+        render.getItems().stream()
+                .filter(item -> "Edit Julia Parameters…".equals(item.getText()))
+                .forEach(item -> item.setDisable(rendering || currentFractal != FractalPreset.JULIA));
+    }
+
+    private void showIterations() {
+        FractalScene scene = fractalView.sceneSnapshot();
+        TextInputDialog base = new TextInputDialog(Integer.toString(scene.iterations().baseIterations()));
+        base.setTitle("Iteration settings");
+        base.setHeaderText("Base iteration count");
+        base.setContentText("Iterations:");
+        var baseValue = base.showAndWait();
+        if (baseValue.isEmpty()) return;
+        TextInputDialog increment = new TextInputDialog(Integer.toString(scene.iterations().iterationsPerZoomLevel()));
+        increment.setTitle("Iteration settings");
+        increment.setHeaderText("Additional iterations per zoom level");
+        increment.setContentText("Iterations per zoom:");
+        var incrementValue = increment.showAndWait();
+        if (incrementValue.isEmpty()) return;
+        try {
+            fractalView.setIterations(new IterationSettings(
+                    Integer.parseInt(baseValue.get().trim()), Integer.parseInt(incrementValue.get().trim())));
+        } catch (RuntimeException exception) {
+            FractalDialogs.messageDialog(stage, javafx.scene.control.Alert.AlertType.ERROR,
+                    "Invalid iteration settings", "Invalid iteration settings",
+                    "Enter a positive base count and a non-negative zoom increment.").showAndWait();
+        }
+    }
+
+    private void showJuliaParameters() {
+        if (currentFractal != FractalPreset.JULIA) return;
+        FractalDialogs.juliaParameters(stage, fractalView.sceneSnapshot().juliaParameters())
+                .ifPresent(fractalView::setJuliaParameters);
     }
 
     private void showCoordinates() {

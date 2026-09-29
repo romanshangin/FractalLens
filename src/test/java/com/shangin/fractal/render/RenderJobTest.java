@@ -3,6 +3,9 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.JuliaParameters;
+import com.shangin.fractal.coloring.PalettePreset;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -39,6 +42,22 @@ class RenderJobTest {
         assertEquals(first.hashCode(), second.hashCode());
         assertNotEquals(first, FormulaDefinition.forPreset(
                 FractalPreset.MANDELBROT, OrbitTrap.POINT));
+    }
+
+    @Test
+    void juliaSceneParametersChangeFormulaIdentityOnlyWhenValuesChange() {
+        FractalScene scene = FractalScene.create(FractalPreset.JULIA, PalettePreset.ICE)
+                .withJuliaParameters(new JuliaParameters(-0.4, 0.6));
+        FormulaDefinition first = FormulaDefinition.forScene(scene);
+        FormulaDefinition second = FormulaDefinition.forScene(scene.withViewport(
+                new Viewport(0.1, 0.2, 1.2)));
+
+        assertEquals(first, second);
+        assertEquals(first.hashCode(), second.hashCode());
+        assertEquals(-0.4, first.parameters().get("cReal"));
+        assertEquals(0.6, first.parameters().get("cImaginary"));
+        assertNotEquals(first, FormulaDefinition.forScene(scene.withJuliaParameters(
+                new JuliaParameters(-0.8, 0.156))));
     }
 
     @Test

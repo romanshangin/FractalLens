@@ -72,11 +72,48 @@ class FractalResizeFxTest {
             assertTrue(badge.getText().contains("Failed"));
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.COMPLETE, 15_000_000));
             assertTrue(badge.getText().contains("Complete 15 ms"));
+            badge.setZoom(new java.math.BigDecimal("1234567"));
+            badge.setIterations(1_234_567);
+            assertTrue(badge.getTooltip().getText().contains("Zoom: ≈1.23 × 10^6"));
+            assertTrue(badge.getTooltip().getText().contains("Iterations: ≈1.23 × 10^6"));
+            assertFalse(badge.getTooltip().getText().contains("Render time"));
+            assertFalse(badge.getTooltip().getText().contains("15 ms"));
             badge.setProgress(0.0);
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
             assertTrue(badge.getText().contains("Rendering 0%"));
             return null;
         });
+    }
+
+    @Test
+    void renderBadgeTooltipTracksTheRenderedSceneAfterZoom() throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE, false));
+        Stage stage = fx(Stage::new);
+        try {
+            fx(() -> {
+                stage.setScene(new Scene(view, 320, 240));
+                stage.show();
+                view.setOnZoomChanged(ignored -> {});
+                return null;
+            });
+            FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+            awaitSurfaceComplete(surface);
+            changeView(view, surface, () -> {
+                view.zoom(true);
+                view.zoom(true);
+            });
+            fx(() -> {
+                RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
+                String tooltip = badge.getTooltip().getText();
+                int effectiveIterations = surface.completedRender().frame().request().maxIterations();
+                assertTrue(tooltip.contains("Zoom: 2"));
+                assertTrue(tooltip.contains("Iterations: " + RenderValueFormat.iterations(effectiveIterations)));
+                assertFalse(tooltip.contains("Render time"));
+                return null;
+            });
+        } finally {
+            fx(() -> { view.close(); stage.close(); return null; });
+        }
     }
 
     @Test
@@ -92,6 +129,12 @@ class FractalResizeFxTest {
             FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
             awaitSurfaceComplete(surface);
             fx(() -> {
+                RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
+                int iterations = surface.completedRender().frame().request().maxIterations();
+                assertEquals(2, view.getChildrenUnmodifiable().size(),
+                        "The render badge must be the only canvas readout");
+                assertTrue(badge.getTooltip().getText().contains("Zoom: 1"));
+                assertTrue(badge.getTooltip().getText().contains("Iterations: " + iterations));
                 Viewport initial = view.sceneSnapshot().viewport();
                 view.fireEvent(key(KeyCode.PAGE_UP, false));
                 Viewport zoomed = view.sceneSnapshot().viewport();
