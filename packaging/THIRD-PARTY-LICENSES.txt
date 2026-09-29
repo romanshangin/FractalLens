@@ -54,6 +54,6 @@ Files:
 * Shaderc-LICENSE.spirv-tools.txt
 
 The linked JDK runtime retains its own legal notices under the runtime image's
-`legal` directory. FractalUI itself currently has no repository-level license;
-these third-party texts do not grant rights to redistribute FractalUI
-application code.
+`legal` directory. FractalUI's Apache License 2.0 text is staged from the
+repository root as `LICENSE`. This inventory covers third-party components;
+they retain their respective licenses.

@@ -140,3 +140,13 @@ engineering target, but Linux is not currently a supported distribution.
   current GPU scope.
 - [CI](CI.md) and [Runtime packaging](RUNTIME_PACKAGING.md) — validation lanes
   and installable artifacts.
+
+## License
+
+FractalUI source code, project documentation, screenshots, and original project
+images are licensed under the [Apache License 2.0](LICENSE), unless otherwise
+noted.
+
+Third-party components and assets remain subject to their respective licenses.
+The [runtime license inventory](packaging/THIRD-PARTY-LICENSES.txt) lists the
+bundled third-party components.

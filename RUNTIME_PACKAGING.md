@@ -8,10 +8,11 @@ installed on the destination machine.
 The application starts with the optional GPU runtime disabled. The CPU renderer
 is the default and remains fully functional. Platform JavaFX modules and LWJGL
 native libraries are included. The macOS artifact also compiles and includes
-the AppKit canvas-menu bridge. The application icon, complete pinned third-party
-license and notice texts, embedded JDK legal notices and build provenance travel
-with the runtime. `packaging/THIRD-PARTY-LICENSES.txt` records the source tag or
-embedded native revision for every copied text.
+the AppKit canvas-menu bridge. The application icon, FractalUI's Apache License
+2.0 text, complete pinned third-party license and notice texts, embedded JDK
+legal notices and build provenance travel with the runtime.
+`packaging/THIRD-PARTY-LICENSES.txt` records the source tag or embedded native
+revision for every copied third-party text.
 
 ## Reproducible build command
 
@@ -124,6 +125,7 @@ stapling, and Windows Authenticode signing are separate release steps and must
 operate on the already validated artifacts. Unsigned builds can trigger
 Gatekeeper or SmartScreen warnings and are not public release candidates.
 
-The repository currently declares no license for FractalUI application code.
-The bundled third-party notices do not grant permission to redistribute that
-code. Resolve the project license before public distribution.
+FractalUI source code, project documentation, screenshots, and original project
+images are licensed under the [Apache License 2.0](LICENSE), unless otherwise
+noted. Bundled third-party components and assets retain their respective
+licenses, listed in `packaging/THIRD-PARTY-LICENSES.txt`.

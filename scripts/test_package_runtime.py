@@ -78,14 +78,17 @@ class PackageRuntimeContractTest(unittest.TestCase):
               mock.patch.object(package_runtime.shutil, "which", return_value="/tools/mvn")):
             self.assertEqual(Path("/tools/mvn"), package_runtime.maven_command())
 
-    def test_stages_complete_pinned_license_materials(self):
+    def test_stages_project_and_pinned_third_party_license_materials(self):
         destination = self.root / "licenses"
 
         staged = package_runtime.stage_license_materials(destination)
 
-        expected = {"THIRD-PARTY-LICENSES.txt", *package_runtime.LICENSE_SHA256}
+        expected = {"LICENSE", "THIRD-PARTY-LICENSES.txt", *package_runtime.LICENSE_SHA256}
         self.assertEqual(expected, {path.name for path in staged})
         self.assertEqual(expected, {path.name for path in destination.iterdir()})
+        self.assertEqual(
+            package_runtime.sha256(package_runtime.ROOT / "LICENSE"),
+            package_runtime.sha256(destination / "LICENSE"))
         for name, digest in package_runtime.LICENSE_SHA256.items():
             self.assertEqual(digest, package_runtime.sha256(destination / name))
 
