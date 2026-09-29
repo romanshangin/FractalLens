@@ -35,7 +35,8 @@ class FractalSceneJsonTest {
                         OrbitTrap.UNIT_CIRCLE),
                 new AntialiasSettings(
                         SamplingPattern.DETERMINISTIC_JITTER,
-                        InteractiveRenderMode.FAST));
+                        InteractiveRenderMode.FAST),
+                new JuliaParameters(0.285, 0.01));
 
         String json = FractalSceneJson.write(scene);
         FractalScene restored = FractalSceneJson.read(json);
@@ -44,6 +45,47 @@ class FractalSceneJsonTest {
         assertTrue(json.contains("\"centerReal\": \"" + real + "\""));
         assertTrue(json.contains("\"centerImaginary\": \"" + imaginary + "\""));
         assertTrue(json.contains("\"scale\": \"" + scale + "\""));
+        assertTrue(json.contains("\"juliaParameters\": {\"real\": 0.285, \"imaginary\": 0.01}"));
+    }
+
+    @Test
+    void readsOlderVersionTwoWithoutJuliaParametersUsingDefaults() {
+        String versionTwo = """
+                {
+                  "schemaVersion": 2,
+                  "fractal": "JULIA",
+                  "viewport": {
+                    "centerReal": "0",
+                    "centerImaginary": "0",
+                    "scale": "4"
+                  },
+                  "iterations": {
+                    "baseIterations": 410,
+                    "iterationsPerZoomLevel": 60
+                  },
+                  "coloring": {
+                    "palette": "GRAYSCALE",
+                    "paletteStops": [
+                      {"position": 0.0, "color": "#FF000000"},
+                      {"position": 1.0, "color": "#FFFFFFFF"}
+                    ],
+                    "colorScale": 12.5,
+                    "offset": 0.25,
+                    "histogramColoring": false,
+                    "orbitTrap": "NONE"
+                  },
+                  "antialiasing": {
+                    "samplingPattern": "REGULAR",
+                    "renderMode": "REFINED"
+                  }
+                }
+                """;
+
+        FractalScene restored = FractalSceneJson.read(versionTwo);
+
+        assertEquals(FractalPreset.JULIA, restored.fractal());
+        assertEquals(new IterationSettings(410, 60), restored.iterations());
+        assertEquals(new JuliaParameters(), restored.juliaParameters());
     }
 
     @Test

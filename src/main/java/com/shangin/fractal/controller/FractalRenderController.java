@@ -94,6 +94,7 @@ public final class FractalRenderController implements AutoCloseable {
     }
 
     private Consumer<BigDecimal> zoomChangedHandler = ignored -> {};
+    private Consumer<Integer> iterationsChangedHandler = ignored -> {};
     private Consumer<Boolean> deepZoomChangedHandler = ignored -> {};
     private Consumer<Double> progressHandler = ignored -> {};
     private Consumer<Throwable> errorHandler = error ->
@@ -210,8 +211,7 @@ public final class FractalRenderController implements AutoCloseable {
         recolorEpoch.incrementAndGet();
         antialiasService.cancelCurrent();
 
-        FormulaDefinition requestedFormula = FormulaDefinition.forPreset(
-                scene.fractal(), scene.coloring().orbitTrap());
+        FormulaDefinition requestedFormula = FormulaDefinition.forScene(scene);
         if (!requestedFormula.equals(formulaDefinition)) {
             formulaDefinition = requestedFormula;
             activeFrame = null;
@@ -232,10 +232,6 @@ public final class FractalRenderController implements AutoCloseable {
         BigDecimal zoomFactor = defaultViewport.scaleExact()
                 .divide(viewport.scaleExact(), viewport.mathContext());
 
-        zoomChangedHandler.accept(
-                zoomFactor
-        );
-
         int maxIterations =
                 scene.iterations().maxIterations(
                         defaultViewport.scaleExact(),
@@ -246,6 +242,8 @@ public final class FractalRenderController implements AutoCloseable {
         if (preserveIterationLimit && activeFrame != null) {
             maxIterations = activeFrame.request().maxIterations();
         }
+        zoomChangedHandler.accept(zoomFactor);
+        iterationsChangedHandler.accept(maxIterations);
 
         RenderJob renderRequest =
                 new RenderJob(
@@ -585,6 +583,10 @@ public final class FractalRenderController implements AutoCloseable {
 
     public void setOnDeepZoomChanged(Consumer<Boolean> handler) {
         deepZoomChangedHandler = Objects.requireNonNull(handler);
+    }
+
+    public void setOnIterationsChanged(Consumer<Integer> handler) {
+        iterationsChangedHandler = Objects.requireNonNull(handler);
     }
 
     @Override

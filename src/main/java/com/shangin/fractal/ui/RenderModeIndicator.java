@@ -13,7 +13,9 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.util.Duration;
 
+import java.math.BigDecimal;
 import java.util.Locale;
+import java.util.Objects;
 
 /** Small, informational overlay; stays outside the rendered/exported image. */
 final class RenderModeIndicator extends Label {
@@ -25,6 +27,8 @@ final class RenderModeIndicator extends Label {
     private boolean deepAntialiasing;
     private RenderStatus status = new RenderStatus(RenderStatus.State.IDLE, 0);
     private double progress;
+    private BigDecimal zoom = BigDecimal.ONE;
+    private int iterations;
 
     RenderModeIndicator() {
         // Reserve the same space for both states so the capsule does not jump.
@@ -72,6 +76,16 @@ final class RenderModeIndicator extends Label {
         update();
     }
 
+    void setZoom(BigDecimal zoom) {
+        this.zoom = Objects.requireNonNull(zoom);
+        update();
+    }
+
+    void setIterations(int iterations) {
+        this.iterations = iterations;
+        update();
+    }
+
     void setProgress(double progress) {
         double bounded = Math.max(0.0, Math.min(1.0, progress));
         if ((int) (this.progress * 100) == (int) (bounded * 100)) return;
@@ -96,13 +110,6 @@ final class RenderModeIndicator extends Label {
         boolean rendering = status.state() == RenderStatus.State.RENDERING;
         spinner.setVisible(rendering);
         dot.setVisible(!rendering);
-        String timing = switch (status.state()) {
-            case IDLE -> "Waiting for the first render";
-            case RENDERING -> state;
-            case COMPLETE -> "Render time: " + formatElapsed(status.elapsedNanos());
-            case CANCELLED -> "Render interrupted";
-            case FAILED -> "Render could not be completed";
-        };
         String description = deepZoom
                 ? "High-precision rendering for deep magnification."
                 : "Standard-precision rendering.";
@@ -111,8 +118,10 @@ final class RenderModeIndicator extends Label {
                     ? "Deep Zoom Antialiasing is on: an additional smoothing pass follows the base render."
                     : "Deep Zoom Antialiasing is off: only the fast base render is calculated.")
                 : "Antialiasing is included in the render.";
-        details.setText(description + "\n" + antialiasing + "\n\n" + timing);
-        setAccessibleText(mode + ". " + antialiasing + " " + timing);
+        String values = "Zoom: " + RenderValueFormat.zoom(zoom)
+                + "\nIterations: " + RenderValueFormat.iterations(iterations);
+        details.setText(description + "\n" + antialiasing + "\n\n" + values);
+        setAccessibleText(getText() + ". " + antialiasing + " " + values.replace('\n', ' '));
     }
 
     static String formatElapsed(long nanos) {

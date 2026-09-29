@@ -17,6 +17,8 @@ import com.shangin.fractal.render.FractalRenderService;
 import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.IterationSettings;
+import com.shangin.fractal.scene.JuliaParameters;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.SamplingPattern;
 import com.shangin.fractal.scene.InteractiveRenderMode;
@@ -154,6 +156,7 @@ public class FractalView extends StackPane {
                 : new FractalRenderController(fractalSurface, renderService, recolorOperation);
         this.loadingScreenEnabled = loadingScreenEnabled;
         scene = java.util.Objects.requireNonNull(initialScene, "Initial scene must not be null");
+        modeIndicator.setIterations(scene.iterations().baseIterations());
         camera = restored
                 ? new FractalCamera(scene.fractal(), scene.viewport())
                 : new FractalCamera(scene.fractal());
@@ -200,6 +203,8 @@ public class FractalView extends StackPane {
             }
         });
         renderController.setOnRenderProgressChanged(modeIndicator::setProgress);
+        renderController.setOnZoomChanged(modeIndicator::setZoom);
+        renderController.setOnIterationsChanged(modeIndicator::setIterations);
         renderController.setOnDeepZoomChanged(active -> {
             modeIndicator.setDeepZoom(active);
             deepZoomChangedHandler.accept(active);
@@ -393,6 +398,24 @@ public class FractalView extends StackPane {
             recalculate();
         } else {
             renderController.recolor(settings);
+        }
+    }
+
+    void setIterations(IterationSettings settings) {
+        dismissContextMenu();
+        scene = scene.withIterations(settings);
+        renderController.cancelCurrent();
+        fractalSurface.invalidateRefinement();
+        recalculate();
+    }
+
+    void setJuliaParameters(JuliaParameters parameters) {
+        dismissContextMenu();
+        scene = scene.withJuliaParameters(parameters);
+        if (scene.fractal() == FractalPreset.JULIA) {
+            renderController.cancelCurrent();
+            fractalSurface.invalidateRefinement();
+            recalculate();
         }
     }
 
@@ -1037,9 +1060,10 @@ public class FractalView extends StackPane {
     public void setOnZoomChanged(
             Consumer<BigDecimal> handler
     ) {
-        renderController.setOnZoomChanged(
-                handler
-        );
+        renderController.setOnZoomChanged(value -> {
+            modeIndicator.setZoom(value);
+            handler.accept(value);
+        });
     }
 
     public void setOnDeepZoomChanged(Consumer<Boolean> handler) {

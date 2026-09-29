@@ -28,6 +28,10 @@ public final class FractalSceneJson {
         json.append("{\n")
                 .append("  \"schemaVersion\": ").append(CURRENT_SCHEMA_VERSION).append(",\n")
                 .append("  \"fractal\": ").append(quoted(scene.fractal().name())).append(",\n")
+                .append("  \"juliaParameters\": {\"real\": ")
+                .append(Double.toString(scene.juliaParameters().real()))
+                .append(", \"imaginary\": ")
+                .append(Double.toString(scene.juliaParameters().imaginary())).append("},\n")
                 .append("  \"viewport\": {\n")
                 .append("    \"centerReal\": ").append(decimal(scene.viewport().center().real())).append(",\n")
                 .append("    \"centerImaginary\": ").append(decimal(scene.viewport().center().imaginary())).append(",\n")
@@ -148,7 +152,16 @@ public final class FractalSceneJson {
                         "samplingPattern"),
                 enumValue(InteractiveRenderMode.class,
                         string(required(antialiasingObject, "renderMode"), "renderMode"), "renderMode"));
-        return new FractalScene(fractal, viewport, iterations, coloring, antialiasing);
+        JuliaParameters julia = root.containsKey("juliaParameters")
+                ? juliaParameters(root) : new JuliaParameters();
+        return new FractalScene(fractal, viewport, iterations, coloring, antialiasing, julia);
+    }
+
+    private static JuliaParameters juliaParameters(Map<String, Object> root) {
+        Map<String, Object> object = object(required(root, "juliaParameters"), "juliaParameters");
+        return new JuliaParameters(
+                decimalNumber(required(object, "real"), "julia real"),
+                decimalNumber(required(object, "imaginary"), "julia imaginary"));
     }
 
     private static Viewport viewport(Map<String, Object> root) {

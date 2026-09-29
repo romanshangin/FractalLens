@@ -180,9 +180,6 @@ delivery foundation should be completed first.
     reconcile IDEA and SARIF totals, and record fixed findings plus accepted
     noncritical results. Every high-impact candidate is fixed or evidenced as
     intentional; this does not claim that every inspection warning disappeared.
-  - The complete exported rule inventory, grouped by criticality with counts
-    and example locations, is in
-    [the IntelliJ inspection report](benchmarks/INTELLIJ_INSPECTION_20260928.md).
 
 ### P2. Product foundation and user workflows
 

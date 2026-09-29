@@ -2,6 +2,7 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.scene.JuliaParameters;
 import javafx.application.ColorScheme;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -163,6 +164,59 @@ class FractalDialogsFxTest {
                 return null;
             });
         } finally { fx(() -> { dialog.close(); return null; }); }
+    }
+
+    @Test void juliaEditorResetsBothFieldsAndAppliesOnlyValidValues() throws Exception {
+        JuliaParameters custom = new JuliaParameters(-0.4, 0.6);
+        var dialog = fx(() -> FractalDialogs.juliaParametersDialog(owner, custom));
+        try {
+            fx(() -> { dialog.show(); return null; });
+            fx(() -> {
+                var pane = dialog.getDialogPane();
+                TextField real = field(dialog, "julia-real");
+                TextField imaginary = field(dialog, "julia-imaginary");
+                assertSame(real, pane.getScene().getFocusOwner());
+                assertEquals("-0.4", real.getText());
+                assertEquals("0.6", imaginary.getText());
+                pane.getScene().getPreferences().setColorScheme(ColorScheme.LIGHT);
+                snapshot(dialog, "julia-light");
+                real.setText("NaN");
+                imaginary.setText("1e309");
+                primary(dialog).fire();
+                assertTrue(dialog.isShowing());
+                assertEquals("NaN", real.getText());
+                assertEquals("1e309", imaginary.getText());
+                assertTrue(pane.lookup("#dialog-validation-error").isVisible());
+                pane.getScene().getPreferences().setColorScheme(ColorScheme.DARK);
+                snapshot(dialog, "julia-dark-validation");
+                Button reset = pane.getButtonTypes().stream()
+                        .filter(type -> "Reset to Defaults".equals(type.getText()))
+                        .map(type -> (Button) pane.lookupButton(type)).findFirst().orElseThrow();
+                reset.fire();
+                assertTrue(dialog.isShowing());
+                assertEquals("-0.8", real.getText());
+                assertEquals("0.156", imaginary.getText());
+                assertFalse(pane.lookup("#dialog-validation-error").isVisible());
+                primary(dialog).fire();
+                assertEquals(new JuliaParameters(), dialog.getResult());
+                return null;
+            });
+        } finally { fx(() -> { dialog.close(); return null; }); }
+
+        var cancelled = fx(() -> FractalDialogs.juliaParametersDialog(owner, custom));
+        try {
+            fx(() -> { cancelled.show(); return null; });
+            fx(() -> {
+                Button reset = cancelled.getDialogPane().getButtonTypes().stream()
+                        .filter(type -> "Reset to Defaults".equals(type.getText()))
+                        .map(type -> (Button) cancelled.getDialogPane().lookupButton(type))
+                        .findFirst().orElseThrow();
+                reset.fire();
+                ((Button) cancelled.getDialogPane().lookupButton(ButtonType.CANCEL)).fire();
+                assertNull(cancelled.getResult());
+                return null;
+            });
+        } finally { fx(() -> { cancelled.close(); return null; }); }
     }
 
     @Test void escapeCancelsInvalidDraftAndHelpAndMessagesShareTheme() throws Exception {
