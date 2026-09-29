@@ -223,6 +223,11 @@ def stage_license_materials(destination):
     source = ROOT / "packaging"
     destination.mkdir(parents=True)
     staged = []
+    project_license = ROOT / "LICENSE"
+    if not project_license.is_file():
+        raise RuntimeError("Required FractalUI license file is missing: LICENSE")
+    shutil.copy2(project_license, destination / project_license.name)
+    staged.append(destination / project_license.name)
     inventory = source / "THIRD-PARTY-LICENSES.txt"
     shutil.copy2(inventory, destination / inventory.name)
     staged.append(destination / inventory.name)
