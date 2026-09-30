@@ -2,6 +2,8 @@ package com.shangin.fractal.ui;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
+import java.util.ArrayList;
+import java.util.List;
 import static java.lang.foreign.ValueLayout.*;
 
 /** Test-only Objective-C inspection; no production testing selectors or input synthesis. */
@@ -10,6 +12,30 @@ final class AppKitMenuProbe {
     private static final SymbolLookup OBJC = SymbolLookup.libraryLookup("/usr/lib/libobjc.A.dylib", Arena.global());
     private static final MethodHandle SELECTOR = LINKER.downcallHandle(OBJC.find("sel_registerName").orElseThrow(),
             FunctionDescriptor.of(ADDRESS, ADDRESS));
+
+    static MemorySegment mainMenu() throws Throwable {
+        try (Arena arena = Arena.ofConfined()) {
+            var getClass = LINKER.downcallHandle(OBJC.find("objc_getClass").orElseThrow(),
+                    FunctionDescriptor.of(ADDRESS, ADDRESS));
+            var applicationType = (MemorySegment) getClass.invokeExact(arena.allocateFrom("NSApplication"));
+            var application = (MemorySegment) message(applicationType, "sharedApplication", ADDRESS);
+            return (MemorySegment) message(application, "mainMenu", ADDRESS);
+        }
+    }
+
+    static List<String> mainMenuTitles() throws Throwable {
+        var menu = mainMenu();
+        long count = (long) message(menu, "numberOfItems", JAVA_LONG);
+        var titles = new ArrayList<String>();
+        for (long index = 0; index < count; index++) {
+            var item = (MemorySegment) message(menu, "itemAtIndex:", ADDRESS,
+                    new MemoryLayout[]{JAVA_LONG}, index);
+            var title = (MemorySegment) message(item, "title", ADDRESS);
+            var bytes = (MemorySegment) message(title, "UTF8String", ADDRESS);
+            titles.add(bytes.reinterpret(Long.MAX_VALUE).getString(0));
+        }
+        return titles;
+    }
 
     static MemorySegment session(FractalContextMenu owner) throws Exception {
         var field = FractalContextMenu.class.getDeclaredField("nativeMenu");

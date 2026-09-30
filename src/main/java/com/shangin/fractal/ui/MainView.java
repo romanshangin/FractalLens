@@ -9,6 +9,8 @@ import com.shangin.fractal.render.FractalRenderService;
 import com.shangin.fractal.scene.FractalScene;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.skin.MenuBarSkin;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -49,6 +51,11 @@ public class MainView extends BorderPane {
                 : new FractalView(initialScene, initial.restored(), renderService, recolorOperation);
         fractalView.setOnRenderError(this::renderFailed);
         menuBar = new MainMenuBar(stage, fractalView, initialScene, this::exportPng);
+        if (System.getProperty("os.name", "").startsWith("Mac")) {
+            // Glass falls back to this menu while no stage is focused, including
+            // the activation gap when returning from another macOS Space.
+            MenuBarSkin.setDefaultSystemMenuBar(menuBar);
+        }
         // JavaFX gives this bar zero height when macOS installs it in the system menu bar.
         setTop(menuBar);
         setCenter(fractalView);
@@ -157,6 +164,9 @@ public class MainView extends BorderPane {
             return;
         }
         closed = true;
+        if (System.getProperty("os.name", "").startsWith("Mac")) {
+            MenuBarSkin.setDefaultSystemMenuBar(new MenuBar());
+        }
         try {
             sessionStore.save(fractalView.sceneSnapshot());
         } catch (IOException exception) {
