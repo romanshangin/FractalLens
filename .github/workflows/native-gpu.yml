@@ -46,7 +46,10 @@ jobs:
       - name: Record hardware and runtime provenance
         shell: bash
         run: |
-          system_profiler SPHardwareDataType SPSoftwareDataType SPDisplaysDataType
+          system_profiler SPHardwareDataType | awk -F': ' '/Model Name:|Model Identifier:|Chip:|Processor Name:|Total Number of Cores:|Memory:/ { print $1 ": " $2 }'
+          system_profiler SPDisplaysDataType | awk -F': ' '/Chipset Model:|Metal Support:/ { print $1 ": " $2 }'
+          sw_vers
+          uname -m
           java --version
           ./mvnw --version
 
@@ -100,7 +103,10 @@ jobs:
       - name: Record hardware and runtime provenance
         shell: bash
         run: |
-          system_profiler SPHardwareDataType SPSoftwareDataType SPDisplaysDataType
+          system_profiler SPHardwareDataType | awk -F': ' '/Model Name:|Model Identifier:|Chip:|Processor Name:|Total Number of Cores:|Memory:/ { print $1 ": " $2 }'
+          system_profiler SPDisplaysDataType | awk -F': ' '/Chipset Model:|Metal Support:/ { print $1 ": " $2 }'
+          sw_vers
+          uname -m
           java --version
           ./mvnw --version
 
