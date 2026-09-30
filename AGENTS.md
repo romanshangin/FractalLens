@@ -102,6 +102,35 @@ inputs, code state, and decision.
 - Mark a roadmap item complete only after its acceptance criteria pass. Do not
   present a proposal or expected speedup as a completed feature.
 
+### Privacy and published data
+
+- Never commit active credentials, tokens, private keys, recovery codes, or
+  other secrets. Before adding benchmark results, logs, test reports, generated
+  files, or diagnostic output, inspect them for secrets and personal machine
+  data. Do not rely on GitHub masking to make a secret safe to print.
+- Do not publish a user's login name, home directory, email address, computer
+  or host name, machine serial number, hardware UUID, MAC address, private or
+  public IP address, or machine-specific temporary/workspace path in repository
+  files, benchmark evidence, Actions logs, or uploaded artifacts. Use
+  repository-relative paths or stable placeholders such as `${USER_HOME}`,
+  `${PROJECT_DIR}`, and `${TEMP_DIR}`.
+- Benchmark provenance may include only machine details needed to reproduce or
+  interpret a result, such as OS/version, architecture, CPU/GPU model, core and
+  memory counts, driver/runtime versions, and power or thermal state. Filter
+  system-report commands to those fields; never upload unfiltered hardware or
+  software profiler output.
+- If a live secret is found in a working tree or any published location, revoke
+  or rotate it with its issuer first. Then remove it from the current files and
+  arrange cleanup of every affected published Git ref, Actions log/artifact,
+  release, cache, and other retained copy. Deleting a file in a later commit
+  does not remove it from history or invalidate a credential. Verify the
+  cleanup at each affected destination; do not claim it is complete from a
+  current-tree scan alone.
+- Before publishing a change that includes historical/generated evidence,
+  scan all included files and review the relevant published Git history and
+  retained Actions logs/artifacts. Do not rewrite shared Git history or delete
+  published logs/artifacts without explicit owner authorization.
+
 ## Architecture constraints
 
 Preserve the existing package boundaries:
