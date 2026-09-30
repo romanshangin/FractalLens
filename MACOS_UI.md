@@ -5,6 +5,32 @@ The main window contains only the fractal canvas and the standard window frame.
 the menu bar at the top of the display. Other platforms retain an in-window menu
 bar. The rendering pipeline, precision limits, and pointer gestures are unchanged.
 
+The main window also registers its commands as JavaFX's application-default
+system menu. Glass otherwise replaces them with an empty default when the stage
+loses focus, leaving only the application name during a macOS Spaces activation
+gap. The commands remain installed across Space and application switches without
+requiring pointer movement over the menu bar. Closing the view clears the default
+registration so it does not retain the closed view's commands.
+
+Run the native menu regression in an active macOS desktop session:
+
+```shell
+mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractalui-system-menu" -DreuseForks=false -Dtest=MacSystemMenuFxTest test
+```
+
+The regression inspects the AppKit menu before focus loss, while an unowned
+window without menus has focus, after focus returns, and after view disposal.
+For visible acceptance, switch to another Space, activate another application,
+then return to FractalUI without moving the pointer onto the menu bar and check
+that File through Help remain visible and usable.
+
+Validation on 2026-09-29: the native regression failed on the original code
+because all nine command menus disappeared on focus loss, then passed after
+registration was added (1 test, no skips). `mvn test` passed with 399 executed
+tests and 60 opt-in skips. The user confirmed the original Spaces sequence and
+opening Help in the current development build; the running process was checked
+to distinguish it from an older packaged copy with the same bundle identifier.
+
 The system application menu is named **FractalUI**, including its Hide and Quit
 commands. `-Xdock:name` alone does not reliably name this menu in JavaFX 26.
 `MacApplicationMenu` updates the Glass application menu after installation and
