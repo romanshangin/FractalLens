@@ -1,0 +1,2916 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "QDJVM",
+          "version": "262.11550",
+          "rules": []
+        }
+      },
+      "results": [
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkMemoryBarrier' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 282,
+                  "startColumn": 24
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "395da9e652fc83a3",
+            "equalIndicator/v1": "0149115533d36403b0c62e4601030bfd8788ffcf1ef50dea247106cd80b36b03"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorBufferInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 212,
+                  "startColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "224366f3aaa18bbc",
+            "equalIndicator/v1": "0aaa1d59d7864525cb13da522d4bd8a3419a735955b08e54de8089e7188cfc11"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorBufferInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 307,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "f8e1473004e43b12",
+            "equalIndicator/v1": "36d63778b082727acb9fe08f3e37486de64f53dc2f769f7ccef7484c09b9e7f4"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkMemoryBarrier' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 267,
+                  "startColumn": 24
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "a1cbe1694deec3e1",
+            "equalIndicator/v1": "41c597bfda553ada67ef816de89d091a9fee0173581d53cb97f8ea229a799a80"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorPoolSize' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 117,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "1718f1f1f009a0dc",
+            "equalIndicator/v1": "464c4c29c7f4c885139b3b2fa1f435631b1229c66ed76d0cd936afb0bd293bb4"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorPoolSize' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 91,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "4be8c921383db29b",
+            "equalIndicator/v1": "49114df766986ea7cd89e2672f9374a9aaf75d7a1f7aaefaaa981271194f4b63"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Buffer' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 58,
+                  "startColumn": 44
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "38f1f940d67c1393",
+            "equalIndicator/v1": "4920003cdc019d0996c3f232097955b9dd314742e6724d58ff943dc8f1e5087b"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkMemoryBarrier' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 334,
+                  "startColumn": 24
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "9ca7c3612fc7be1f",
+            "equalIndicator/v1": "4b7d3d0d77355f7b21799234a9a19b0385c1dab58716aff1ff5d2af2789b612d"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorPoolSize' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 94,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "11ae71418778e2d1",
+            "equalIndicator/v1": "5ca203dadc4c517cabed5c2f2ba358c21143dfba9ad073c3eed0a0bb2d697a46"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkComputePipelineCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 165,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "0614227d9201311a",
+            "equalIndicator/v1": "61f25fc4ee9b4c74bf276734b462b087dd4958a8820af98065d051cba7b42a9c"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkWriteDescriptorSet' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 213,
+                  "startColumn": 31
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "68e03beb9382acfd",
+            "equalIndicator/v1": "6805621c5834d7af85df64d1bab6175ec1987149afa056024abc4a06802d589a"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkComputePipelineCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 141,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "ce7fea67e35e9a9f",
+            "equalIndicator/v1": "70540b4e352106e9bf236ff840b9678d2a042b1d2152d7dc69e5c9af81e845a3"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkMappedMemoryRange' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 371,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "e110aa74e42f9c27",
+            "equalIndicator/v1": "718e94e6c0c32bed1363556979381db838f5c7399ecd57a2541b5336571193f9"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkPipelineShaderStageCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 142,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "067a409caf04ef3f",
+            "equalIndicator/v1": "74e1ff3de5ad30f58ee4ed166654fa8e91141768c34b0d6ac3fc426f1ef6cc24"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkMappedMemoryRange' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 344,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "9b04aea0833a5cd2",
+            "equalIndicator/v1": "7fcced695500afd692c9221e75fc0f52b191fed964d67888e9134a1104226901"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkPipelineShaderStageCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 142,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "6fb08129a428cbef",
+            "equalIndicator/v1": "825c4686a6b35fdce24202a841ee2ad5675e327e4cdc32aae30294a3623439f1"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorSetLayoutBinding' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 79,
+                  "startColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "91663ea46c0aedce",
+            "equalIndicator/v1": "84bf5316bec7c95e5b523f67c74705851231713a12a1480000032defa906b3f4"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkMappedMemoryRange' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 409,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "bd4c59518bf019b4",
+            "equalIndicator/v1": "8ea30a2e8f05399c5f5a9a71561f4ad1e6643e4545e1a4ecee3b6faf5dbb9a3d"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkWriteDescriptorSet' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 308,
+                  "startColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "5f0fc96120ce3ef7",
+            "equalIndicator/v1": "9159674a179e7d1e37c1a8291364a7d50384bc7262651ad118cb7ee2f8ca7bd1"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'RenderBackend' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/render/PrecisionSelectingRenderBackend.java"
+                },
+                "region": {
+                  "startLine": 45,
+                  "startColumn": 16
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "235aec89d974544a",
+            "equalIndicator/v1": "96d6bf8554cfebcb24d60b5baa5b54bf6e32aac7e1d1f06811b3d7156cd03272"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkPushConstantRange' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 83,
+                  "startColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "caf3008bcbaf5b9d",
+            "equalIndicator/v1": "a001718b67e78863985c2036f53ac5d0ef47d7c6dcd8e49540cb7baae8f7f563"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkPushConstantRange' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 109,
+                  "startColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "81226da76d65660f",
+            "equalIndicator/v1": "a2f79f5c04aff40d48cb8112bd0888681c8450905efceaab5fdf9a45e7c422bc"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Buffer' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 226,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "98c0be068d0d83f2",
+            "equalIndicator/v1": "a4436d39b1d5d3c87d961b129af352c8983c591a0d117d1255ee8acf351fba2d"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDeviceQueueCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/MacosMoltenVkSession.java"
+                },
+                "region": {
+                  "startLine": 97,
+                  "startColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "7dbe2602a7664d8a",
+            "equalIndicator/v1": "b0c5faa89d337ea429ea494380104db1c4582d9f33fa6a3a92d799428e065eb1"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorSetLayoutBinding' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 75,
+                  "startColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "ec1ffb4b5cadd943",
+            "equalIndicator/v1": "b2950ec5433f332ac8d9081cf07aa808ab2c57c8ce7b08a732ca1a38084b954b"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Buffer' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 257,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "6f867ce9a273a017",
+            "equalIndicator/v1": "cb738c4ed14d91dc3bd17358c38cb805c62a2fbf0937ff338afe13576280d1ae"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkPushConstantRange' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 86,
+                  "startColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "1019f613419b2029",
+            "equalIndicator/v1": "d24b9fd4e6344ce825f4e5da2bda1cb759894e747e1f1cca1ba2491482507e15"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkComputePipelineCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanResidentMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 141,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "e3a2905dc5ce9e38",
+            "equalIndicator/v1": "de043a8cab7377779fede350f233434c2a99313ede9f1cd3cef36cfe9221c636"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorSetLayoutBinding' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 102,
+                  "startColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "ba16eff05ffb796b",
+            "equalIndicator/v1": "e0be1926646fce7fa600d9d84b5c347d6bf2b1648ce6f7395953ea10f027b760"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkPipelineShaderStageCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 166,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "2cadab0426de0e75",
+            "equalIndicator/v1": "e231330d769cd1bc7e4d2fa0e2a83f6e0c58b12e04b4a09aec3947fbe4673837"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorBufferInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 234,
+                  "startColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "f01bb284bac46150",
+            "equalIndicator/v1": "eefa6ca34cdfe44b1c4c91fa6a7a96c9b00337af742f01c3b1b3b1c43e78fd74"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Buffer' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanMandelbrotKernel.java"
+                },
+                "region": {
+                  "startLine": 59,
+                  "startColumn": 44
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "c61c2dc66eab79b7",
+            "equalIndicator/v1": "f68c60b562fd2e9fd768387c32a5b2e54a9dbb659e9231e88b0f2100ef5831be"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkWriteDescriptorSet' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanPaletteKernel.java"
+                },
+                "region": {
+                  "startLine": 235,
+                  "startColumn": 31
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "bb40eaaea9ad296c",
+            "equalIndicator/v1": "f77ba343df5f15dbf5162978dda15b4fff91ebf620409192930ef072a5c05761"
+          }
+        },
+        {
+          "ruleId": "BigDecimalMethodWithoutRoundingCalled",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'BigDecimal.divide()' called without a rounding mode argument"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/render/FrameReusePlanner.java"
+                },
+                "region": {
+                  "startLine": 284,
+                  "startColumn": 18
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "70913cefef7734de",
+            "equalIndicator/v1": "2881c06e98399337a15aaaf17dda865f78e55b5e32a80869e8c0f4903e3c1d3d"
+          }
+        },
+        {
+          "ruleId": "BigDecimalMethodWithoutRoundingCalled",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'BigDecimal.divide()' called without a rounding mode argument"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/render/FrameReusePlanner.java"
+                },
+                "region": {
+                  "startLine": 282,
+                  "startColumn": 18
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "07064bf02848b9fd",
+            "equalIndicator/v1": "d02c006b2e155182a97031dbc5aedd2bd3bed9b4fa1fa6448b2661c319a30944"
+          }
+        },
+        {
+          "ruleId": "BusyWait",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Call to 'Thread.sleep()' in a loop, probably busy-waiting"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/InteractionLatencyBenchmark.java"
+                },
+                "region": {
+                  "startLine": 191,
+                  "startColumn": 40
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "0bbbc7d603111cc8",
+            "equalIndicator/v1": "3464adc5bce0cfcb749fe001e24b186c08e0d88d129c0a623a7963b65aac970b"
+          }
+        },
+        {
+          "ruleId": "BusyWait",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Call to 'Thread.sleep()' in a loop, probably busy-waiting"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/InteractionLatencyBenchmark.java"
+                },
+                "region": {
+                  "startLine": 206,
+                  "startColumn": 40
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "04bde70a529c6e89",
+            "equalIndicator/v1": "503dc0ed94fcc0014aa4aefe591f62a5b00bda605ff60d0807a4e0e0e4325d67"
+          }
+        },
+        {
+          "ruleId": "BusyWait",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Call to 'Thread.sleep()' in a loop, probably busy-waiting"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/InteractionLatencyBenchmark.java"
+                },
+                "region": {
+                  "startLine": 302,
+                  "startColumn": 20
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "76e9b49ecd5ff592",
+            "equalIndicator/v1": "de5b9ee35ccd9f2840ffb14c771489e61e6305cefc5e0ffb4ec11b7f1dea23cf"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 375,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "028c5b37368c4ab7",
+            "equalIndicator/v1": "01ed4405ce65a7ad97762fc2bd7b1a2b1d565457def5b8de211ab27800cbd059"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'InteractiveRenderMode' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 562,
+                  "startColumn": 42
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "2a2bd41cf978c79d",
+            "equalIndicator/v1": "0a6060b503108c281091a0baeff17e7a1f18fb49e66ec0ef5684f3196a9350a7"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 724,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "f06921d96671f075",
+            "equalIndicator/v1": "134ae4b4f1ed050f7578efa169d55445419ef9ede179f93981151cb309f2bee9"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 485,
+                  "startColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "2b345676a5b3b63d",
+            "equalIndicator/v1": "13b04c740e3b259132167ad0ce332c53e8ff70657bfd21c52f7258ae24b8574d"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'PalettePreset' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 101,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "56912e29a417c6d7",
+            "equalIndicator/v1": "17a07cea13861644d5020f61d3b00a528acae67855c8d669051edb1ffcc9a025"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'ColoringSettings' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 635,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "e7a04b714bf6cc7b",
+            "equalIndicator/v1": "1817e21c124bf5cf36666d8e76bb198ec5a89e015d91e92263a1618b4b88f060"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'OrbitTrap' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 440,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "6df39fed3247917b",
+            "equalIndicator/v1": "19f89b8d894ac26c3e93e79bdf5fea48a5a4829f782a8ca7835bc11d12e2d34a"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalScene' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/app/LastSessionStore.java"
+                },
+                "region": {
+                  "startLine": 62,
+                  "startColumn": 21
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "713ecabd2e2b8adf",
+            "equalIndicator/v1": "1fadbb4a64358132fce63fc624e99259498dbe975b30193ff0d2182233b25b3c"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'ColoringStrategy' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 725,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "fb4fd4287801e9bd",
+            "equalIndicator/v1": "259efc799e58a943206a6e394e6f13cae5e7049edb1a4bf46ec7d153f92262ac"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalPreset' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 31,
+                  "startColumn": 26
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "8c1d22f49fff8564",
+            "equalIndicator/v1": "29e68a2cb7828544cf880fa28bd13c554c0946aeb9b7b8e7fd9e6886f396e0fd"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 82,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "3b670ad1d743d2f0",
+            "equalIndicator/v1": "37e3c1b7265be05618ed8528dc33eaf1ad61fe10f4d55a244548a9e1fabd66df"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 31,
+                  "startColumn": 48
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "30ac101e44411a68",
+            "equalIndicator/v1": "39664a6a25cad87bbcfff4aef048014b8c1d241b31be9934da37d7f398e528fd"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalPreset' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 26,
+                  "startColumn": 26
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "ffb1f55e1665468b",
+            "equalIndicator/v1": "3982d7128d56e0e66ffbb0c972f5726ce08cb4f7c53e123a1517f4caeedb0a89"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderRegion' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 570,
+                  "startColumn": 21
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "57209d370fbfc2a4",
+            "equalIndicator/v1": "3de6dfbc4a352bb76804552f18bc0979b826d25905c3ebcf846b3c5c2b2f2b41"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 773,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "a3b8250b85322546",
+            "equalIndicator/v1": "3f04dcf48440999688f2718a94ea123e684aa940341291b661d9a56529fddb68"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'ColoringSettings' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 615,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "8d27ed436525fdf3",
+            "equalIndicator/v1": "49239ebed694f33f27e88de431b8e390a3d48cde0e4472db0db605479f8bc110"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalPreset' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 100,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "cdd77a0b79b2ab18",
+            "equalIndicator/v1": "4a178539dce3b4e87133a6f405d5b6f989a4456b051605c9c10fc0eb25581d62"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 402,
+                  "startColumn": 54
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "446155db8d2ac62f",
+            "equalIndicator/v1": "4f14a7d9c4ef3400dbfaac28745d39d9b31263a61ba1e2c01a3e457d851120dc"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 64,
+                  "startColumn": 12
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "cff100334397b662",
+            "equalIndicator/v1": "51670f2f84b4ffcf572d3254f53fa5bc45f0d6b29150f32a9e1261eb22519603"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderDiagnostics.Snapshot' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/InteractionLatency.java"
+                },
+                "region": {
+                  "startLine": 69,
+                  "startColumn": 66
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "4d2910f061400d51",
+            "equalIndicator/v1": "5451041ff2cb4337fb20ebe86e01b83d193f05f503f583cf46bf8190e4f85882"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'PalettePreset' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 386,
+                  "startColumn": 28
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "2b0072bbd52d26db",
+            "equalIndicator/v1": "5839a850a66f5833d6c149ec48e3a5c43814801ebf453d01d971fe272522c59c"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalPreset' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 42,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "4e7b9f0832f04ea3",
+            "equalIndicator/v1": "589f4ffb6228b68cea8e30da47318c376eacf7c8fa85efe8982bfb5d3feb4310"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 278,
+                  "startColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "e45206967070e5fa",
+            "equalIndicator/v1": "5a0e45d5e7db24204c38a62601a9afff9c66b2e236504d54a1363c4fbd2c0243"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderProgressBatch' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 185,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "b3492f3ab083b5ba",
+            "equalIndicator/v1": "5e121957e158dc54358a0e43586e4f0d9d26a098ab57f8a48110ad3730aa864d"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 732,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "c7260a5a336f32d4",
+            "equalIndicator/v1": "6195c5593aaa7a337da5fe598cbaf2b8da2ef7f29b1dcdc099b00646f52224bc"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalScene' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 111,
+                  "startColumn": 24
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "ae114c29c242ea5b",
+            "equalIndicator/v1": "6e25a8b94e1b4c5cfd699dcb347f6790d55e16ff60abfc33955b49bca1df4ff6"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'InteractiveRenderMode' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 187,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "41b8ead1f972be3b",
+            "equalIndicator/v1": "6e3076e48de6f16434ab9f33c81b94dac5d19ef21fb84534490bd094d4ec17a3"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'PixelShift' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 774,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "7ac6db6bbafde9bf",
+            "equalIndicator/v1": "70a2d9b90e054b37eaef1e83e7897c78ac12fdec017050edbeed5f1916119480"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 266,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "754a331786695962",
+            "equalIndicator/v1": "7a7cf3e048f28cd05e2fcace207f30ed99bb9788b3cbc8236f975f2c21c4e3ad"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'CompletedRender' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 359,
+                  "startColumn": 12
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "798451c4c092dda8",
+            "equalIndicator/v1": "7c8d217c89c1b59b8317987cfbe09e3f57f5a235bb07a711aa542f99aa64b759"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalPreset' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 243,
+                  "startColumn": 28
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "7097d59b744241c6",
+            "equalIndicator/v1": "7f2d992df58f9a1e1c03a3fdfe5ad31a56a0bd232f207be7d77358567999f330"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 389,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "b44147cee99f0fbb",
+            "equalIndicator/v1": "80ed3768a0871a889826f791c7f471f4adced131057fc4ad717a7146a7d5fe41"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalScene' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 267,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "7835573517343bf8",
+            "equalIndicator/v1": "8385d8820081e18a4dcd8b76cdead339825f99ca1b7118cc38dfe6ff4664ed0d"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 570,
+                  "startColumn": 62
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "99e52d45b997c01a",
+            "equalIndicator/v1": "85c575fc61d8ad796a32e1ad0e9d90a936d1da9b92261e75fcb150a1dbd50f71"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 772,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "eae25939068a3cd1",
+            "equalIndicator/v1": "8d438c804fa03826df11168ac7bed3bf70c545131b6b8783be131f66408caa1f"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'SamplingPattern' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 551,
+                  "startColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "eb496477aa17093d",
+            "equalIndicator/v1": "8e992dbf9867cbffb0bb598b90e2f1cedfeba6ddb7a5a03d2611870e15c1cbf8"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'InteractiveRenderMode' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 84,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "70bf70c4beb61056",
+            "equalIndicator/v1": "910ef01f4ac936fd1d0e33dade8c8fae7e5a616ef37a29f44fdd8f76692c3922"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 368,
+                  "startColumn": 42
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "f492c8fa7ca0fe14",
+            "equalIndicator/v1": "95d4eb95adb9cc3691138834045fa752f7c90de4f885296e92cdfcd8a65cb8a7"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RefinedPixelSnapshot' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 402,
+                  "startColumn": 12
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "42f8c9d2216923a5",
+            "equalIndicator/v1": "96060a335596c5f8c9c32d619d678a5343d3ee1372458129fc75ce18344df061"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'ColorStop' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 422,
+                  "startColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "12141964693494c9",
+            "equalIndicator/v1": "a1a7c30c41f8de337652116103b2a153721e7f904fc266d79fa62a7f02aeb665"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'ColoringStrategy' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 775,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "dc5eef95564c3bc4",
+            "equalIndicator/v1": "a3eebe4ca3e1b2a023d03f839a3b049af307735de77a1e09c17672cf388e0d3a"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'ColoringStrategy' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 186,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "c7b0547b3cd6557c",
+            "equalIndicator/v1": "a5a3595197fa71212491d45b97297e1ecd0b843148e1c0854e5c8764af78c6a2"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'FractalScene' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/app/LastSessionStore.java"
+                },
+                "region": {
+                  "startLine": 71,
+                  "startColumn": 22
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "bd5c03c83fe4fbe1",
+            "equalIndicator/v1": "acbf5d80d06e2bf08edd9ad2bbd47898a33be1993947aa4db97b0f93eb44bb55"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderRegion' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 376,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "4f65ad578e1b7705",
+            "equalIndicator/v1": "ad2918cc4584c44a4596419bd3ea06962d18cb4c1ec3d09e7cb83838ba4b7c95"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 320,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "01376d0fc7bc4257",
+            "equalIndicator/v1": "b556ca47501308b63047ed35d3f975bbb2281e22402c11b8342cc735047b3856"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 83,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "0e92d363af58a838",
+            "equalIndicator/v1": "b5b53fb340f63469b0d699c54ccae59d1cb1ccbc7c2cf3c13b7059b6abe2e891"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Palette' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 656,
+                  "startColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "798cedcc1933c047",
+            "equalIndicator/v1": "b7e59672e2a09d90a2a065cce2ba0a027ae5d386ec4a58627c8d1468a475424d"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 815,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "40dc911693b5cded",
+            "equalIndicator/v1": "bf1cc6153c210f47c716ad90afd6352e20d13f65f4b9a5602ab30a39ffb20a52"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'PreciseComplex' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 304,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "17417dceeb26ee2f",
+            "equalIndicator/v1": "c0ead6a49da17f654f491004494f775ea953809da1fc419314ca5323a04ae0b9"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'AdaptivePngExportService' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 937,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "bf884725e9cc011c",
+            "equalIndicator/v1": "ca290c5445e388e1baa37caefef5ba57e733a79e483f63acdcf489d90bdd56ad"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 505,
+                  "startColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "249af441e2a58710",
+            "equalIndicator/v1": "cad4e186f9019d4404088f5ca4f899013d092e4bf2a6d6e98903348f75f0fd56"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 263,
+                  "startColumn": 22
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "b617cd0fa8e2d4c9",
+            "equalIndicator/v1": "cdd163b6bb76e6970c990f3007bcdc52a4df6f4be841c25816f35c70ff257b5d"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 51,
+                  "startColumn": 22
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "eab9128f24b571c9",
+            "equalIndicator/v1": "d0bcafed5b514dbf8b8dfbe8e69249d304c389b7e9cbb48343a2875d00ff865d"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'ColoringStrategy' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 614,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "0453ad414be54ca2",
+            "equalIndicator/v1": "d1ecf14f996b3418d2bab499d9f8d723c2672b008b27049fcba8dfe8b12497eb"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 1073,
+                  "startColumn": 47
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "e456b587964a5dca",
+            "equalIndicator/v1": "d3dcf65fc40558303074a6a34cdb8657824664488193e6967a7b3d19d549ffc0"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'PixelShift' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/SurfaceBuffer.java"
+                },
+                "region": {
+                  "startLine": 181,
+                  "startColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "bc83c40a5fe01cb9",
+            "equalIndicator/v1": "dd14b5765cd54f8989989604504c2bb41229b73f898c6deb1d005537da5a79be"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderFrame' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 633,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "05178df4583b72f3",
+            "equalIndicator/v1": "e42a50a668a4837e50f9c095ed4324c23e2e95a8bc906ddc5a3829387259f3f9"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'ColoringStrategy' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 733,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "202799a447ec87d7",
+            "equalIndicator/v1": "e6a1745514a8c3e5596f3748f15fd7c58713111188321a074ef9d19e288236a5"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'PixelShift' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 816,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "f8a0a4193416c804",
+            "equalIndicator/v1": "e98a82d20d3e34304abb4b9578e974e05ad718351edf6805e4d12c06aeaad19b"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'RenderRegion' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalSurface.java"
+                },
+                "region": {
+                  "startLine": 390,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "2150d384069401b2",
+            "equalIndicator/v1": "f181b56caa2457f40bf1fdf0935ba85a52a1ce8097e72be94ee1e243b2df5102"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'PixelShift' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/SurfaceBuffer.java"
+                },
+                "region": {
+                  "startLine": 97,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "93c2c4e3c29a4c0d",
+            "equalIndicator/v1": "f6becc1b8ad1ccb9a96563d5a4a6b2116913f873fba2952214a5aeac28aab266"
+          }
+        },
+        {
+          "ruleId": "ClassEscapesItsScope",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Class 'Viewport' is not exported from module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalCamera.java"
+                },
+                "region": {
+                  "startLine": 37,
+                  "startColumn": 12
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "4e1a3b2383c9426f",
+            "equalIndicator/v1": "fc6493b0667f3a5e2698b01c4fb052d6bfb2da0a63afbe728de0aee77119c545"
+          }
+        },
+        {
+          "ruleId": "ConstantValue",
+          "kind": "fail",
+          "level": "note",
+          "message": {
+            "text": "Value 'enabled' is always 'true'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
+                },
+                "region": {
+                  "startLine": 467,
+                  "startColumn": 24
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "d28a8f5b4a119405",
+            "equalIndicator/v1": "c9e86299c5d114e4707f027c1203873ce08fd5e234d4c44f6f21ff61a60691e8"
+          }
+        },
+        {
+          "ruleId": "DataFlowIssue",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Variable is already assigned to this value"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/GpuCapabilityReport.java"
+                },
+                "region": {
+                  "startLine": 16,
+                  "startColumn": 9
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "2b894aaa85caaaff",
+            "equalIndicator/v1": "6e876652ba80be0424e5ad56d4d152a9b407d77b15ce87aee1b15079f5e90f2e"
+          }
+        },
+        {
+          "ruleId": "DataFlowIssue",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Variable is already assigned to this value"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/GpuCapabilityReport.java"
+                },
+                "region": {
+                  "startLine": 19,
+                  "startColumn": 9
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "51407244fc713874",
+            "equalIndicator/v1": "b640f53f6afe84f7b187b53e65bfea629cc29f8392d208532182d73ebc48cbf4"
+          }
+        },
+        {
+          "ruleId": "DataFlowIssue",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Variable is already assigned to this value"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/GpuCapabilityReport.java"
+                },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 9
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "b36cd4fdc563b2e8",
+            "equalIndicator/v1": "d4e882a241aaa264b6dbcb9f4858721298ea5edbd8519826694e52fdd693b8ed"
+          }
+        },
+        {
+          "ruleId": "IgnoreResultOfCall",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Result of 'FileChannel.write()' is ignored"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/app/LastSessionStore.java"
+                },
+                "region": {
+                  "startLine": 107,
+                  "startColumn": 55
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "d5aab309cda790e5",
+            "equalIndicator/v1": "4812a1e19d3252a3d2842301b495ef746847cf88d6d5dcd0f8cb33500df5d326"
+          }
+        },
+        {
+          "ruleId": "Java9ReflectionClassVisibility",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "The module 'javafx.graphics' does not export the package 'com.sun.javafx.tk' to the module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/MacContextMenu.java"
+                },
+                "region": {
+                  "startLine": 44,
+                  "startColumn": 50
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "49d80727ddb1d7b5",
+            "equalIndicator/v1": "14f17c9a09782d9c6edcf42225ee902ad104cfbd2a9c5948f0f202bfde04759e"
+          }
+        },
+        {
+          "ruleId": "Java9ReflectionClassVisibility",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "The module 'javafx.graphics' does not export the package 'com.sun.glass.ui' to the module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/app/MacApplicationMenu.java"
+                },
+                "region": {
+                  "startLine": 16,
+                  "startColumn": 54
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "bf5d14514b00c150",
+            "equalIndicator/v1": "236af8cf5c3205efdeaab614be5f8b3a6051bf7e883d77cd5de2474f44d1f4ce"
+          }
+        },
+        {
+          "ruleId": "Java9ReflectionClassVisibility",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "The module 'javafx.graphics' does not export the package 'com.sun.glass.ui' to the module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/app/MacApplicationMenu.java"
+                },
+                "region": {
+                  "startLine": 26,
+                  "startColumn": 47
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "28f1a2d6959a278e",
+            "equalIndicator/v1": "8571fb4a2175c04f214292b7f85f913058191a3ade39f6e718e7a1db26123bc8"
+          }
+        },
+        {
+          "ruleId": "Java9ReflectionClassVisibility",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "The module 'javafx.graphics' does not export the package 'com.sun.glass.ui' to the module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/app/MacApplicationMenu.java"
+                },
+                "region": {
+                  "startLine": 28,
+                  "startColumn": 47
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "040830db8016b636",
+            "equalIndicator/v1": "8a074169b63949e8d2ca26abff2e2f0d2c0af15c5d4c571f68b5be94702b7970"
+          }
+        },
+        {
+          "ruleId": "Java9ReflectionClassVisibility",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "The module 'javafx.graphics' does not export the package 'com.sun.javafx.tk' to the module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/MacLoadingMaterial.java"
+                },
+                "region": {
+                  "startLine": 26,
+                  "startColumn": 44
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "02808aef866c8a90",
+            "equalIndicator/v1": "98c5439a003f6687b7be59051335d67c34ad5bafb0f2fb1f28c7c2299fa96349"
+          }
+        },
+        {
+          "ruleId": "Java9ReflectionClassVisibility",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "The module 'javafx.graphics' does not export the package 'com.sun.javafx.stage' to the module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/MacLoadingMaterial.java"
+                },
+                "region": {
+                  "startLine": 24,
+                  "startColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "c050ce0d49bc75ed",
+            "equalIndicator/v1": "b473c23f5570eac338687a393cc105b0c42bd4c9db15312cb771da341ffa93b7"
+          }
+        },
+        {
+          "ruleId": "Java9ReflectionClassVisibility",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "The module 'javafx.graphics' does not export the package 'com.sun.javafx.stage' to the module 'com.shangin.fractal'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/ui/MacContextMenu.java"
+                },
+                "region": {
+                  "startLine": 41,
+                  "startColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "6e68a13bc2f1ff41",
+            "equalIndicator/v1": "bb3fc55beb62683d36ee6e776ba4410e25cbacc6c626efcb5949a3682d1ed56c"
+          }
+        },
+        {
+          "ruleId": "OptionalUsedAsFieldOrParameterType",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Optional<RenderRegion>' used as type for parameter 'approximateCoverage'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/render/RenderJob.java"
+                },
+                "region": {
+                  "startLine": 33,
+                  "startColumn": 66
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "89c15fdbaa95e90e",
+            "equalIndicator/v1": "3dd3697cbaf4c54de153edbd441d96983bfb971bac67648a20ca1f7473b08c01"
+          }
+        },
+        {
+          "ruleId": "OptionalUsedAsFieldOrParameterType",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Optional<RenderRegion>' used as type for field 'approximateCoverage'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/render/RenderJob.java"
+                },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 19
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "0ea7d59c6c5372bc",
+            "equalIndicator/v1": "87237aca625f447c311e979eee90730a83374454e50236555951f5fbb3b75c6d"
+          }
+        },
+        {
+          "ruleId": "OptionalUsedAsFieldOrParameterType",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Optional<RenderRegion>' used as type for parameter 'approximateCoverage'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/render/RenderJob.java"
+                },
+                "region": {
+                  "startLine": 27,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "6830d7196d8bc039",
+            "equalIndicator/v1": "8a547f3158d18028f5ef5b244d98ce0d72698132b92de3eac07d686b1f30f077"
+          }
+        },
+        {
+          "ruleId": "OptionalUsedAsFieldOrParameterType",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Optional<RenderRegion>' used as type for parameter 'approximateCoverage'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/render/RenderRequest.java"
+                },
+                "region": {
+                  "startLine": 18,
+                  "startColumn": 13
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "df5888471ebcef61",
+            "equalIndicator/v1": "8cb3cb4454d49ff061fddd4d9e07d5ca1d43b3ab82a906e14cc214d18746c10e"
+          }
+        }
+      ]
+    }
+  ]
+}

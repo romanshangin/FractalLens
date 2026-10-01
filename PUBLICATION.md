@@ -95,7 +95,8 @@ those destination checks have passed.
 ## Prevention controls
 
 The current [CI controls](CI.md) use hosted runners, read-only permissions,
-secret-free Community analysis and explicit artifact upload. Local privacy
-guards and secret scanning complement review; they do not certify uninspected
+secret-free Community analysis, a checked Qodana findings artifact, and explicit
+installer upload. Local privacy guards and secret scanning complement review;
+they do not certify uninspected
 images, installers or future Actions logs. Destination fork-PR and platform
 acceptance must still be completed before publication.
