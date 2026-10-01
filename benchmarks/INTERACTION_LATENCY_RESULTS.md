@@ -1,5 +1,12 @@
 # Interaction latency results
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Measured 2026-09-06 on Apple M3 Pro, macOS 26.6.2, Java 26.0.2, JavaFX 26.0.2+3,
 2 GiB maximum heap. Viewport: 1200x760 logical / 2400x1520 physical pixels.
 The graphics smoke log confirmed the ES2 pipeline on Apple M3 Pro, with vsync enabled.
@@ -78,8 +85,8 @@ AA callback queue wait had medians around 29–36 ms for the single wheel case, 
 this is secondary to the 1.87-second planning interval. Queue-wait sums overlap
 and must not be added as sequential wall-clock costs.
 
-[Zoom raw](INTERACTION_LATENCY_ZOOM_CONTROL.csv), [zoom summary](INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv),
-[pan raw](INTERACTION_LATENCY_PAN_CONTROL.csv), [pan summary](INTERACTION_LATENCY_PAN_CONTROL_SUMMARY.csv).
+Zoom raw (private archive: `INTERACTION_LATENCY_ZOOM_CONTROL.csv`), [zoom summary](INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv),
+pan raw (private archive: `INTERACTION_LATENCY_PAN_CONTROL.csv`), [pan summary](INTERACTION_LATENCY_PAN_CONTROL_SUMMARY.csv).
 
 ## Screen-marker observations
 
@@ -114,7 +121,7 @@ uniformly in the same direction, so no fixed capture correction is justified.
 A less intrusive OS presentation trace or external high-speed recording is needed
 for a precise input-to-photon measurement.
 
-[Screen raw](INTERACTION_LATENCY_SCREEN.csv), [screen summary](INTERACTION_LATENCY_SCREEN_SUMMARY.csv).
+Screen raw (private archive: `INTERACTION_LATENCY_SCREEN.csv`), [screen summary](INTERACTION_LATENCY_SCREEN_SUMMARY.csv).
 
 ## Scope and validation
 

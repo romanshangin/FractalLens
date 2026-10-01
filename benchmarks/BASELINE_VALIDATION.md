@@ -1,5 +1,12 @@
 # Roadmap 9.1 fixture validation
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Recorded 2026-09-07 UTC (2026-09-06 local). Source: branch
 `codex/roadmap-9-1-baseline-fixtures`, working-tree implementation on parent
 `0c1b5a49fa1d9bf490cee9ed7085946ba9b0a57e`. The saved output explicitly labels
@@ -22,11 +29,12 @@ AA instrumentation is off; no JFR/native profiler was attached. Maven tests
 used OpenJDK 26.0.2. These different launch runtimes must not be treated as
 matching performance controls; each launch records its actual VM.
 
-Artifacts are preserved together:
+The selected manifest and summary remain public; other original artifacts
+are identified below as private archive records:
 
 - [Executed exact manifest](baseline-9-1-validation/manifest.csv)
-- [Runtime, arguments and cache metadata](baseline-9-1-validation/environment.txt)
-- [Raw samples](baseline-9-1-validation/samples.csv)
+- Runtime, arguments and cache metadata (private archive: `baseline-9-1-validation/environment.txt`)
+- Raw samples (private archive: `baseline-9-1-validation/samples.csv`)
 - [Per-scope summary](baseline-9-1-validation/summary.csv)
 
 ## Observed checks

@@ -1,5 +1,12 @@
 # GPU calculation decision gate (roadmap 8.4)
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 ## Decision
 
 **Conformance passes on Apple M3 Pro; the performance gate fails. Keep CPU as
@@ -15,11 +22,11 @@ The JVM heap was capped at 2 GiB. No timing runs overlapped the test suite.
 
 Raw data:
 
-- [Main uninstrumented run](GPU_RENDER_BENCHMARK_RESULTS.csv): eight cases,
+- Main uninstrumented run (private archive: `GPU_RENDER_BENCHMARK_RESULTS.csv`): eight cases,
   224 frame rows, including warmup and first-use observations.
-- [Uninstrumented Refined run](GPU_RENDER_BENCHMARK_REFINED.csv): two cases,
+- Uninstrumented Refined run (private archive: `GPU_RENDER_BENCHMARK_REFINED.csv`): two cases,
   56 frame rows. This runs the application's default presentation mode.
-- [Separate component profiling run](GPU_RENDER_BENCHMARK_PROFILE.csv): six
+- Separate component profiling run (private archive: `GPU_RENDER_BENCHMARK_PROFILE.csv`): six
   base-pass cases, 108 frame rows. Timestamp queries are enabled only here.
 
 ## End-to-end results
@@ -182,7 +189,7 @@ JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true -Dfractal.gpu.mandelbrot.pr
 
 mvn clean test
 mvn -Pgpu-smoke -Dfractal.gpu.fp32Native=true -Dfp32.native.full=true -Dfractal.gpu.mandelbrot.profile=true '-Dtest=GpuRuntimeNativeTest,PaletteRecolorNativeTest,GpuMandelbrotRenderBackendNativeTest,MandelbrotPrecisionNativeTest' test
-mvn -Pgpu-smoke -Dtest=GpuMandelbrotRenderBackendNativeTest -Dfractal.gpu.expectUnavailable=true -Dorg.lwjgl.shaderc.libname=/private/tmp/fractalui-missing-shaderc.dylib test
+mvn -Pgpu-smoke -Dtest=GpuMandelbrotRenderBackendNativeTest -Dfractal.gpu.expectUnavailable=true -Dorg.lwjgl.shaderc.libname=/private/tmp/fractallens-missing-shaderc.dylib test
 ```
 
 The benchmark defaults to both sizes, all five workloads, three warmup pairs

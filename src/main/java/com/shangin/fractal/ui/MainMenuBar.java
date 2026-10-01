@@ -92,7 +92,7 @@ final class MainMenuBar extends MenuBar {
             currentFractal = preset;
             fractalView.setFractal(preset);
             updateDestinations(preset);
-            stage.setTitle(preset + " — FractalUI");
+            stage.setTitle(preset + " — FractalLens");
         });
         Menu palette = choices("Palette", PalettePreset.values(), initialPalette, palettes, preset -> {
             paletteStops = preset.stops();
@@ -131,7 +131,7 @@ final class MainMenuBar extends MenuBar {
         Menu window = new Menu("Window", null,
                 command("Minimize", shortcut(KeyCode.M), () -> stage.setIconified(true)),
                 command("Zoom", null, () -> stage.setMaximized(!stage.isMaximized())));
-        Menu help = new Menu("Help", null, command("FractalUI Help", null, () -> FractalDialogs.help(stage)));
+        Menu help = new Menu("Help", null, command("FractalLens Help", null, () -> FractalDialogs.help(stage)));
         updateDestinations(initialFractal);
         getMenus().setAll(file, editMenu(), view, fractal, goTo, color, render, window, help);
         stage.sceneProperty().addListener((observable, oldScene, scene) -> {

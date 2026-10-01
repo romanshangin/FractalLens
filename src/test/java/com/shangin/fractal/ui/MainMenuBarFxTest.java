@@ -77,6 +77,19 @@ class MainMenuBarFxTest {
     }
 
     @Test
+    void helpUsesThePublicApplicationName() throws Exception {
+        fx(() -> {
+            Menu help = menuBar.getMenus().stream()
+                    .filter(menu -> "Help".equals(menu.getText())).findFirst().orElseThrow();
+            assertEquals("FractalLens Help", help.getItems().getFirst().getText());
+            var dialog = FractalDialogs.helpDialog(stage);
+            assertEquals("FractalLens Help", dialog.getTitle());
+            dialog.close();
+            return null;
+        });
+    }
+
+    @Test
     void iterationMenuAppliesBothValuesOnlyAfterSecondConfirmation() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
         CompletableFuture<Void> action = openIterationEditor();

@@ -42,7 +42,7 @@ public final class GpuRenderBenchmark extends Application {
         this.stage = stage;
         surface = new FractalSurface();
         stage.setScene(new Scene(new StackPane(surface), 756, 491));
-        stage.setTitle("FractalUI — GPU calculation decision gate");
+        stage.setTitle("FractalLens — GPU calculation decision gate");
         stage.show();
         pulse = new AnimationTimer() {
             @Override public void handle(long now) {

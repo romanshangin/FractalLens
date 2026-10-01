@@ -1,5 +1,12 @@
 # Roadmap P1.4 allocation profile — 2026-09-24
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 ## Decision and scope
 
 **Profile complete.** The current renderer still allocates heavily in both
@@ -66,11 +73,11 @@ and ARGB controls. The workload `SUCCESS` and process `MONITOR_SUCCESS` markers,
 both NMT captures, ordered scope/event coverage and the JFR-derived
 [allocation groups](p1-4-allocation-profile-20260924/allocations.json) are
 saved with the [environment record](p1-4-allocation-profile-20260924/environment.json).
-The raw JFR is retained locally as
+The raw JFR was retained privately as
 `p1-4-allocation-profile-20260924/allocation.jfr` and ignored by Git; its
 SHA-256 is `f6732ed75f4f3a67e645af69195d47e63126bd534b27a7d4832f6ac7fe5a6e94`.
 The derived allocation groups are versioned and can be regrouped without the
-raw recording. The launch log also records the existing native loading-material
+raw recording. The privately archived launch log also records the existing native loading-material
 fallback; it did not prevent exact frame validation.
 
 The table groups `jdk.ObjectAllocationSample` estimated weights by the nearest

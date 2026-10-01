@@ -172,14 +172,14 @@ error contract; every other category is zero. This rules out palette-phase and
 iteration-matching tweaks as useful next work. A further calculation experiment
 must apply a higher-precision certificate only to rejected pixels. The raw
 profile is in
-[GPU_RESIDENT_REJECTION_PROFILE.csv](benchmarks/GPU_RESIDENT_REJECTION_PROFILE.csv).
+GPU_RESIDENT_REJECTION_PROFILE.csv (private archive: `benchmarks/GPU_RESIDENT_REJECTION_PROFILE.csv`).
 
 A follow-up centered-error FP32 certificate was tested only on first-stage
 rejections. It preserved conformance but certified zero additional pixels at
 both benchmark sizes and all three native smoke scenes. On Retina seahorse its
 extra arithmetic raised median GPU calculation from 27.06 to 46.65 ms. The
 second pass was removed; its measurements remain in
-[GPU_RESIDENT_SECOND_STAGE_PROFILE.csv](benchmarks/GPU_RESIDENT_SECOND_STAGE_PROFILE.csv).
+GPU_RESIDENT_SECOND_STAGE_PROFILE.csv (private archive: `benchmarks/GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`).
 Any later certificate experiment must use a genuinely higher-precision numeric
 representation rather than reshaping the same FP32 bounds.
 
@@ -190,7 +190,7 @@ zero CPU recovery it fails the performance gate: Retina seahorse is 37.3% slower
 than CPU and Retina overview is only 4.3% faster. It also fails conformance, with
 54 Retina seahorse outliers and a maximum channel error of 189. The emulation
 path was removed. Raw results are in
-[GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv](benchmarks/GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv).
+GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv (private archive: `benchmarks/GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`).
 
 ## Palette recoloring integration
 
@@ -304,9 +304,9 @@ uploads, AA/scale/size/palette invalidation, cleanup, and reopening after dispat
 Run failure-path checks in fresh JVMs:
 
 ```sh
-mvn -Pgpu-smoke -Dfractal.gpu.expectUnavailable=true -Dorg.lwjgl.vulkan.libname=/private/tmp/fractalui-missing-moltenvk.dylib test
+mvn -Pgpu-smoke -Dfractal.gpu.expectUnavailable=true -Dorg.lwjgl.vulkan.libname=/private/tmp/fractallens-missing-moltenvk.dylib test
 mvn '-P!gpu-macos,gpu-smoke' -Dfractal.gpu.expectUnavailable=true test
-mvn -Pgpu-smoke -Dtest=PaletteRecolorNativeTest -Dfractal.gpu.expectPaletteUnavailable=true -Dorg.lwjgl.shaderc.libname=/private/tmp/fractalui-missing-shaderc.dylib test
+mvn -Pgpu-smoke -Dtest=PaletteRecolorNativeTest -Dfractal.gpu.expectPaletteUnavailable=true -Dorg.lwjgl.shaderc.libname=/private/tmp/fractallens-missing-shaderc.dylib test
 ```
 
 The first two must report `UNAVAILABLE` and finish ordinary/direct and deep/perturbation

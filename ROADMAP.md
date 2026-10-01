@@ -1,4 +1,4 @@
-# FractalUI development roadmap
+# FractalLens development roadmap
 
 CPU/GPU optimization review (2026-09-05):
 [analysis, experiment inventory and validation rules](benchmarks/CPU_GPU_OPTIMIZATION_ANALYSIS.md).
@@ -7,6 +7,13 @@ optimization work is section 9: establish comparable measurements, investigate
 CPU AA synchronization, improve CPU/deep-zoom work, then test different GPU
 algorithms. Completed and rejected experiments below remain historical evidence;
 new unchecked items are proposals, not measured speedups.
+
+Completed historical items refer to the original recorded validation. The
+public evidence set is intentionally smaller; see [publication provenance](PUBLICATION.md)
+for archived inputs, original SHA values and replay limits. Migration does not
+rerun or extend those acceptance results. The public configuration removes the
+original self-hosted lanes and automatic raw-report uploads; hardware checks
+remain manual and their acceptance gates remain unchanged. See [CI](CI.md).
 
 Checkboxes represent acceptance state: a parent item remains open until every
 required implementation and validation step beneath it is complete.
@@ -226,17 +233,17 @@ delivery foundation should be completed first.
     checkout checks, dependency caching, bounded diagnostics and retained test
     reports.
   - [x] Pass the hosted macOS and Windows CPU-default jobs and retain their
-    reports in [Portable CI run 35392879380](https://github.com/romzesthefirst/fractal-ui/actions/runs/35392879380).
+    reports in Portable CI run 35392879380 (private archive).
   - [x] Run the configured self-hosted native hardware lanes and retain their
     reports.
     - [x] Pass the Apple Silicon macOS lane on an Apple M3 Pro with macOS 27.0:
       5 native GPU smoke tests passed and the reports were retained in
-      [Native GPU Validation run 35373192709](https://github.com/romzesthefirst/fractal-ui/actions/runs/35373192709).
+      Native GPU Validation run 35373192709 (private archive).
     - [x] Pass the Windows x64 CPU-fallback lane on Windows 11: the runtime
       remained unavailable as required, 5 native smoke tests completed with no
       failures or errors and one expected resident-GPU skip, the Maven cache
       was saved successfully, and the reports were retained in
-      [Native GPU Validation run 35393710276](https://github.com/romzesthefirst/fractal-ui/actions/runs/35393710276).
+      Native GPU Validation run 35393710276 (private archive).
 - [x] Pass the macOS and Windows runtime-artifact workflow and record the
   clean-machine launch checklist, including the owner's explicit acceptance of
   the failed default launch on macOS Sonoma in VirtualBuddy. Windows passed;

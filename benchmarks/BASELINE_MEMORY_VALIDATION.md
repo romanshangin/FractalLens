@@ -1,5 +1,12 @@
 # Roadmap 9.1 allocation and sustained memory — 2026-09-08 local
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 The allocation profile identifies repeated arbitrary-precision coordinate work
 in deep AA as a follow-up target. This step adds diagnostic infrastructure and
 evidence; it does not optimize the production renderer or establish a speedup.
@@ -12,8 +19,8 @@ before the detached GC checkpoint, avoiding dependence on the liveness of
 large `Result` locals in the long-running main method. The earlier allocation
 profile remains useful for allocation attribution; its detached-memory values
 are not the final sustained ownership evidence.
-The earlier driver and launcher are retained in
-[source snapshots](baseline-9-1-memory-allocation-20260908/source-snapshots);
+The earlier driver and launcher are preserved only in the private archive as
+source snapshots (private archive: `baseline-9-1-memory-allocation-20260908/source-snapshots`);
 their SHA-256 values exactly match the allocation run's recorded manifest.
 
 ## Environment and boundaries
@@ -38,16 +45,17 @@ controlled. These runs cannot isolate a thermal cause of timing variation.
 
 ## Allocation attribution
 
-[Raw scopes and trials](baseline-9-1-memory-allocation-20260908/workload),
-[process observations](baseline-9-1-memory-allocation-20260908/process.csv),
-[scope summary](baseline-9-1-memory-allocation-20260908/summary.json),
-[allocation groups](baseline-9-1-memory-allocation-20260908/allocations-by-fixture.json).
+Raw scopes and trials (private archive: `baseline-9-1-memory-allocation-20260908/workload`),
+process observations (private archive: `baseline-9-1-memory-allocation-20260908/process.csv`),
+scope summary (private archive: `baseline-9-1-memory-allocation-20260908/summary.json`),
+allocation groups (private archive: `baseline-9-1-memory-allocation-20260908/allocations-by-fixture.json`).
 
 Eight selected fixtures, 480x270, both requested modes, two navigation cycles
 per view and two complete rounds produce **144 verified trials in 80.47 s**.
 The trial workload is 33.58 s navigation, 28.35 s controls and 17.84 s source
 preparation/control; the remaining interval includes checkpoints and recording.
-The JFR and its SHA-256 are preserved locally; the derived grouping is versioned.
+The JFR, its SHA-256 and the earlier derived grouping are preserved privately;
+this historical grouping is not included in the selected public evidence.
 
 The estimated JFR allocation weights total **41.57 GB in navigation scopes**,
 33.02 GB in controls and 12.78 GB in source preparation/control. These are
@@ -84,10 +92,10 @@ so treating every `int[]` allocation as a pixel-buffer copy would be incorrect.
 
 ## Sustained run
 
-[Final summary](baseline-9-1-memory-sustained-final-20260908/summary.json),
-[raw scopes](baseline-9-1-memory-sustained-final-20260908/workload/scopes.csv),
-[RSS/thermal observations](baseline-9-1-memory-sustained-final-20260908/process.csv),
-[final NMT difference](baseline-9-1-memory-sustained-final-20260908/nmt-final.json).
+Final summary (private archive: `baseline-9-1-memory-sustained-final-20260908/summary.json`),
+raw scopes (private archive: `baseline-9-1-memory-sustained-final-20260908/workload/scopes.csv`),
+RSS/thermal observations (private archive: `baseline-9-1-memory-sustained-final-20260908/process.csv`),
+final NMT difference (private archive: `baseline-9-1-memory-sustained-final-20260908/nmt-final.json`).
 
 The final JFR-free run uses 1512x982, both requested modes and one navigation
 cycle per view. Four complete rounds produce **144 verified trials in 794.69 s
@@ -116,7 +124,7 @@ primarily because of heap decommit. Code and metaspace commitments rise by
 independent proof of native leak absence. The checkpoint does not force all
 JavaFX peer/resource cleanup to complete on a particular pulse.
 
-![RSS and detached heap checkpoints](baseline-9-1-memory-sustained-final-20260908/memory.svg)
+RSS and detached heap checkpoints (private archive: `baseline-9-1-memory-sustained-final-20260908/memory.svg`).
 
 Exact-target timing groups are saved per round. For example, deep-AA pinch
 Fast completion is 5156.50 / 5107.67 / 5012.09 / 5055.69 ms, while the Fast
@@ -136,18 +144,18 @@ rounds, scope overlap, short runs and failed native captures. JFR tests cover
 nanosecond timestamps with timezone offsets and allocation scope boundaries.
 
 - `mvn clean test`: **394 tests, zero failures/errors, 37 skipped**.
-  [Saved log](baseline-9-1-memory-sustained-final-20260908/clean-test.log).
+  Saved log (private archive: `baseline-9-1-memory-sustained-final-20260908/clean-test.log`).
 - Python baseline validators: **22 tests passed**.
-  [Saved log](baseline-9-1-memory-sustained-final-20260908/python-tests.log).
+  Saved log (private archive: `baseline-9-1-memory-sustained-final-20260908/python-tests.log`).
 - Graphical `BaselineInputBenchmarkTest`: **16 tests passed**.
-  [Summary](baseline-9-1-memory-sustained-final-20260908/fx-test-summary.txt),
-  [log](baseline-9-1-memory-sustained-final-20260908/fx-tests.log).
+  Summary (private archive: `baseline-9-1-memory-sustained-final-20260908/fx-test-summary.txt`),
+  log (private archive: `baseline-9-1-memory-sustained-final-20260908/fx-tests.log`).
   The logged injected timer failure is the expected asynchronous-failure regression.
 - Both accepted datasets pass the strict memory/event/drain validator:
   **288 trials total**, excluding seed and independent control work.
   A short-run regression also verifies that the monitor waits for its initial
   NMT capture even when the workload finishes first.
-  [Validation record](baseline-9-1-memory-sustained-final-20260908/validation.txt).
+  Validation record (private archive: `baseline-9-1-memory-sustained-final-20260908/validation.txt`).
 
 The first restricted graphical probe failed to access a display/NMT. Temporary
 development probes under `target` are excluded from accepted datasets and are
@@ -157,8 +165,9 @@ The initial sustained run at
 per-case stack lifetimes; its `SUPERSEDED` marker excludes it from conclusions.
 It has no monitor success marker. Historical CSVs are not overwritten.
 New process CSVs are normalized to LF for review; their original CRLF byte
-streams are retained as `process-original.csv.gz`. Numeric observations are
-unchanged. Saved log trailing whitespace is normalized separately.
+streams were retained as `process-original.csv.gz` in the private archive.
+Those captures and logs are excluded from the public evidence. Numeric
+observations in this historical report are unchanged.
 
 The eight-fixture selection is not full formula/feature coverage, and a bounded
 soak does not prove indefinite memory stability. NMT excludes some native graphics

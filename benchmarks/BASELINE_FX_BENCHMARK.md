@@ -1,5 +1,9 @@
 # Roadmap 9.1 JavaFX publication baseline
 
+> Publication scope: use this protocol for fresh runs in a new output directory.
+> Keep raw logs and diagnostic captures private; publish only reviewed summaries
+> and necessary sanitized evidence. See [evidence provenance](../PUBLICATION.md).
+
 [`BaselineFxBenchmark`](../src/test/java/com/shangin/fractal/render/BaselineFxBenchmark.java)
 uses the same `9.1-v1` fixture objects and exact [manifest](BASELINE_FIXTURES.csv)
 as the [headless benchmark](BASELINE_BENCHMARK.md). It exercises the production
@@ -118,7 +122,7 @@ BASELINE_JAVA=/path/to/jdk/bin/java
   --module-path "target/classes:$(cat target/baseline-classpath.txt)" \
   --patch-module com.shangin.fractal=target/test-classes \
   --enable-native-access=javafx.graphics,org.lwjgl \
-  -Djavafx.cachedir=/tmp/fractalui-javafx-cache \
+  -Djavafx.cachedir=/tmp/fractallens-javafx-cache \
   -Dbaseline.output=target/baseline-fx-check \
   -Dbaseline.revision="$(git rev-parse HEAD)" -Dbaseline.label=current \
   -Dbaseline.sizes=480x270,1512x982,3024x1964 \
@@ -147,7 +151,7 @@ For a graphics attribution/validation run, `-Dprism.verbose=true` records the
 `requested_pipeline` property alone does not identify the actual pipeline.
 Run with graphical access; a sandbox software fallback is not a native baseline.
 Keep startup diagnostics and JFR/native profiles separate from final timing
-decisions, and retain the original log with saved validation results.
+decisions, and retain the original log privately with the validation record.
 
 ## Verification and limits
 
@@ -170,7 +174,7 @@ Regression commands:
 
 ```sh
 mvn clean test
-mvn -q -Dfractal.fx.tests=true -Djavafx.cachedir=/tmp/fractalui-javafx-cache \
+mvn -q -Dfractal.fx.tests=true -Djavafx.cachedir=/tmp/fractallens-javafx-cache \
   -Dtest=BaselineFxBenchmarkTest test
 ```
 

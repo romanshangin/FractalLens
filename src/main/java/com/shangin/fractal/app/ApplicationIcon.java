@@ -17,11 +17,11 @@ final class ApplicationIcon {
 
     static void install(Stage stage) {
         URL resource = Objects.requireNonNull(
-                ApplicationIcon.class.getResource("icons/fractalui.png"),
-                "Missing FractalUI application icon");
+                ApplicationIcon.class.getResource("icons/fractallens.png"),
+                "Missing FractalLens application icon");
         Image icon = new Image(resource.toExternalForm());
         if (icon.isError()) {
-            throw new IllegalStateException("Cannot load FractalUI application icon", icon.getException());
+            throw new IllegalStateException("Cannot load FractalLens application icon", icon.getException());
         }
         boolean mac = System.getProperty("os.name", "").startsWith("Mac");
         if (!mac) {
@@ -35,7 +35,7 @@ final class ApplicationIcon {
                 try {
                     taskbar.setIconImage(ImageIO.read(resource));
                 } catch (IOException e) {
-                    throw new UncheckedIOException("Cannot load FractalUI Dock icon", e);
+                    throw new UncheckedIOException("Cannot load FractalLens Dock icon", e);
                 }
             }
         }

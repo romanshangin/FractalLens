@@ -1,5 +1,12 @@
 # Roadmap 9.1 production input validation
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Validation spans 2026-09-07–08 local; dataset names use the UTC run date 2026-09-08. Base commit `a8ecdabb`, branch
 `codex/roadmap-9-1-input-matrix`. Saved environments identify a working-tree run;
 the final dataset includes source SHA-256 hashes. Saved log trailing whitespace
@@ -29,19 +36,19 @@ AA/cache policy affect the requests. See [the contract and commands](BASELINE_IN
 
 ## Full matrix
 
-[Final 480x270 dataset](baseline-9-1-input-final-20260908/samples.csv),
-[raw events](baseline-9-1-input-final-20260908/events.csv),
-[actual jobs](baseline-9-1-input-final-20260908/actual-manifest.csv),
-[summary](baseline-9-1-input-final-20260908/summary.csv),
-[environment](baseline-9-1-input-final-20260908/environment.txt),
-[launch log](baseline-9-1-input-final-20260908/launch.log).
+Final 480x270 dataset (private archive: `baseline-9-1-input-final-20260908/samples.csv`),
+raw events (private archive: `baseline-9-1-input-final-20260908/events.csv`),
+actual jobs (private archive: `baseline-9-1-input-final-20260908/actual-manifest.csv`),
+summary (private archive: `baseline-9-1-input-final-20260908/summary.csv`),
+environment (private archive: `baseline-9-1-input-final-20260908/environment.txt`),
+launch log (private archive: `baseline-9-1-input-final-20260908/launch.log`).
 
 All 28 fixtures pass: **444 trials**, including 222 first sequences and 222
 measured sequences. There are **364 completed navigation renders** and **80
 no-change trials**, where a pan is clamped and the prior frame remains valid.
 The scenario counts are 80 each for wheel, wheel burst, pinch, trackpad and drag;
 36 navigation steps; and eight input-driven replacements. Both requested
-Fast/Refined modes are covered. The [SUCCESS marker](baseline-9-1-input-final-20260908/SUCCESS)
+Fast/Refined modes are covered. The SUCCESS marker (private archive: `baseline-9-1-input-final-20260908/SUCCESS`)
 requires every seed and every trial control to pass. The strict summarizer
 accepts all 444 trials and checks their timings against the raw events.
 
@@ -53,12 +60,12 @@ missing work, without relaxing numerical or ARGB equality.
 
 ## Target-size follow-up
 
-[1512x982 / 3024x1964 dataset](baseline-9-1-input-retina-20260908/samples.csv),
-[summary](baseline-9-1-input-retina-20260908/summary.csv),
-[actual jobs](baseline-9-1-input-retina-20260908/actual-manifest.csv),
-[environment](baseline-9-1-input-retina-20260908/environment.txt),
-[launch log](baseline-9-1-input-retina-20260908/launch.log),
-[SUCCESS](baseline-9-1-input-retina-20260908/SUCCESS).
+1512x982 / 3024x1964 dataset (private archive: `baseline-9-1-input-retina-20260908/samples.csv`),
+summary (private archive: `baseline-9-1-input-retina-20260908/summary.csv`),
+actual jobs (private archive: `baseline-9-1-input-retina-20260908/actual-manifest.csv`),
+environment (private archive: `baseline-9-1-input-retina-20260908/environment.txt`),
+launch log (private archive: `baseline-9-1-input-retina-20260908/launch.log`),
+SUCCESS (private archive: `baseline-9-1-input-retina-20260908/SUCCESS`).
 
 All **80 trials** pass, 40 at each size, all with completed target renders.
 This follow-up selects `seahorse-fixed`, `julia-aa-regular`, `pan-25`,
@@ -96,26 +103,27 @@ available. The early runner could mistake it for a no-change gesture. The final
 runner captures asynchronous FX failures and requires the idle frame to agree
 with the camera. Its regression injects a timer failure and requires rejection.
 
-Two partial development datasets are preserved and excluded from summaries:
+Two partial development datasets remain in the private archive and were
+excluded from the accepted summaries:
 
-- [Initial control-contract failure](baseline-9-1-input-20260908/FAILED.md):
+- Initial control-contract failure (private archive: `baseline-9-1-input-20260908/FAILED.md`):
   a fresh-reference recomputation of retained deep samples was not a bit-exact
   navigation control. The final control preserves previously verified samples.
-- [Scaled-exponent failure](baseline-9-1-input-verified-20260908/FAILED.md),
-  [launch evidence](baseline-9-1-input-verified-20260908/launch.log),
-  [failing regression](baseline-9-1-input-verified-20260908/grid-snap-before.log).
+- Scaled-exponent failure (private archive: `baseline-9-1-input-verified-20260908/FAILED.md`),
+  launch evidence (private archive: `baseline-9-1-input-verified-20260908/launch.log`),
+  failing regression (private archive: `baseline-9-1-input-verified-20260908/grid-snap-before.log`).
   Despite its early directory name, this run has no `SUCCESS` marker.
 
 ## Regression checks
 
 - `mvn clean test`: **386 tests**, zero failures/errors, 37 opt-in skips.
-  [Full log](baseline-9-1-input-final-20260908/clean-test.log).
+  Full log (private archive: `baseline-9-1-input-final-20260908/clean-test.log`).
 - `BaselineInputBenchmarkTest` with graphical access: **16 tests**, no failures
-  or skips. [Summary](baseline-9-1-input-final-20260908/fx-regressions.txt),
-  [log](baseline-9-1-input-final-20260908/fx-regressions.log). The
+  or skips. Summary (private archive: `baseline-9-1-input-final-20260908/fx-regressions.txt`),
+  log (private archive: `baseline-9-1-input-final-20260908/fx-regressions.log`). The
   `injected timer failure` message is intentional: the test requires rejection.
 - Existing `FractalResizeFxTest`: **14 passed**, two separately gated skips.
-  [Summary](baseline-9-1-input-final-20260908/existing-fx-regressions.txt).
+  Summary (private archive: `baseline-9-1-input-final-20260908/existing-fx-regressions.txt`).
 - `python3 -m unittest discover -s scripts -p 'test_summarize_baseline_input.py'`:
   **seven passed**, including missing/duplicate trials, wrong-generation pulses,
   missing success, inconsistent raw timings and unstable endpoints. Existing

@@ -63,7 +63,7 @@ public final class BaselineInputBenchmark {
         }
         System.setProperty("fractal.gpu.enabled", "false");
         System.setProperty("fractal.gpu.mandelbrot.enabled", "false");
-        var lockPath = Path.of(System.getProperty("java.io.tmpdir"), "fractalui-baseline-benchmark.lock");
+        var lockPath = Path.of(System.getProperty("java.io.tmpdir"), "fractallens-baseline-benchmark.lock");
         try (var channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
              var lock = channel.tryLock()) {
             if (lock == null) throw new IllegalStateException("Another baseline benchmark is running");
@@ -138,7 +138,7 @@ public final class BaselineInputBenchmark {
                 if (view != null) for (var event : pending.values()) view.latency().observed(event, "_post_layout");
                 pending.clear();
             });
-            stage.setTitle("FractalUI — roadmap 9.1 production input baseline");
+            stage.setTitle("FractalLens — roadmap 9.1 production input baseline");
             stage.setScene(scene); stage.show();
         }
         void size(int width, int height) {

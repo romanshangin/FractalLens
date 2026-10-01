@@ -3,7 +3,9 @@
 import argparse
 import fcntl
 import json
+from privacy import safe_json, redact
 import os
+import platform
 from pathlib import Path
 import subprocess
 import sys
@@ -85,7 +87,7 @@ def main():
     (output / "tmp").mkdir()
     (output / "policy.json").write_text(json.dumps(policy, indent=2) + "\n")
     for label, manifest in manifests.items():
-        (output / ("build-" + label + ".json")).write_text(json.dumps(manifest, indent=2) + "\n")
+        (output / ("build-" + label + ".json")).write_text(safe_json(manifest, indent=2) + "\n")
     env = clean_environment(java)
     first_manifest = None
     for label, build in builds.items():
@@ -95,7 +97,7 @@ def main():
                    "-cp", os.pathsep.join((str(build / "test-classes"), str(build / "classes"), cp)),
                    "com.shangin.fractal.render.BaselineBenchmark"]
         result = capture(command, env)
-        (output / ("preflight-" + label + ".json")).write_text(json.dumps(result, indent=2) + "\n")
+        (output / ("preflight-" + label + ".json")).write_text(safe_json(result, indent=2) + "\n")
         if result["returncode"] != 0:
             raise ValueError("Fixture preflight failed: " + label)
         manifest = read(output / ("preflight-" + label) / "manifest.csv")
@@ -107,16 +109,16 @@ def main():
     if settings["returncode"] != 0:
         raise ValueError("Cannot inspect selected JDK")
     tmp = next(line.split("=", 1)[1].strip() for line in settings["stderr"].splitlines() if "java.io.tmpdir =" in line)
-    (output / "environment.json").write_text(json.dumps({"jdk": settings,
-        "system": capture(["/usr/bin/uname", "-a"]),
+    (output / "environment.json").write_text(safe_json({"jdk": settings,
+        "system": {"os": platform.system(), "release": platform.release(), "architecture": platform.machine()},
         "hardware": capture(["/usr/sbin/sysctl", "hw.model", "hw.memsize", "hw.ncpu", "machdep.cpu.brand_string"]),
         "controller_sha256": {Path(__file__).name: sha(Path(__file__)), "summarize_baseline_pairs.py": sha(Path(__file__).with_name("summarize_baseline_pairs.py"))},
-        "global_lock": str(Path(tmp) / "fractalui-baseline-benchmark.lock"),
+        "global_lock": str(Path(tmp) / "fractallens-baseline-benchmark.lock"),
         "thermal_during_runs": "unmeasured; observations only before and after each process",
         "publication_scope": policy["runner"], "physical_scanout": "unmeasured"}, indent=2) + "\n")
     # lockf uses the same POSIX record locks as Java FileChannel. Children get a
     # private tmpdir, so their normal lock does not conflict with our campaign lease.
-    with (Path(tmp) / "fractalui-baseline-benchmark.lock").open("a+") as lock:
+    with (Path(tmp) / "fractallens-baseline-benchmark.lock").open("a+") as lock:
         fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         launches = []
         for pair in range(policy["process_pairs"]):
@@ -144,21 +146,21 @@ def main():
                 record = dict(process_pair=pair, order=order, label=label, directory=name, command=command,
                               policy_sha256=sha(output / "policy.json"),
                               before=observations(args.thermal))
-                (output / (name + "-launch.json")).write_text(json.dumps(record, indent=2) + "\n")
+                (output / (name + "-launch.json")).write_text(safe_json(record, indent=2) + "\n")
                 print("Starting " + name + " (order " + order + ")", flush=True)
                 with (output / (name + ".log")).open("x") as log:
                     record["result"] = run_process(command, build, env, log, policy["timeout_seconds"])
                 record["after"] = observations(args.thermal)
                 launches.append(record)
-                (output / (name + "-result.json")).write_text(json.dumps(record, indent=2) + "\n")
+                (output / (name + "-result.json")).write_text(safe_json(record, indent=2) + "\n")
                 if record["result"]["returncode"] != 0:
                     raise RuntimeError("Failed JVM: " + name)
         for path in builds.values():
             verify_build(path)
-        (output / "launches.json").write_text(json.dumps(launches, indent=2) + "\n")
+        (output / "launches.json").write_text(safe_json(launches, indent=2) + "\n")
         validate_campaign(output, require_marker=False)
         (output / "CAMPAIGN_COMPLETE").write_text("All scheduled JVMs exited successfully; strict coverage and fingerprint checks passed. This is not a production promotion.\n")
-    print(str(output), flush=True)
+    print(redact(str(output)), flush=True)
 
 
 if __name__ == "__main__":

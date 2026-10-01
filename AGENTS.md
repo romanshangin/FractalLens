@@ -1,4 +1,4 @@
-# FractalUI project instructions
+# FractalLens project instructions
 
 ## Communication and repository language
 
@@ -21,7 +21,7 @@
 
 ## Project overview and sources of truth
 
-FractalUI is a modular desktop application for exploring fractals. The current
+FractalLens is a modular desktop application for exploring fractals. The current
 stack and major capabilities are:
 
 - Java and JavaFX versions defined by `pom.xml`;
@@ -104,11 +104,37 @@ inputs, code state, and decision.
 
 ### Privacy and published data
 
+- Before committing new or generated evidence, run `python3 scripts/check_public_data.py`
+  and a full secret scan via `scripts/check_secrets.py`; include `--tree` for
+  uncommitted files. Keep `scripts/public_benchmark_files.json` and the benchmark
+  index consistent when explicitly selecting new evidence. Do not attach
+  personal self-hosted runners or expose repository secrets to pull requests.
+
+- The public benchmark selection is documented in `benchmarks/README.md` and
+  `PUBLICATION.md`. Keep raw logs, diagnostic dumps and unselected working
+  evidence in a private archive. Publish only reviewed summaries and explicitly
+  selected sanitized data. Preserve original measurement identities and label
+  redacted derivatives; do not imply that privately archived inputs are
+  available in a public checkout or that historical checks were rerun.
+
 - Never commit active credentials, tokens, private keys, recovery codes, or
   other secrets. Before adding benchmark results, logs, test reports, generated
   files, or diagnostic output, inspect them for secrets and personal machine
   data. Do not rely on GitHub masking to make a secret safe to print.
-- Do not publish a user's login name, home directory, email address, computer
+- A surname and contact email address explicitly selected by the user for
+  public use may appear in author metadata and project content. The explicit
+  public identity allowlist is:
+
+  - Surname: `Shangin`, including its use in package and module identifiers
+    such as `com.shangin` and `com.shangin.fractal`.
+  - Contact email address: `shangin.ro@gmail.com`.
+
+  Do not rewrite history solely to remove these approved public details.
+  This exception does not authorize publishing other personal or
+  machine-specific data, even when a prohibited field contains an allowlisted
+  value. Any expansion of this allowlist requires explicit user approval.
+- Apart from the explicitly approved contact email address above, do not
+  publish a user's login name, home directory, email address, computer
   or host name, machine serial number, hardware UUID, MAC address, private or
   public IP address, or machine-specific temporary/workspace path in repository
   files, benchmark evidence, Actions logs, or uploaded artifacts. Use
@@ -204,7 +230,7 @@ fallback.
   `@argfiles`, `JDK_JAVA_OPTIONS`, exit status, and paths containing spaces.
 - Do not modify the installed JDK to implement the launcher.
 - The acceptance check for application identity is the visible Dock tooltip
-  `FractalUI`; a process name or `localizedName` is insufficient.
+  `FractalLens`; a process name or `localizedName` is insufficient.
 - Preserve normal development launch through `mvn javafx:run`.
 
 ### GPU rules

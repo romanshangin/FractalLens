@@ -4,6 +4,7 @@ import argparse
 import csv
 import hashlib
 import json
+from privacy import safe_json, redact
 from pathlib import Path
 import subprocess
 import time
@@ -63,7 +64,7 @@ def main():
                    "java": command([java, "-version"]), "hardware": command(["/usr/sbin/sysctl", "hw.model", "hw.memsize", "hw.ncpu", "machdep.cpu.brand_string"]),
                    "power": command(["/usr/bin/pmset", "-g", "batt"]), "thermal_notes": command(["/usr/bin/pmset", "-g", "therm"]),
                    "scope": "diagnostic; native tracking and input trace enabled; controls included in process totals"}
-    (output / "environment.json").write_text(json.dumps(environment, indent=2) + "\n")
+    (output / "environment.json").write_text(safe_json(environment, indent=2) + "\n")
     with (output / "launch.log").open("x") as log, (output / "process.csv").open("x", newline="") as f:
         process = subprocess.Popen(args, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         writer = csv.writer(f, lineterminator="\n")
@@ -84,13 +85,13 @@ def main():
                 writer.writerow([datetime.now(timezone.utc).isoformat(), round(now - start, 3), rss, cpu, state]); f.flush()
                 if not baseline and now - start >= 5:
                     result = command([jcmd, process.pid, "VM.native_memory", "baseline"])
-                    (output / "nmt-baseline.json").write_text(json.dumps(result, indent=2) + "\n")
+                    (output / "nmt-baseline.json").write_text(safe_json(result, indent=2) + "\n")
                     baseline = result["returncode"] == 0 and "Baseline taken" in result["stdout"]
                     if not baseline:
                         raise RuntimeError("NMT baseline unavailable; see nmt-baseline.json")
                 if (output / "workload/MONITOR_READY").exists() and baseline and not final:
                     result = command([jcmd, process.pid, "VM.native_memory", "summary.diff", "scale=KB"])
-                    (output / "nmt-final.json").write_text(json.dumps(result, indent=2) + "\n")
+                    (output / "nmt-final.json").write_text(safe_json(result, indent=2) + "\n")
                     if not baseline or result["returncode"] != 0 or "Total: reserved=" not in result["stdout"]:
                         raise RuntimeError("Final NMT unavailable")
                     (output / "workload/MONITOR_RELEASE").write_text("NMT collected\n")
@@ -108,7 +109,7 @@ def main():
                 except subprocess.TimeoutExpired:
                     process.kill(); process.wait()
     (output / "MONITOR_SUCCESS").write_text("Process exited successfully; conformance and NMT complete.\n")
-    print(output)
+    print(redact(str(output)))
 
 
 if __name__ == "__main__":

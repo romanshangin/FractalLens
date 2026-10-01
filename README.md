@@ -1,6 +1,6 @@
-# FractalUI
+# FractalLens
 
-FractalUI is a desktop fractal explorer for macOS and Windows, built with
+FractalLens is a desktop fractal explorer for macOS and Windows, built with
 Java 25 and JavaFX. It supports interactive exploration of Mandelbrot, Julia,
 Burning Ship, Tricorn, and Multibrot sets, with deep zoom for Mandelbrot and
 Julia, customizable coloring, saved sessions, and PNG export.
@@ -8,11 +8,11 @@ Julia, customizable coloring, saved sessions, and PNG export.
 Rendering is CPU-based by default. Experimental Vulkan paths are available for
 selected macOS workloads.
 
-![FractalUI Mandelbrot overview on macOS](docs/images/mandelbrot-overview.png)
+![FractalLens Mandelbrot overview on macOS](docs/images/mandelbrot-overview.png)
 
-| Mandelbrot deep zoom | Julia |
+| Mandelbrot detail | Julia |
 | --- | --- |
-| ![Mandelbrot deep zoom in FractalUI](docs/images/mandelbrot-deep-zoom.png) | ![Julia set in FractalUI](docs/images/julia-overview.png) |
+| ![Mandelbrot detail in FractalLens](docs/images/mandelbrot-deep-zoom.png) | ![Julia set in FractalLens](docs/images/julia-overview.png) |
 
 ## Highlights
 
@@ -141,9 +141,14 @@ engineering target, but Linux is not currently a supported distribution.
 - [CI](CI.md) and [Runtime packaging](RUNTIME_PACKAGING.md) — validation lanes
   and installable artifacts.
 
+- [Benchmark evidence](benchmarks/README.md) — selected protocols, results and
+  measurement inputs.
+- [Publication provenance](PUBLICATION.md) — historical evidence, redactions
+  and limits on replaying archived experiments.
+
 ## License
 
-FractalUI source code, project documentation, screenshots, and original project
+FractalLens source code, project documentation, screenshots, and original project
 images are licensed under the [Apache License 2.0](LICENSE), unless otherwise
 noted.
 

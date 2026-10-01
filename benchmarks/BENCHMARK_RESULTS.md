@@ -1,5 +1,12 @@
 # Frame reuse benchmark results
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Measured on 2026-08-27 with Java 26.0.1 on arm64, using 11 render workers,
 300 maximum iterations, two warm-up runs, and five measured runs. Times below
 are medians from the dedicated `benchmark` Maven profile.

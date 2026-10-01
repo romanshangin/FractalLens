@@ -1,5 +1,12 @@
 # Roadmap 9.1 paired protocol calibration — 2026-09-09
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 This step adds a reproducible comparison mechanism, not a renderer optimization.
 Both A and B use the same compiled snapshot of
 `1a33e6f5f2e19213a4a980d4ede61a406293b83e`, identity
@@ -20,13 +27,13 @@ JFR, native-memory tracking, AA/scheduling instrumentation and GPU computation
 are disabled. The campaigns ran sequentially; this task ran no tests or builds
 during timing. Power
 and thermal observations bracket each JVM; they are not a continuous thermal
-measurement. Raw heap/GC data and per-process peak RSS are retained. Driver
-source copies are saved in each result directory; launcher and analyzer hashes
+measurement. Raw heap/GC data, per-process peak RSS and driver source copies
+remain in the private campaign archive; launcher and analyzer hashes
 match the recorded controller hashes.
 
 ## JavaFX calibration
 
-Raw data: [FX campaign](baseline-9-1-pairs-fx-calibration-20260909/analysis.json),
+Raw data: FX campaign (private archive: `baseline-9-1-pairs-fx-calibration-20260909/analysis.json`),
 [declared policy](policies/9-1-pairs-fx-calibration.json).
 Two fixtures at 480x270 render pixels, both FAST and REFINED: eight metric
 groups and 240 metric pairs. All six JVMs completed their exact-control
@@ -50,7 +57,7 @@ as the eventual large-frame ValidityMask publication gate.
 
 ## Large-frame headless calibration
 
-Raw data: [headless campaign](baseline-9-1-pairs-validity-calibration-20260909/analysis.json),
+Raw data: headless campaign (private archive: `baseline-9-1-pairs-validity-calibration-20260909/analysis.json`),
 [declared policy](policies/9-1-validity-headless-calibration.json).
 Five sequences / eight steps at 3024x1964 render pixels: 11 metric groups and
 330 metric pairs. Six JVMs produced 672 cold/warmup/measured rows; coverage,

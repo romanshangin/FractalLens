@@ -33,8 +33,8 @@ final class RuntimeArtifactSmoke {
 
     static void start(Stage stage, Path report) {
         ApplicationIcon.install(stage);
-        stage.setScene(new Scene(new Label("FractalUI runtime smoke test"), 360, 100));
-        stage.setTitle("FractalUI runtime smoke test");
+        stage.setScene(new Scene(new Label("FractalLens runtime smoke test"), 360, 100));
+        stage.setTitle("FractalLens runtime smoke test");
         stage.show();
 
         Thread.startVirtualThread(() -> {
@@ -42,7 +42,7 @@ final class RuntimeArtifactSmoke {
                 Map<String, String> checks = runChecks();
                 checks.put("javafx", "available");
                 writeReport(report, checks);
-                System.out.println("FRACTALUI_PACKAGE_SMOKE_OK");
+                System.out.println("FRACTALLENS_PACKAGE_SMOKE_OK");
                 Platform.runLater(() -> {
                     stage.close();
                     Platform.exit();

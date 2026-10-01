@@ -1,5 +1,9 @@
 # Alternating build comparisons for roadmap 9.1
 
+> Publication scope: use this protocol for fresh runs in a new output directory.
+> Keep raw logs and diagnostic captures private; publish only reviewed summaries
+> and necessary sanitized evidence. See [evidence provenance](../PUBLICATION.md).
+
 The paired runner compares frozen builds through the existing
 [headless](BASELINE_BENCHMARK.md) or [JavaFX publication](BASELINE_FX_BENCHMARK.md)
 driver. It records individual matching samples, including their process pair and
@@ -14,9 +18,9 @@ builds offline, and copies compiled classes and ordered dependencies into new
 self-contained directories. Uncommitted changes are excluded.
 
 ```shell
-python3 scripts/prepare_baseline_build.py BASE_COMMIT /tmp/fractalui-build-a \
+python3 scripts/prepare_baseline_build.py BASE_COMMIT /tmp/fractallens-build-a \
   --java /opt/homebrew/opt/openjdk/bin/java
-python3 scripts/prepare_baseline_build.py CANDIDATE_COMMIT /tmp/fractalui-build-b \
+python3 scripts/prepare_baseline_build.py CANDIDATE_COMMIT /tmp/fractallens-build-b \
   --java /opt/homebrew/opt/openjdk/bin/java
 ```
 
@@ -40,11 +44,11 @@ these declared cases; it cannot establish a whole-matrix or whole-app benefit.
 ## Execute without competing work
 
 ```shell
-swiftc scripts/baseline_thermal.swift -o /tmp/fractalui-baseline-thermal
+swiftc scripts/baseline_thermal.swift -o /tmp/fractallens-baseline-thermal
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/run_baseline_pairs.py POLICY.json NEW_OUTPUT \
-  --a /tmp/fractalui-build-a --b /tmp/fractalui-build-b \
+  --a /tmp/fractallens-build-a --b /tmp/fractallens-build-b \
   --java /opt/homebrew/opt/openjdk/bin/java \
-  --thermal /tmp/fractalui-baseline-thermal
+  --thermal /tmp/fractallens-baseline-thermal
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_baseline_pairs.py NEW_OUTPUT
 ```
 

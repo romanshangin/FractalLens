@@ -1,14 +1,20 @@
 # Runtime packaging
 
-FractalUI produces platform-native, self-contained runtime artifacts with JDK
-25 `jlink` and `jpackage`. The macOS output is a DMG containing `FractalUI.app`;
+Automatic runs build and smoke-test packages but do not upload artifacts. A
+manual dispatch can set `upload_artifacts: true` after private-destination
+validation and artifact review. Provenance and smoke-report text must pass the
+privacy guard first; PRs cannot enable uploads. Test logs and Surefire reports
+are excluded. See [CI publication controls](CI.md).
+
+FractalLens produces platform-native, self-contained runtime artifacts with JDK
+25 `jlink` and `jpackage`. The macOS output is a DMG containing `FractalLens.app`;
 the Windows output is an EXE installer. Neither artifact requires Java to be
 installed on the destination machine.
 
 The application starts with the optional GPU runtime disabled. The CPU renderer
 is the default and remains fully functional. Platform JavaFX modules and LWJGL
 native libraries are included. The macOS artifact also compiles and includes
-the AppKit canvas-menu bridge. The application icon, FractalUI's Apache License
+the AppKit canvas-menu bridge. The application icon, FractalLens's Apache License
 2.0 text, complete pinned third-party license and notice texts, embedded JDK
 legal notices and build provenance travel with the runtime.
 `packaging/THIRD-PARTY-LICENSES.txt` records the source tag or embedded native
@@ -36,7 +42,7 @@ installer is not needed.
 
 Outputs are under `target/runtime-package`:
 
-- `artifacts/FractalUI-<version>.dmg` or the Windows EXE installer;
+- `artifacts/FractalLens-<version>.dmg` or the Windows EXE installer;
 - an adjacent SHA-256 file;
 - `artifact-provenance.json`, with revision, dirty-tree state, JDK, platform,
   module/native/license hashes, smoke result and final artifact hash;
@@ -57,10 +63,10 @@ Use a machine without a development JDK or Maven installation.
    names the expected revision, version, target OS/architecture and successful
    smoke checks.
 2. Install with the platform-native artifact. On macOS, mount the DMG and copy
-   `FractalUI.app` to Applications. On Windows, run the EXE and choose the
+   `FractalLens.app` to Applications. On Windows, run the EXE and choose the
    installation directory.
-3. Launch FractalUI from Finder or the Windows Start menu. Confirm the window
-   opens without an installed Java runtime, the FractalUI icon is visible, and
+3. Launch FractalLens from Finder or the Windows Start menu. Confirm the window
+   opens without an installed Java runtime, the FractalLens icon is visible, and
    the initial Mandelbrot frame reaches a complete state.
 4. Pan, zoom, use Reset View, open the canvas context menu, and export a PNG.
    On macOS confirm the canvas menu uses AppKit; on Windows confirm the JavaFX
@@ -74,17 +80,22 @@ test as a completed clean-machine check.
 
 ## P0.2 acceptance record
 
+This is the original private-repository acceptance record. Its Actions runs,
+artifacts and PR revisions are not published here or evidence that CI passed
+in a new destination repository. Original checksums and revision identifiers
+remain historical provenance; see [publication provenance](PUBLICATION.md).
+
 The owner accepted P0.2 with the macOS virtual-machine exception below. This
 decision closes the roadmap packaging item; it does not turn the failed default
 macOS launch into a passing check or establish support for that environment.
 
-- [Runtime Artifacts run 35557346815](https://github.com/romzesthefirst/fractal-ui/actions/runs/35557346815)
+- Historical Runtime Artifacts run `35557346815` (private archive)
   passed its hosted macOS ARM64 and Windows X64 packaging, packaged-launcher
   smoke, and artifact-upload jobs. The PR head was
   `cdeff9d4181f69031b4a8e14236381659d1d38ad`; artifact provenance records
   the PR merge revision `3331e33c7babf3635cd4f1ade1e75cff0a8595fc`,
   version `1.0.3`, and `working_tree_dirty=false` on both platforms.
-- The macOS artifact `FractalUI-1.0.3.dmg` had SHA-256
+- The macOS artifact `FractalLens-1.0.3.dmg` had SHA-256
   `71d2dfb9a6d6c3513aabfbb51077e0b3b40641e44a425f765eee7ac7cf02a0e7`.
   On a VirtualBuddy macOS Sonoma 14.8.9 (23J631) ARM64 guest without JDK or
   Maven, the downloaded artifact checksum was independently verified and
@@ -100,7 +111,7 @@ macOS launch into a passing check or establish support for that environment.
   clean Apple Silicon Mac was unavailable, so physical macOS launch behavior
   remains unverified. The software-pipeline result is a diagnostic control,
   not a general macOS graphics default or a pass for the default-launch step.
-- The Windows artifact `FractalUI-1.0.3.exe` had SHA-256
+- The Windows artifact `FractalLens-1.0.3.exe` had SHA-256
   `b18c687b666452414b9574021ac1c6d539471671056d254383db9da6f08a4826`.
   On a Windows 11 Home 10.0.26200 x64 laptop, Java and Maven were removed
   before testing; a fresh PowerShell session found no `java.exe`, `javac.exe`,
@@ -125,7 +136,7 @@ stapling, and Windows Authenticode signing are separate release steps and must
 operate on the already validated artifacts. Unsigned builds can trigger
 Gatekeeper or SmartScreen warnings and are not public release candidates.
 
-FractalUI source code, project documentation, screenshots, and original project
+FractalLens source code, project documentation, screenshots, and original project
 images are licensed under the [Apache License 2.0](LICENSE), unless otherwise
 noted. Bundled third-party components and assets retain their respective
 licenses, listed in `packaging/THIRD-PARTY-LICENSES.txt`.

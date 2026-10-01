@@ -1,9 +1,9 @@
 ---
 name: deliver-task
-description: Perform explicitly authorized FractalUI delivery actions—commit, push, pull-request creation or update, merge, or close—with scoped staging, validation provenance, CI evidence, and publication checks. Use only for those actions, not for implementation, review, or verification alone.
+description: Perform explicitly authorized FractalLens delivery actions—commit, push, pull-request creation or update, merge, or close—with scoped staging, validation provenance, CI evidence, and publication checks. Use only for those actions, not for implementation, review, or verification alone.
 ---
 
-# Deliver FractalUI changes
+# Deliver FractalLens changes
 
 Follow the Git policy in `AGENTS.md`. This workflow does not grant permission to
 commit, push, create, update, merge, or close a pull request: perform only the

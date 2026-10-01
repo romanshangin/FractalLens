@@ -14,8 +14,8 @@ from prepare_baseline_build import clean_environment, sha, verify_build
 
 PROBE_CLASS = Path("com/shangin/fractal/app/ColdStartupBenchmark.class")
 MARKERS = {
-    "stage_shown_ms": "FRACTALUI_STAGE_SHOWN_EPOCH_MS=",
-    "first_layout_pulse_ms": "FRACTALUI_FIRST_LAYOUT_PULSE_EPOCH_MS=",
+    "stage_shown_ms": "FRACTALLENS_STAGE_SHOWN_EPOCH_MS=",
+    "first_layout_pulse_ms": "FRACTALLENS_FIRST_LAYOUT_PULSE_EPOCH_MS=",
 }
 
 

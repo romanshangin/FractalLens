@@ -1,5 +1,12 @@
 # Mandelbrot FP32 precision screening (roadmap 8.3)
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 This document records the initial CPU screening. The subsequent native shader
 experiment and per-pixel acceptance contract are in
 [GPU_FP32_NATIVE.md](GPU_FP32_NATIVE.md). Whole-frame FP32 remains unsupported;

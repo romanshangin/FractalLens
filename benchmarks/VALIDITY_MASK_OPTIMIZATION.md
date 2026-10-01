@@ -1,5 +1,12 @@
 # Bounded validity scans and cancellable CPU planning
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 **Final P0.3 decision (2026-09-21): reject.** The candidate's large retained-frame
 gain is reproducible, but the predeclared aggregate control budget remains
 inconclusive after 30 fresh process pairs in each headless and JavaFX campaign.
@@ -97,7 +104,7 @@ unconfounded general performance or production-promotion decision.
 
 ## Headless results
 
-[Raw campaign and analysis](baseline-9-3-validity-headless-20260909/analysis.json)
+Raw campaign and analysis (private archive: `baseline-9-3-validity-headless-20260909/analysis.json`)
 passed strict pair, workload and non-cancelled sample/ARGB fingerprint validation.
 Every metric has 30 matched samples across six process pairs.
 
@@ -130,7 +137,7 @@ in the linked analysis; the ratio of separate medians is not the paired estimate
 
 ## JavaFX publication results
 
-[Raw FX campaign and analysis](baseline-9-3-validity-fx-20260909/analysis.json)
+Raw FX campaign and analysis (private archive: `baseline-9-3-validity-fx-20260909/analysis.json`)
 passed all 12 JVM exact-control runs and the strict paired validator. Each of
 the 18 metric groups has 30 matching observations across six process pairs.
 
@@ -171,7 +178,7 @@ classes, so these counts must not be added as a unique-test total. All **39
 Python baseline-validator tests** pass. Production class hashes after the clean
 build match the measured candidate snapshot.
 
-The [test logs and production-class hash check](baseline-9-3-validity-headless-20260909/test-evidence)
+The test logs and production-class hash check (private archive: `baseline-9-3-validity-headless-20260909/test-evidence`)
 are retained with the results. The two graphical skips are optional native
 fullscreen cases requiring the separate `fractal.fx.fullscreen` setting.
 
@@ -182,7 +189,7 @@ resolves that test-lifecycle conflict without changing production code:
 
 ```shell
 mvn -Dfractal.fx.tests=true -DreuseForks=false \
-  -Djavafx.cachedir=/tmp/fractalui-javafx-cache \
+  -Djavafx.cachedir=/tmp/fractallens-javafx-cache \
   -Dtest=FractalResizeFxTest,BaselineFxBenchmarkTest,BaselineInputBenchmarkTest test
 ```
 
@@ -192,7 +199,7 @@ both normal and diagnostic execution paths.
 
 ## Rejected diagnostic memory run
 
-The first [memory run](baseline-9-3-validity-memory-20260909)
+The first memory run (private archive: `baseline-9-3-validity-memory-20260909`)
 completed 108 exact trials but is **not accepted**: one scope's wall duration
 was 107.868 ms shorter than its monotonic duration. The independent JVM GC log
 also shows a persistent wall/uptime offset change across that scope:
@@ -204,14 +211,14 @@ Wall time advanced 3.541 seconds while uptime advanced 3.648 seconds, confirming
 an approximately 107 ms backward wall-clock adjustment within the resolution of
 that log. This is independent evidence of a clock step, not an inferred renderer
 pause. Its cause (for example time synchronization) was not investigated.
-The original CSVs and logs are preserved. The existing strict 10 ms consistency
+The original CSVs and logs remain in the private archive. The existing strict 10 ms consistency
 limit is unchanged; a new regression checks rejection of both clock-step
 directions. The Python validator suite now passes **39 tests**. No benchmark
 driver or production change was needed to repeat the soak in a fresh directory.
 
 ## Accepted sustained-memory validation
 
-The fresh [final memory run](baseline-9-3-validity-memory-final-20260909/summary.json)
+The fresh final memory run (private archive: `baseline-9-3-validity-memory-final-20260909/summary.json`)
 passes the unchanged strict validator: **108 exact trials, three complete
 rounds, 802.084 seconds (13.37 minutes)**. It uses all eight default memory
 fixtures at 1512x982, FAST/REFINED, one cycle per fixture per round, a 600-second
@@ -242,13 +249,13 @@ Reproduction after compiling the test drivers and dependency classpath:
 ```shell
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/run_baseline_memory.py NEW_OUTPUT \
   --java /opt/homebrew/opt/openjdk/bin/java --seconds 600 --cycles 1 \
-  --sizes 1512x982 --modes FAST,REFINED --thermal /tmp/fractalui-baseline-thermal
+  --sizes 1512x982 --modes FAST,REFINED --thermal /tmp/fractallens-baseline-thermal
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_baseline_memory.py NEW_OUTPUT
 ```
 
 The production source revision and full source hashes are recorded per run.
-Memory driver, launcher and validator snapshots are retained in each memory
-directory; the only additional script edit is the clock-step rejection test.
+Memory driver, launcher and validator snapshots remain in the private campaign
+archive; the only additional script edit is the clock-step rejection test.
 
 ## Scope limits
 
@@ -285,12 +292,12 @@ workloads, while current-tree correctness needs separate tests.
 Exact preparation and campaign commands (each output path was new):
 
 ```shell
-python3 scripts/prepare_baseline_build.py 1a33e6f /tmp/fractalui-p0-3-build-a --java /opt/homebrew/opt/openjdk/bin/java
-python3 scripts/prepare_baseline_build.py 9778ac9 /tmp/fractalui-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java
-SWIFT_MODULE_CACHE_PATH=/tmp/fractalui-p0-3-swift-cache CLANG_MODULE_CACHE_PATH=/tmp/fractalui-p0-3-swift-cache swiftc scripts/baseline_thermal.swift -o /tmp/fractalui-p0-3-thermal
-PYTHONDONTWRITEBYTECODE=1 python3 scripts/run_baseline_pairs.py benchmarks/policies/9-3-validity-headless-p0-3.json benchmarks/baseline-p0-3-validity-headless-20260921 --a /tmp/fractalui-p0-3-build-a --b /tmp/fractalui-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java --thermal /tmp/fractalui-p0-3-thermal
+python3 scripts/prepare_baseline_build.py 1a33e6f /tmp/fractallens-p0-3-build-a --java /opt/homebrew/opt/openjdk/bin/java
+python3 scripts/prepare_baseline_build.py 9778ac9 /tmp/fractallens-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java
+SWIFT_MODULE_CACHE_PATH=/tmp/fractallens-p0-3-swift-cache CLANG_MODULE_CACHE_PATH=/tmp/fractallens-p0-3-swift-cache swiftc scripts/baseline_thermal.swift -o /tmp/fractallens-p0-3-thermal
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/run_baseline_pairs.py benchmarks/policies/9-3-validity-headless-p0-3.json benchmarks/baseline-p0-3-validity-headless-20260921 --a /tmp/fractallens-p0-3-build-a --b /tmp/fractallens-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java --thermal /tmp/fractallens-p0-3-thermal
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_baseline_pairs.py benchmarks/baseline-p0-3-validity-headless-20260921
-python3 scripts/run_baseline_pairs.py benchmarks/policies/9-3-validity-fx-p0-3.json benchmarks/baseline-p0-3-validity-fx-desktop-20260921 --a /tmp/fractalui-p0-3-build-a --b /tmp/fractalui-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java --thermal /tmp/fractalui-p0-3-thermal
+python3 scripts/run_baseline_pairs.py benchmarks/policies/9-3-validity-fx-p0-3.json benchmarks/baseline-p0-3-validity-fx-desktop-20260921 --a /tmp/fractallens-p0-3-build-a --b /tmp/fractallens-p0-3-build-b --java /opt/homebrew/opt/openjdk/bin/java --thermal /tmp/fractallens-p0-3-thermal
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_baseline_pairs.py benchmarks/baseline-p0-3-validity-fx-desktop-20260921
 ```
 
@@ -356,8 +363,8 @@ inconclusive:
 | Pan, REFINED first publication | 8.691 (9.906) | 9.160 (10.422) | 1.004–1.054 | Inconclusive |
 | Pan, REFINED full publication | 14.005 (16.313) | 14.508 (16.524) | 1.004–1.058 | Inconclusive |
 
-The initial FX attempt in the process sandbox is retained as an
-[environment failure](baseline-p0-3-validity-fx-sandbox-failure-20260921/pair-00-A.log):
+The initial FX attempt in the process sandbox remains privately archived as an
+environment failure (private archive: `baseline-p0-3-validity-fx-sandbox-failure-20260921/pair-00-A.log`):
 Prism could not obtain a main screen and the first JVM was stopped. It is not
 a benchmark sample. The complete desktop campaign used a fresh directory and
 unchanged policy, builds and metrics.

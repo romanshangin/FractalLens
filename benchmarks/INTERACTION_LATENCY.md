@@ -1,5 +1,12 @@
 # Interaction latency diagnostic
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 This benchmark drives the production `FractalView` scroll, pinch, trackpad and
 mouse-drag handlers in a visible JavaFX window. It separates transformed-image
 preview, preparation of the requested frame, callback delivery, exact target
@@ -57,10 +64,10 @@ Compile once, then run measurements without overlapping tests or other benchmark
 ```sh
 mvn -q -DskipTests compile
 
-JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractalui-javafx-cache -Dfractal.gpu.enabled=false -Dfractal.latency.noScreen=true -Dfractal.latency.output=target/latency-control.csv' \
+JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractallens-javafx-cache -Dfractal.gpu.enabled=false -Dfractal.latency.noScreen=true -Dfractal.latency.output=target/latency-control.csv' \
   mvn -q -Pinteraction-latency javafx:run
 
-JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractalui-javafx-cache -Dfractal.gpu.enabled=false -Dfractal.latency.output=target/latency-screen.csv' \
+JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractallens-javafx-cache -Dfractal.gpu.enabled=false -Dfractal.latency.output=target/latency-screen.csv' \
   mvn -q -Pinteraction-latency javafx:run
 
 python3 scripts/summarize_interaction_latency.py target/latency-control.csv target/latency-control-summary.csv

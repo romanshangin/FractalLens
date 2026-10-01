@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and smoke-test a self-contained FractalUI runtime and native installer."""
+"""Build and smoke-test a self-contained FractalLens runtime and native installer."""
 
 import argparse
 import binascii
@@ -117,7 +117,7 @@ def stage_modules(classpath, destination):
         elif not dependency.name.startswith("javafx-"):
             raise RuntimeError(f"Runtime dependency is not modular: {dependency.name}")
 
-    application = next((ROOT / "target").glob("fractal-ui-*.jar"), None)
+    application = next((ROOT / "target").glob("fractal-lens-*.jar"), None)
     if application is None:
         raise RuntimeError("Maven did not produce the application JAR")
     for source in [application, *module_jars]:
@@ -225,7 +225,7 @@ def stage_license_materials(destination):
     staged = []
     project_license = ROOT / "LICENSE"
     if not project_license.is_file():
-        raise RuntimeError("Required FractalUI license file is missing: LICENSE")
+        raise RuntimeError("Required FractalLens license file is missing: LICENSE")
     shutil.copy2(project_license, destination / project_license.name)
     staged.append(destination / project_license.name)
     inventory = source / "THIRD-PARTY-LICENSES.txt"
@@ -268,7 +268,7 @@ def project_version():
 
 def build_provenance(version, jpackage_version, application, dependencies, natives, licenses):
     return {
-        "schema": "fractalui-runtime-provenance-v1",
+        "schema": "fractallens-runtime-provenance-v1",
         "application_version": version,
         "revision": git_value("rev-parse", "HEAD"),
         "working_tree_dirty": bool(git_value("status", "--porcelain")),
@@ -285,8 +285,8 @@ def build_provenance(version, jpackage_version, application, dependencies, nativ
 
 def app_executable(image):
     if sys.platform == "darwin":
-        return image / "Contents" / "MacOS" / "FractalUI"
-    return image / "FractalUI.exe"
+        return image / "Contents" / "MacOS" / "FractalLens"
+    return image / "FractalLens.exe"
 
 
 def validate_image(image, report):
@@ -323,8 +323,8 @@ def quote_java_tool_option(option):
 
 def jpackage_common(jpackage, version, module_path, input_dir, icon):
     options = [
-        jpackage, "--name", "FractalUI", "--app-version", version,
-        "--vendor", "FractalUI contributors",
+        jpackage, "--name", "FractalLens", "--app-version", version,
+        "--vendor", "FractalLens contributors",
         "--description", "Desktop fractal explorer",
         "--module", APP_MODULE, "--module-path", module_path,
         "--input", input_dir, "--icon", icon,
@@ -338,7 +338,7 @@ def jpackage_common(jpackage, version, module_path, input_dir, icon):
     if sys.platform == "darwin":
         options += [
             "--mac-package-identifier", "com.shangin.fractal",
-            "--mac-package-name", "FractalUI",
+            "--mac-package-name", "FractalLens",
             "--java-options", "--add-exports=javafx.graphics/com.sun.glass.ui=com.shangin.fractal",
             "--java-options", "--add-opens=javafx.graphics/com.sun.glass.ui.mac=com.shangin.fractal",
         ]
@@ -347,7 +347,7 @@ def jpackage_common(jpackage, version, module_path, input_dir, icon):
 
 def build_installer(jpackage, image, version, output):
     installer_type = "dmg" if sys.platform == "darwin" else "exe"
-    options = [jpackage, "--type", installer_type, "--name", "FractalUI",
+    options = [jpackage, "--type", installer_type, "--name", "FractalLens",
                "--app-version", version, "--app-image", image, "--dest", output]
     if os.name == "nt":
         options += ["--win-dir-chooser", "--win-menu", "--win-shortcut"]
@@ -368,7 +368,7 @@ def parse_args():
 def main():
     args = parse_args()
     if not (sys.platform == "darwin" or os.name == "nt"):
-        raise RuntimeError("FractalUI runtime packaging supports macOS and Windows")
+        raise RuntimeError("FractalLens runtime packaging supports macOS and Windows")
     version = args.version or project_version()
     if re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", version) is None:
         raise RuntimeError("Package version must contain only numeric dot-separated components")
@@ -387,11 +387,11 @@ def main():
     natives = extract_natives(native_jars, input_dir / "native")
     licenses = stage_license_materials(input_dir / "licenses")
 
-    icon = ROOT / "src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns"
+    icon = ROOT / "src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns"
     if os.name == "nt":
-        icon = staging / "FractalUI.ico"
+        icon = staging / "FractalLens.ico"
         create_windows_icon(
-            ROOT / "src/main/resources/com/shangin/fractal/app/icons/fractalui.png", icon)
+            ROOT / "src/main/resources/com/shangin/fractal/app/icons/fractallens.png", icon)
 
     provenance = build_provenance(version, jpackage_version, application,
                                   [*modules, *native_jars], natives, licenses)
@@ -401,7 +401,7 @@ def main():
     image_output.mkdir(parents=True)
     common = jpackage_common(jpackage, version, module_path, input_dir, icon)
     run([*common, "--type", "app-image", "--dest", image_output], cwd=ROOT)
-    image = image_output / ("FractalUI.app" if sys.platform == "darwin" else "FractalUI")
+    image = image_output / ("FractalLens.app" if sys.platform == "darwin" else "FractalLens")
 
     smoke_report = TARGET / "smoke-report.properties"
     provenance["smoke"] = validate_image(image, smoke_report)

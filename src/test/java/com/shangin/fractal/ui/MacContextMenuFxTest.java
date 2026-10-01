@@ -56,7 +56,7 @@ class MacContextMenuFxTest {
             copies.incrementAndGet();
         }));
         var stage = fx(() -> {
-            var s = new Stage(); s.setTitle("FractalUI native menu verification");
+            var s = new Stage(); s.setTitle("FractalLens native menu verification");
             s.setScene(new Scene(owner, 500, 320)); s.show(); s.toFront(); s.requestFocus(); return s;
         });
         var timer = fx(() -> {

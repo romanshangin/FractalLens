@@ -20,7 +20,7 @@ final class MacContextMenu implements AutoCloseable {
             if (!System.getProperty("os.name", "").startsWith("Mac")) return false;
             try (var source = MacContextMenu.class.getResourceAsStream("native/libfractal-menu.dylib")) {
                 if (source == null) throw new IOException("Packaged AppKit menu library is missing");
-                var library = Files.createTempFile("fractalui-menu-", ".dylib");
+                var library = Files.createTempFile("fractallens-menu-", ".dylib");
                 library.toFile().deleteOnExit();
                 Files.copy(source, library, StandardCopyOption.REPLACE_EXISTING);
                 System.load(library.toAbsolutePath().toString());

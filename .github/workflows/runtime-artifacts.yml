@@ -13,9 +13,17 @@ on:
       - 'pom.xml'
       - 'scripts/package_runtime.py'
       - 'scripts/test_package_runtime.py'
+      - 'scripts/privacy.py'
+      - 'scripts/check_public_data.py'
+      - 'scripts/run-ci-tests'
       - 'src/main/**'
   workflow_dispatch:
     inputs:
+      upload_artifacts:
+        description: Upload installers only after private destination validation and artifact review
+        required: false
+        type: boolean
+        default: false
       version:
         description: Numeric package version, for example 1.2.3
         required: false
@@ -75,7 +83,7 @@ jobs:
 
       - name: Validate packaging contracts
         shell: bash
-        run: ${{ matrix.python }} scripts/test_package_runtime.py
+        run: bash scripts/run-ci-tests ${{ matrix.python }} scripts/test_package_runtime.py
 
       - name: Select package version
         id: version
@@ -91,7 +99,7 @@ jobs:
             version="1.0.${GITHUB_RUN_NUMBER}"
           fi
           if [[ ! "$version" =~ ^[0-9]+([.][0-9]+)*$ ]]; then
-            echo "Package version must be numeric: $version" >&2
+            echo "Package version must be numeric." >&2
             exit 2
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
@@ -99,14 +107,22 @@ jobs:
       - name: Build installer and run packaged launcher smoke test
         shell: bash
         run: >-
-          ${{ matrix.python }} scripts/package_runtime.py
+          bash scripts/run-ci-tests ${{ matrix.python }} scripts/package_runtime.py
           --version '${{ steps.version.outputs.value }}'
 
+      - name: Check exportable text reports
+        if: success()
+        shell: bash
+        run: >-
+          ${{ matrix.python }} scripts/check_public_data.py --files
+          target/runtime-package/artifact-provenance.json
+          target/runtime-package/smoke-report.properties
+
       - name: Upload installer, checksum, provenance and smoke report
-        if: always()
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.upload_artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: fractalui-runtime-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}
+          name: fractallens-runtime-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}
           path: |
             target/runtime-package/artifacts/
             target/runtime-package/artifact-provenance.json

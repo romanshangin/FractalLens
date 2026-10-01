@@ -29,6 +29,18 @@ class PackageRuntimeContractTest(unittest.TestCase):
                 archive.writestr(entry, contents)
         return path
 
+    def test_public_application_name_reaches_native_package_and_launchers(self):
+        options = package_runtime.jpackage_common(
+            "jpackage", "1.0", "modules", "input", "icon")
+        self.assertEqual("FractalLens", options[options.index("--name") + 1])
+        self.assertEqual("FractalLens contributors", options[options.index("--vendor") + 1])
+        with mock.patch.object(package_runtime.sys, "platform", "darwin"):
+            self.assertEqual(Path("image/Contents/MacOS/FractalLens"),
+                             package_runtime.app_executable(Path("image")))
+        with mock.patch.object(package_runtime.sys, "platform", "win32"):
+            self.assertEqual(Path("image/FractalLens.exe"),
+                             package_runtime.app_executable(Path("image")))
+
     def test_recognizes_versioned_and_platform_module_descriptors(self):
         regular = self.jar("regular.jar", {"module-info.class": b"module"})
         multi_release = self.jar(
@@ -53,7 +65,7 @@ class PackageRuntimeContractTest(unittest.TestCase):
 
     def test_wraps_png_in_a_windows_icon_container(self):
         png = (package_runtime.ROOT
-               / "src/main/resources/com/shangin/fractal/app/icons/fractalui.png")
+               / "src/main/resources/com/shangin/fractal/app/icons/fractallens.png")
         icon = self.root / "icon.ico"
 
         package_runtime.create_windows_icon(png, icon)
@@ -93,7 +105,7 @@ class PackageRuntimeContractTest(unittest.TestCase):
             self.assertEqual(digest, package_runtime.sha256(destination / name))
 
     def test_java_tool_option_preserves_cache_path_with_spaces(self):
-        cache = self.root / "FractalUI cache"
+        cache = self.root / "FractalLens cache"
         option = package_runtime.quote_java_tool_option(
             f"-Djavafx.cachedir={cache.as_posix()}")
         environment = dict(os.environ)

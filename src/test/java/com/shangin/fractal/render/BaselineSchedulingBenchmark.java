@@ -34,7 +34,7 @@ public final class BaselineSchedulingBenchmark {
             manifest.println(BaselineFixtures.HEADER);
             for (var f : fixtures) for (var step : f.steps()) manifest.println(step.csv(f.id()));
         }
-        var lockPath = Path.of(System.getProperty("java.io.tmpdir"), "fractalui-baseline-benchmark.lock");
+        var lockPath = Path.of(System.getProperty("java.io.tmpdir"), "fractallens-baseline-benchmark.lock");
         try (var channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
              var lock = channel.tryLock(); var rows = writer(output, "samples.csv"); var events = writer(output, "diagnostics.csv")) {
             if (lock == null) throw new IllegalStateException("Another baseline benchmark is running");

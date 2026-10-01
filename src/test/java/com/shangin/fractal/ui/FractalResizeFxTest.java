@@ -312,7 +312,7 @@ class FractalResizeFxTest {
         try {
             var view = fx(() -> (FractalView) main.getCenter());
             assertEquals(restored, fx(view::sceneSnapshot));
-            assertEquals("Julia — FractalUI", fx(stage::getTitle));
+            assertEquals("Julia — FractalLens", fx(stage::getTitle));
         } finally {
             fx(() -> {
                 main.close();

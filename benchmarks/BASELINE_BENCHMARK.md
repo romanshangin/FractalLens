@@ -1,5 +1,9 @@
 # Roadmap 9.1 baseline fixtures and headless scopes
 
+> Publication scope: use this protocol for fresh runs in a new output directory.
+> Keep raw logs and diagnostic captures private; publish only reviewed summaries
+> and necessary sanitized evidence. See [evidence provenance](../PUBLICATION.md).
+
 Matrix version: `9.1-v1`. The reviewed [manifest](BASELINE_FIXTURES.csv)
 contains 28 sequences / 37 steps at each of 480x270, 1512x982 and 3024x1964.
 Dimensions are **render pixels**, not logical window dimensions. Resize adds

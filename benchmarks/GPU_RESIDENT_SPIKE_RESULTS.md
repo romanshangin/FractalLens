@@ -1,5 +1,12 @@
 # GPU-resident Mandelbrot feasibility spike
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Date: 2026-09-05
 
 Hardware: Apple M3 Pro, 12 logical processors
@@ -52,7 +59,7 @@ pixels and spends 0.177 ms in recovery.
   be part of any residency policy.
 
 Raw samples and cold/warmup rows are in
-[`GPU_RESIDENT_SPIKE_RESULTS.csv`](GPU_RESIDENT_SPIKE_RESULTS.csv).
+`GPU_RESIDENT_SPIKE_RESULTS.csv` (private archive: `GPU_RESIDENT_SPIKE_RESULTS.csv`).
 
 ## Decision
 
@@ -88,7 +95,7 @@ The next justified calculation experiment is a second, higher-precision GPU
 certificate applied only to FP32 rejections. It must keep the same conformance
 contract and pass the existing cross-scene gate before any production wiring.
 Raw diagnostic pairs are in
-[`GPU_RESIDENT_REJECTION_PROFILE.csv`](GPU_RESIDENT_REJECTION_PROFILE.csv).
+`GPU_RESIDENT_REJECTION_PROFILE.csv` (private archive: `GPU_RESIDENT_REJECTION_PROFILE.csv`).
 
 ### Centered-error certificate attempt
 
@@ -102,7 +109,7 @@ At 3024x1964, the extra pass raised median calculation time from 27.06 to 46.65
 ms while leaving all 4,070,274 CPU corrections in place. It was therefore
 removed from the implementation. Measurements from the rejected prototype are
 preserved in
-[`GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`](GPU_RESIDENT_SECOND_STAGE_PROFILE.csv).
+`GPU_RESIDENT_SECOND_STAGE_PROFILE.csv` (private archive: `GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`).
 Further work needs a genuinely higher-precision GPU representation; another
 FP32 interval reformulation is not justified by these results.
 
@@ -126,7 +133,7 @@ The ceiling already fails performance on the two scenes that need emulation,
 and accepting its results fails conformance. A stability certificate and exact
 fallback would only add work. The double-single path was therefore removed;
 raw samples are preserved in
-[`GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`](GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv).
+`GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv` (private archive: `GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`).
 
 This closes the current resident-calculation branch of 8.6. Further GPU render
 work needs either efficient native FP64-class hardware or a different algorithm

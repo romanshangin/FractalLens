@@ -1,5 +1,12 @@
 # P1.3 JavaFX publication experiment
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Date: 2026-09-24. Decision: **reject** the queued-progress coalescing candidate.
 The experiment completes P1.3's measurement scope; it makes no production
 publication change. The broader 9.3 improvement and 9.9 promotion gates remain
@@ -72,11 +79,12 @@ that revision plus working-tree source hash `3ad109bd79426af6`. The build
 identities and file hashes are recorded in the
 [control](p1-3-publication-20260924/coalescing-pairs/build-A.json) and
 [candidate](p1-3-publication-20260924/coalescing-pairs/build-B.json) manifests.
-The only candidate source differences are preserved as
-[service](p1-3-publication-20260924/source-snapshots/FractalRenderService.java.txt)
-and [test](p1-3-publication-20260924/source-snapshots/FractalRenderServiceProgressTest.java.txt)
+The candidate source differences remain in the private archive as
+service (private archive: `p1-3-publication-20260924/source-snapshots/FractalRenderService.java.txt`)
+and test (private archive: `p1-3-publication-20260924/source-snapshots/FractalRenderServiceProgressTest.java.txt`)
 snapshots. Compiled build directories remain local to the measuring machine;
-the repository keeps hashes, source differences and raw campaign results.
+this repository keeps build hashes and the aggregate analysis. Source
+differences and raw campaign results remain in the private archive.
 The candidate was removed after the timing decision.
 
 The [predeclared policy](policies/9-3-publication-coalescing-fx.json) used
@@ -103,9 +111,11 @@ interval (30 process pairs):
 | Cancellation tail | 0.592 | 0.694 | 0.943–1.365 | Inconclusive control |
 
 The [complete analysis](p1-3-publication-20260924/coalescing-pairs/analysis.json),
-[matched pairs](p1-3-publication-20260924/coalescing-pairs/pairs.csv),
+matched pairs (private archive: `p1-3-publication-20260924/coalescing-pairs/pairs.csv`),
 [environment](p1-3-publication-20260924/coalescing-pairs/environment.json) and
-per-process raw rows/logs preserve the full campaign. The aggregate verdict is
+privately archived per-process rows/logs describe the original campaign.
+The public analysis and environment record do not form a complete replay
+bundle. The aggregate verdict is
 `fail`: both declared targets failed, and several controls were inconclusive.
 No retained improvement or production promotion is claimed. The software
 publication boundary excludes OS input delivery, compositor completion and

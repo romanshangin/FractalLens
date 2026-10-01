@@ -1,5 +1,12 @@
 # GPU calculation decision gate repeat (roadmap 8.5)
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 ## Decision
 
 **The optimization substantially improves the certified hybrid backend, but the
@@ -15,11 +22,11 @@ The JVM heap was capped at 2 GiB. No timing run overlapped the test suite.
 
 Raw data:
 
-- [Main uninstrumented run](GPU_RENDER_BENCHMARK_8_5_RESULTS.csv): eight cases,
+- Main uninstrumented run (private archive: `GPU_RENDER_BENCHMARK_8_5_RESULTS.csv`): eight cases,
   224 frame rows including cold and warmup observations.
-- [Uninstrumented Refined run](GPU_RENDER_BENCHMARK_8_5_REFINED.csv): two cases,
+- Uninstrumented Refined run (private archive: `GPU_RENDER_BENCHMARK_8_5_REFINED.csv`): two cases,
   56 frame rows using the application's default presentation mode.
-- [Separate component profile](GPU_RENDER_BENCHMARK_8_5_PROFILE.csv): six base
+- Separate component profile (private archive: `GPU_RENDER_BENCHMARK_8_5_PROFILE.csv`): six base
   cases, 108 frame rows. Timestamp queries and host-stage timers are enabled
   only in this diagnostic run.
 
@@ -149,7 +156,7 @@ RSS. The short gate found no unbounded GPU staging or native allocation.
 
 Validation on this branch:
 
-- `mvn clean test -Djavafx.cachedir=/tmp/fractalui-javafx-cache`: 344 tests,
+- `mvn clean test -Djavafx.cachedir=/tmp/fractallens-javafx-cache`: 344 tests,
   zero failures/errors; 19 opt-in native/FX tests skipped.
 - Opt-in JavaFX integration: 16 tests, zero failures/errors, two fullscreen
   methods skipped.

@@ -23,7 +23,7 @@ class MacLoadingMaterialFxTest {
         return task.get(10, TimeUnit.SECONDS);
     }
     @Test void nativeMaterialAttachesResizesAndDetachesRepeatedly() throws Exception {
-        Stage stage = fx(() -> { var s = new Stage(); s.setTitle("FractalUI material verification"); return s; });
+        Stage stage = fx(() -> { var s = new Stage(); s.setTitle("FractalLens material verification"); return s; });
         try {
             for (int i = 0; i < 3; i++) {
                 var scheme = i == 0 ? javafx.application.ColorScheme.LIGHT

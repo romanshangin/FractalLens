@@ -31,7 +31,7 @@ public final class BaselineMemoryBenchmark {
         Files.createDirectory(output);
         System.setProperty("fractal.gpu.enabled", "false");
         System.setProperty("fractal.gpu.mandelbrot.enabled", "false");
-        var lockPath = Path.of(System.getProperty("java.io.tmpdir"), "fractalui-baseline-benchmark.lock");
+        var lockPath = Path.of(System.getProperty("java.io.tmpdir"), "fractallens-baseline-benchmark.lock");
         try (var channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
              var lock = channel.tryLock()) {
             if (lock == null) throw new IllegalStateException("Another baseline benchmark is running");

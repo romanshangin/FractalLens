@@ -1,5 +1,12 @@
 # CPU/GPU optimization analysis
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Analysis date: 2026-09-05. Repository baseline: `6c263f6`.
 
 CPU AA follow-up (2026-09-05–06): the cache contention and repeated preparation
@@ -60,8 +67,8 @@ Existing sections 8.7 and 8.8 retain the separate Windows and Intel/AMD Mac work
 | Integrated GPU 8.4 → 8.5 | Host recovery/conversion parallelization, single smooth conversion, certified interior shortcuts and 192x192 batches substantially improved GPU time. All ten repeated CPU/GPU cases still lose. | Those optimizations are already done. Work on a different bottleneck. [8.4](GPU_RENDER_BENCHMARK_RESULTS.md), [8.5](GPU_RENDER_BENCHMARK_8_5_RESULTS.md). |
 | GPU candidate-detection proposal | Even subtracting the complete measured candidate critical path leaves the hybrid AA pipeline 1.03–1.07x slower. | Moving detection alone cannot justify expansion of the current hybrid backend. [8.6 decision](GPU_RESIDENCY_8_6_DECISION.md). |
 | Whole-frame resident GPU | Retina overview/exterior win before JavaFX; seahorse loses. Small overview is essentially tied. | Residency is useful for some workloads, but this spike failed its predeclared 15% cross-scene gate. [Resident results](GPU_RESIDENT_SPIKE_RESULTS.md). |
-| Centered-error FP32 second pass | Zero additional certifications; Retina seahorse calculation 27.06 → 46.65 ms. | Removed; another FP32 interval shape is unsupported by this evidence. [Second-stage results](GPU_RESIDENT_SECOND_STAGE_PROFILE.csv). |
-| Double-single GPU recovery | Even without a rigorous certificate, Retina seahorse is 37.3% slower and has 54 color outliers, maximum channel error 189. | Removed; adding a certificate to this same implementation cannot rescue its measured optimistic ceiling. This does not rule out every use of multiword arithmetic. [Double-single results](GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv). |
+| Centered-error FP32 second pass | Zero additional certifications; Retina seahorse calculation 27.06 → 46.65 ms. | Removed; another FP32 interval shape is unsupported by this evidence. Second-stage results (private archive: `GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`). |
+| Double-single GPU recovery | Even without a rigorous certificate, Retina seahorse is 37.3% slower and has 54 color outliers, maximum channel error 189. | Removed; adding a certificate to this same implementation cannot rescue its measured optimistic ceiling. This does not rule out every use of multiword arithmetic. Double-single results (private archive: `GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`). |
 
 ### Keep the measurement boundaries separate
 
@@ -76,8 +83,8 @@ buffer publication and, where selected, CPU AA. Retina medians in milliseconds:
 | Overview Fast + AA | 1345.79 | 1526.22 | 1.13x |
 | Overview Refined + AA | 1378.67 | 1534.89 | 1.11x |
 
-Sources: [primary CSV](GPU_RENDER_BENCHMARK_8_5_RESULTS.csv) and
-[Refined CSV](GPU_RENDER_BENCHMARK_8_5_REFINED.csv). Refined first publication is
+Sources: primary CSV (private archive: `GPU_RENDER_BENCHMARK_8_5_RESULTS.csv`) and
+Refined CSV (private archive: `GPU_RENDER_BENCHMARK_8_5_REFINED.csv`). Refined first publication is
 also worse on GPU: 244.50 vs 92.26 ms. Neither timer measures physical scanout.
 
 The resident benchmark instead ends at a returned ARGB array. It uses fixed 300
@@ -93,7 +100,7 @@ and its [native test](../src/test/java/com/shangin/fractal/gpu/GpuResidentMandel
 | Exterior | 49.551 ms | 7.976 ms | 0.11% | 83.9% lower elapsed time in this benchmark |
 | Seahorse | 125.887 ms | 156.173 ms | 68.53% | 24.1% higher elapsed time |
 
-Source: [resident CSV](GPU_RESIDENT_SPIKE_RESULTS.csv). There are 5,939,136 pixels
+Source: resident CSV (private archive: `GPU_RESIDENT_SPIKE_RESULTS.csv`). There are 5,939,136 pixels
 at 3024x1964; 4,070,274 seahorse corrections cost 117.013 ms. The resident and
 integrated certificates have different acceptance rates; do not mix the
 resident overview's 91.80% acceptance with the integrated backend's 95.12%.
@@ -106,7 +113,7 @@ and would not establish an application speedup.
 
 ### CPU antialiasing: measure synchronization before rewriting arithmetic
 
-The [8.6 profile CSV](GPU_RESIDENCY_8_6_PROFILE.csv) reports CPU Retina AA wall
+The 8.6 profile CSV (private archive: `GPU_RESIDENCY_8_6_PROFILE.csv`) reports CPU Retina AA wall
 time around 1,089 ms, with only 164,354 candidates (2.77% of pixels) and
 2,629,664 subpixel samples. Candidate detection's busiest-worker elapsed time
 is about 72–73 ms. The summed sampling and cache/color intervals are worker
@@ -229,7 +236,7 @@ Perturbation uses low-precision deltas around a high-precision reference; BLA
 replaces several valid recurrence steps with a short linear map. Those are the
 algorithmic foundations already used by the CPU backend, and are documented by
 [Mathr](https://mathr.co.uk/web/deep-zoom.html). A GPU implementation is a proposed
-application of these ideas, not an observed FractalUI GPU result.
+application of these ideas, not an observed FractalLens GPU result.
 
 Start with the existing scalar CPU reference/BLA data and fixed diagnostic
 grids. Quantify GPU error from reference conversion, coefficient conversion,
@@ -299,7 +306,7 @@ JavaFX upload costs. Native memory experiments must also cover discrete GPUs.
 CPU/GPU selection by measured hardware and number type has precedent in
 [Fraktaler 3's documented calibration](https://fraktaler.mathr.co.uk/#wisdom).
 That is an architectural reference, not evidence that its performance or
-precision policy transfers to FractalUI.
+precision policy transfers to FractalLens.
 
 ## Validation and promotion rules
 

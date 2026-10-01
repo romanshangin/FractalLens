@@ -58,14 +58,3 @@ jobs:
         run: >-
           bash scripts/run-ci-tests ./mvnw --batch-mode --no-transfer-progress
           -Dfractal.gpu.enabled=false clean test
-
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: surefire-reports-${{ matrix.os }}-${{ github.run_attempt }}
-          path: |
-            target/ci-test.log
-            target/surefire-reports/
-          if-no-files-found: warn
-          retention-days: 30

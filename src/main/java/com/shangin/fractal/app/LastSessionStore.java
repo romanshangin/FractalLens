@@ -36,19 +36,19 @@ public final class LastSessionStore {
         String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         if (osName.startsWith("mac")) {
             return Path.of(System.getProperty("user.home"), "Library", "Application Support",
-                    "FractalUI", FILE_NAME);
+                    "FractalLens", FILE_NAME);
         }
         if (osName.startsWith("windows")) {
             String applicationData = firstNonBlank(
                     System.getenv("LOCALAPPDATA"),
                     System.getenv("APPDATA"),
                     System.getProperty("user.home"));
-            return Path.of(applicationData, "FractalUI", FILE_NAME);
+            return Path.of(applicationData, "FractalLens", FILE_NAME);
         }
         String stateHome = firstNonBlank(
                 System.getenv("XDG_STATE_HOME"),
                 Path.of(System.getProperty("user.home"), ".local", "state").toString());
-        return Path.of(stateHome, "fractalui", FILE_NAME);
+        return Path.of(stateHome, "fractallens", FILE_NAME);
     }
 
     private static String firstNonBlank(String... values) {

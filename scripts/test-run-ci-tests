@@ -5,7 +5,7 @@ set -eu
 readonly expected_exit=37
 readonly console_limit=8000
 readonly status_line='Running test command; output is buffered and retained in target/ci-test.log.'
-console_log="$(mktemp "${TMPDIR:-/tmp}/fractalui-ci-console.XXXXXX")"
+console_log="$(mktemp "${TMPDIR:-/tmp}/fractallens-ci-console.XXXXXX")"
 trap 'rm -f "$console_log"' EXIT
 
 set +e

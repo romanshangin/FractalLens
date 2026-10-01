@@ -42,12 +42,12 @@ public class FractalApplication extends Application {
         stage.setOnHidden(event -> mainView.close());
         stage.focusedProperty().addListener((observable, wasFocused, focused) -> {
             if (focused) {
-                Platform.runLater(() -> MacApplicationMenu.setName("FractalUI"));
+                Platform.runLater(() -> MacApplicationMenu.setName("FractalLens"));
             }
         });
         stage.show();
         stage.centerOnScreen();
-        Platform.runLater(() -> MacApplicationMenu.setName("FractalUI"));
+        Platform.runLater(() -> MacApplicationMenu.setName("FractalLens"));
         mainView.getCenter().requestFocus();
     }
 

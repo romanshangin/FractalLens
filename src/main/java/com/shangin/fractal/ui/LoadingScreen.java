@@ -27,7 +27,7 @@ final class LoadingScreen extends StackPane implements AutoCloseable {
 
     LoadingScreen() {
         var resource = java.util.Objects.requireNonNull(getClass().getResource(
-                "/com/shangin/fractal/app/icons/fractalui.png"));
+                "/com/shangin/fractal/app/icons/fractallens.png"));
         ImageView icon = new ImageView(new Image(resource.toExternalForm(), 256, 256, true, true));
         icon.setFitWidth(96);
         icon.setFitHeight(96);

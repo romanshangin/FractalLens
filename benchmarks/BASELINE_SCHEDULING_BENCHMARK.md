@@ -1,5 +1,9 @@
 # Roadmap 9.1 scheduling and cancellation diagnostics
 
+> Publication scope: use this protocol for fresh runs in a new output directory.
+> Keep raw logs and diagnostic captures private; publish only reviewed summaries
+> and necessary sanitized evidence. See [evidence provenance](../PUBLICATION.md).
+
 `-Dfractal.render.diagnostics=true` at JVM startup enables request-owned CPU
 scheduling diagnostics. The default remains off. Direct and perturbation pools
 keep their existing fixed-pool scheduling policy; disabled runs use the original
@@ -115,7 +119,7 @@ for the ordinary post-first-region diagnostic matrix on the candidate.
 
 For the input scope, use the same startup switch with
 `com.shangin.fractal.render.BaselineInputBenchmark`, a graphical session and
-`-Djavafx.cachedir=/tmp/fractalui-javafx-cache`. The scheduling summarizer also
+`-Djavafx.cachedir=/tmp/fractallens-javafx-cache`. The scheduling summarizer also
 accepts its output directory and runs the existing strict input validator.
 `SUCCESS` is a runner conformance marker; the summarizer additionally rejects
 missing matrix cases, missing submitted-request snapshots, impossible event
@@ -125,7 +129,7 @@ Its derived `scheduling-summary.csv` may be regenerated from immutable raw CSVs.
 ```sh
 mvn clean test
 mvn -q -Dfractal.fx.tests=true -Dfractal.render.diagnostics=true \
-  -Djavafx.cachedir=/tmp/fractalui-javafx-cache \
+  -Djavafx.cachedir=/tmp/fractallens-javafx-cache \
   -Dtest=BaselineInputBenchmarkTest test
 python3 -m unittest discover -s scripts -p 'test_summarize_baseline*.py'
 ```

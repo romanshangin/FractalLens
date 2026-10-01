@@ -59,7 +59,7 @@ public class MainView extends BorderPane {
         // JavaFX gives this bar zero height when macOS installs it in the system menu bar.
         setTop(menuBar);
         setCenter(fractalView);
-        stage.setTitle(initialScene.fractal() + " — FractalUI");
+        stage.setTitle(initialScene.fractal() + " — FractalLens");
     }
 
     private static InitialScene loadInitialScene(LastSessionStore sessionStore) {
@@ -68,7 +68,7 @@ public class MainView extends BorderPane {
                     .map(scene -> new InitialScene(scene, true))
                     .orElseGet(MainView::defaultInitialScene);
         } catch (IOException exception) {
-            System.err.println("Could not restore the last FractalUI session: "
+            System.err.println("Could not restore the last FractalLens session: "
                     + exception.getMessage());
             return defaultInitialScene();
         }
@@ -170,7 +170,7 @@ public class MainView extends BorderPane {
         try {
             sessionStore.save(fractalView.sceneSnapshot());
         } catch (IOException exception) {
-            System.err.println("Could not save the last FractalUI session: "
+            System.err.println("Could not save the last FractalLens session: "
                     + exception.getMessage());
         }
         exportService.close();

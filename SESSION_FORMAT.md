@@ -1,20 +1,25 @@
-# FractalUI session format
+# FractalLens session format
 
-FractalUI restores the most recently closed scene at the next normal launch.
+FractalLens restores the most recently closed scene at the next normal launch.
 The session contains only reproducible scene state; window dimensions, render
 priority, in-progress work and transient animation state are not persisted.
 
 ## Storage locations
 
-- macOS: `~/Library/Application Support/FractalUI/last-session.json`
-- Windows: `%LOCALAPPDATA%\FractalUI\last-session.json`, falling back to
+- macOS: `~/Library/Application Support/FractalLens/last-session.json`
+- Windows: `%LOCALAPPDATA%\FractalLens\last-session.json`, falling back to
   `%APPDATA%` and then the user profile
-- Linux: `$XDG_STATE_HOME/fractalui/last-session.json`, or
-  `~/.local/state/fractalui/last-session.json`
+- Linux: `$XDG_STATE_HOME/fractallens/last-session.json`, or
+  `~/.local/state/fractallens/last-session.json`
 
 The file is saved when the main view closes. A missing or malformed session
-does not prevent startup: FractalUI tries the previous valid generation and
+does not prevent startup: FractalLens tries the previous valid generation and
 then falls back to the default Mandelbrot scene.
+
+FractalLens uses a separate application-data directory from the earlier private
+application. Existing session files are not moved or deleted automatically. To
+reuse an earlier scene, copy its `last-session.json` into the new platform
+location while both applications are closed. The scene schema is unchanged.
 
 ## Schema contract
 
@@ -41,7 +46,7 @@ invalid required values are rejected rather than partially applied.
 ## Atomic publication and recovery
 
 Each generation is written and forced to a temporary file in the session
-directory, then published with an atomic same-directory replacement. FractalUI
+directory, then published with an atomic same-directory replacement. FractalLens
 does not fall back to a non-atomic replacement on file systems that cannot
 provide this guarantee. Before replacement, the current valid primary file is
 published independently as `last-session.json.backup`.

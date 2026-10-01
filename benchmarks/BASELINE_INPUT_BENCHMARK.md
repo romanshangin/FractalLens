@@ -1,5 +1,9 @@
 # Roadmap 9.1 production input baseline
 
+> Publication scope: use this protocol for fresh runs in a new output directory.
+> Keep raw logs and diagnostic captures private; publish only reviewed summaries
+> and necessary sanitized evidence. See [evidence provenance](../PUBLICATION.md).
+
 [`BaselineInputBenchmark`](../src/test/java/com/shangin/fractal/render/BaselineInputBenchmark.java)
 connects the versioned `9.1-v1` [fixture matrix](BASELINE_BENCHMARK.md) to the
 installed `FractalView` scroll, zoom, mouse and resize handlers. It dispatches
@@ -131,7 +135,7 @@ BASELINE_JAVA=/path/to/jdk/bin/java
   --module-path "target/classes:$(cat target/baseline-classpath.txt)" \
   --patch-module com.shangin.fractal=target/test-classes \
   --enable-native-access=javafx.graphics,org.lwjgl \
-  -Djavafx.cachedir=/tmp/fractalui-javafx-cache \
+  -Djavafx.cachedir=/tmp/fractallens-javafx-cache \
   -Dbaseline.output=target/baseline-input-check \
   -Dbaseline.revision="$(git rev-parse HEAD)" \
   -Dbaseline.sizes=480x270 -Dbaseline.warmups=1 -Dbaseline.runs=3 \
@@ -152,7 +156,7 @@ a requested pipeline property is not proof of the active renderer.
 
 ```sh
 mvn clean test
-mvn -q -Dfractal.fx.tests=true -Djavafx.cachedir=/tmp/fractalui-javafx-cache \
+mvn -q -Dfractal.fx.tests=true -Djavafx.cachedir=/tmp/fractallens-javafx-cache \
   -Dtest=BaselineInputBenchmarkTest test
 ```
 

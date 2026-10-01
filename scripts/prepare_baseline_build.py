@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+from privacy import safe_json, redact
 import os
 from pathlib import Path
 import shutil
@@ -120,9 +121,9 @@ def main():
             "java": str(java.resolve()), "java_sha256": sha(java),
             "java_version": subprocess.run([str(java), "-version"], env=env, text=True, capture_output=True, check=True).stderr,
             "build_command": command}
-    (output / "build.json").write_text(json.dumps(data, indent=2) + "\n")
+    (output / "build.json").write_text(safe_json(data, indent=2) + "\n")
     verify_build(output)
-    print(str(output) + " " + identity)
+    print(redact(str(output)) + " " + identity)
 
 
 if __name__ == "__main__":

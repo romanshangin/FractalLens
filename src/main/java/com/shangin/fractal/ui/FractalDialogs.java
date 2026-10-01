@@ -179,7 +179,7 @@ final class FractalDialogs {
 
     static Dialog<Void> helpDialog(Window owner) {
         Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("FractalUI Help");
+        dialog.setTitle("FractalLens Help");
         Label content = new Label("Explore the fractal\n\n"
                 + "Drag to move. Use arrow keys to pan, Page Up and Page Down to zoom, and Home to reset the view.\n"
                 + "Scroll with a mouse to zoom toward the pointer.\n"

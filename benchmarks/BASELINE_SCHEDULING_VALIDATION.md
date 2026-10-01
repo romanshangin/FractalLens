@@ -1,5 +1,12 @@
 # Roadmap 9.1 scheduling validation — 2026-09-08
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 The new opt-in diagnostics identify a coordinator-side cancellation bottleneck:
 a fully reused 3024x1964 direct frame spends about five seconds scanning its
 validity mask while creating **zero worker tasks**. Cancelling during that
@@ -8,8 +15,8 @@ the problem; it does not change the mask algorithm or claim a speedup.
 
 Branch: `codex/roadmap-9-1-scheduling-diagnostics`, based on `7f3b0e2`.
 All accepted datasets describe that base plus the scheduling working tree and
-include source SHA-256 hashes. Raw CSVs are preserved; saved log trailing
-whitespace is normalized for Git. See [the measurement contract](BASELINE_SCHEDULING_BENCHMARK.md).
+include source SHA-256 hashes. Raw CSVs and logs remain in the private archive;
+they are not distributed with this report. See [the measurement contract](BASELINE_SCHEDULING_BENCHMARK.md).
 
 ## Runtime and limits
 
@@ -24,7 +31,7 @@ an explicit Java executable and record it with the run.
 
 The input run used JavaFX 26.0.2+3, 2x output scale, native
 `com.sun.prism.es2.ES2Pipeline`, Apple M3 Pro renderer and vsync, verified in its
-[launch log](baseline-9-1-scheduling-input-20260908/launch.log).
+launch log (private archive: `baseline-9-1-scheduling-input-20260908/launch.log`).
 GPU fractal calculation was disabled. Suites ran sequentially, without a
 concurrent rendering benchmark or JFR/native profiler. Background activity,
 thermal state and OS/physical display latency were not measured. Diagnostic
@@ -33,10 +40,10 @@ conformance runs, not 30-pair optimization gates.
 
 ## Canonical CPU base matrix
 
-[480x270 data](baseline-9-1-scheduling-final-20260908/samples.csv),
-[raw diagnostics](baseline-9-1-scheduling-final-20260908/diagnostics.csv),
-[derived intervals](baseline-9-1-scheduling-final-20260908/scheduling-summary.csv),
-[environment](baseline-9-1-scheduling-final-20260908/environment.txt).
+480x270 data (private archive: `baseline-9-1-scheduling-final-20260908/samples.csv`),
+raw diagnostics (private archive: `baseline-9-1-scheduling-final-20260908/diagnostics.csv`),
+derived intervals (private archive: `baseline-9-1-scheduling-final-20260908/scheduling-summary.csv`),
+environment (private archive: `baseline-9-1-scheduling-final-20260908/environment.txt`).
 
 Six fixtures cover seahorse, direct/deep/reverse, 25% pan, resize/drag and direct
 and deep cancellation. Their 11 steps produce **44 validated requests**: one
@@ -60,9 +67,9 @@ that first region. It cannot diagnose cancellation during a long planning scan.
 
 ## Fully reused Retina frame and cancellation during planning
 
-[3024x1964 data](baseline-9-1-scheduling-retina-final-20260908/samples.csv),
-[raw diagnostics](baseline-9-1-scheduling-retina-final-20260908/diagnostics.csv),
-[derived intervals](baseline-9-1-scheduling-retina-final-20260908/scheduling-summary.csv).
+3024x1964 data (private archive: `baseline-9-1-scheduling-retina-final-20260908/samples.csv`),
+raw diagnostics (private archive: `baseline-9-1-scheduling-retina-final-20260908/diagnostics.csv`),
+derived intervals (private archive: `baseline-9-1-scheduling-retina-final-20260908/scheduling-summary.csv`).
 
 One first sequence and one sample run the canonical direct/deep/reverse fixture.
 After each fully reused reverse, an additional request is cancelled after
@@ -89,11 +96,11 @@ The result therefore does not mean every real zoom or pan incurs five seconds.
 
 ## Real input and generation identity
 
-[Input data](baseline-9-1-scheduling-input-20260908/samples.csv),
-[raw trace](baseline-9-1-scheduling-input-20260908/events.csv),
-[actual jobs](baseline-9-1-scheduling-input-20260908/actual-manifest.csv),
-[input summary](baseline-9-1-scheduling-input-20260908/summary.csv),
-[scheduling summary](baseline-9-1-scheduling-input-20260908/scheduling-summary.csv).
+Input data (private archive: `baseline-9-1-scheduling-input-20260908/samples.csv`),
+raw trace (private archive: `baseline-9-1-scheduling-input-20260908/events.csv`),
+actual jobs (private archive: `baseline-9-1-scheduling-input-20260908/actual-manifest.csv`),
+input summary (private archive: `baseline-9-1-scheduling-input-20260908/summary.csv`),
+scheduling summary (private archive: `baseline-9-1-scheduling-input-20260908/scheduling-summary.csv`).
 
 Five fixtures cover wheel/pinch, pan-25, resize/drag and direct/deep replacement,
 in both requested Fast/Refined modes. One first sequence and one sample give
@@ -113,11 +120,11 @@ excluding untimed seed/control work. Canonical manifests still match `9.1-v1`.
 ## Regression and validation evidence
 
 - Final `mvn clean test`: **394 tests, zero failures/errors, 37 skipped**.
-  [Saved log](baseline-9-1-scheduling-final-20260908/clean-test.log).
+  Saved log (private archive: `baseline-9-1-scheduling-final-20260908/clean-test.log`).
 - Opt-in graphical `BaselineInputBenchmarkTest`: **16 tests passed**, including
   replacement identity and exact real-handler output. Its deliberately injected
   asynchronous timer failure is expected regression output.
-  [Saved log](baseline-9-1-scheduling-input-20260908/fx-tests.log).
+  Saved log (private archive: `baseline-9-1-scheduling-input-20260908/fx-tests.log`).
 - Python validators: **11 tests passed**. All three final datasets also pass
   the scheduling validator; the input dataset passes the full input validator.
 - New deterministic regressions hold an interrupted worker alive after backend

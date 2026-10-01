@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.shangin</groupId>
-    <artifactId>fractal-ui</artifactId>
+    <artifactId>fractal-lens</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>
@@ -197,9 +197,9 @@
                             <executable>${project.basedir}/scripts/macos-java</executable>
                             <options combine.children="append">
                                 <option>--fractal-java-home=${java.home}</option>
-                                <option>-Xdock:name=FractalUI</option>
+                                <option>-Xdock:name=FractalLens</option>
                                 <!-- Set before JavaFX starts so the generic Java icon never appears. -->
-                                <option>-Xdock:icon=${project.basedir}/src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns</option>
+                                <option>-Xdock:icon=${project.basedir}/src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns</option>
                                 <option>--add-exports=javafx.graphics/com.sun.glass.ui=com.shangin.fractal</option>
                                 <option>--add-opens=javafx.graphics/com.sun.glass.ui.mac=com.shangin.fractal</option>
                                 <option>--add-exports=javafx.graphics/com.sun.javafx.stage=com.shangin.fractal</option>

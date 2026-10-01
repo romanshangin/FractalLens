@@ -80,7 +80,7 @@ public final class InteractionLatencyBenchmark extends Application {
             }
             pendingPulse.clear();
         });
-        stage.setTitle("FractalUI — interaction latency diagnostic");
+        stage.setTitle("FractalLens — interaction latency diagnostic");
         stage.setScene(scene);
         stage.setAlwaysOnTop(true);
         stage.show();

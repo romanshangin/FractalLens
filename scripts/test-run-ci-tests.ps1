@@ -6,7 +6,7 @@ $statusLine = 'Running test command; output is buffered and retained in target/c
 $consoleLog = [System.IO.Path]::GetTempFileName()
 $fixture = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
-    "fractalui-ci-fixture-$([guid]::NewGuid().ToString('N')).ps1"
+    "fractallens-ci-fixture-$([guid]::NewGuid().ToString('N')).ps1"
 )
 $currentPowerShell = (Get-Process -Id $PID).Path
 

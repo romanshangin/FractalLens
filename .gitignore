@@ -42,4 +42,13 @@ build/
 .DS_Store
 
 # Temporary benchmark process locks
-benchmarks/**/tmp/fractalui-baseline-benchmark.lock
+benchmarks/**/tmp/fractallens-baseline-benchmark.lock
+
+# Raw measurement output stays private. Existing reviewed files remain tracked.
+*.log
+*.jfr
+*.hprof
+*.sarif
+.env
+.env.*
+/benchmarks/*/

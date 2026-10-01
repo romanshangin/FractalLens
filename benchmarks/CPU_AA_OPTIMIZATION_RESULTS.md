@@ -1,5 +1,12 @@
 # CPU antialiasing cache optimization
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Measurement dates: 2026-09-05–06. Baseline rendering code: `6c263f6`.
 Machine: Apple M3 Pro, 12 logical processors, macOS 26.6.2,
 Java 26.0.1, JavaFX 26.0.2, 2 GiB JVM heap, 11 AA workers.
@@ -57,7 +64,7 @@ These durations overlap across threads and include cold/warmup frames.
 Low-threshold JFR recording substantially increases baseline runtime; the
 performance tables use separate uninstrumented runs. Contention on
 `ValidityMask` also appears during untimed base rendering and is not attributed
-to this AA change. See [saved diagnostic counters](CPU_AA_CONTENTION_PROFILE.csv).
+to this AA change. See saved diagnostic counters (private archive: `CPU_AA_CONTENTION_PROFILE.csv`).
 
 `InteractiveAntialiasService.Profile` now exposes cache snapshot preparation,
 tile-merge elapsed time and merge count separately. Worker stage timings are
@@ -74,7 +81,7 @@ Three fresh JVM pairs alternate build order. Each process runs one cold
 observation, three warmups and ten measured samples per scene/size: 30 measured
 samples per build per case. Every returned pixel is compared against the
 saved baseline image outside timing. Primary data are in
-[CPU_AA_BENCHMARK_RESULTS.csv](CPU_AA_BENCHMARK_RESULTS.csv).
+CPU_AA_BENCHMARK_RESULTS.csv (private archive: `CPU_AA_BENCHMARK_RESULTS.csv`).
 
 | Scene | Size | Median before → after, ms | Speedup | p95 before → after, ms | First AA tile median before → after, ms |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -105,7 +112,7 @@ do not establish GPU conformance.
 Three fresh JVM pairs use the same cold/warmup/measured counts as the AA
 service comparison: 30 measured frames per build per case. Total time includes
 base calculation, coloring, AA and JavaFX publication. Raw data are in
-[CPU_AA_FX_BENCHMARK_RESULTS.csv](CPU_AA_FX_BENCHMARK_RESULTS.csv).
+CPU_AA_FX_BENCHMARK_RESULTS.csv (private archive: `CPU_AA_FX_BENCHMARK_RESULTS.csv`).
 
 | Mode | Size | Total median before → after, ms | Speedup | Total p95 before → after, ms | First publication median before → after, ms |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -149,7 +156,7 @@ recolor equivalence and pan/resize retention coverage.
 
 Supplementary controls use one process per build, one cold frame, two warmups
 and five measured frames; each complete image matches its baseline pixel for
-pixel. Data: [CPU_AA_CONTROL_RESULTS.csv](CPU_AA_CONTROL_RESULTS.csv).
+pixel. Data: CPU_AA_CONTROL_RESULTS.csv (private archive: `CPU_AA_CONTROL_RESULTS.csv`).
 
 | Control | Scene / size | AA median before → after, ms | First tile median before → after, ms |
 | --- | --- | ---: | ---: |
@@ -168,7 +175,7 @@ supersedes these two preliminary timing observations.
 
 The follow-up has three fresh JVM pairs in alternating build order, with
 30 measured frames per build/control and full pixel equality throughout.
-Data: [CPU_AA_FOLLOWUP_RESULTS.csv](CPU_AA_FOLLOWUP_RESULTS.csv).
+Data: CPU_AA_FOLLOWUP_RESULTS.csv (private archive: `CPU_AA_FOLLOWUP_RESULTS.csv`).
 
 | Control | AA median before → after, ms | AA p95 before → after, ms | First tile median before → after, ms |
 | --- | ---: | ---: | ---: |
@@ -211,7 +218,7 @@ MAVEN_OPTS='-Xmx2g' mvn -Paa-benchmark verify -DskipTests -Dfractal.aa.profile=t
   -DaaBenchmark.output=target/aa-current-profile.csv
 
 # Real JavaFX publication, CPU only.
-JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractalui-javafx-cache -Dfractal.gpu.enabled=false -Dfractal.benchmark.cpuOnly=true -Dfractal.benchmark.scenes=overview-aa,overview-refined -Dfractal.benchmark.output=target/aa-fx-current.csv' mvn -Pgpu-render-benchmark javafx:run
+JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractallens-javafx-cache -Dfractal.gpu.enabled=false -Dfractal.benchmark.cpuOnly=true -Dfractal.benchmark.scenes=overview-aa,overview-refined -Dfractal.benchmark.output=target/aa-fx-current.csv' mvn -Pgpu-render-benchmark javafx:run
 ```
 
 The headless profile also accepts `aaBenchmark.pattern=DETERMINISTIC_JITTER`,

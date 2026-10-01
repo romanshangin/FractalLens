@@ -50,7 +50,7 @@ def main():
     source = Image.open(SOURCE)
     symbol, background = icon_layers(source)
     symbol.save(SOURCE.parent / "mandelbrot.png")
-    native_layer = SOURCE.parent / "FractalUI.icon/Assets/mandelbrot.png"
+    native_layer = SOURCE.parent / "FractalLens.icon/Assets/mandelbrot.png"
     if native_layer.parent.is_dir():
         symbol.save(native_layer)
     flat = Image.alpha_composite(background, symbol)
@@ -59,8 +59,8 @@ def main():
     DESTINATION.mkdir(parents=True, exist_ok=True)
     variants = [icon.resize((size, size), Image.Resampling.LANCZOS)
                 for size in (32, 64, 128, 256, 512, 1024)]
-    variants[-1].save(DESTINATION / "fractalui.png")
-    variants[-1].save(DESTINATION / "FractalUI.icns", append_images=variants)
+    variants[-1].save(DESTINATION / "fractallens.png")
+    variants[-1].save(DESTINATION / "FractalLens.icns", append_images=variants)
     print(f"Saved PNG and ICNS to {DESTINATION}")
 
 

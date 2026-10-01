@@ -1,9 +1,9 @@
 ---
 name: verify-task
-description: Verify FractalUI changes with risk-proportionate tests, visible checks, benchmark evidence, and repository hygiene. Use for test, validation, acceptance, or pre-handoff verification requests; not for implementing fixes or publishing changes.
+description: Verify FractalLens changes with risk-proportionate tests, visible checks, benchmark evidence, and repository hygiene. Use for test, validation, acceptance, or pre-handoff verification requests; not for implementing fixes or publishing changes.
 ---
 
-# Verify a FractalUI task
+# Verify a FractalLens task
 
 Follow the testing rules, subsystem constraints, and acceptance criteria in
 `AGENTS.md` and the relevant project validation documents.

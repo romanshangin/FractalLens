@@ -20,6 +20,23 @@ class LastSessionStoreTest {
     Path temporaryDirectory;
 
     @Test
+    void defaultLocationUsesThePublicApplicationNameOnEveryPlatform() {
+        String originalOs = System.getProperty("os.name");
+        try {
+            for (String os : new String[] {"Mac OS X", "Windows 11", "Linux"}) {
+                System.setProperty("os.name", os);
+                Path path = LastSessionStore.defaultPath();
+                assertEquals("last-session.json", path.getFileName().toString());
+                assertEquals(os.equals("Linux") ? "fractallens" : "FractalLens",
+                        path.getParent().getFileName().toString());
+            }
+        } finally {
+            if (originalOs == null) System.clearProperty("os.name");
+            else System.setProperty("os.name", originalOs);
+        }
+    }
+
+    @Test
     void savesAndLoadsTheLatestScene() throws Exception {
         LastSessionStore store = store();
         FractalScene scene = scene(FractalPreset.JULIA, "-0.12", "0.34", "5E-80");

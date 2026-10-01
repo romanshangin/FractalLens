@@ -14,13 +14,13 @@ import unittest
 class MacLauncherTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.temp = tempfile.TemporaryDirectory(prefix="FractalUI launcher test ")
+        cls.temp = tempfile.TemporaryDirectory(prefix="FractalLens launcher test ")
         cls.addClassCleanup(cls.temp.cleanup)
         cls.root = Path(cls.temp.name)
         project = Path(__file__).resolve().parent.parent
         for relative in ("scripts/macos-java", "src/main/macos/FractalLauncher.c",
                          "src/main/macos/Info.plist",
-                         "src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns"):
+                         "src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns"):
             destination = cls.root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(project / relative, destination)
@@ -53,13 +53,13 @@ class MacLauncherTest(unittest.TestCase):
             results = list(pool.map(lambda _: self.launch(["-version"]), range(2)))
         for result in results:
             self.assertEqual(0, result.returncode, result.stderr)
-        bundles = list((self.root / "target/macos-launcher").glob("*/FractalUI.app"))
+        bundles = list((self.root / "target/macos-launcher").glob("*/FractalLens.app"))
         self.assertEqual(1, len(bundles))
         bundle = bundles[0]
         info = plistlib.loads((bundle / "Contents/Info.plist").read_bytes())
-        self.assertEqual("FractalUI", info["CFBundleDisplayName"])
+        self.assertEqual("FractalLens", info["CFBundleDisplayName"])
         subprocess.run(["codesign", "--verify", "--strict", str(bundle)], check=True)
-        executable = bundle / "Contents/MacOS/FractalUI"
+        executable = bundle / "Contents/MacOS/FractalLens"
         binary = subprocess.check_output(["otool", "-l", str(executable)], text=True)
         sdk = subprocess.check_output(
             ["xcrun", "--sdk", "macosx", "--show-sdk-version"], text=True).strip()

@@ -34,7 +34,7 @@ public final class BaselineBenchmark {
         }
         if (Boolean.getBoolean("baseline.manifestOnly")) return;
         // Protect this harness across checkouts. Other timing suites must still be stopped manually.
-        Path lockPath = Path.of(System.getProperty("java.io.tmpdir"), "fractalui-baseline-benchmark.lock");
+        Path lockPath = Path.of(System.getProperty("java.io.tmpdir"), "fractallens-baseline-benchmark.lock");
         try (var lockChannel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
              var lock = lockChannel.tryLock()) {
             if (lock == null) throw new IllegalStateException("Another baseline benchmark is running");

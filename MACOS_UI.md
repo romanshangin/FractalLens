@@ -15,13 +15,13 @@ registration so it does not retain the closed view's commands.
 Run the native menu regression in an active macOS desktop session:
 
 ```shell
-mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractalui-system-menu" -DreuseForks=false -Dtest=MacSystemMenuFxTest test
+mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-system-menu" -DreuseForks=false -Dtest=MacSystemMenuFxTest test
 ```
 
 The regression inspects the AppKit menu before focus loss, while an unowned
 window without menus has focus, after focus returns, and after view disposal.
 For visible acceptance, switch to another Space, activate another application,
-then return to FractalUI without moving the pointer onto the menu bar and check
+then return to FractalLens without moving the pointer onto the menu bar and check
 that File through Help remain visible and usable.
 
 Validation on 2026-09-29: the native regression failed on the original code
@@ -31,32 +31,32 @@ tests and 60 opt-in skips. The user confirmed the original Spaces sequence and
 opening Help in the current development build; the running process was checked
 to distinguish it from an older packaged copy with the same bundle identifier.
 
-The system application menu is named **FractalUI**, including its Hide and Quit
+The system application menu is named **FractalLens**, including its Hide and Quit
 commands. `-Xdock:name` alone does not reliably name this menu in JavaFX 26.
 `MacApplicationMenu` updates the Glass application menu after installation and
 when the main window regains focus. This small adapter isolates an internal
 JavaFX API because the public MenuBar API cannot edit the application menu.
 
 `mvn javafx:run` automatically enables the required module access on macOS.
-IntelliJ users can select the shared **FractalUI (macOS)** run configuration.
+IntelliJ users can select the shared **FractalLens (macOS)** run configuration.
 Custom run configurations and packaged launchers need these VM options:
 
 ```text
--Xdock:name=FractalUI
+-Xdock:name=FractalLens
 --add-exports=javafx.graphics/com.sun.glass.ui=com.shangin.fractal
 --add-opens=javafx.graphics/com.sun.glass.ui.mac=com.shangin.fractal
 ```
 
 The name takes effect on restart. When packaging with `jpackage`, also use
-`--name FractalUI`. Recheck the adapter when upgrading JavaFX.
+`--name FractalLens`. Recheck the adapter when upgrading JavaFX.
 
 ## Application icon
 
 The selected Mandelbrot icon is bundled in
-`src/main/resources/com/shangin/fractal/app/icons/fractalui.png` (1024×1024,
+`src/main/resources/com/shangin/fractal/app/icons/fractallens.png` (1024×1024,
 RGBA). `ApplicationIcon` loads it from the application resources at startup.
 On macOS the Maven profile and shared IntelliJ run configuration supply
-`-Xdock:icon` with the absolute path to `FractalUI.icns`. The native launcher
+`-Xdock:icon` with the absolute path to `FractalLens.icns`. The native launcher
 therefore has the correct icon before JavaFX creates the application; setting
 it only in `Application.start()` caused the generic Java icon to flash first.
 `ApplicationIcon` retains its public `Taskbar` API fallback for custom launchers.
@@ -67,8 +67,8 @@ to see the change.
 For a macOS application bundle, pass these additional `jpackage` options:
 
 ```text
---name FractalUI
---icon src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns
+--name FractalLens
+--icon src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns
 ```
 
 The ICNS contains standard and Retina representations up to 1024 pixels.
@@ -84,7 +84,7 @@ Custom Java launch configurations must supply this VM option before the main cla
 (replace the project path; retain quotes when it contains spaces):
 
 ```text
-"-Xdock:icon=/path/to/FractalUI/src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns"
+"-Xdock:icon=/path/to/FractalLens/src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns"
 ```
 
 API references: [Java Taskbar](https://docs.oracle.com/en/java/javase/25/docs/api/java.desktop/java/awt/Taskbar.html),
@@ -123,7 +123,7 @@ The native JavaFX regression checks can be run with
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette |
 | Render | Display Quality, Antialiasing Pattern, Edit Iteration Settings…, Edit Julia Parameters…, Deep Zoom Antialiasing |
 | Window | Minimize (⌘M), Zoom |
-| Help | FractalUI Help, including pointer and keyboard navigation |
+| Help | FractalLens Help, including pointer and keyboard navigation |
 
 Edit Iteration Settings is available for every fractal when rendering is idle.
 Edit Julia Parameters is enabled only for Julia.
@@ -214,12 +214,12 @@ Native canvas menu checks (require an unlocked, focused desktop session):
 
 ```sh
 mvn -Dfractal.fx.tests=true -Dtest=MacContextMenuFxTest \
-    -Djavafx.cachedir=/tmp/fractalui-javafx-cache test
+    -Djavafx.cachedir=/tmp/fractallens-javafx-cache test
 mvn -Dfractal.fx.tests=true -Dfractal.fx.fullscreen=true -Dtest=MacContextMenuFxTest \
-    -Djavafx.cachedir=/tmp/fractalui-javafx-cache test
+    -Djavafx.cachedir=/tmp/fractallens-javafx-cache test
 mvn -Dfractal.fx.tests=true \
     '-Dtest=FractalResizeFxTest#contextMenuDismissesWithoutSwallowingCanvasInput' \
-    -Djavafx.cachedir=/tmp/fractalui-javafx-cache test
+    -Djavafx.cachedir=/tmp/fractallens-javafx-cache test
 ```
 
 The native suite checks AppKit target/action, cancellation, suppression of stale
@@ -277,8 +277,8 @@ coordinate validation, gradient Apply/Cancel, full-screen entry and exit,
 and the native PNG save sheet. The save sheet was opened without saving a file.
 
 The application-menu fix was checked on Microsoft OpenJDK 25.0.4 with JavaFX
-26.0.2. A test bundle deliberately named MenuNameCheck displayed **FractalUI**
-in the actual native menu, with **Hide FractalUI** and **Quit FractalUI** items.
+26.0.2. A test bundle deliberately named MenuNameCheck displayed **FractalLens**
+in the actual native menu, with **Hide FractalLens** and **Quit FractalLens** items.
 
 The icon was checked in Finder using a locally packaged `.app`. A separate
 Java launch on Microsoft OpenJDK 25.0.4 read back the actual native Dock image:
@@ -346,7 +346,7 @@ in `target/dialog-qa/`, alongside the graphical test report. Manual keyboard
 checks also confirmed coordinate validation with Return and correction with Tab.
 
 ```sh
-mvn -q -Dfractal.fx.tests=true -Dtest=FractalDialogsFxTest -Djavafx.cachedir=/tmp/fractalui-javafx-cache test
+mvn -q -Dfractal.fx.tests=true -Dtest=FractalDialogsFxTest -Djavafx.cachedir=/tmp/fractallens-javafx-cache test
 mvn -q package
 ```
 

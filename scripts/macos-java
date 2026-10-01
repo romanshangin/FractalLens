@@ -13,12 +13,12 @@ for arg in "$@"; do
     fi
 done
 if [[ -z "$java_home" || ! -x "$java_home/bin/java" ]]; then
-    echo 'FractalUI: expected --fractal-java-home=<Maven JDK home>' >&2
+    echo 'FractalLens: expected --fractal-java-home=<Maven JDK home>' >&2
     exit 1
 fi
 
 plist="$project_dir/src/main/macos/Info.plist"
-icon="$project_dir/src/main/resources/com/shangin/fractal/app/icons/FractalUI.icns"
+icon="$project_dir/src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns"
 source_file="$project_dir/src/main/macos/FractalLauncher.c"
 sdk_path=$(xcrun --sdk macosx --show-sdk-path)
 compiler=$(xcrun --sdk macosx --find clang)
@@ -31,27 +31,27 @@ cache_key=$({
 } | shasum -a 256 | cut -d ' ' -f 1)
 cache_root="$project_dir/target/macos-launcher"
 cache_dir="$cache_root/$cache_key"
-bundle="$cache_dir/FractalUI.app"
+bundle="$cache_dir/FractalLens.app"
 if [[ ! -d "$bundle" ]]; then
     mkdir -p "$cache_root"
     staging=$(mktemp -d "$cache_root/.build.XXXXXX")
     trap 'rm -rf "$staging"' EXIT
-    contents="$staging/FractalUI.app/Contents"
+    contents="$staging/FractalLens.app/Contents"
     mkdir -p "$contents/MacOS" "$contents/Resources"
     "$compiler" -std=c11 -Wall -Wextra -Werror -isysroot "$sdk_path" \
         -mmacosx-version-min=11.0 -I"$java_home/include" -I"$java_home/include/darwin" \
         "-DFRACTAL_JAVA_VERSION=\"$jdk_version\"" "$source_file" \
         -L"$java_home/lib" -ljli -Xlinker -rpath -Xlinker "$java_home/lib" \
-        -Wl,-exported_symbol,_main -o "$contents/MacOS/FractalUI"
+        -Wl,-exported_symbol,_main -o "$contents/MacOS/FractalLens"
     cp "$plist" "$contents/Info.plist"
-    cp "$icon" "$contents/Resources/FractalUI.icns"
+    cp "$icon" "$contents/Resources/FractalLens.icns"
     # Sign only our generated application; the installed JDK stays untouched.
-    codesign --force --sign - "$staging/FractalUI.app"
+    codesign --force --sign - "$staging/FractalLens.app"
     mkdir -p "$cache_dir"
     # Publish the complete bundle atomically. Another launch may win this race.
-    if ! mv -n "$staging/FractalUI.app" "$cache_dir/" 2>/dev/null; then
-        if [[ ! -x "$bundle/Contents/MacOS/FractalUI" ]]; then
-            echo "FractalUI: cannot install launcher in $cache_dir" >&2
+    if ! mv -n "$staging/FractalLens.app" "$cache_dir/" 2>/dev/null; then
+        if [[ ! -x "$bundle/Contents/MacOS/FractalLens" ]]; then
+            echo "FractalLens: cannot install launcher in $cache_dir" >&2
             exit 1
         fi
     fi
@@ -59,4 +59,4 @@ if [[ ! -d "$bundle" ]]; then
     trap - EXIT
 fi
 
-exec "$bundle/Contents/MacOS/FractalUI" "${java_args[@]}"
+exec "$bundle/Contents/MacOS/FractalLens" "${java_args[@]}"

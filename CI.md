@@ -1,92 +1,121 @@
 # Continuous integration
 
-This document covers the portable CI and hardware validation lanes in the P0
-infrastructure and delivery foundation of `ROADMAP.md`. Runtime artifact CI is
-described in `RUNTIME_PACKAGING.md`. The Windows GPU runtime implementation and
-Intel/AMD Mac acceptance work remain in roadmap 8.7 and 8.8.
-
-FractalUI separates portable CPU-default validation from hardware-native GPU
-validation. Hosted runners establish portability; they do not establish GPU
-conformance or performance.
+Historical checks belong to the original private repository. They do not certify
+runs in the new destination; see [publication provenance](PUBLICATION.md).
+The workflows use GitHub-hosted runners, a read-only `contents` token, immutable
+action pins and checkouts with credential persistence disabled. No workflow uses
+`pull_request_target`, repository secrets, write permissions or a personal runner.
 
 ## Portable build
 
-`.github/workflows/ci.yml` runs the CPU-default suite on Ubuntu for pull
-requests targeting `main` and pushes to `codex/**` branches.
+`ci.yml` runs CPU-default tests on Ubuntu for PRs targeting `main` and pushes to
+`codex/**`. `portable-ci.yml` runs macOS/Windows tests on PRs, pushes to `main`
+and manual dispatch. Temurin Java 25, the Maven Wrapper and the existing Maven
+cache are used. The macOS/Windows command is:
 
-`.github/workflows/portable-ci.yml` runs automatically for pull requests and
-pushes to `main`, and can also be started manually. Its macOS and Windows jobs:
+```sh
+./mvnw --batch-mode --no-transfer-progress -Dfractal.gpu.enabled=false clean test
+```
 
-- start from a clean checkout and verify that it has no changes;
-- install Temurin Java 25;
-- cache Maven dependencies using `pom.xml` as part of the cache key;
-- run `./mvnw --batch-mode --no-transfer-progress
-  -Dfractal.gpu.enabled=false clean test`;
-- retain `target/surefire-reports` for 30 days, including reports from failed
-  test runs.
+Native GPU, graphical JavaFX and benchmark profiles remain opt-in. A hosted
+portable pass is not device conformance or a performance result.
 
-The portable jobs deliberately do not run the opt-in JavaFX, benchmark, or
-native GPU profiles. They verify the CPU-default build without requiring a
-display or Vulkan device. The checked-in Maven Wrapper pins Maven 3.9.16 and
-removes a preinstalled-Maven requirement from hosted and self-hosted runners.
-Third-party workflow actions are pinned to immutable commit SHAs, with their
-release tags recorded beside each pin.
+## Console output and artifacts
 
-All CI test commands run through `scripts/run-ci-tests` (or its PowerShell
-equivalent). The complete Maven output is retained as `target/ci-test.log`. A
-failed run prints at most 8,000 output units to the job console, including the
-status line and truncation marker, while preserving both ends. The Bash runner
-counts bytes; the PowerShell runner counts .NET characters. The uploaded log
-and Surefire reports retain the complete diagnostics.
+Test and packaging commands run through `scripts/run-ci-tests` or its PowerShell
+counterpart. Python 3 is required. `scripts/privacy.py` redacts known home,
+project and temporary roots, the current login/hostname, email addresses other
+than the approved contact, machine identifiers, addresses and common credential
+forms before output reaches the console or `target/ci-test.log`. Known secret
+environment values are also removed. Filtering failure withholds command output
+and fails the step. Redaction is best effort, not proof of absence of secrets.
 
-The hosted lanes run `scripts/test-run-ci-tests` and the Windows-specific
-PowerShell counterpart before Maven. These contract checks use a deterministic
-failing process to verify exit-code propagation, complete log retention, the
-console limit, both retained edges and the reported omission size.
+The test command's exit status is preserved after successful filtering. Failed
+output keeps both diagnostic edges within the existing 8,000-unit console budget
+(bytes in Bash; .NET characters in PowerShell). Successful output is also
+filtered. The raw temporary capture is deleted; the local retained log is the
+filtered version. Surefire reports and test logs are not uploaded automatically.
 
-## Native GPU validation
+Runtime installers have a separate, explicit manual upload switch, off by
+default. Generated provenance and smoke-report text must pass the privacy check
+before upload. This does not inspect the contents of installers or establish
+release acceptance; validate them in the private destination first. See
+[packaging](RUNTIME_PACKAGING.md).
 
-`.github/workflows/native-gpu.yml` is manual-only. It routes the selected lane
-to a self-hosted runner with real target hardware, records hardware and runtime
-provenance in the job log, and retains the full test log and Surefire reports for
-30 days. The Apple Silicon and Intel Mac lanes run `./mvnw -Pgpu-smoke test` as
-native conformance smoke tests. The Intel lane requires an x64 JVM on a physical
-Intel Mac; its checkout step rejects an ARM64 host running an x64 process through
-Rosetta. A passing smoke run is evidence for the selected device only, not for
-all Intel or AMD GPUs, paired performance, or a packaged application.
+## Publication checks
 
-Until the Windows runtime work in roadmap 8.7 is implemented, the Windows lane
-requires the runtime to remain unavailable and verifies CPU fallback. It must
-not be reported as Windows GPU conformance. This lane runs on Windows 10/11 x64
-hardware while the Windows GPU runtime is unavailable; enabling a Windows GPU mode
-requires a separate hardware-backed native lane after the runtime exists.
+`publication-checks.yml` runs on PRs, including forks, pushes to `main` and
+`codex/**`, and manual dispatch. It needs no repository secrets or write access.
+It runs the privacy regression tests, baseline analyzer tests and these checks:
 
-The runner labels are:
+```sh
+python3 scripts/check_public_data.py
+python3 scripts/check_secrets.py --gitleaks /path/to/gitleaks
+```
 
-| Lane | Required labels |
-| --- | --- |
-| Apple Silicon macOS | `self-hosted`, `macOS`, `ARM64`, `fractalui-gpu` |
-| Physical Intel Mac, x64 JVM | `self-hosted`, `macOS`, `X64`, `fractalui-gpu` |
-| Windows x64 fallback | `self-hosted`, `Windows`, `X64`, `fractalui-gpu` |
+The public-data guard scans tracked files plus non-ignored new files, rejects
+raw diagnostic/credential filenames, known prohibited identity patterns and
+unreviewed benchmark paths. `scripts/public_benchmark_files.json` is the explicit
+benchmark selection. Extending it requires reviewing the data and updating the
+benchmark index. Known PNG/ICNS assets still require visual and metadata review;
+this text guard does not inspect their pixels or prove binary privacy.
 
-A self-hosted machine must run GitHub Actions Runner 2.329.0 or newer because
-the pinned actions use the current Node.js action runtime. A Windows runner
-must also provide `gzip.exe`; the Maven cache uses it to create the archive at
-the end of a job. The workflow accepts it on `PATH` or in the standard Git for
-Windows directory `C:\Program Files\Git\usr\bin`, which it adds to subsequent
-steps through `GITHUB_PATH`. Verify the installation with `Get-Command gzip.exe`
-or `Test-Path 'C:\Program Files\Git\usr\bin\gzip.exe'`. The Windows job checks
-this contract before Java and Maven cache setup.
+Gitleaks 8.30.1 is installed on Linux x64 from its official release after verifying
+a pinned SHA-256. It scans the complete fetched Git history with default rules,
+no project ignore list, inline allow comments disabled, archive/decode depth 5
+and no size limit. The wrapper independently classifies only structured
+benchmark JSON file-checksum matches. An arbitrary credential field is not a
+checksum exception. Unresolved findings or scanner errors fail without printing
+matched values. A full scan should also be run before a local commit; use
+`--tree` to include current uncommitted files. Never publish the scanner report
+without review.
 
-A queued job means that no online runner matches all required labels. Before
-accepting an Intel Mac result, retain the run URL, commit, selected-device
-capability report, host model, GPU and driver details, Java/Maven versions, and
-Surefire artifact. Run the packaged macOS x64 launcher on the same hardware and
-record its CPU fallback and visible JavaFX behavior separately. Then complete
-roadmap 8.8's missing-native, palette, calculation, paired timing, and transfer
-gates. For Windows, complete 8.7's runtime, failure-path, palette, calculation,
-and paired timing gates on actual Windows hardware before adding a GPU-conformance
-lane or enabling a GPU mode there. A passing hosted portable job or build-machine
-packaging smoke is not native GPU conformance. Neither hardware track blocks the
-CPU-default macOS artifact; GPU promotion requires the correctness and
-performance gates in `ROADMAP.md` on each supported target device.
+Raw benchmark output remains private. The paired-run driver records OS,
+release and architecture without querying a hostname. Benchmark metadata is
+sanitized only when serialized; executable commands, locks and numerical
+observations are unchanged. Generated directories and raw logs/dumps are ignored
+by default. Existing selected evidence stays tracked. Local raw runs remain
+sensitive and must not be force-added wholesale.
+
+## Qodana and fork pull requests
+
+The existing JVM Community linter runs without `QODANA_TOKEN` on every configured
+PR, including forks, on `main` pushes and manual dispatch. The action is pinned
+to v2026.2.2. It performs a full analysis (`pr-mode: false`) with comments,
+annotations, fixes, cache export and report uploads disabled. This avoids write
+operations that a fork's restricted token cannot perform and does not silently
+skip fork analysis. The current linter version remains defined in `qodana.yaml`.
+
+Community token behavior is documented by [JetBrains](https://www.jetbrains.com/help/qodana/github.html).
+The runner/token restrictions follow [GitHub's security guidance](https://docs.github.com/en/actions/reference/security/secure-use)
+and [fork event behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+
+## Hardware validation
+
+The former `native-gpu.yml` self-hosted workflow is removed from the current
+configuration. Do not attach personal runners to the destination repository or
+expose an organization runner group to it. Local hardware work remains manual
+and its raw output private:
+
+```sh
+./mvnw -Pgpu-smoke test
+```
+
+Use an active desktop session on the actual target device, record only permitted
+hardware/runtime fields and retain the platform limits from `ROADMAP.md`.
+Windows CPU fallback checks are not Windows GPU conformance; Intel/AMD Mac and
+Windows GPU promotion gates remain open. Removing a workflow does not unregister
+runners from the old private repository, and this change does not alter that
+repository's settings.
+
+## Required private-destination acceptance
+
+Local checks do not simulate GitHub's authorization or execute hosted workflows.
+Before opening access, run a same-repository PR and a real external fork PR,
+including the first-contributor approval flow. Confirm portable tests, publication
+checks, Qodana and applicable packaging jobs run with read-only permissions and
+no secrets. Confirm there are no PR comments, report uploads or runner requests
+outside this policy. Inspect successful and failing Actions logs and any manually
+uploaded installer/provenance files. Run on Windows and macOS; a PowerShell test
+on macOS is not Windows acceptance. These destination checks remain pending
+until the new private repository exists.

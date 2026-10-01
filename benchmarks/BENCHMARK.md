@@ -1,5 +1,9 @@
 # Frame reuse benchmark
 
+> Publication scope: use this protocol for fresh runs in a new output directory.
+> Keep raw logs and diagnostic captures private; publish only reviewed summaries
+> and necessary sanitized evidence. See [evidence provenance](../PUBLICATION.md).
+
 For the versioned roadmap 9.1 scene/navigation matrix and separate backend,
 returned-ARGB and production-AA scopes, see [baseline benchmark](BASELINE_BENCHMARK.md).
 The original frame-reuse profile below remains available for historical comparisons.

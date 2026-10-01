@@ -43,6 +43,6 @@ JNIEXPORT int main(int argc, char **argv) {
     int count = (int)arguments->size;
     JLI_List_add(arguments, NULL);
     return JLI_Launch(count, arguments->elements, 0, NULL, 0, NULL,
-                      FRACTAL_JAVA_VERSION, "0.0", "FractalUI", "java",
+                      FRACTAL_JAVA_VERSION, "0.0", "FractalLens", "java",
                       JNI_FALSE, JNI_TRUE, JNI_FALSE, 0);
 }

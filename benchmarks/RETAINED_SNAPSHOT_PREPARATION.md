@@ -1,5 +1,12 @@
 # P1.2 retained-snapshot preparation experiment
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Decision: **reject** the on-demand tile-coloring candidate. The production
 implementation remains at the control behavior. The required first-tile and
 full-AA gates did not both pass; no performance improvement is claimed.

@@ -3,19 +3,19 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>FractalUI</string>
+    <string>FractalLens</string>
     <key>CFBundleDisplayName</key>
-    <string>FractalUI</string>
+    <string>FractalLens</string>
     <key>CFBundleIdentifier</key>
     <string>com.shangin.fractal</string>
     <key>CFBundleExecutable</key>
-    <string>FractalUI</string>
+    <string>FractalLens</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleIconFile</key>
-    <string>FractalUI.icns</string>
+    <string>FractalLens.icns</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

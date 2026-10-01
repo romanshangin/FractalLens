@@ -1,9 +1,9 @@
 ---
 name: review-task
-description: Perform a read-only FractalUI code, diff, or change assessment and report actionable findings with evidence and remediation. Use for review, audit, assessment, or re-review requests; not for implementing fixes unless the user explicitly includes implementation.
+description: Perform a read-only FractalLens code, diff, or change assessment and report actionable findings with evidence and remediation. Use for review, audit, assessment, or re-review requests; not for implementing fixes unless the user explicitly includes implementation.
 ---
 
-# Review a FractalUI task
+# Review a FractalLens task
 
 Follow all project-wide rules, constraints, testing requirements, Git policy,
 and severity definitions in `AGENTS.md`.

@@ -1,5 +1,9 @@
 # Roadmap 9.1 allocation and sustained-memory diagnostics
 
+> Publication scope: use this protocol for fresh runs in a new output directory.
+> Keep raw logs and diagnostic captures private; publish only reviewed summaries
+> and necessary sanitized evidence. See [evidence provenance](../PUBLICATION.md).
+
 `BaselineMemoryBenchmark` reuses the installed-handler input driver and the
 decimal-authoritative `9.1-v1` fixtures. This is a diagnostic workload, not an
 uninstrumented before/after performance gate. Production rendering is unchanged.
@@ -77,7 +81,9 @@ distinguished when interpreting stacks. Asynchronous activity may cross scopes.
 
 The raw JFR stays in the output directory but is ignored by Git; keep its hash
 with the saved derived report. JSON conversion is temporary and removed after
-successful analysis. Small raw CSVs, logs and reports can be versioned.
+successful analysis. Keep raw CSVs, logs and diagnostic captures in the private run archive.
+Publish only explicitly selected, privacy-reviewed summaries and necessary
+sanitized numerical evidence; do not commit raw logs.
 
 ## Reproduce
 
@@ -86,7 +92,7 @@ Run in a graphical macOS session with the selected JDK, sequentially:
 ```sh
 mvn -q -DskipTests test-compile dependency:build-classpath \
   -Dmdep.includeScope=test -Dmdep.outputFile=target/baseline-classpath.txt
-/usr/bin/swiftc -module-cache-path /tmp/fractalui-swift-module-cache \
+/usr/bin/swiftc -module-cache-path /tmp/fractallens-swift-module-cache \
   scripts/baseline_thermal.swift -o target/baseline-thermal
 
 python3 scripts/run_baseline_memory.py target/new-allocation-run \

@@ -1,9 +1,9 @@
 ---
 name: implement-task
-description: Implement a requested FractalUI change with repository-aware discovery, planning, scoped edits, tests, and documentation. Use for feature, fix, refactoring, performance, or roadmap implementation; not for review-only, verification-only, or pull-request delivery requests.
+description: Implement a requested FractalLens change with repository-aware discovery, planning, scoped edits, tests, and documentation. Use for feature, fix, refactoring, performance, or roadmap implementation; not for review-only, verification-only, or pull-request delivery requests.
 ---
 
-# Implement a FractalUI task
+# Implement a FractalLens task
 
 Follow all project-wide rules and constraints in `AGENTS.md`.
 

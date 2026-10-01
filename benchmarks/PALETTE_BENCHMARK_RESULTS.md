@@ -1,15 +1,22 @@
 # Palette recoloring: CPU / Vulkan experiment (roadmap 8.2)
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 Measured 2026-09-03 on Apple M3 Pro (12 logical processors), macOS 26.6.2,
 ARM64 Java 26.0.2, JavaFX 26.0.2, LWJGL 3.4.2 / FFM / MoltenVK Vulkan 1.1.350.
 JavaFX reported output scale 2.0. Raw per-frame measurements are preserved in
-[PALETTE_BENCHMARK_RESULTS.csv](PALETTE_BENCHMARK_RESULTS.csv).
+PALETTE_BENCHMARK_RESULTS.csv (private archive: `PALETTE_BENCHMARK_RESULTS.csv`).
 
 The current results use 30 warmup pairs and 120 measured pairs per case.
 A preceding repeat with the original 12/40 settings is saved in
-[PALETTE_BENCHMARK_LWJGL342_DEFAULT.csv](PALETTE_BENCHMARK_LWJGL342_DEFAULT.csv).
+PALETTE_BENCHMARK_LWJGL342_DEFAULT.csv (private archive: `PALETTE_BENCHMARK_LWJGL342_DEFAULT.csv`).
 The original 2026-09-02 LWJGL 3.3.6 data is preserved in
-[PALETTE_BENCHMARK_LWJGL336.csv](PALETTE_BENCHMARK_LWJGL336.csv).
+PALETTE_BENCHMARK_LWJGL336.csv (private archive: `PALETTE_BENCHMARK_LWJGL336.csv`).
 Both new runs passed their per-frame output comparisons without CPU fallback.
 Neither run emitted Unsafe warnings.
 

@@ -58,7 +58,7 @@ final class MacosMoltenVkSession implements GpuSession {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkApplicationInfo app = VkApplicationInfo.calloc(stack)
                     .sType$Default()
-                    .pApplicationName(stack.UTF8("FractalUI"))
+                    .pApplicationName(stack.UTF8("FractalLens"))
                     .apiVersion(VK_API_VERSION_1_1);
             VkInstanceCreateInfo info = VkInstanceCreateInfo.calloc(stack)
                     .sType$Default().pApplicationInfo(app);

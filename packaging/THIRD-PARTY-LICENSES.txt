@@ -1,8 +1,8 @@
-FractalUI runtime third-party license inventory
+FractalLens runtime third-party license inventory
 ===============================================
 
 This directory contains the license and notice texts for every third-party
-runtime component added by the FractalUI packaging pipeline. The source
+runtime component added by the FractalLens packaging pipeline. The source
 revision is pinned to the binary version or embedded native revision.
 
 OpenJFX 26.0.2
@@ -54,6 +54,6 @@ Files:
 * Shaderc-LICENSE.spirv-tools.txt
 
 The linked JDK runtime retains its own legal notices under the runtime image's
-`legal` directory. FractalUI's Apache License 2.0 text is staged from the
+`legal` directory. FractalLens's Apache License 2.0 text is staged from the
 repository root as `LICENSE`. This inventory covers third-party components;
 they retain their respective licenses.

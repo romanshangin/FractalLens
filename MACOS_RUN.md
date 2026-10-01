@@ -1,8 +1,8 @@
-# Running FractalUI on macOS
+# Running FractalLens on macOS
 
 Run `mvn compile javafx:run` (or `mvn javafx:run` after compilation).
 The automatically activated `macos-app-name` profile launches through
-`scripts/macos-java`. Dock sees a `FractalUI.app` bundle with its own name,
+`scripts/macos-java`. Dock sees a `FractalLens.app` bundle with its own name,
 identifier and icon, rather than the shared `java` executable.
 
 The launcher creates a small, locally signed development bundle under
@@ -35,5 +35,5 @@ documented in `RUNTIME_PACKAGING.md`. That artifact includes its own runtime and
 does not use this development launcher.
 
 For a manual check, launch the application and hover over its Dock icon:
-the tooltip must say **FractalUI**. Checking only the running process's
-`localizedName` is insufficient: it can be FractalUI while Dock still says java.
+the tooltip must say **FractalLens**. Checking only the running process's
+`localizedName` is insufficient: it can be FractalLens while Dock still says java.

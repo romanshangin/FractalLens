@@ -1,5 +1,12 @@
 # Series approximation benchmark results
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 ## Decision
 
 Keep the current per-pixel perturbation recurrence. The tested cubic series

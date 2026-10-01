@@ -1,5 +1,12 @@
 # P1.5 retained CPU AA promotion assessment — 2026-09-25 to 2026-09-28
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 ## Decision and scope
 
 **P1.5 is complete for the retained CPU antialiasing (AA) change against its
@@ -54,8 +61,8 @@ a new passing candidate or an explicit, predeclared acceptance decision.
 | --- | --- | --- |
 | `mvn -Dtest=InteractiveAntialiasServiceTest,AntialiasSampleCacheTest test` | 22 passed | Cache ownership, tile admission, reuse and cancellation. |
 | `mvn test` | 447 reported, 393 executed, 54 opt-in skips; no failures | Portable CPU, precision, palette, fallback and lifecycle regressions on this macOS/JDK. Skipped native/FX cases are not counted as passed. |
-| `mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/private/tmp/fractalui-p1-5-fx-cache -DreuseForks=false -Dtest=FractalResizeFxTest,BaselineFxBenchmarkTest test` | 31 executed, 2 separately gated fullscreen skips; no failures | Visible JavaFX resize, pan, AA publication, cancellation and exact benchmark controls in the active desktop session. |
-| `mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/private/tmp/fractalui-p1-5-native-fx-cache -DreuseForks=false -Dtest=MacContextMenuFxTest,MacLoadingMaterialFxTest test` | 3 executed, 1 separately gated fullscreen/multi-display skip; no failures | Native macOS menu and material lifecycle on this host. GPU device-loss testing is not applicable to the CPU AA change. |
+| `mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/private/tmp/fractallens-p1-5-fx-cache -DreuseForks=false -Dtest=FractalResizeFxTest,BaselineFxBenchmarkTest test` | 31 executed, 2 separately gated fullscreen skips; no failures | Visible JavaFX resize, pan, AA publication, cancellation and exact benchmark controls in the active desktop session. |
+| `mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/private/tmp/fractallens-p1-5-native-fx-cache -DreuseForks=false -Dtest=MacContextMenuFxTest,MacLoadingMaterialFxTest test` | 3 executed, 1 separately gated fullscreen/multi-display skip; no failures | Native macOS menu and material lifecycle on this host. GPU device-loss testing is not applicable to the CPU AA change. |
 | `python3 -m unittest discover -s scripts -p 'test_summarize_baseline_memory.py'` | 12 passed | Strict sustained-report validator. |
 
 The sustained command ran in the active graphical macOS session, without
@@ -63,14 +70,14 @@ competing rendering benchmarks:
 
 ```sh
 mvn -q -DskipTests test-compile dependency:build-classpath -Dmdep.includeScope=test -Dmdep.outputFile=target/baseline-classpath.txt
-/usr/bin/swiftc -module-cache-path /private/tmp/fractalui-p1-5-swift-cache scripts/baseline_thermal.swift -o target/p1-5-thermal
+/usr/bin/swiftc -module-cache-path /private/tmp/fractallens-p1-5-swift-cache scripts/baseline_thermal.swift -o target/p1-5-thermal
 python3 scripts/run_baseline_memory.py benchmarks/p1-5-aa-sustained-20260924 --java /opt/homebrew/opt/openjdk/bin/java --seconds 600 --cycles 1 --sizes 1512x982 --fixtures seahorse-fixed,julia-aa-regular,deep-glitch-aa,direct-deep-reverse,pan-25,resize-then-drag,cancel-direct,cancel-deep --modes FAST,REFINED --thermal target/p1-5-thermal
 python3 scripts/summarize_baseline_memory.py benchmarks/p1-5-aa-sustained-20260924
 ```
 
 The [strict summary](p1-5-aa-sustained-20260924/summary.json),
-[exact-frame marker](p1-5-aa-sustained-20260924/workload/SUCCESS), and
-[monitor marker](p1-5-aa-sustained-20260924/MONITOR_SUCCESS) passed: 108
+exact-frame marker (private archive: `p1-5-aa-sustained-20260924/workload/SUCCESS`), and
+monitor marker (private archive: `p1-5-aa-sustained-20260924/MONITOR_SUCCESS`) passed: 108
 verified navigation trials in three complete rounds over 652.00 seconds.
 Every source, forward and return frame matched exact CPU sample and ARGB
 controls. The run covered normal/deep AA, reuse, reverse navigation, resize,
@@ -80,13 +87,13 @@ declared larger dimensions.
 The host was an Apple M3 Pro with 18 GiB RAM, macOS 27.0, Homebrew OpenJDK
 26.0.2, JavaFX 26.0.2, a 4 GiB maximum heap and 2x JavaFX output scale.
 Fractal GPU calculation was disabled. Power was AC at the start and after the
-run. The [process observations](p1-5-aa-sustained-20260924/process.csv) report
+run. The process observations (private archive: `p1-5-aa-sustained-20260924/process.csv`) report
 `nominal` OS thermal pressure throughout; they do not measure temperature or
 energy. Heap after each forced detached-GC checkpoint was 127.110, 127.166,
 and 127.193 MB, a first-to-last increase of 82,432 bytes. Navigation scopes
 totaled 218.72 seconds with 2.684 seconds of recorded GC time. Peak observed
 RSS was 3,118.76 MB and the final pre-exit observation was 598.98 MB.
-[NMT baseline and final captures](p1-5-aa-sustained-20260924/nmt-final.json)
+NMT baseline and final captures (private archive: `p1-5-aa-sustained-20260924/nmt-final.json`)
 completed. These are bounded diagnostic observations, not a proof of indefinite
 memory stability or a candidate-versus-control memory improvement.
 
@@ -131,8 +138,8 @@ sustained checks on the final source before P1.5 can close.
 
 Build A (`78128cad55c3ccd15d8183ed0b45baa1ed7591446fd92d1b9b984ba5a90c17d6`)
 and the first candidate B (`b6fe209a4448dd99a815c445a0671e1d7dfdde7a7fd3a5b62944fbfbeb638d04`)
-completed the 30-pair [headless](p1-5-aa-headless-pairs-20260924/analysis.json)
-and [JavaFX](p1-5-aa-fx-pairs-20260925/analysis.json) campaigns. Both exact
+completed the 30-pair headless (private archive: `p1-5-aa-headless-pairs-20260924/analysis.json`)
+and JavaFX (private archive: `p1-5-aa-fx-pairs-20260925/analysis.json`) campaigns. Both exact
 campaigns were timing-inconclusive. Retained Julia first-AA-tile ratios passed
 the 0.90 target in headless (0.722), Fast (0.791), and Refined (0.679). The
 headless fresh Mandelbrot first tile and several JavaFX controls exceeded the
@@ -158,14 +165,14 @@ bootstrap upper bounds at most 1.05. These markers end before physical
 scanout and do not measure the first completed fractal frame. The probe class,
 selected JDK and frozen build hashes are recorded with the campaign.
 
-The B2 [headless replication](p1-5-aa-b2-headless-pairs-20260925/analysis.json)
+The B2 headless replication (private archive: `p1-5-aa-b2-headless-pairs-20260925/analysis.json`)
 completed all 60 process pairs with 180 measured sequences per build and exact
 fingerprints. All seven declared timing groups passed. Retained-Julia first AA
 tile B/A was 0.665 (95% interval 0.647–0.687); full AA was 1.013
 (0.999–1.036) and total operation was 1.001 (0.997–1.005). Fresh Julia and
 Mandelbrot first-tile and operation controls all stayed within 1.05. This
 headless result alone did not promote B2. The 60-pair
-[JavaFX replication](p1-5-aa-b2-fx-pairs-20260925/analysis.json) was
+JavaFX replication (private archive: `p1-5-aa-b2-fx-pairs-20260925/analysis.json`) was
 timing-inconclusive: retained first-AA-tile B/A passed in Fast (0.797) and
 Refined (0.650), but full AA duration in both modes and fresh Julia Fast
 first-AA-tile did not meet the 1.05 upper confidence bound. All exact controls
@@ -182,11 +189,11 @@ alternating pairs, three warmups, three measured repetitions, fixtures,
 metrics and limits as B2. Every group must pass; C also needs the separate
 cold-startup and final correctness/sustained gates before promotion.
 
-The [candidate C headless campaign](p1-5-aa-c-headless-pairs-20260925/analysis.json)
+The candidate C headless campaign (private archive: `p1-5-aa-c-headless-pairs-20260925/analysis.json`)
 completed all 60 pairs with exact fingerprints and passed all seven groups.
 Retained Julia first-AA-tile B/A was 0.679 (95% interval 0.664–0.705), full
 AA was 1.016 (1.005–1.029), and total operation was 1.003 (0.998–1.008).
-The [JavaFX comparison](p1-5-aa-c-fx-pairs-20260925/analysis.json) was
+The JavaFX comparison (private archive: `p1-5-aa-c-fx-pairs-20260925/analysis.json`) was
 timing-inconclusive despite exact controls and first-AA-tile ratios of 0.650
 in Fast and 0.649 in Refined. Full AA and four short fresh/base controls had
 upper intervals above 1.05. C is not promoted.
@@ -202,18 +209,18 @@ measurement from C's 60-pair, three-sample policies without changing any
 fixture, metric or limit. All declared timing, exactness and later cold,
 portable, native and sustained gates remain required.
 
-The [candidate D headless campaign](p1-5-aa-d-headless-pairs-20260925/analysis.json)
+The candidate D headless campaign (private archive: `p1-5-aa-d-headless-pairs-20260925/analysis.json`)
 completed all 60 pairs with exact fingerprints and passed all seven timing
 groups. Retained Julia first-AA-tile B/A was 0.670 (95% interval
 0.655–0.695), full AA was 1.013 (0.996–1.030), and total operation was
 1.003 (0.999–1.007). This does not replace the JavaFX decision.
 
-The first [candidate D JavaFX campaign](p1-5-aa-d-fx-pairs-20260925/analysis.json)
+The first candidate D JavaFX campaign (private archive: `p1-5-aa-d-fx-pairs-20260925/analysis.json`)
 completed with exact controls but was timing-inconclusive: 14 of 18 groups
 passed, including retained first-AA-tile B/A of 0.653 in Fast and 0.643 in
 Refined. Retained Fast AA duration, fresh Julia Fast first AA tile and two
 base-only first-publication controls had upper intervals above 1.05. The
-[cold-startup campaign](p1-5-aa-d-cold-startup-20260925/summary.json) passed
+cold-startup campaign (private archive: `p1-5-aa-d-cold-startup-20260925/summary.json`) passed
 both declared 30-pair limits: Stage.show B/A 0.997 (upper 1.004) and first
 layout pulse 0.998 (upper 1.005). The shared probe class and JDK/build hashes
 are captured in that campaign's definition.
@@ -226,15 +233,15 @@ from the prior D JavaFX policy. All 18 groups must pass. If any group remains
 inconclusive or fails, reject D rather than changing this gate again.
 
 The first confirmation launch stopped at `pair-48-B` after macOS entered Deep
-Idle during `pair-47-A`. The [failed-process log](p1-5-aa-d-confirm-fx-pairs-20260925/pair-48-B.log)
+Idle during `pair-47-A`. The failed-process log (private archive: `p1-5-aa-d-confirm-fx-pairs-20260925/pair-48-B.log`)
 shows a missing post-layout pulse after exact rendering had completed; the
-macOS [power evidence](p1-5-aa-d-confirm-fx-pairs-20260925/sleep-evidence.txt)
+macOS power evidence (private archive: `p1-5-aa-d-confirm-fx-pairs-20260925/sleep-evidence.txt`)
 records a Deep Idle wake at 10:02 local time. The incomplete campaign is
 preserved and is not a timing verdict. The same frozen builds and unchanged
 policy were rerun from the beginning under a `caffeinate -dims` display/system
 sleep assertion; `pmset -g assertions` confirmed both assertions were active.
 
-The awake [120-pair confirmation](p1-5-aa-d-confirm-fx-awake-20260925/analysis.json)
+The awake 120-pair confirmation (private archive: `p1-5-aa-d-confirm-fx-awake-20260925/analysis.json`)
 completed with exact controls but was **timing-inconclusive**: 16 of 18 groups
 passed. Retained Julia first-AA-tile B/A was 0.653 in Fast and 0.610 in
 Refined, while retained full AA and full publication passed both modes. Fresh
@@ -300,7 +307,7 @@ precise deep AA must remain exact. A rejected candidate will be removed.
 
 The frozen E build identity was
 `3b276d6f644a4b0c97c23a5cfc9ae77595276750e610942229fe406f541e7ee7`.
-Its [60-pair headless screen](p1-5-aa-e-headless-pairs-20260927/analysis.json)
+Its 60-pair headless screen (private archive: `p1-5-aa-e-headless-pairs-20260927/analysis.json`)
 completed with exact sample/ARGB controls. Retained Julia first AA tile passed
 at B/A 0.665 (95% interval 0.640–0.706); five other groups passed. Retained
 full AA was inconclusive at B/A 1.020 (0.997–1.061), crossing the 1.05 control
@@ -335,13 +342,13 @@ active-desktop JavaFX/native and final-source sustained gates.
 
 Build F identity is
 `a067e3fbf8161b50a79456e935d792f7aec562da82fbcad1ea6c51fdfb447f3e`.
-The [60-pair headless campaign](p1-5-aa-f-headless-pairs-20260927/analysis.json)
+The 60-pair headless campaign (private archive: `p1-5-aa-f-headless-pairs-20260927/analysis.json`)
 completed with exact sample/ARGB controls and passed all seven timing groups.
 Retained Julia first AA tile was B/A 0.636 (95% interval 0.623–0.654), full AA
 was 1.002 (0.984–1.017), and total operation was 0.997 (0.993–1.004).
 This permits the predeclared JavaFX screen; it does not promote F.
 
-The [60-pair JavaFX screen](p1-5-aa-f-fx-screen-pairs-20260927/analysis.json)
+The 60-pair JavaFX screen (private archive: `p1-5-aa-f-fx-screen-pairs-20260927/analysis.json`)
 completed with exact sample/ARGB controls but was timing-inconclusive. Retained
 Julia first AA tile passed at B/A 0.614 in Fast and 0.616 in Refined. Retained
 full publication passed in both modes, but retained full AA remained
@@ -392,7 +399,7 @@ run. A rejected or inconclusive G will be removed.
 
 The frozen G build was
 `5145d5aefafa41db4dcbdac1cbf72e7db2d086f14ef60b26c819ce6e98f3fabe`.
-The [60-pair headless screen](p1-5-aa-g-headless-pairs-20260927/analysis.json)
+The 60-pair headless screen (private archive: `p1-5-aa-g-headless-pairs-20260927/analysis.json`)
 completed on the same AC-powered M3 Pro and JDK 26.0.2. The preflight and
 all campaign processes exited successfully, including exact benchmark output
 checks. Retained Julia first AA tile failed its declared 0.90 B/A upper bound:
@@ -428,8 +435,8 @@ Final source checks after removing G:
 | Check | Result | Scope |
 | --- | --- | --- |
 | `mvn test` | 447 reported, 393 executed, 54 opt-in skips; zero failures/errors | Portable CPU, precision, palette/AA, fallback, cache/reuse and cancellation. |
-| `mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/private/tmp/fractalui-p1-5-final-fx-cache -DreuseForks=false -Dtest=FractalResizeFxTest,BaselineFxBenchmarkTest test` | 33 reported, 31 executed, 2 separately gated fullscreen skips; zero failures/errors | Active-desktop JavaFX resize, pan, AA publication, cancellation and exact fixture controls. |
-| `mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/private/tmp/fractalui-p1-5-final-native-fx-cache -DreuseForks=false -Dtest=MacContextMenuFxTest,MacLoadingMaterialFxTest test` | 4 reported, 3 executed, 1 separately gated fullscreen/multi-display skip; zero failures/errors | Active-desktop native macOS menu/material lifecycle; resolves the earlier focus-limited rerun. |
+| `mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/private/tmp/fractallens-p1-5-final-fx-cache -DreuseForks=false -Dtest=FractalResizeFxTest,BaselineFxBenchmarkTest test` | 33 reported, 31 executed, 2 separately gated fullscreen skips; zero failures/errors | Active-desktop JavaFX resize, pan, AA publication, cancellation and exact fixture controls. |
+| `mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/private/tmp/fractallens-p1-5-final-native-fx-cache -DreuseForks=false -Dtest=MacContextMenuFxTest,MacLoadingMaterialFxTest test` | 4 reported, 3 executed, 1 separately gated fullscreen/multi-display skip; zero failures/errors | Active-desktop native macOS menu/material lifecycle; resolves the earlier focus-limited rerun. |
 | `python3 -m unittest discover -s scripts -p 'test_summarize_baseline_*.py'` | 39 passed | Benchmark evidence parsers. |
 | `git diff --check` | Passed | Repository whitespace hygiene. |
 
@@ -440,7 +447,7 @@ implementation. It passed exact sample/ARGB controls for 108 navigation
 trials, plus the bounded memory/GC/thermal observations described above.
 The frozen-control rows in the later headless and JavaFX pair campaigns and
 the A side of the 30-pair
-[cold-startup campaign](p1-5-aa-d-cold-startup-20260925/summary.json)
+cold-startup campaign (private archive: `p1-5-aa-d-cold-startup-20260925/summary.json`)
 also exercise that same implementation; candidate-side results are not used
 to claim a new improvement. The final native rerun passed in an active desktop
 session. Fullscreen/multi-display cases were skipped by their separate gates;
@@ -506,10 +513,10 @@ only by the accepted exception. This headless result alone is not P1.5
 promotion; the JavaFX and cold-startup comparisons remain required.
 
 The first JavaFX campaign
-[`p1-5-retained-vs-pre-fx-20260927`](p1-5-retained-vs-pre-fx-20260927/)
+`p1-5-retained-vs-pre-fx-20260927` (private archive: `p1-5-retained-vs-pre-fx-20260927/`)
 was stopped during pair 04-B after that JVM had written exact results and a
 `SUCCESS` marker but did not exit. The saved
-[thread dump](p1-5-retained-vs-pre-fx-20260927/pair-04-B-threads.txt)
+thread dump (private archive: `p1-5-retained-vs-pre-fx-20260927/pair-04-B-threads.txt`)
 shows the main thread waiting in `Platform.exit()` while the JavaFX thread
 remained in native `MacTimer._stop`; the runner therefore had no completed
 pair result. AC power and `caffeinate -dims` display/system assertions were
@@ -532,7 +539,7 @@ passed at 1.008 [0.986, 1.047]. The overall JavaFX timing verdict is
 
 The laptop changed to battery power after the completed AC-powered headless
 and JavaFX campaigns. A separate
-[battery cold-startup attempt](p1-5-retained-vs-pre-cold-battery-20260928/CAMPAIGN_INTERRUPTED)
+battery cold-startup attempt (private archive: `p1-5-retained-vs-pre-cold-battery-20260928/CAMPAIGN_INTERRUPTED`)
 was stopped at the owner's request after 13 complete A/B pairs. It has no
 30-pair summary and no timing verdict. At that point, the cold-startup gate and
 the three inconclusive JavaFX base-only controls remained open for AC checks.
@@ -577,7 +584,7 @@ passed their 0.90 limits: Fast AA **0.283 [0.277, 0.289]**, Fast full
 Refined full **0.323 [0.318, 0.326]**. All 480 fresh JVMs exited with code
 zero; every before/after observation recorded AC power and `nominal` thermal
 state. All compared non-cancelled sample and ARGB fingerprints matched. The
-[launch records](p1-5-retained-vs-pre-fx-base-confirm-20260928/launches.json),
+launch records (private archive: `p1-5-retained-vs-pre-fx-base-confirm-20260928/launches.json`),
 [environment](p1-5-retained-vs-pre-fx-base-confirm-20260928/environment.json),
 and frozen [A](p1-5-retained-vs-pre-fx-base-confirm-20260928/build-A.json)/[B](p1-5-retained-vs-pre-fx-base-confirm-20260928/build-B.json)
 build manifests preserve the provenance. The saved policy is byte-identical

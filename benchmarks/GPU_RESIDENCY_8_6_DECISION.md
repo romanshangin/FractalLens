@@ -1,5 +1,12 @@
 # GPU residency decision gate (roadmap 8.6)
 
+> Historical evidence: results and “current source” below refer to the dated
+> experiment, not a new validation of this checkout. Only the
+> [selected evidence](README.md) is included; entries marked “private archive”
+> are unavailable in this repository. Original SHA values and recorded commands
+> describe the original run and may require private revisions or inputs. See
+> [provenance and replay limits](../PUBLICATION.md).
+
 ## Decision
 
 **Do not move adaptive edge/distance candidate detection onto the GPU yet.**
@@ -18,7 +25,7 @@ ARM64 Java 26.0.2, JavaFX 26.0.2, LWJGL 3.4.2 / FFM, MoltenVK Vulkan 1.1.350.
 The JVM heap was capped at 2 GiB. Each case has one cold pair, two warmup pairs
 and five measured CPU/GPU pairs. CPU/GPU order alternates.
 
-Raw data: [GPU_RESIDENCY_8_6_PROFILE.csv](GPU_RESIDENCY_8_6_PROFILE.csv).
+Raw data: GPU_RESIDENCY_8_6_PROFILE.csv (private archive: `GPU_RESIDENCY_8_6_PROFILE.csv`).
 
 ## Results
 
