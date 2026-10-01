@@ -31,7 +31,9 @@ jobs:
           upload-result: false
           use-caches: false
           push-fixes: none
-          args: --baseline .qodana/baseline.sarif.json
+          args: >-
+            --baseline .qodana/baseline.sarif.json
+            --image jetbrains/qodana-jvm-community@sha256:3db2bdb1d846ddeca9f600a6737bc82b3993067e07e572ba7bf791d9fe41a9bf
       - name: Validate complete analysis and export safe findings
         if: ${{ !cancelled() }}
         run: >-
@@ -43,7 +45,7 @@ jobs:
         run: |
           python3 scripts/check_public_data.py --files target/qodana-reviewed/results.json
           bash scripts/install-gitleaks
-          gitleaks dir target/qodana-reviewed --redact=100 --no-banner --ignore-gitleaks-allow --max-decode-depth 5 --max-target-megabytes 0
+          "${RUNNER_TEMP}/fractallens-gitleaks/gitleaks" dir target/qodana-reviewed --redact=100 --no-banner --ignore-gitleaks-allow --max-decode-depth 5 --max-target-megabytes 0
       - name: Retain only the checked findings report
         if: ${{ success() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

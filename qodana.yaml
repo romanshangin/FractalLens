@@ -7,5 +7,5 @@ bootstrap: bash scripts/prepare-qodana
 failureConditions:
   severityThresholds:
     any: 0
-# Pin the reviewed analyzer, rather than following a changing image tag.
-linter: jetbrains/qodana-jvm-community@sha256:3db2bdb1d846ddeca9f600a6737bc82b3993067e07e572ba7bf791d9fe41a9bf
+# The workflow selects the immutable image using the CLI --image option.
+linter: jetbrains/qodana-jvm-community:2026.2
