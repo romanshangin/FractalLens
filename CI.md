@@ -82,9 +82,28 @@ sensitive and must not be force-added wholesale.
 The existing JVM Community linter runs without `QODANA_TOKEN` on every configured
 PR, including forks, on `main` pushes and manual dispatch. The action is pinned
 to v2026.2.2. It performs a full analysis (`pr-mode: false`) with comments,
-annotations, fixes, cache export and report uploads disabled. This avoids write
+annotations, fixes, cache export and raw report uploads disabled. This avoids write
 operations that a fork's restricted token cannot perform and does not silently
 skip fork analysis. The current linter version remains defined in `qodana.yaml`.
+
+The analyzer image is pinned by digest. Its bootstrap compiles production and
+test sources with the Maven Wrapper before a fresh import from `pom.xml`, using
+the analyzer's dependency repository. Developer IDE metadata is moved into
+private diagnostics in a disposable checkout. The image lacks ZIP utilities;
+the bootstrap uses JDK ZIP support to extract the wrapper's checksum-verified
+Maven distribution without changing its declared version or checksum.
+
+The [reviewed baseline](.qodana/README.md) preserves 116 accepted source contracts
+as sanitized locations and fingerprints. The zero-new-finding gate does not
+claim a warning-free application. `scripts/check_qodana.py` also rejects missing
+preparation evidence, unsuccessful analysis, unresolved dependency roots, sanity
+findings, and new or changed findings. Baseline updates require source review.
+
+After a successful run, only source-relative rule/location/message fields are
+exported to `qodana-reviewed-findings`, retained for seven days. Both the
+public-data guard and Gitleaks must pass before that upload. Raw SARIF, HTML,
+logs, IDE metadata and caches are never uploaded. Local analysis does not prove
+the changed workflow or actual fork permissions work on GitHub.
 
 Community token behavior is documented by [JetBrains](https://www.jetbrains.com/help/qodana/github.html).
 The runner/token restrictions follow [GitHub's security guidance](https://docs.github.com/en/actions/reference/security/secure-use)

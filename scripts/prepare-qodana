@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -eu
+
+# Only use a disposable checkout mounted into the Qodana container.
+if [[ "$PWD" != /data/project ]]; then
+    echo 'Qodana bootstrap requires a disposable checkout at /data/project.' >&2
+    exit 2
+fi
+mkdir -p /data/results
+# This image has no unzip. Without it the wrapper selects a tar archive,
+# whose checksum differs from the declared ZIP checksum. JDK ZIP support extracts
+# the original, checksum-verified ZIP with the wrapper's unzip invocation.
+if ! command -v unzip >/dev/null; then
+    mkdir -p /data/results/wrapper-tools
+    cat > /data/results/wrapper-tools/ExtractZip.java <<'JAVA'
+import java.nio.file.*;
+import java.util.zip.ZipFile;
+class ExtractZip {
+    public static void main(String[] args) throws Exception {
+        Path root = Path.of(args[1]).toAbsolutePath().normalize();
+        try (ZipFile zip = new ZipFile(args[0])) {
+            var entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                var entry = entries.nextElement();
+                Path target = root.resolve(entry.getName()).normalize();
+                if (!target.startsWith(root)) throw new java.io.IOException("Invalid ZIP entry");
+                if (entry.isDirectory()) Files.createDirectories(target);
+                else {
+                    Files.createDirectories(target.getParent());
+                    try (var input = zip.getInputStream(entry)) {
+                        Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    if (entry.getName().endsWith("/bin/mvn")
+                            && !target.toFile().setExecutable(true, false)) {
+                        throw new java.io.IOException("Cannot make Maven executable");
+                    }
+                }
+            }
+        }
+    }
+}
+JAVA
+    cat > /data/results/wrapper-tools/unzip <<'ZIP'
+#!/usr/bin/env bash
+set -eu
+archive=''
+destination=''
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -q) shift ;;
+        -d) destination="$2"; shift 2 ;;
+        *) archive="$1"; shift ;;
+    esac
+done
+test -n "$archive" && test -n "$destination"
+java /data/results/wrapper-tools/ExtractZip.java "$archive" "$destination"
+ZIP
+    chmod +x /data/results/wrapper-tools/unzip
+    export PATH="/data/results/wrapper-tools:$PATH"
+fi
+printf '%s\n' '<settings><localRepository>/data/cache/.m2</localRepository></settings>' \
+    > /data/results/maven-settings.xml
+# Tracked IDE external-storage metadata can prevent a complete Maven import.
+# Keep it in private diagnostics; let Qodana rebuild its model from pom.xml.
+if [[ -d .idea ]]; then
+    mv .idea /data/results/ide-metadata-before-import
+fi
+echo 'Preparing the complete Maven project for Qodana.'
+if ! ./mvnw --batch-mode --no-transfer-progress \
+    --settings /data/results/maven-settings.xml -DskipTests test-compile \
+    >/data/results/bootstrap.log 2>&1; then
+    echo 'Qodana Maven preparation failed; raw diagnostics remain private.' >&2
+    exit 1
+fi
+echo 'Qodana Maven preparation completed.'
