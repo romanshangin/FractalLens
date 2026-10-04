@@ -61,7 +61,7 @@ class MainMenuBarFxTest {
             stage.show();
             return null;
         });
-        await(() -> !renderMenu().isDisable());
+        await(() -> view.hasCompletedFrame() && !command("Render", "Edit Iteration Settings…").isDisable());
     }
 
     @AfterEach
@@ -138,6 +138,51 @@ class MainMenuBarFxTest {
         action.get(10, TimeUnit.SECONDS);
 
         assertEquals(initial, fx(view::sceneSnapshot));
+    }
+
+    @Test
+    void availabilityKeepsSceneSpecificRestrictionsAfterRendering() throws Exception {
+        fx(() -> {
+            assertTrue(command("Render", "Deep Zoom Antialiasing").isDisable());
+            assertTrue(command("Render", "Edit Julia Parameters…").isDisable());
+            command("Fractal", "Julia").fire();
+            return null;
+        });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
+        fx(() -> {
+            var histogram = (javafx.scene.control.CheckMenuItem) command("Color", "Histogram Coloring");
+            histogram.setSelected(true);
+            histogram.fire();
+            assertTrue(command("Color", "Animate Palette").isDisable());
+            return null;
+        });
+        await(() -> !command("Color", "Edit Palette…").isDisable());
+        fx(() -> {
+            assertTrue(command("Color", "Animate Palette").isDisable());
+            var histogram = (javafx.scene.control.CheckMenuItem) command("Color", "Histogram Coloring");
+            histogram.setSelected(false);
+            histogram.fire();
+            return null;
+        });
+        await(() -> !command("Color", "Animate Palette").isDisable());
+        fx(() -> { command("Color/Orbit Trap", "Point").fire(); return null; });
+        await(() -> !command("Color", "Edit Palette…").isDisable());
+        fx(() -> {
+            assertTrue(command("Color", "Animate Palette").isDisable());
+            command("Color/Orbit Trap", "Off").fire();
+            return null;
+        });
+        await(() -> !command("Color", "Animate Palette").isDisable());
+    }
+
+    private MenuItem command(String path, String title) {
+        java.util.List<? extends MenuItem> items = menuBar.getMenus();
+        for (String part : path.split("/")) {
+            Menu menu = (Menu) items.stream().filter(item -> part.equals(item.getText()))
+                    .findFirst().orElseThrow();
+            items = menu.getItems();
+        }
+        return items.stream().filter(item -> title.equals(item.getText())).findFirst().orElseThrow();
     }
 
     private CompletableFuture<Void> openIterationEditor() throws Exception {

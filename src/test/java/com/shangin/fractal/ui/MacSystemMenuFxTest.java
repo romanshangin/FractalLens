@@ -1,6 +1,15 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.app.LastSessionStore;
+import com.shangin.fractal.render.DirectDoubleRenderBackend;
+import com.shangin.fractal.render.FractalRenderService;
+import com.shangin.fractal.render.RenderBackend;
+import com.shangin.fractal.render.RenderFrame;
+import com.shangin.fractal.render.RenderRegion;
+import com.shangin.fractal.render.TileTimingStats;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -21,6 +30,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -72,6 +83,89 @@ class MacSystemMenuFxTest {
             assertEquals(List.of(), nativeCommands(), "Closed views must release the application-default commands");
         } finally {
             fx(() -> { other.close(); stage.close(); view.close(); return null; });
+        }
+    }
+
+    @Test void appearanceCommandsFollowStartupAndSubsequentRenderWithoutValidation() throws Exception {
+        var gate = new AtomicReference<>(new CountDownLatch(1));
+        var cpu = new DirectDoubleRenderBackend();
+        RenderBackend backend = new RenderBackend() {
+            @Override public RenderFrame render(RenderFrame frame, BooleanSupplier cancelled,
+                                                Consumer<RenderRegion> progress,
+                                                Consumer<TileTimingStats> timing) throws InterruptedException {
+                assertTrue(gate.get().await(15, TimeUnit.SECONDS), "Render gate was not released");
+                return cpu.render(frame, cancelled, progress, timing);
+            }
+            @Override public void close() { cpu.close(); }
+        };
+        var stage = fx(Stage::new);
+        var view = fx(() -> new MainView(stage, new LastSessionStore(directory.resolve("gated.json")),
+                new FractalRenderService(backend)));
+        var bar = (MainMenuBar) fx(view::getTop);
+        var canvas = (FractalView) fx(view::getCenter);
+        try {
+            fx(() -> {
+                stage.setScene(new Scene(view, 320, 240));
+                stage.show(); stage.toFront(); stage.requestFocus();
+                return null;
+            });
+            await(stage::isFocused);
+            assertAppearanceCommands(bar, true);
+            fx(() -> {
+                AppKitMenuProbe.updateSubmenu("Color");
+                AppKitMenuProbe.updateSubmenu("Render");
+                return null;
+            });
+            assertAppearanceCommands(bar, true);
+            assertFalse(fx(() -> AppKitMenuProbe.enabled("File/Export PNG…")));
+            assertTrue(fx(() -> AppKitMenuProbe.enabled("File/Close Window")));
+            assertTrue(fx(() -> AppKitMenuProbe.enabled("Help/FractalLens Help")));
+            gate.get().countDown();
+            await(() -> canvas.hasCompletedFrame() && !item(bar, "Color", "Edit Palette…").isDisable());
+            assertAppearanceCommands(bar, false);
+            assertTrue(fx(() -> AppKitMenuProbe.enabled("File/Export PNG…")));
+
+            gate.set(new CountDownLatch(1));
+            fx(() -> { canvas.zoom(true); return null; });
+            await(() -> item(bar, "Color", "Edit Palette…").isDisable());
+            assertAppearanceCommands(bar, true);
+            gate.get().countDown();
+            await(() -> !item(bar, "Color", "Edit Palette…").isDisable());
+            assertAppearanceCommands(bar, false);
+        } finally {
+            gate.get().countDown();
+            fx(() -> { stage.close(); view.close(); return null; });
+        }
+    }
+
+    private static MenuItem item(MainMenuBar bar, String menu, String title) {
+        return bar.getMenus().stream().filter(candidate -> menu.equals(candidate.getText()))
+                .findFirst().orElseThrow().getItems().stream()
+                .filter(candidate -> title.equals(candidate.getText())).findFirst().orElseThrow();
+    }
+
+    private static void assertAppearanceCommands(MainMenuBar bar, boolean busy) throws Exception {
+        fx(() -> {
+            for (String title : List.of("Color", "Render")) {
+                Menu menu = bar.getMenus().stream().filter(candidate -> title.equals(candidate.getText()))
+                        .findFirst().orElseThrow();
+                assertFalse(menu.isDisable(), "Top-level menus must remain openable");
+                assertItems(menu, title, busy);
+            }
+            return null;
+        });
+    }
+
+    private static void assertItems(Menu menu, String path, boolean busy) {
+        for (MenuItem item : menu.getItems()) {
+            if (item instanceof SeparatorMenuItem) continue;
+            String itemPath = path + "/" + item.getText();
+            boolean unavailable = busy || "Deep Zoom Antialiasing".equals(item.getText())
+                    || "Edit Julia Parameters…".equals(item.getText());
+            assertEquals(item instanceof Menu ? false : unavailable, item.isDisable(), itemPath);
+            assertEquals(item instanceof Menu || !unavailable, AppKitMenuProbe.enabled(itemPath),
+                    "Native state must match without hovering or reopening: " + itemPath);
+            if (item instanceof Menu submenu) assertItems(submenu, itemPath, busy);
         }
     }
 

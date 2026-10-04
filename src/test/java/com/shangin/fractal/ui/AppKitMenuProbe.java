@@ -37,6 +37,42 @@ final class AppKitMenuProbe {
         return titles;
     }
 
+    static void updateSubmenu(String title) {
+        try (Arena arena = Arena.ofConfined()) {
+            var text = (MemorySegment) message(objcClass("NSString", arena), "stringWithUTF8String:", ADDRESS,
+                    new MemoryLayout[]{ADDRESS}, arena.allocateFrom(title));
+            var item = (MemorySegment) message(mainMenu(), "itemWithTitle:", ADDRESS,
+                    new MemoryLayout[]{ADDRESS}, text);
+            var submenu = (MemorySegment) message(item, "submenu", ADDRESS);
+            message(submenu, "update", null);
+        } catch (Throwable failure) { throw new AssertionError("Cannot update " + title, failure); }
+    }
+
+    static boolean enabled(String path) {
+        try {
+            MemorySegment menu = mainMenu();
+            MemorySegment item = MemorySegment.NULL;
+            for (String title : path.split("/")) {
+                try (Arena arena = Arena.ofConfined()) {
+                    var text = (MemorySegment) message(
+                            objcClass("NSString", arena), "stringWithUTF8String:", ADDRESS,
+                            new MemoryLayout[]{ADDRESS}, arena.allocateFrom(title));
+                    item = (MemorySegment) message(menu, "itemWithTitle:", ADDRESS,
+                            new MemoryLayout[]{ADDRESS}, text);
+                }
+                if (item.equals(MemorySegment.NULL)) throw new AssertionError("Missing native item: " + path);
+                menu = (MemorySegment) message(item, "submenu", ADDRESS);
+            }
+            return (byte) message(item, "isEnabled", JAVA_BYTE) != 0;
+        } catch (Throwable failure) { throw new AssertionError("Cannot inspect " + path, failure); }
+    }
+
+    private static MemorySegment objcClass(String name, Arena arena) throws Throwable {
+        var getClass = LINKER.downcallHandle(OBJC.find("objc_getClass").orElseThrow(),
+                FunctionDescriptor.of(ADDRESS, ADDRESS));
+        return (MemorySegment) getClass.invokeExact(arena.allocateFrom(name));
+    }
+
     static MemorySegment session(FractalContextMenu owner) throws Exception {
         var field = FractalContextMenu.class.getDeclaredField("nativeMenu");
         field.setAccessible(true);
