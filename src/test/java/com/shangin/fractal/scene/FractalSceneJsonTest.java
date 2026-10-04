@@ -15,6 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FractalSceneJsonTest {
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(PalettePreset.class)
+    void roundTripsEveryPalettePresetAndItsStops(PalettePreset preset) {
+        FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, preset);
+        assertEquals(scene, FractalSceneJson.read(FractalSceneJson.write(scene)));
+    }
+
     @Test
     void roundTripsEverySceneSettingWithoutLosingDecimalCoordinates() {
         String real = "-0.743643887037151000000000000000000000000000000000000000000001";

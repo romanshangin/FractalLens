@@ -85,6 +85,29 @@ class MainMenuBarFxTest {
     }
 
     @Test
+    void paletteMenuStartsWithDefaultAndAppliesEveryPreset() throws Exception {
+        fx(() -> {
+            Menu palette = (Menu) colorItem("Palette");
+            assertEquals("Ice", palette.getItems().getFirst().getText());
+            assertTrue(((RadioMenuItem) palette.getItems().getFirst()).isSelected());
+            assertEquals(15, palette.getItems().size());
+            return null;
+        });
+        for (PalettePreset preset : PalettePreset.values()) {
+            fx(() -> { command("Color/Palette", preset.toString()).fire(); return null; });
+            await(() -> !colorItem("Edit Palette…").isDisable());
+            fx(() -> {
+                assertEquals(new ColoringSettings(preset), view.sceneSnapshot().coloring());
+                assertTrue(selectedChoice("Palette", preset.toString()));
+                FractalSurface surface = (FractalSurface) view.getChildrenUnmodifiable().stream()
+                        .filter(FractalSurface.class::isInstance).findFirst().orElseThrow();
+                assertEquals(view.sceneSnapshot().coloring(), surface.completedRender().scene().coloring());
+                return null;
+            });
+        }
+    }
+
+    @Test
     void helpUsesThePublicApplicationName() throws Exception {
         fx(() -> {
             Menu help = menuBar.getMenus().stream()
