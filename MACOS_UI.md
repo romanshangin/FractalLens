@@ -222,6 +222,14 @@ when histogram coloring or an orbit trap is active; its checkmark clears when
 navigation or a scene change stops animation. Export becomes available after
 a completed frame exists, and is disabled while an export is running.
 
+Color → Palette lists the default Ice preset first, followed by Ocean, Fire,
+Plasma, Forest, Grayscale, Aurora, Sunset, Twilight, Coral, Desert, Emerald,
+Amethyst, Copper and Blue & Gold. The eight presets from Aurora through Copper
+use deeper shadows and brighter, more saturated highlights. Blue & Gold combines
+navy, blue, cyan, cream, gold, orange and brown in a cyclic gradient.
+Each built-in preset contains at least five distinct color
+stops; custom palettes can still contain as few as two stops.
+
 Color → Reset Colors to Defaults restores the startup Ice palette and its
 original stops, the default color scale, and zero offset. It turns off histogram
 coloring, orbit traps, and palette animation, updates the menu checkmarks, and
