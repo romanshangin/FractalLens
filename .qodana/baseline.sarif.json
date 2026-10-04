@@ -999,15 +999,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
                 },
                 "region": {
-                  "startLine": 562,
+                  "startLine": 574,
                   "startColumn": 42
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "2a2bd41cf978c79d",
-            "equalIndicator/v1": "0a6060b503108c281091a0baeff17e7a1f18fb49e66ec0ef5684f3196a9350a7"
+            "equalIndicator/v2": "5f44316a419eb4d1",
+            "equalIndicator/v1": "96790f06e96ddeb4b2f7bc898ff07346848889a81b8c445aebee28f78922137f"
           }
         },
         {
@@ -1124,15 +1124,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
                 },
                 "region": {
-                  "startLine": 440,
+                  "startLine": 452,
                   "startColumn": 30
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "6df39fed3247917b",
-            "equalIndicator/v1": "19f89b8d894ac26c3e93e79bdf5fea48a5a4829f782a8ca7835bc11d12e2d34a"
+            "equalIndicator/v2": "6eda17bb6044f291",
+            "equalIndicator/v1": "55b260f646788f217aba95694397f0926b0614cd076c6ab15249347834fe94a5"
           }
         },
         {
@@ -1849,15 +1849,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
                 },
                 "region": {
-                  "startLine": 551,
+                  "startLine": 563,
                   "startColumn": 36
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "eb496477aa17093d",
-            "equalIndicator/v1": "8e992dbf9867cbffb0bb598b90e2f1cedfeba6ddb7a5a03d2611870e15c1cbf8"
+            "equalIndicator/v2": "4c0f6d74465b9a2d",
+            "equalIndicator/v1": "09d2071156a5aed5f4c366637cda475fbc621f5bba35e84b41c5b02a1cc8822b"
           }
         },
         {
@@ -2199,15 +2199,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
                 },
                 "region": {
-                  "startLine": 937,
+                  "startLine": 949,
                   "startColumn": 13
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "bf884725e9cc011c",
-            "equalIndicator/v1": "ca290c5445e388e1baa37caefef5ba57e733a79e483f63acdcf489d90bdd56ad"
+            "equalIndicator/v2": "92bc4b14e38c7f33",
+            "equalIndicator/v1": "0a683c89e3e833315fcc5697808c769372e3381aeda6de26487a303dbba11893"
           }
         },
         {
@@ -2324,15 +2324,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
                 },
                 "region": {
-                  "startLine": 1073,
+                  "startLine": 1085,
                   "startColumn": 47
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "e456b587964a5dca",
-            "equalIndicator/v1": "d3dcf65fc40558303074a6a34cdb8657824664488193e6967a7b3d19d549ffc0"
+            "equalIndicator/v2": "26ae448bbc4d5880",
+            "equalIndicator/v1": "4fe05d450c0c4bb2def2db5c42de472a6f34ce9b1d0cfd375dc58b0ebc85f19a"
           }
         },
         {
@@ -2524,15 +2524,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/FractalView.java"
                 },
                 "region": {
-                  "startLine": 467,
+                  "startLine": 479,
                   "startColumn": 24
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "d28a8f5b4a119405",
-            "equalIndicator/v1": "c9e86299c5d114e4707f027c1203873ce08fd5e234d4c44f6f21ff61a60691e8"
+            "equalIndicator/v2": "62fb382d67a4543a",
+            "equalIndicator/v1": "ef2d0efdf4642366bf6d49a6044f4cba61f55fbef776941b97aeef1664e3368f"
           }
         },
         {
