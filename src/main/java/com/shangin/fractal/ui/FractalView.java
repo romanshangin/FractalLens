@@ -437,6 +437,18 @@ public class FractalView extends StackPane {
         }
     }
 
+    void resetColorsToDefaults() {
+        stopColorCyclingForSceneChange();
+        ColoringSettings defaults = new ColoringSettings(PalettePreset.ICE);
+        scene = scene.withColoring(defaults);
+        colorCycleOffset = defaults.offset();
+        configurePalette(defaults.paletteStops());
+        renderController.cancelRecolor();
+        renderController.cancelCurrent();
+        fractalSurface.invalidateRefinement();
+        recalculate();
+    }
+
     public void setOrbitTrap(OrbitTrap orbitTrap) {
         stopColorCyclingForSceneChange();
         ColoringSettings current = scene.coloring();
