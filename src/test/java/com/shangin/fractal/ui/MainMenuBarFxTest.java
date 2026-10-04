@@ -112,10 +112,10 @@ class MainMenuBarFxTest {
             root.setTop(menuBar);
             return null;
         });
-        await(() -> !colorMenu().isDisable());
+        await(() -> !colorItem("Reset Colors to Defaults").isDisable());
         FractalScene before = fx(view::sceneSnapshot);
         fx(() -> { colorItem("Reset Colors to Defaults").fire(); return null; });
-        await(() -> !colorMenu().isDisable());
+        await(() -> !colorItem("Reset Colors to Defaults").isDisable());
         fx(() -> {
             assertEquals(before.withColoring(new ColoringSettings(PalettePreset.ICE)), view.sceneSnapshot());
             assertTrue(selectedChoice("Palette", "Ice"));
@@ -142,12 +142,12 @@ class MainMenuBarFxTest {
         });
         await(() -> view.sceneSnapshot().coloring().offset() > 0);
         fx(() -> { colorItem("Reset Colors to Defaults").fire(); return null; });
-        await(() -> !colorMenu().isDisable());
+        await(() -> !colorItem("Reset Colors to Defaults").isDisable());
         assertEquals(before, fx(view::sceneSnapshot));
         assertArrayEquals(originalPixels, fx(this::displayedPixels));
         assertFalse(fx(() -> ((CheckMenuItem) colorItem("Animate Palette")).isSelected()));
         fx(() -> { colorItem("Reset Colors to Defaults").fire(); return null; });
-        await(() -> !colorMenu().isDisable());
+        await(() -> !colorItem("Reset Colors to Defaults").isDisable());
         assertEquals(before, fx(view::sceneSnapshot));
         assertArrayEquals(originalPixels, fx(this::displayedPixels));
     }
