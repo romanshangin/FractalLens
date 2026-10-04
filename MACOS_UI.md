@@ -20,6 +20,26 @@ mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-system-me
 
 The regression inspects the AppKit menu before focus loss, while an unowned
 window without menus has focus, after focus returns, and after view disposal.
+It also gates the CPU renderer to inspect every Color and Render command in both
+JavaFX and AppKit during startup, after completion, during another render, and
+after its completion. An AppKit menu update during the first render reproduces
+validation of an opened menu; assertions after completion do not refresh the
+native menu or supply pointer input.
+
+
+2026-10-03 render-availability validation on macOS 27.0 arm64, JDK 26.0.1,
+and JavaFX 26.0.2: the regression reproduced a native-disabled Edit Palette item
+after completion on the original implementation. After the fix, both native
+menu tests and all five MainMenuBar tests passed without skips. `mvn test` passed
+with 400 executed tests and 63 opt-in skips. In the current development launch,
+Color and Render were opened during separate Julia renders: native accessibility
+reported disabled actions during calculation and enabled actions in the same
+open menus after completion, without pointer input over those actions. Deep Zoom
+Antialiasing remained unavailable in standard mode, and the palette editor opened
+with its shortcut and was cancelled. The UI tool could not capture a screenshot,
+so the actual painted enabled/disabled appearance remains visually unverified.
+Windows and Linux runtime checks were not run for this change.
+
 For visible acceptance, switch to another Space, activate another application,
 then return to FractalLens without moving the pointer onto the menu bar and check
 that File through Help remain visible and usable.
@@ -190,8 +210,14 @@ value and the current deep-zoom status. Palette edits are drafts until Apply;
 Cancel leaves the current palette unchanged. Editing a preset clears its menu
 checkmark to indicate a custom gradient.
 
-Appearance commands are unavailable while the renderer is busy. Deep zoom
-antialiasing is available only in deep zoom. Palette animation is unavailable
+Color and Render remain openable during startup and later renders. Their action
+items, including palette, orbit-trap, quality and sampling choices, are explicitly
+disabled while the renderer is busy. Completion updates every action's native
+state even when a menu was opened during rendering; hovering or reopening is not
+required. Disabling only the parent menu lets AppKit validation leave child items
+inactive after the JavaFX parent is re-enabled.
+
+Deep zoom antialiasing is available only in deep zoom. Palette animation is unavailable
 when histogram coloring or an orbit trap is active; its checkmark clears when
 navigation or a scene change stops animation. Export becomes available after
 a completed frame exists, and is disabled while an export is running.

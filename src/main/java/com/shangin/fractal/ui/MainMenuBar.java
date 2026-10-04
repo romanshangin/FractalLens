@@ -177,14 +177,27 @@ final class MainMenuBar extends MenuBar {
     }
 
     private void updateAvailability() {
-        color.setDisable(rendering);
-        render.setDisable(rendering);
+        // Keep the menu containers enabled. AppKit validation can disable their
+        // children without changing JavaFX properties, leaving stale native state
+        // when only the parent is re-enabled after rendering.
+        setCommandsDisabled(color, rendering);
+        setCommandsDisabled(render, rendering);
         export.setDisable(exporting || !fractalView.hasCompletedFrame());
-        deepAntialiasing.setDisable(!deepZoom);
-        animation.setDisable(histogram.isSelected() || orbitTrap != OrbitTrap.NONE);
+        deepAntialiasing.setDisable(rendering || !deepZoom);
+        animation.setDisable(rendering || histogram.isSelected() || orbitTrap != OrbitTrap.NONE);
         render.getItems().stream()
                 .filter(item -> "Edit Julia Parameters…".equals(item.getText()))
                 .forEach(item -> item.setDisable(rendering || currentFractal != FractalPreset.JULIA));
+    }
+
+    private static void setCommandsDisabled(Menu menu, boolean disabled) {
+        for (MenuItem item : menu.getItems()) {
+            if (item instanceof Menu submenu) {
+                setCommandsDisabled(submenu, disabled);
+            } else if (!(item instanceof SeparatorMenuItem)) {
+                item.setDisable(disabled);
+            }
+        }
     }
 
     private void showIterations() {
