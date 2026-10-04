@@ -43,6 +43,7 @@ final class MainMenuBar extends MenuBar {
     private final CheckMenuItem histogram = new CheckMenuItem("Histogram Coloring");
     private final CheckMenuItem deepAntialiasing = new CheckMenuItem("Deep Zoom Antialiasing");
     private final ToggleGroup palettes = new ToggleGroup();
+    private final ToggleGroup orbitTraps = new ToggleGroup();
     private List<ColorStop> paletteStops;
     private OrbitTrap orbitTrap;
     private Viewport viewport;
@@ -101,7 +102,7 @@ final class MainMenuBar extends MenuBar {
         if (!paletteStops.equals(initialPalette.stops())) {
             palettes.selectToggle(null);
         }
-        Menu trap = choices("Orbit Trap", OrbitTrap.values(), orbitTrap, new ToggleGroup(), selected -> {
+        Menu trap = choices("Orbit Trap", OrbitTrap.values(), orbitTrap, orbitTraps, selected -> {
             orbitTrap = selected;
             fractalView.setOrbitTrap(selected);
             updateAvailability();
@@ -114,7 +115,8 @@ final class MainMenuBar extends MenuBar {
         });
         color.getItems().setAll(palette,
                 command("Edit Palette…", shortcut(KeyCode.P, KeyCombination.SHIFT_DOWN), this::showPalette),
-                new SeparatorMenuItem(), trap, histogram, animation);
+                new SeparatorMenuItem(), trap, histogram, animation,
+                new SeparatorMenuItem(), command("Reset Colors to Defaults", null, this::resetColors));
         deepAntialiasing.setDisable(true);
         deepAntialiasing.setOnAction(event -> fractalView.setDeepAntialiasing(deepAntialiasing.isSelected()));
         render.getItems().setAll(
@@ -218,6 +220,18 @@ final class MainMenuBar extends MenuBar {
     private void showCoordinates() {
         FractalDialogs.coordinates(stage, viewport, zoom, deepZoom).ifPresent(center ->
                 fractalView.setCenter(center.real(), center.imaginary()));
+    }
+
+    private void resetColors() {
+        fractalView.resetColorsToDefaults();
+        var defaults = fractalView.sceneSnapshot().coloring();
+        paletteStops = defaults.paletteStops();
+        orbitTrap = defaults.orbitTrap();
+        palettes.selectToggle(palettes.getToggles().get(defaults.palette().ordinal()));
+        orbitTraps.selectToggle(orbitTraps.getToggles().get(orbitTrap.ordinal()));
+        histogram.setSelected(defaults.histogramColoring());
+        animation.setSelected(false);
+        updateAvailability();
     }
 
     private void showPalette() {

@@ -1,6 +1,9 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.coloring.ColorStop;
+import com.shangin.fractal.coloring.OrbitTrap;
+import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.IterationSettings;
@@ -12,8 +15,12 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelFormat;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import org.junit.jupiter.api.AfterAll;
@@ -24,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -87,6 +95,89 @@ class MainMenuBarFxTest {
             dialog.close();
             return null;
         });
+    }
+
+    @Test
+    void colorResetRestoresAllSettingsAndMenuSelectionsFromRestoredScene() throws Exception {
+        FractalScene customized = fx(() -> view.sceneSnapshot().withColoring(new ColoringSettings(
+                PalettePreset.FIRE,
+                List.of(new ColorStop(0, 0xFF123456), new ColorStop(1, 0xFFABCDEF)),
+                7.5, 0.6, true, OrbitTrap.CROSS)));
+        fx(() -> {
+            view.close();
+            view = new FractalView(customized, true);
+            menuBar = new MainMenuBar(stage, view, customized, () -> {});
+            BorderPane root = (BorderPane) stage.getScene().getRoot();
+            root.setCenter(view);
+            root.setTop(menuBar);
+            return null;
+        });
+        await(() -> !colorMenu().isDisable());
+        FractalScene before = fx(view::sceneSnapshot);
+        fx(() -> { colorItem("Reset Colors to Defaults").fire(); return null; });
+        await(() -> !colorMenu().isDisable());
+        fx(() -> {
+            assertEquals(before.withColoring(new ColoringSettings(PalettePreset.ICE)), view.sceneSnapshot());
+            assertTrue(selectedChoice("Palette", "Ice"));
+            assertTrue(selectedChoice("Orbit Trap", "Off"));
+            assertFalse(((CheckMenuItem) colorItem("Histogram Coloring")).isSelected());
+            assertFalse(((CheckMenuItem) colorItem("Animate Palette")).isSelected());
+            assertFalse(colorItem("Animate Palette").isDisable());
+            FractalSurface surface = (FractalSurface) view.getChildrenUnmodifiable().stream()
+                    .filter(FractalSurface.class::isInstance).findFirst().orElseThrow();
+            assertEquals(view.sceneSnapshot().coloring(), surface.completedRender().scene().coloring());
+            return null;
+        });
+    }
+
+    @Test
+    void colorResetStopsAnimationAndCanBeRepeated() throws Exception {
+        FractalScene before = fx(view::sceneSnapshot);
+        int[] originalPixels = fx(this::displayedPixels);
+        fx(() -> {
+            CheckMenuItem animation = (CheckMenuItem) colorItem("Animate Palette");
+            animation.setSelected(true);
+            animation.fire();
+            return null;
+        });
+        await(() -> view.sceneSnapshot().coloring().offset() > 0);
+        fx(() -> { colorItem("Reset Colors to Defaults").fire(); return null; });
+        await(() -> !colorMenu().isDisable());
+        assertEquals(before, fx(view::sceneSnapshot));
+        assertArrayEquals(originalPixels, fx(this::displayedPixels));
+        assertFalse(fx(() -> ((CheckMenuItem) colorItem("Animate Palette")).isSelected()));
+        fx(() -> { colorItem("Reset Colors to Defaults").fire(); return null; });
+        await(() -> !colorMenu().isDisable());
+        assertEquals(before, fx(view::sceneSnapshot));
+        assertArrayEquals(originalPixels, fx(this::displayedPixels));
+    }
+
+    private int[] displayedPixels() {
+        FractalSurface surface = (FractalSurface) view.getChildrenUnmodifiable().stream()
+                .filter(FractalSurface.class::isInstance).findFirst().orElseThrow();
+        var image = ((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage();
+        int width = (int) image.getWidth();
+        int height = (int) image.getHeight();
+        int[] pixels = new int[width * height];
+        image.getPixelReader().getPixels(0, 0, width, height,
+                PixelFormat.getIntArgbInstance(), pixels, 0, width);
+        return pixels;
+    }
+
+    private Menu colorMenu() {
+        return menuBar.getMenus().stream()
+                .filter(menu -> "Color".equals(menu.getText())).findFirst().orElseThrow();
+    }
+
+    private MenuItem colorItem(String title) {
+        return colorMenu().getItems().stream()
+                .filter(item -> title.equals(item.getText())).findFirst().orElseThrow();
+    }
+
+    private boolean selectedChoice(String menu, String title) {
+        return ((Menu) colorItem(menu)).getItems().stream()
+                .filter(item -> title.equals(item.getText()))
+                .map(item -> (RadioMenuItem) item).findFirst().orElseThrow().isSelected();
     }
 
     @Test
