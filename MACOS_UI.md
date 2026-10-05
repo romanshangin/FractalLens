@@ -371,6 +371,36 @@ with the primary action on the right. Enter confirms, Escape cancels, and the
 initial editable value is selected. Closing restores the owner's previous focus
 when the owner is active.
 
+Iteration settings use the same appearance and edit both values in one window:
+base iterations and the additional iterations per zoom level are applied
+together only after Apply. Reset to Defaults restores both fields in the open
+dialog, and Cancel leaves the scene unchanged.
+
+Dark Mode HIG audit (2026-10-04), against Apple's
+[Dark Mode guidance](https://developer.apple.com/design/human-interface-guidelines/dark-mode):
+the dialogs follow the system appearance and accent, and do not expose an
+application-specific theme setting. The 13 active-desktop JavaFX tests passed
+without skips. Reviewed content snapshots showed readable light/dark forms and
+validation messages without overlapping actions. The palette menu regression
+now waits for the requested coloring in the completed render, rather than only
+for the synchronous scene-setting update.
+
+This is partial alignment, not full HIG compliance. Background, input, label,
+border and error colors are custom light/dark values, rather than AppKit
+semantic colors. Text fields and buttons remain JavaFX controls. Native desktop
+tinting is not implemented for these opaque backgrounds. Increase Contrast and
+Reduce Transparency, separately and together, and a live system appearance
+change in the running application were not manually verified in this audit.
+DialogPane snapshots do not establish native window-frame behavior. Native
+sheets remain an open roadmap item.
+
+Calculated contrast for normal states is 14.94:1 / 13.00:1 for body text,
+5.77:1 / 7.58:1 for hints and 6.00:1 / 7.17:1 for errors (light / dark).
+These exceed Apple's 4.5:1 minimum; the light hints and errors fall short of
+the suggested 7:1 for custom small text. The accent-label luminance rule chooses
+the higher-contrast black or white label for the current accent; hover, pressed,
+disabled and all system accent variants were not exhaustively measured.
+
 Coordinate validation retains exact decimal input, highlights the invalid field
 and focuses it without closing the dialog. Palette Apply commits the current
 typed positions even without a preceding Enter; invalid or out-of-range drafts
@@ -394,3 +424,45 @@ The package build passed: 408 tests, zero failures/errors, 45 opt-in tests skipp
 These are owner-associated JavaFX WINDOW_MODAL dialogs. The roadmap separately
 tracks reduced modality and native AppKit sheets; this appearance step does not
 implement those later changes. Windows runtime verification remains outstanding.
+
+### Native iteration settings sheet
+
+On macOS, Edit Iteration Settings now opens a real owner-associated AppKit
+`NSPanel` sheet with two `NSTextField` controls, Reset to Defaults, Cancel and
+Apply. The native window background and secondary text use semantic `NSColor`
+values; the other controls retain AppKit's default appearance. No application
+appearance override is installed. The sheet inherits the native appearance and
+keeps input drafts during validation and appearance changes.
+
+Presentation uses `beginSheet:completionHandler:` rather than a blocking native
+modal loop. Results are dispatched to JavaFX with `Platform.runLater`; only
+Apply changes the scene, and only while the owner remains visible. Owner closure
+disposes the session, unregisters its listener and suppresses pending results.
+Repeated opening while a sheet is active leaves that sheet in place. Native
+creation failures and non-macOS platforms retain the shared JavaFX form.
+
+Active-desktop checks on Apple Silicon covered applying both values, reset and
+cancel, invalid drafts including integer overflow, and owner closure/disposal
+before a queued Apply result. A separate appearance test verifies inherited Aqua
+and Dark Aqua from the native owner without modifying system preferences.
+Forcing a high-contrast appearance alone was normalized by macOS to ordinary
+Aqua without the global accessibility setting, so that experiment does not
+verify Increase Contrast. Manual checks in the current application confirmed the
+dark sheet layout, initial selection, Tab, Return, Escape, Reset and Apply,
+including opening and cancelling in full screen and returning to windowed mode.
+Light/high-contrast layout, live OS preference changes, Increase Contrast,
+Reduce Transparency,
+multiple displays, VoiceOver, Intel macOS and the Windows
+and Linux fallback runtime remain unverified. Other dialogs are still JavaFX;
+this first native form does not establish application-wide HIG compliance.
+
+Final validation on 2026-10-04: the portable suite reported 500 tests, zero
+failures/errors and 69 opt-in skips. The targeted desktop suite reported 18
+tests, zero failures/errors and one skip (the separately gated native context
+menu full-screen test). Sheet full-screen behavior was checked manually as
+described above.
+
+```sh
+mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-sheet-cache" \
+  -DreuseForks=false -Dtest=MainMenuBarFxTest,FractalDialogsFxTest,MacIterationSheetFxTest,MacContextMenuFxTest test
+```

@@ -2,6 +2,7 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import javafx.application.ColorScheme;
 import javafx.application.Platform;
@@ -217,6 +218,43 @@ class FractalDialogsFxTest {
                 return null;
             });
         } finally { fx(() -> { cancelled.close(); return null; }); }
+    }
+
+    @Test void iterationEditorResetsBothFieldsAndAppliesOnlyValidValues() throws Exception {
+        var current = new IterationSettings(420, 70);
+        var dialog = fx(() -> FractalDialogs.iterationSettingsDialog(owner, current));
+        try {
+            fx(() -> { dialog.show(); return null; });
+            fx(() -> {
+                var pane = dialog.getDialogPane();
+                TextField base = field(dialog, "iteration-base");
+                TextField zoom = field(dialog, "iteration-zoom");
+                assertSame(base, pane.getScene().getFocusOwner());
+                assertEquals("420", base.getText());
+                assertEquals("70", zoom.getText());
+                pane.getScene().getPreferences().setColorScheme(ColorScheme.LIGHT);
+                snapshot(dialog, "iterations-light");
+                base.setText("0");
+                zoom.setText("-1");
+                primary(dialog).fire();
+                assertTrue(dialog.isShowing());
+                assertEquals("0", base.getText());
+                assertEquals("-1", zoom.getText());
+                assertTrue(pane.lookup("#dialog-validation-error").isVisible());
+                pane.getScene().getPreferences().setColorScheme(ColorScheme.DARK);
+                snapshot(dialog, "iterations-dark-validation");
+                Button reset = pane.getButtonTypes().stream()
+                        .filter(type -> "Reset to Defaults".equals(type.getText()))
+                        .map(type -> (Button) pane.lookupButton(type)).findFirst().orElseThrow();
+                reset.fire();
+                assertEquals("300", base.getText());
+                assertEquals("50", zoom.getText());
+                assertFalse(pane.lookup("#dialog-validation-error").isVisible());
+                primary(dialog).fire();
+                assertEquals(new IterationSettings(), dialog.getResult());
+                return null;
+            });
+        } finally { fx(() -> { dialog.close(); return null; }); }
     }
 
     @Test void escapeCancelsInvalidDraftAndHelpAndMessagesShareTheme() throws Exception {

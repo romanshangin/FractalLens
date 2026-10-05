@@ -8,6 +8,7 @@ import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.IterationSettings;
 import javafx.animation.AnimationTimer;
+import javafx.application.ColorScheme;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -23,6 +24,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
 import javafx.stage.Stage;
 import javafx.stage.Window;
+import javafx.scene.paint.Color;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -95,9 +97,15 @@ class MainMenuBarFxTest {
         });
         for (PalettePreset preset : PalettePreset.values()) {
             fx(() -> { command("Color/Palette", preset.toString()).fire(); return null; });
-            await(() -> !colorItem("Edit Palette…").isDisable());
+            ColoringSettings expected = new ColoringSettings(preset);
+            await(() -> {
+                FractalSurface surface = (FractalSurface) view.getChildrenUnmodifiable().stream()
+                        .filter(FractalSurface.class::isInstance).findFirst().orElseThrow();
+                return surface.completedRender() != null
+                        && surface.completedRender().scene().coloring().equals(expected);
+            });
             fx(() -> {
-                assertEquals(new ColoringSettings(preset), view.sceneSnapshot().coloring());
+                assertEquals(expected, view.sceneSnapshot().coloring());
                 assertTrue(selectedChoice("Palette", preset.toString()));
                 FractalSurface surface = (FractalSurface) view.getChildrenUnmodifiable().stream()
                         .filter(FractalSurface.class::isInstance).findFirst().orElseThrow();
@@ -204,32 +212,75 @@ class MainMenuBarFxTest {
     }
 
     @Test
-    void iterationMenuAppliesBothValuesOnlyAfterSecondConfirmation() throws Exception {
+    void iterationMenuAppliesBothValuesFromOneThemedDialog() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
         CompletableFuture<Void> action = openIterationEditor();
-        DialogPane base = awaitDialog("Iteration settings", "Base iteration count");
-        assertEquals(Integer.toString(initial.iterations().baseIterations()), fx(() -> input(base).getText()));
-        fx(() -> { input(base).setText("420"); confirm(base); return null; });
-
-        DialogPane increment = awaitDialog("Iteration settings", "Additional iterations per zoom level");
-        assertEquals(initial, fx(view::sceneSnapshot));
-        assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()),
-                fx(() -> input(increment).getText()));
-        fx(() -> { input(increment).setText("70"); confirm(increment); return null; });
+        if (MacIterationSheet.isAvailable()) {
+            action.get(10, TimeUnit.SECONDS);
+            fx(() -> {
+                var sheet = AppKitIterationProbe.sheet(menuBar);
+                assertNotNull(sheet);
+                assertEquals(Integer.toString(initial.iterations().baseIterations()), AppKitIterationProbe.text(sheet, "base"));
+                assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()), AppKitIterationProbe.text(sheet, "zoom"));
+                AppKitIterationProbe.text(sheet, "base", "420");
+                AppKitIterationProbe.text(sheet, "zoom", "70");
+                assertEquals(initial, view.sceneSnapshot());
+                AppKitIterationProbe.action(sheet, "apply");
+                return null;
+            });
+            await(() -> view.sceneSnapshot().iterations().equals(new IterationSettings(420, 70)));
+            return;
+        }
+        DialogPane pane = awaitDialog("Iteration Settings");
+        fx(() -> {
+            var base = input(pane, "iteration-base");
+            var zoom = input(pane, "iteration-zoom");
+            assertEquals(Integer.toString(initial.iterations().baseIterations()), base.getText());
+            assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()), zoom.getText());
+            pane.getScene().getPreferences().setColorScheme(ColorScheme.DARK);
+            pane.applyCss();
+            assertEquals(Color.web("#292929"), pane.getBackground().getFills().getFirst().getFill());
+            base.setText("420");
+            zoom.setText("70");
+            assertEquals(initial, view.sceneSnapshot());
+            confirm(pane);
+            return null;
+        });
         action.get(10, TimeUnit.SECONDS);
 
         assertEquals(new IterationSettings(420, 70), fx(() -> view.sceneSnapshot().iterations()));
     }
 
     @Test
-    void cancellingSecondIterationDialogKeepsSceneUnchanged() throws Exception {
+    void cancellingIterationDialogKeepsSceneUnchangedAfterReset() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
         CompletableFuture<Void> action = openIterationEditor();
-        DialogPane base = awaitDialog("Iteration settings", "Base iteration count");
-        fx(() -> { input(base).setText("420"); confirm(base); return null; });
-
-        DialogPane increment = awaitDialog("Iteration settings", "Additional iterations per zoom level");
-        fx(() -> { ((Button) increment.lookupButton(ButtonType.CANCEL)).fire(); return null; });
+        if (MacIterationSheet.isAvailable()) {
+            action.get(10, TimeUnit.SECONDS);
+            fx(() -> {
+                var sheet = AppKitIterationProbe.sheet(menuBar);
+                AppKitIterationProbe.text(sheet, "base", "420");
+                AppKitIterationProbe.text(sheet, "zoom", "70");
+                AppKitIterationProbe.action(sheet, "reset");
+                assertEquals("300", AppKitIterationProbe.text(sheet, "base"));
+                assertEquals("50", AppKitIterationProbe.text(sheet, "zoom"));
+                AppKitIterationProbe.action(sheet, "cancel");
+                return null;
+            });
+            fx(() -> { assertEquals(initial, view.sceneSnapshot()); return null; });
+            return;
+        }
+        DialogPane pane = awaitDialog("Iteration Settings");
+        fx(() -> {
+            input(pane, "iteration-base").setText("420");
+            input(pane, "iteration-zoom").setText("70");
+            Button reset = pane.getButtonTypes().stream()
+                    .filter(type -> "Reset to Defaults".equals(type.getText()))
+                    .map(type -> (Button) pane.lookupButton(type)).findFirst().orElseThrow();
+            reset.fire();
+            ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+            return null;
+        });
         action.get(10, TimeUnit.SECONDS);
 
         assertEquals(initial, fx(view::sceneSnapshot));
@@ -239,19 +290,50 @@ class MainMenuBarFxTest {
     void invalidIterationInputShowsErrorAndKeepsSceneUnchanged() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
         CompletableFuture<Void> action = openIterationEditor();
-        DialogPane base = awaitDialog("Iteration settings", "Base iteration count");
-        fx(() -> { input(base).setText("not a number"); confirm(base); return null; });
-
-        DialogPane increment = awaitDialog("Iteration settings", "Additional iterations per zoom level");
-        fx(() -> { input(increment).setText("70"); confirm(increment); return null; });
-        DialogPane error = awaitDialog("Invalid iteration settings", "Invalid iteration settings");
-        assertEquals("Enter a positive base count and a non-negative zoom increment.",
-                fx(error::getContentText));
-        assertEquals(initial, fx(view::sceneSnapshot));
-        fx(() -> { ((Button) error.lookupButton(ButtonType.OK)).fire(); return null; });
+        if (MacIterationSheet.isAvailable()) {
+            action.get(10, TimeUnit.SECONDS);
+            fx(() -> {
+                var sheet = AppKitIterationProbe.sheet(menuBar);
+                for (String invalid : List.of("not a number", "0", "2147483648", "999999999999999999999")) {
+                    AppKitIterationProbe.text(sheet, "base", invalid);
+                    AppKitIterationProbe.action(sheet, "apply");
+                    assertTrue(AppKitIterationProbe.showing(sheet));
+                    assertEquals(invalid, AppKitIterationProbe.text(sheet, "base"));
+                    assertFalse(AppKitIterationProbe.text(sheet, "error").isEmpty());
+                    assertEquals(initial, view.sceneSnapshot());
+                }
+                AppKitIterationProbe.text(sheet, "base", "420");
+                AppKitIterationProbe.text(sheet, "zoom", "-1");
+                AppKitIterationProbe.action(sheet, "apply");
+                assertTrue(AppKitIterationProbe.showing(sheet));
+                assertEquals(initial, view.sceneSnapshot());
+                AppKitIterationProbe.text(sheet, "zoom", "70");
+                AppKitIterationProbe.action(sheet, "apply");
+                return null;
+            });
+            await(() -> view.sceneSnapshot().iterations().equals(new IterationSettings(420, 70)));
+            return;
+        }
+        DialogPane pane = awaitDialog("Iteration Settings");
+        fx(() -> {
+            input(pane, "iteration-base").setText("not a number");
+            input(pane, "iteration-zoom").setText("70");
+            confirm(pane);
+            assertTrue(pane.lookup("#dialog-validation-error").isVisible());
+            assertTrue(pane.getScene().getWindow().isShowing());
+            assertEquals(initial, view.sceneSnapshot());
+            input(pane, "iteration-base").setText("420");
+            input(pane, "iteration-zoom").setText("-1");
+            confirm(pane);
+            assertTrue(pane.lookup("#dialog-validation-error").isVisible());
+            assertEquals(initial, view.sceneSnapshot());
+            input(pane, "iteration-zoom").setText("70");
+            confirm(pane);
+            return null;
+        });
         action.get(10, TimeUnit.SECONDS);
 
-        assertEquals(initial, fx(view::sceneSnapshot));
+        assertEquals(new IterationSettings(420, 70), fx(() -> view.sceneSnapshot().iterations()));
     }
 
     @Test
@@ -328,8 +410,14 @@ class MainMenuBarFxTest {
         return (TextField) pane.lookup(".text-field");
     }
 
+    private static TextField input(DialogPane pane, String id) {
+        return (TextField) pane.lookup("#" + id);
+    }
+
     private static void confirm(DialogPane pane) {
-        ((Button) pane.lookupButton(ButtonType.OK)).fire();
+        pane.getButtonTypes().stream()
+                .map(type -> (Button) pane.lookupButton(type))
+                .filter(Button::isDefaultButton).findFirst().orElseThrow().fire();
     }
 
     private static DialogPane awaitDialog(String title, String header) throws Exception {
@@ -343,6 +431,19 @@ class MainMenuBarFxTest {
                         && window instanceof Stage dialog && title.equals(dialog.getTitle()))
                 .map(window -> (DialogPane) window.getScene().getRoot())
                 .filter(pane -> header.equals(pane.getHeaderText()))
+                .findFirst().orElseThrow());
+    }
+
+    private static DialogPane awaitDialog(String title) throws Exception {
+        await(() -> Window.getWindows().stream()
+                .filter(window -> window.isShowing() && window.getScene() != null
+                        && window instanceof Stage dialog && title.equals(dialog.getTitle()))
+                .map(window -> (DialogPane) window.getScene().getRoot())
+                .findAny().isPresent());
+        return fx(() -> Window.getWindows().stream()
+                .filter(window -> window.isShowing() && window.getScene() != null
+                        && window instanceof Stage dialog && title.equals(dialog.getTitle()))
+                .map(window -> (DialogPane) window.getScene().getRoot())
                 .findFirst().orElseThrow());
     }
 

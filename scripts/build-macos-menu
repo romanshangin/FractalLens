@@ -8,4 +8,5 @@ xcrun --sdk macosx clang -dynamiclib -fobjc-arc -Wall -Wextra -Werror \
     -arch arm64 -arch x86_64 \
     -mmacosx-version-min=11.0 -I"$java_home/include" -I"$java_home/include/darwin" \
     -framework Cocoa "$project_dir/src/main/macos/FractalContextMenu.m" \
+    "$project_dir/src/main/macos/FractalIterationSheet.m" \
     -o "$output_dir/com/shangin/fractal/ui/native/libfractal-menu.dylib"
