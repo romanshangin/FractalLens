@@ -441,6 +441,11 @@ disposes the session, unregisters its listener and suppresses pending results.
 Repeated opening while a sheet is active leaves that sheet in place. Native
 creation failures and non-macOS platforms retain the shared JavaFX form.
 
+The native menu and iteration sheet share one JNI-backed window-handle resolver.
+It accesses the internal JavaFX Glass peer inside the native bridge, avoiding
+duplicate cross-module Java reflection. Missing peers and zero handles fail
+before native presentation; JavaFX upgrades still require bridge validation.
+
 Active-desktop checks on Apple Silicon covered applying both values, reset and
 cancel, invalid drafts including integer overflow, and owner closure/disposal
 before a queued Apply result. A separate appearance test verifies inherited Aqua

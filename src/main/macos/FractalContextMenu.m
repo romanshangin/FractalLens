@@ -73,6 +73,30 @@ static BOOL requireMainThread(JNIEnv *env) {
 }
 @end
 
+// Resolve the Glass peer within the JNI bridge rather than through cross-module Java reflection.
+JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacContextMenu_nativeWindowHandle
+(JNIEnv *env, jclass type, jobject window) {
+    (void)type;
+    if (!requireMainThread(env)) return 0;
+    jclass helper = (*env)->FindClass(env, "com/sun/javafx/stage/WindowHelper");
+    if (!helper) return 0;
+    jmethodID getPeer = (*env)->GetStaticMethodID(env, helper, "getPeer",
+            "(Ljavafx/stage/Window;)Lcom/sun/javafx/tk/TKStage;");
+    if (!getPeer) return 0;
+    jobject peer = (*env)->CallStaticObjectMethod(env, helper, getPeer, window);
+    if ((*env)->ExceptionCheck(env)) return 0;
+    if (!peer) {
+        (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/IllegalStateException"),
+                        "Window has no native peer");
+        return 0;
+    }
+    jclass stage = (*env)->GetObjectClass(env, peer);
+    if (!stage) return 0;
+    jmethodID getHandle = (*env)->GetMethodID(env, stage, "getRawHandle", "()J");
+    if (!getHandle) return 0;
+    return (*env)->CallLongMethod(env, peer, getHandle);
+}
+
 JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacContextMenu_open
 (JNIEnv *env, jobject callback, jlong windowHandle, jdouble x, jdouble y) {
     if (!requireMainThread(env)) return 0;

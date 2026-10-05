@@ -23,11 +23,7 @@ final class MacIterationSheet implements AutoCloseable {
                                   Consumer<IterationSettings> apply) throws ReflectiveOperationException {
         requireFxThread();
         if (!owner.isShowing()) throw new IllegalStateException("Sheet owner must be showing");
-        Object peer = Class.forName("com.sun.javafx.stage.WindowHelper")
-                .getMethod("getPeer", Window.class).invoke(null, owner);
-        long window = (long) Class.forName("com.sun.javafx.tk.TKStage")
-                .getMethod("getRawHandle").invoke(peer);
-        if (window == 0) throw new IllegalStateException("Window has no native handle");
+        long window = MacContextMenu.windowHandle(owner);
         var session = new MacIterationSheet(owner, apply);
         session.handle = session.open(window, current.baseIterations(), current.iterationsPerZoomLevel(),
                 IterationSettings.DEFAULT_BASE_ITERATIONS, IterationSettings.DEFAULT_ITERATIONS_PER_ZOOM_LEVEL);

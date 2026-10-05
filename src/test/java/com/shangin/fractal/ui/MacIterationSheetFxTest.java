@@ -28,6 +28,17 @@ class MacIterationSheetFxTest {
         return task.get(10, TimeUnit.SECONDS);
     }
 
+    @Test void sharedWindowHandleRejectsAnUnshownOwner() throws Exception {
+        assertTrue(MacIterationSheet.isAvailable());
+        fx(() -> {
+            var owner = new Stage();
+            try {
+                assertThrows(IllegalStateException.class, () -> MacContextMenu.windowHandle(owner));
+            } finally { owner.close(); }
+            return null;
+        });
+    }
+
     @Test void nativeAppearanceChangesKeepDraftsAndSessionAlive() throws Exception {
         assertTrue(MacIterationSheet.isAvailable());
         var applied = new AtomicInteger();
