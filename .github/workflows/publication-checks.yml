@@ -3,7 +3,7 @@ name: Publication checks
 on:
   pull_request:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'feature/**', 'fix/**', 'chore/**']
   workflow_dispatch:
 
 permissions:

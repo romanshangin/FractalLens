@@ -13,7 +13,8 @@ Follow all project-wide rules and constraints in `AGENTS.md`.
    read-only baseline. Inspect existing tracked modifications, staged changes,
    and untracked files, then create a new dedicated task branch. Unless the
    user explicitly specifies another base or branch name, create the branch
-   from `main` with the `codex/` prefix. Treat all pre-existing work as
+   from `main` using the change-based naming rule in `AGENTS.md`
+   (`feature/`, `fix/`, or `chore/`). Treat all pre-existing work as
    user-owned and preserve it while creating the branch. Do not edit files
    until the new branch has been created and its base has been verified.
 2. Resolve the requested outcome and boundaries. Distinguish required behavior,
