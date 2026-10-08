@@ -35,7 +35,8 @@ authorization from the existence of a task branch or a likely PR workflow.
    preflight:
    - Confirm the current branch, its merge base, remotes, and working-tree
      status. Preserve a task branch already selected by the user unless it is
-     `main`. When a new task branch is required, create a `codex/` branch from
+     `main`. When a new task branch is required, follow the change-based naming
+     rule in `AGENTS.md` (`feature/`, `fix/`, or `chore/`) and create it from
      the intended current base revision, normally the refreshed `origin/main`,
      unless the user explicitly selected another base. Safely refresh the
      relevant remote refs before relying on them; if that is not possible,

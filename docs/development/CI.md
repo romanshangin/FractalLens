@@ -9,9 +9,9 @@ action pins and checkouts with credential persistence disabled. No workflow uses
 ## Portable build
 
 `ci.yml` runs CPU-default tests on Ubuntu for PRs targeting `main` and pushes to
-`codex/**`. `portable-ci.yml` runs macOS/Windows tests on PRs, pushes to `main`
-and manual dispatch. Temurin Java 25, the Maven Wrapper and the existing Maven
-cache are used. The macOS/Windows command is:
+`feature/**`, `fix/**` and `chore/**`. `portable-ci.yml` runs macOS/Windows tests
+on PRs, pushes to `main` and manual dispatch. Temurin Java 25, the Maven Wrapper
+and the existing Maven cache are used. The macOS/Windows command is:
 
 ```sh
 ./mvnw --batch-mode --no-transfer-progress -Dfractal.gpu.enabled=false clean test
@@ -44,9 +44,10 @@ release acceptance; validate them in the private destination first. See
 
 ## Publication checks
 
-`publication-checks.yml` runs on PRs, including forks, pushes to `main` and
-`codex/**`, and manual dispatch. It needs no repository secrets or write access.
-It runs the privacy regression tests, baseline analyzer tests and these checks:
+`publication-checks.yml` runs on PRs, including forks, pushes to `main`,
+`feature/**`, `fix/**` and `chore/**`, and manual dispatch. It needs no repository
+secrets or write access. It runs the privacy regression tests, baseline analyzer
+tests and these checks:
 
 ```sh
 python3 scripts/check_public_data.py
