@@ -9,7 +9,7 @@ public record FractalDestination(String name, Viewport viewport) {
         return new FractalDestination(name, new Viewport(real, imaginary, span));
     }
 
-    /** Sources and framing decisions are documented in docs/FRACTAL_DESTINATIONS.md. */
+    /** Sources and framing decisions are documented in docs/architecture/FRACTAL_DESTINATIONS.md. */
     public static List<FractalDestination> forPreset(FractalPreset preset) {
         return switch (preset) {
             case MANDELBROT -> List.of(

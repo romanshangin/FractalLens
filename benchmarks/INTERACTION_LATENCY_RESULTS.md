@@ -5,7 +5,7 @@
 > [selected evidence](README.md) is included; entries marked “private archive”
 > are unavailable in this repository. Original SHA values and recorded commands
 > describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../PUBLICATION.md).
+> [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Measured 2026-09-06 on Apple M3 Pro, macOS 26.6.2, Java 26.0.2, JavaFX 26.0.2+3,
 2 GiB maximum heap. Viewport: 1200x760 logical / 2400x1520 physical pixels.

@@ -21,7 +21,7 @@ means the source used at that time. Migration did not rerun those experiments,
 promote rejected candidates, remove recorded failures or extend platform support.
 Historical CI success is not evidence that a new destination's CI has passed.
 
-The [benchmark index](benchmarks/README.md) identifies the evidence retained in
+The [benchmark index](../../benchmarks/README.md) identifies the evidence retained in
 this checkout. A reference marked **private archive** identifies an original
 artifact that is not distributed here. It is intentionally plain text rather
 than a link to an inaccessible file. The path records its historical name; it
@@ -46,7 +46,7 @@ use in package/module names such as `com.shangin.fractal`, and the contact email
 `shangin.ro@gmail.com`. These details may remain in author metadata and project
 content. This permission does not cover login names, home paths, hostnames,
 serial numbers, hardware UUIDs, MAC/IP addresses or machine-specific workspace
-paths. See the publication rules in [AGENTS.md](AGENTS.md).
+paths. See the publication rules in [AGENTS.md](../../AGENTS.md).
 
 ## Commit and artifact identifiers
 

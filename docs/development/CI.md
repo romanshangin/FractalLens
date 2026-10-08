@@ -40,7 +40,7 @@ Runtime installers have a separate, explicit manual upload switch, off by
 default. Generated provenance and smoke-report text must pass the privacy check
 before upload. This does not inspect the contents of installers or establish
 release acceptance; validate them in the private destination first. See
-[packaging](RUNTIME_PACKAGING.md).
+[packaging](../packaging/RUNTIME_PACKAGING.md).
 
 ## Publication checks
 
@@ -85,7 +85,7 @@ PR, including forks, on `main` pushes and manual dispatch. The action is pinned
 to v2026.2.2. It performs a full analysis (`pr-mode: false`) with comments,
 annotations, fixes, cache export and raw report uploads disabled. This avoids write
 operations that a fork's restricted token cannot perform and does not silently
-skip fork analysis. The current linter version remains defined in `qodana.yaml`.
+skip fork analysis. The current linter version remains defined in `.qodana/qodana.yaml`.
 
 The analyzer image is pinned by digest. Its bootstrap compiles production and
 test sources with the Maven Wrapper before a fresh import from `pom.xml`, using
@@ -94,7 +94,7 @@ private diagnostics in a disposable checkout. The image lacks ZIP utilities;
 the bootstrap uses JDK ZIP support to extract the wrapper's checksum-verified
 Maven distribution without changing its declared version or checksum.
 
-The [reviewed baseline](.qodana/README.md) preserves 116 accepted source contracts
+The [reviewed baseline](../../.qodana/README.md) preserves 116 accepted source contracts
 as sanitized locations and fingerprints. The zero-new-finding gate does not
 claim a warning-free application. `scripts/check_qodana.py` also rejects missing
 preparation evidence, unsuccessful analysis, unresolved dependency roots, sanity

@@ -5,7 +5,7 @@
 > [selected evidence](README.md) is included; entries marked “private archive”
 > are unavailable in this repository. Original SHA values and recorded commands
 > describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../PUBLICATION.md).
+> [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Date: 2026-09-07. Work starts from `0c83aa7` on
 `codex/roadmap-9-1-fx-baselines`. Saved runs identify their working-tree state

@@ -32,6 +32,7 @@ jobs:
           use-caches: false
           push-fixes: none
           args: >-
+            --config .qodana/qodana.yaml
             --baseline .qodana/baseline.sarif.json
             --image jetbrains/qodana-jvm-community@sha256:3db2bdb1d846ddeca9f600a6737bc82b3993067e07e572ba7bf791d9fe41a9bf
       - name: Validate complete analysis and export safe findings

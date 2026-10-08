@@ -3,7 +3,7 @@
 This directory retains a compact set of historical reports and evidence.
 Original measurements and decisions are unchanged. Most raw observations,
 logs and exploratory working files remain private; see
-[provenance and replay limits](../PUBLICATION.md). This selection does not
+[provenance and replay limits](../docs/development/PUBLICATION.md). This selection does not
 claim that every historical analysis can be rerun from the published files.
 
 ## Protocols for fresh measurements

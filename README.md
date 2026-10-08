@@ -65,7 +65,7 @@ mvnw.cmd compile javafx:run
 The Maven Wrapper is included, so you do not need a separate Maven
 installation. Maven resolves JavaFX and LWJGL dependencies on the first build.
 On macOS, the build compiles the AppKit menu bridge and the development launch
-creates a small launcher bundle; see [macOS launch](MACOS_RUN.md) for details.
+creates a small launcher bundle; see [macOS launch](docs/platform/MACOS_RUN.md) for details.
 
 The application opens at the default Mandelbrot view unless a valid saved
 session exists.
@@ -75,7 +75,7 @@ session exists.
 Drag to pan, scroll to zoom around the pointer, or enter decimal coordinates
 for a specific view. When the canvas has focus, the arrow keys pan the view
 after you zoom in; Page Up and Page Down zoom, and Home resets it. See
-[macOS UI](MACOS_UI.md) for the full macOS menu and control reference.
+[macOS UI](docs/platform/MACOS_UI.md) for the full macOS menu and control reference.
 The main controls work on both supported platforms; macOS also provides an
 AppKit canvas context menu with a JavaFX fallback.
 
@@ -105,7 +105,7 @@ render progress as results arrive.
 Experimental Vulkan paths are opt-in for selected macOS workloads. The limited
 GPU calculation path is Mandelbrot-specific and does not provide GPU deep zoom.
 Windows GPU support is not yet available; validation on Intel Macs and Macs
-with AMD GPUs is still pending. See [GPU runtime](GPU_RUNTIME.md) and the
+with AMD GPUs is still pending. See [GPU runtime](docs/platform/GPU_RUNTIME.md) and the
 [roadmap](ROADMAP.md) for exact gates and current scope.
 
 ## Building and testing
@@ -117,7 +117,7 @@ Run the portable CPU-default test suite with:
 ```
 
 JavaFX integration and hardware-specific tests are opt-in and require an
-appropriate desktop session or device. [CI](CI.md) describes the portable
+appropriate desktop session or device. [CI](docs/development/CI.md) describes the portable
 macOS, Windows, and Ubuntu lanes and the separate hardware validation workflow.
 
 ## Packaging
@@ -126,24 +126,29 @@ The project can build self-contained macOS DMG and Windows EXE artifacts using
 JDK `jlink` and `jpackage`. These packages include a runtime; the development
 launcher above still uses the installed JDK. Packaging prerequisites,
 provenance, clean-machine checks, and signing and notarization status are in
-[Runtime packaging](RUNTIME_PACKAGING.md). Linux compatibility remains an
+[Runtime packaging](docs/packaging/RUNTIME_PACKAGING.md). Linux compatibility remains an
 engineering target, but Linux is not currently a supported distribution.
 
 ## Documentation
 
+Documentation is grouped under `docs/`: `architecture/` for formats and fractal
+references, `development/` for CI, publication and performance notes, `platform/`
+for macOS and GPU integration, `packaging/` for runtime distribution, and
+`images/` for screenshots. Selected benchmark evidence remains in `benchmarks/`.
+
 - [Development roadmap](ROADMAP.md) — priorities, completed work, and open
   acceptance criteria.
-- [macOS UI](MACOS_UI.md) and [macOS launch](MACOS_RUN.md) — controls and native
+- [macOS UI](docs/platform/MACOS_UI.md) and [macOS launch](docs/platform/MACOS_RUN.md) — controls and native
   integration.
-- [Session format](SESSION_FORMAT.md) — saved-scene schema and recovery.
-- [GPU runtime](GPU_RUNTIME.md) — Vulkan capability checks, CPU fallback, and
+- [Session format](docs/architecture/SESSION_FORMAT.md) — saved-scene schema and recovery.
+- [GPU runtime](docs/platform/GPU_RUNTIME.md) — Vulkan capability checks, CPU fallback, and
   current GPU scope.
-- [CI](CI.md) and [Runtime packaging](RUNTIME_PACKAGING.md) — validation lanes
+- [CI](docs/development/CI.md) and [Runtime packaging](docs/packaging/RUNTIME_PACKAGING.md) — validation lanes
   and installable artifacts.
 
 - [Benchmark evidence](benchmarks/README.md) — selected protocols, results and
   measurement inputs.
-- [Publication provenance](PUBLICATION.md) — historical evidence, redactions
+- [Publication provenance](docs/development/PUBLICATION.md) — historical evidence, redactions
   and limits on replaying archived experiments.
 
 ## License

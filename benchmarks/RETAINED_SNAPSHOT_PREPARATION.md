@@ -5,7 +5,7 @@
 > [selected evidence](README.md) is included; entries marked “private archive”
 > are unavailable in this repository. Original SHA values and recorded commands
 > describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../PUBLICATION.md).
+> [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Decision: **reject** the on-demand tile-coloring candidate. The production
 implementation remains at the control behavior. The required first-tile and
