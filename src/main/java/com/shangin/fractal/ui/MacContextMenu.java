@@ -35,15 +35,17 @@ final class MacContextMenu implements AutoCloseable {
 
     static boolean isAvailable() { return Library.AVAILABLE; }
 
+    static long windowHandle(Window window) {
+        requireFxThread();
+        if (!isAvailable()) throw new IllegalStateException("Native window bridge is unavailable");
+        long windowHandle = nativeWindowHandle(window);
+        if (windowHandle == 0) throw new IllegalStateException("Window has no native handle");
+        return windowHandle;
+    }
+
     static MacContextMenu show(Window window, double sceneX, double sceneY,
                                Consumer<Boolean> completion) throws ReflectiveOperationException {
-        requireFxThread();
-        Object peer = Class.forName("com.sun.javafx.stage.WindowHelper")
-                .getMethod("getPeer", Window.class).invoke(null, window);
-        if (peer == null) throw new IllegalStateException("Window has no native peer");
-        long windowHandle = (long) Class.forName("com.sun.javafx.tk.TKStage")
-                .getMethod("getRawHandle").invoke(peer);
-        if (windowHandle == 0) throw new IllegalStateException("Window has no native handle");
+        long windowHandle = windowHandle(window);
         var session = new MacContextMenu(completion);
         session.handle = session.open(windowHandle, sceneX, sceneY);
         if (session.handle == 0) throw new IllegalStateException("Cannot create native menu");
@@ -77,5 +79,6 @@ final class MacContextMenu implements AutoCloseable {
     }
 
     private native long open(long window, double x, double y);
+    private static native long nativeWindowHandle(Window window);
     private static native void dispose(long handle);
 }

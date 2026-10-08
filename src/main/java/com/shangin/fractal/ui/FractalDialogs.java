@@ -3,6 +3,7 @@ package com.shangin.fractal.ui;
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import javafx.event.ActionEvent;
 import javafx.scene.Node;
@@ -83,6 +84,61 @@ final class FractalDialogs {
 
     static Optional<JuliaParameters> juliaParameters(Window owner, JuliaParameters current) {
         return juliaParametersDialog(owner, current).showAndWait();
+    }
+
+    static Optional<IterationSettings> iterationSettings(Window owner, IterationSettings current) {
+        return iterationSettingsDialog(owner, current).showAndWait();
+    }
+
+    static Dialog<IterationSettings> iterationSettingsDialog(Window owner, IterationSettings current) {
+        Dialog<IterationSettings> dialog = new Dialog<>();
+        dialog.setTitle("Iteration Settings");
+        TextField base = new TextField(Integer.toString(current.baseIterations()));
+        TextField zoom = new TextField(Integer.toString(current.iterationsPerZoomLevel()));
+        base.setId("iteration-base");
+        zoom.setId("iteration-zoom");
+        base.setPromptText(Integer.toString(IterationSettings.DEFAULT_BASE_ITERATIONS));
+        zoom.setPromptText(Integer.toString(IterationSettings.DEFAULT_ITERATIONS_PER_ZOOM_LEVEL));
+        GridPane fields = new GridPane(12, 12);
+        fields.addRow(0, label("Base iterations", base), base);
+        fields.addRow(1, label("Additional per zoom level", zoom), zoom);
+        GridPane.setHgrow(base, Priority.ALWAYS);
+        GridPane.setHgrow(zoom, Priority.ALWAYS);
+        Label hint = new Label("Set the base render budget and how much it grows as you zoom in.");
+        hint.setWrapText(true);
+        hint.getStyleClass().add("dialog-hint");
+        Label error = errorLabel();
+        VBox content = new VBox(14, hint, fields, error);
+        content.getStyleClass().add("dialog-body");
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().setPrefWidth(480);
+        ButtonType reset = new ButtonType("Reset to Defaults", ButtonData.OTHER);
+        ButtonType apply = new ButtonType("Apply", ButtonData.OK_DONE);
+        DialogAppearance.install(dialog, owner, () -> base);
+        Button confirm = DialogAppearance.buttons(dialog, apply, reset, ButtonType.CANCEL);
+        Button resetButton = (Button) dialog.getDialogPane().lookupButton(reset);
+        resetButton.addEventFilter(ActionEvent.ACTION, event -> {
+            event.consume();
+            base.setText(Integer.toString(IterationSettings.DEFAULT_BASE_ITERATIONS));
+            zoom.setText(Integer.toString(IterationSettings.DEFAULT_ITERATIONS_PER_ZOOM_LEVEL));
+            validateIterationSettings(dialog, base, zoom, error, false);
+            base.requestFocus();
+            base.selectAll();
+        });
+        confirm.addEventFilter(ActionEvent.ACTION, event -> {
+            if (!validateIterationSettings(dialog, base, zoom, error, true)) event.consume();
+        });
+        base.setOnAction(event -> { confirm.fire(); event.consume(); });
+        zoom.setOnAction(event -> { confirm.fire(); event.consume(); });
+        for (TextField field : List.of(base, zoom)) {
+            field.textProperty().addListener(ignored -> {
+                if (error.isVisible()) validateIterationSettings(dialog, base, zoom, error, false);
+            });
+        }
+        dialog.setResultConverter(button -> button == apply
+                ? new IterationSettings(Integer.parseInt(base.getText().trim()),
+                        Integer.parseInt(zoom.getText().trim())) : null);
+        return dialog;
     }
 
     static Dialog<JuliaParameters> juliaParametersDialog(Window owner, JuliaParameters current) {
@@ -258,6 +314,30 @@ final class FractalDialogs {
         return false;
     }
 
+    private static boolean validateIterationSettings(Dialog<?> dialog, TextField base, TextField zoom,
+                                                     Label error, boolean focus) {
+        TextField firstInvalid = null;
+        boolean invalidBase = !isPositiveInteger(base.getText());
+        boolean invalidZoom = !isNonNegativeInteger(zoom.getText());
+        for (TextField field : List.of(base, zoom)) {
+            boolean invalid = field == base ? invalidBase : invalidZoom;
+            field.pseudoClassStateChanged(PseudoClass.getPseudoClass("invalid"), invalid);
+            field.setAccessibleHelp(invalid ? iterationHelp(field == base) : null);
+            if (invalid && firstInvalid == null) firstInvalid = field;
+        }
+        if (firstInvalid == null) {
+            clearError(dialog, error);
+            return true;
+        }
+        showError(dialog, error, "Enter a positive base count and a non-negative zoom increment.");
+        if (focus) { firstInvalid.requestFocus(); firstInvalid.selectAll(); }
+        return false;
+    }
+
+    private static String iterationHelp(boolean base) {
+        return base ? "Enter a positive whole number." : "Enter zero or a positive whole number.";
+    }
+
     private static boolean isFiniteDouble(String text) {
         try {
             return Double.isFinite(Double.parseDouble(text.trim()));
@@ -299,6 +379,22 @@ final class FractalDialogs {
         try {
             new BigDecimal(text.trim());
             return true;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
+    }
+
+    private static boolean isPositiveInteger(String text) {
+        try {
+            return Integer.parseInt(text.trim()) > 0;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
+    }
+
+    private static boolean isNonNegativeInteger(String text) {
+        try {
+            return Integer.parseInt(text.trim()) >= 0;
         } catch (NumberFormatException exception) {
             return false;
         }

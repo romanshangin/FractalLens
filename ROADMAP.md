@@ -331,6 +331,10 @@ Remaining items in this section follow the cross-section order in section 0.
   `WINDOW_MODAL` and CSS alone do not provide a native AppKit sheet. Validate
   ownership, focus restoration, cancellation, input validation, appearance
   changes, full screen, and callbacks without blocking rendering.
+  The first native form is implemented for Iteration Settings using an AppKit
+  `NSPanel` sheet and native fields/buttons, with JavaFX fallback. Other forms,
+  native alerts and the remaining platform acceptance checks are still open;
+  see `MACOS_UI.md`.
 
 ## 5. Add history and reproducibility
 
