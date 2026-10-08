@@ -4,7 +4,7 @@ Automatic runs build and smoke-test packages but do not upload artifacts. A
 manual dispatch can set `upload_artifacts: true` after private-destination
 validation and artifact review. Provenance and smoke-report text must pass the
 privacy guard first; PRs cannot enable uploads. Test logs and Surefire reports
-are excluded. See [CI publication controls](CI.md).
+are excluded. See [CI publication controls](../development/CI.md).
 
 FractalLens produces platform-native, self-contained runtime artifacts with JDK
 25 `jlink` and `jpackage`. The macOS output is a DMG containing `FractalLens.app`;
@@ -83,7 +83,7 @@ test as a completed clean-machine check.
 This is the original private-repository acceptance record. Its Actions runs,
 artifacts and PR revisions are not published here or evidence that CI passed
 in a new destination repository. Original checksums and revision identifiers
-remain historical provenance; see [publication provenance](PUBLICATION.md).
+remain historical provenance; see [publication provenance](../development/PUBLICATION.md).
 
 The owner accepted P0.2 with the macOS virtual-machine exception below. This
 decision closes the roadmap packaging item; it does not turn the failed default
@@ -137,6 +137,6 @@ operate on the already validated artifacts. Unsigned builds can trigger
 Gatekeeper or SmartScreen warnings and are not public release candidates.
 
 FractalLens source code, project documentation, screenshots, and original project
-images are licensed under the [Apache License 2.0](LICENSE), unless otherwise
+images are licensed under the [Apache License 2.0](../../LICENSE), unless otherwise
 noted. Bundled third-party components and assets retain their respective
 licenses, listed in `packaging/THIRD-PARTY-LICENSES.txt`.

@@ -43,8 +43,8 @@ The project sources of truth are:
 
 - `ROADMAP.md` for work order, requirements, and acceptance criteria;
 - `pom.xml` for versions, Maven profiles, launch settings, and test settings;
-- `MACOS_RUN.md` for macOS launch and application-identity behavior;
-- `MACOS_UI.md` for current UI behavior and the native/JavaFX boundary;
+- `docs/platform/MACOS_RUN.md` for macOS launch and application-identity behavior;
+- `docs/platform/MACOS_UI.md` for current UI behavior and the native/JavaFX boundary;
 - relevant `*_BENCHMARK.md`, `*_VALIDATION.md`, and `*_RESULTS.md` files for
   established measurement protocols and evidence;
 - existing tests for the executable behavioral contract.
@@ -111,7 +111,7 @@ inputs, code state, and decision.
   personal self-hosted runners or expose repository secrets to pull requests.
 
 - The public benchmark selection is documented in `benchmarks/README.md` and
-  `PUBLICATION.md`. Keep raw logs, diagnostic dumps and unselected working
+  `docs/development/PUBLICATION.md`. Keep raw logs, diagnostic dumps and unselected working
   evidence in a private archive. Publish only reviewed summaries and explicitly
   selected sanitized data. Preserve original measurement identities and label
   redacted derivatives; do not imply that privately archived inputs are

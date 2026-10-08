@@ -9,11 +9,11 @@ algorithms. Completed and rejected experiments below remain historical evidence;
 new unchecked items are proposals, not measured speedups.
 
 Completed historical items refer to the original recorded validation. The
-public evidence set is intentionally smaller; see [publication provenance](PUBLICATION.md)
+public evidence set is intentionally smaller; see [publication provenance](docs/development/PUBLICATION.md)
 for archived inputs, original SHA values and replay limits. Migration does not
 rerun or extend those acceptance results. The public configuration removes the
 original self-hosted lanes and automatic raw-report uploads; hardware checks
-remain manual and their acceptance gates remain unchanged. See [CI](CI.md).
+remain manual and their acceptance gates remain unchanged. See [CI](docs/development/CI.md).
 
 Checkboxes represent acceptance state: a parent item remains open until every
 required implementation and validation step beneath it is complete.
@@ -45,7 +45,7 @@ delivery foundation should be completed first.
   default Finder launch crashes in the virtual Metal pipeline, while the
   software-pipeline launch and manual functionality checks pass. This is not a
   passing default macOS clean-machine launch; physical macOS clean-machine
-  behavior remains unverified. See `RUNTIME_PACKAGING.md` for the evidence and
+  behavior remains unverified. See `docs/packaging/RUNTIME_PACKAGING.md` for the evidence and
   release boundary.
 - [x] **P0.3. Close the current measurement gate before starting another
   optimization.** Finish the open 9.1 paired-decision item and the already
@@ -62,14 +62,14 @@ delivery foundation should be completed first.
   migration, malformed input, precise decimal coordinates and atomic recovery
   after an interrupted write. The version 2 format, version 1 migration,
   platform session locations and recovery contract are documented in
-  `SESSION_FORMAT.md`.
+  `docs/architecture/SESSION_FORMAT.md`.
 - [x] **P0.5. Define platform validation lanes.** Treat the Windows runtime
   work in 8.7 and Intel/AMD Mac work in 8.8 as hardware-backed infrastructure
   tracks. They may run when hardware is available and do not block the
   CPU-default macOS artifact, but they must precede enabling GPU modes on those
   platforms. The manual native workflow now has a physical Intel Mac x64 lane;
   the Windows x64 lane remains a CPU-fallback contract until its GPU runtime is
-  implemented. `CI.md` defines the runner, evidence, and promotion boundaries.
+  implemented. `docs/development/CI.md` defines the runner, evidence, and promotion boundaries.
   Neither 8.7 nor 8.8 hardware acceptance is complete.
 
 - [x] **P0 exit criterion:** a clean checkout is tested automatically, produces a
@@ -223,7 +223,7 @@ delivery foundation should be completed first.
 
 - [x] Add portable macOS/Windows CI for the CPU-default build and test suite,
   plus opt-in native hardware lanes with retained reports. The workflows and
-  runner contract are implemented in `.github/workflows` and `CI.md`; keep this
+  runner contract are implemented in `.github/workflows` and `docs/development/CI.md`; keep this
   item open until the hosted macOS/Windows jobs and configured self-hosted lane
   have produced retained reports from the repository. That implementation was
   limited to P0 item 1 and did not satisfy the P0 exit criterion at that stage:
@@ -249,7 +249,7 @@ delivery foundation should be completed first.
   the failed default launch on macOS Sonoma in VirtualBuddy. Windows passed;
   macOS passed only with a software-pipeline override, not the default Finder
   launch. Packaging, provenance, the exception, and the separate signing/release
-  boundary are documented in `RUNTIME_PACKAGING.md`.
+  boundary are documented in `docs/packaging/RUNTIME_PACKAGING.md`.
 
 ## 1. Restore a stable green build
 
@@ -310,7 +310,7 @@ Remaining items in this section follow the cross-section order in section 0.
   Implemented with a packaged universal JNI library and JavaFX fallback.
   Native callbacks, accessibility activation, cancellation/replacement, live
   rendering and full-screen entry/exit passed on the built-in Retina display;
-  see `MACOS_UI.md` for validation details and reproducible commands.
+  see `docs/platform/MACOS_UI.md` for validation details and reproducible commands.
 - [ ] Complete native context-menu positioning validation across multiple displays,
   including mixed DPI, negative screen origins and display edges. Only one
   physical display was available for the initial implementation checks.
@@ -320,7 +320,7 @@ Remaining items in this section follow the cross-section order in section 0.
   Escape to cancel, and predictable keyboard focus and validation.
   Shared appearance now covers coordinate/palette editors, Help and alerts;
   GUI regressions cover theme changes, exact input, draft validation and focus.
-  See `MACOS_UI.md` for validation details.
+  See `docs/platform/MACOS_UI.md` for validation details.
 - [ ] Reduce unnecessary modality: use a compact owner-associated sheet for
   Go to Coordinates, a nonmodal palette editor with live preview, and a nonmodal
   Help window. Show export completion unobtrusively inside the application;
@@ -338,7 +338,7 @@ Remaining items in this section follow the cross-section order in section 0.
 - [x] Keep transient output dimensions and scheduling priority in a separate immutable `RenderTarget` so window resizes do not alter scene history.
 - [ ] Add undo/redo and bookmarks based on `FractalScene` snapshots.
 - [x] Add JSON serialization and last-session restore. The current versioned
-  schema and atomic recovery behavior are documented in `SESSION_FORMAT.md`.
+  schema and atomic recovery behavior are documented in `docs/architecture/SESSION_FORMAT.md`.
 - [ ] Add arbitrary-resolution export by combining a scene snapshot with an independent render target.
 
 ## 6. Expand the rendering engine
@@ -469,7 +469,7 @@ This phase should remain separate from the current pan-reuse optimization.
 Julia uses shared reference perturbation in base rendering, deep AA, and export.
 It does not apply Mandelbrot cardioid tests, critical-point rebasing, or BLA.
 Unreliable and subnormal deltas retain the slower arbitrary-precision fallback.
-See `docs/JULIA_DEEP_ZOOM_PERFORMANCE.md` for the latency regression and measurements.
+See `docs/development/JULIA_DEEP_ZOOM_PERFORMANCE.md` for the latency regression and measurements.
 
 ## 8. Add GPU rendering
 
@@ -485,7 +485,7 @@ Mac validation in 8.8; preserve portable contracts throughout the GPU work.
 - [x] Select the initial GPU stack: MoltenVK on macOS through the LWJGL 3 Vulkan
   bindings.
 - [x] Define the supported OS/GPU matrix, including the numeric
-  capabilities required by each backend mode (`GPU_RUNTIME.md`).
+  capabilities required by each backend mode (`docs/platform/GPU_RUNTIME.md`).
 - [x] Isolate native dependencies and GPU resource ownership behind a dedicated
   runtime so the render controller and JavaFX surface do not depend on a
   specific graphics API.
@@ -497,7 +497,7 @@ Mac validation in 8.8; preserve portable contracts throughout the GPU work.
   that preserves the caller's precision policy and cancellation.
 - [x] Validate startup, simultaneous runtimes, shutdown/reopen, simulated device
   loss, missing-native failures, and direct/deep CPU fallback on Apple M3 Pro.
-  See `GPU_RUNTIME.md` for commands and limits of this macOS-first validation.
+  See `docs/platform/GPU_RUNTIME.md` for commands and limits of this macOS-first validation.
 
 ### 8.2. Validate integration with palette recoloring
 

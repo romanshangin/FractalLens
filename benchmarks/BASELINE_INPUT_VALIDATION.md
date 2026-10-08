@@ -5,7 +5,7 @@
 > [selected evidence](README.md) is included; entries marked “private archive”
 > are unavailable in this repository. Original SHA values and recorded commands
 > describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../PUBLICATION.md).
+> [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Validation spans 2026-09-07–08 local; dataset names use the UTC run date 2026-09-08. Base commit `a8ecdabb`, branch
 `codex/roadmap-9-1-input-matrix`. Saved environments identify a working-tree run;

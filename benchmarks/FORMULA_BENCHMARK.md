@@ -2,7 +2,7 @@
 
 > Publication scope: use this protocol for fresh runs in a new output directory.
 > Keep raw logs and diagnostic captures private; publish only reviewed summaries
-> and necessary sanitized evidence. See [evidence provenance](../PUBLICATION.md).
+> and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
 Run the single-threaded formula benchmark with:
 

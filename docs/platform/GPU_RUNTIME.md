@@ -115,7 +115,7 @@ optimized repeat of the numeric/performance gate on M3 Pro. Retina base overview
 improves from 592.52 to 238.67 ms on GPU, but remains behind its paired 71.93 ms
 CPU baseline; Refined + AA is 1534.89 versus 1378.67 ms. CPU remains the default
 and GPU residency expansion is still deferred. See
-[GPU_RENDER_BENCHMARK_8_5_RESULTS.md](benchmarks/GPU_RENDER_BENCHMARK_8_5_RESULTS.md) for
+[GPU_RENDER_BENCHMARK_8_5_RESULTS.md](../../benchmarks/GPU_RENDER_BENCHMARK_8_5_RESULTS.md) for
 raw runs, host/kernel profiles, memory accounting and display limitations; the
 original 8.4 result remains archived separately.
 
@@ -142,7 +142,7 @@ work, the candidate time accumulated by the busiest worker, and pixel/sample
 counts. Per-pixel timestamps exist only in this diagnostic mode. The M3 Pro gate
 found that even free candidate detection would not close the current GPU
 base-frame deficit, so AA remains on CPU. See
-[GPU_RESIDENCY_8_6_DECISION.md](benchmarks/GPU_RESIDENCY_8_6_DECISION.md).
+[GPU_RESIDENCY_8_6_DECISION.md](../../benchmarks/GPU_RESIDENCY_8_6_DECISION.md).
 
 The follow-up 8.6 whole-frame residency spike is also isolated from production
 backend selection. It keeps a palette-independent four-word sample record per
@@ -163,7 +163,7 @@ of stopping at the first conformance failure. The M3 Pro gate found meaningful w
 Retina overview and exterior, but a correction-heavy seahorse view remained
 24.1% slower than CPU. This fails the required 15% win in every representative
 scene, so the spike remains an opt-in experiment. See
-[GPU_RESIDENT_SPIKE_RESULTS.md](benchmarks/GPU_RESIDENT_SPIKE_RESULTS.md).
+[GPU_RESIDENT_SPIKE_RESULTS.md](../../benchmarks/GPU_RESIDENT_SPIKE_RESULTS.md).
 
 The rejection buffer also carries bounded diagnostic counters. The follow-up
 Retina seahorse profile attributes 51.16% of rejected pixels to an uncertain

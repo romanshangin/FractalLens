@@ -5,7 +5,7 @@
 > [selected evidence](README.md) is included; entries marked “private archive”
 > are unavailable in this repository. Original SHA values and recorded commands
 > describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../PUBLICATION.md).
+> [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Analysis date: 2026-09-05. Repository baseline: `6c263f6`.
 
@@ -27,7 +27,7 @@ The integrated GPU calculation path currently accepts only certified Mandelbrot
 jobs without orbit traps, with 1–1000 iterations and a supported coordinate
 grid. Deep zoom and unsupported work use CPU. A future GPU perturbation path
 must establish its own higher-iteration contract; the existing FP32 gate does
-not cover it. See [runtime modes](../GPU_RUNTIME.md#platform-and-numeric-requirements)
+not cover it. See [runtime modes](../docs/platform/GPU_RUNTIME.md#platform-and-numeric-requirements)
 and [backend eligibility](../src/main/java/com/shangin/fractal/gpu/GpuMandelbrotRenderBackend.java).
 
 This analysis covers the relevant families of optimization: avoiding work,
@@ -384,4 +384,4 @@ The BLA-disable property affects the benchmark's base backend only; its later
 AA sampler still uses the production BLA policy. See
 [formula benchmark instructions](FORMULA_BENCHMARK.md),
 [8.5 reproduction](GPU_RENDER_BENCHMARK_8_5_RESULTS.md#reproduce) and
-[runtime validation](../GPU_RUNTIME.md) for native/FX prerequisites and limits.
+[runtime validation](../docs/platform/GPU_RUNTIME.md) for native/FX prerequisites and limits.
