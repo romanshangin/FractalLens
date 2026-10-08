@@ -406,7 +406,12 @@ Manually verify Dock identity and any affected system behavior.
 - When the task requires creating a new branch, create it from `main` unless the
   user explicitly specifies another base. Verify the selected base and the new
   branch's merge base.
-- When the agent creates a task branch, use the `codex/` prefix.
+- Name task branches according to the planned changes: `feature/<description>`
+  for new or expanded functionality, `fix/<description>` for defect corrections,
+  and `chore/<description>` for maintenance, tooling, CI, or documentation.
+  Use a concise English description in lowercase with hyphens. For mixed work,
+  choose the prefix that matches the primary purpose. Honor an explicit branch
+  name supplied by the user.
 - Do not switch branches when doing so would overwrite, move, or otherwise
   disturb pre-existing user changes.
 - When the user has already selected or created the task branch, preserve and
