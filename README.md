@@ -1,5 +1,8 @@
 # FractalLens
 
+[![Portable CI](https://github.com/romzesthefirst/FractalLens/actions/workflows/portable-ci.yml/badge.svg)](https://github.com/romzesthefirst/FractalLens/actions/workflows/portable-ci.yml)
+[![Qodana](https://github.com/romzesthefirst/FractalLens/actions/workflows/qodana_code_quality.yml/badge.svg)](https://github.com/romzesthefirst/FractalLens/actions/workflows/qodana_code_quality.yml)
+
 FractalLens is a desktop fractal explorer for macOS and Windows, built with
 Java 25 and JavaFX. It supports interactive exploration of Mandelbrot, Julia,
 Burning Ship, Tricorn, and Multibrot sets, with deep zoom for Mandelbrot and
