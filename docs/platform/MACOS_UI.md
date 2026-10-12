@@ -361,6 +361,49 @@ injects a recolor failure on the worker path, and checks the error dialog's
 message in the application window. This is functional evidence, not a render
 performance measurement.
 
+### P2.1 acceptance
+
+Acceptance on 2026-10-12 reconciled the open roadmap checkboxes with the existing
+implementation; no production behavior was changed. Source base:
+`3fdc50d71bdb2f654dd7e092821959d5ed93d376`, with additional menu-to-frame tests.
+Environment: Apple Silicon, macOS 27.0.1, Maven JDK 26.0.2, JavaFX 26.0.2;
+the graphical checks ran in an active desktop session.
+
+| Requirement | Current acceptance evidence |
+| --- | --- |
+| Iteration editing | Both values remain drafts until Apply. Native and JavaFX forms cover reset, cancellation and invalid input; the menu regression waits for a completed frame with the new iteration settings, checks its actual iteration limit and the badge tooltip. |
+| Julia editing | One dialog edits both finite components, with Reset to Defaults and Cancel. The menu regression applies a custom constant and compares every completed base-frame sample's iterations, escape flag and smooth value with a direct CPU calculation. Invalid input followed by Cancel preserves the scene and completed frame. |
+| Zoom and effective iterations | Badge tests check compact large values and compare the post-zoom tooltip with the completed render request. Manual keyboard zoom changed the displayed scale and iteration budget; Home returned to the initial view. |
+| Persistence and formula identity | Portable scene/JSON and render-job tests cover serialization, legacy defaults and parameter-sensitive formula identity. Closing and relaunching the current worktree with `mvn javafx:run` restored iteration values `420`/`70` and Julia values `-0.4`/`0.6`, confirmed in both editors and the first completed frame's badge. |
+
+Checks executed:
+
+```sh
+mvn -Dtest=IterationSettingsTest,FractalSceneTest,FractalSceneJsonTest,AdaptiveIterationPolicyTest,RenderValueFormatTest test
+mvn -Dfractal.fx.tests=true -Djavafx.cachedir=/tmp/fractallens-p21-final-cache \
+    -DreuseForks=false \
+    '-Dtest=FractalDialogsFxTest,MainMenuBarFxTest,MacIterationSheetFxTest,FractalResizeFxTest#renderBadgeShowsProgressAndLatestOutcomeWithoutHover+renderBadgeTooltipTracksTheRenderedSceneAfterZoom+canvasKeyboardNavigationUsesCameraAndIgnoresModifiedKeys' test
+mvn test
+mvn javafx:run
+```
+
+The targeted portable run passed 31 tests. The final graphical/native run passed
+21 tests with no skips. The full portable run reported 503 tests: 431 executed,
+72 opt-in skips, zero failures or errors. JavaFX test forks emitted the existing
+native-access warning for `javafx.graphics`; it did not prevent these checks.
+
+Manual checks covered initial selected-field focus, keyboard Enter, validation
+without losing drafts, Apply, Reset, Cancel/Escape, return to canvas keyboard
+navigation, visible completion and restart. Light/dark JavaFX form snapshots and
+native inherited-appearance tests passed; the live desktop used dark appearance.
+The original user settings were restored after the checks. Reports and snapshots
+remain ignored local output under `target/`, not published evidence.
+
+Windows, Linux and Intel Mac runtime behavior was not exercised in this
+acceptance; the shared JavaFX forms were exercised directly on macOS. GPU
+hardware checks and multi-display/native-sheet expansion are separate roadmap
+work and were not rerun for this test/documentation change.
+
 ### JavaFX dialog appearance
 
 Coordinate and palette editors, Help, errors and export-completion messages now

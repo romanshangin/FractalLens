@@ -7,6 +7,9 @@ import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.IterationSettings;
+import com.shangin.fractal.scene.JuliaParameters;
+import com.shangin.fractal.formula.JuliaFormula;
+import com.shangin.fractal.render.FractalCalculator;
 import javafx.animation.AnimationTimer;
 import javafx.application.ColorScheme;
 import javafx.application.Platform;
@@ -214,7 +217,7 @@ class MainMenuBarFxTest {
     @Test
     void iterationMenuAppliesBothValuesFromOneThemedDialog() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
-        CompletableFuture<Void> action = openIterationEditor();
+        CompletableFuture<Void> action = openEditor("Edit Iteration Settings…");
         if (MacIterationSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
@@ -229,6 +232,7 @@ class MainMenuBarFxTest {
                 return null;
             });
             await(() -> view.sceneSnapshot().iterations().equals(new IterationSettings(420, 70)));
+            assertCompletedIterations(new IterationSettings(420, 70));
             return;
         }
         DialogPane pane = awaitDialog("Iteration Settings");
@@ -249,12 +253,13 @@ class MainMenuBarFxTest {
         action.get(10, TimeUnit.SECONDS);
 
         assertEquals(new IterationSettings(420, 70), fx(() -> view.sceneSnapshot().iterations()));
+        assertCompletedIterations(new IterationSettings(420, 70));
     }
 
     @Test
     void cancellingIterationDialogKeepsSceneUnchangedAfterReset() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
-        CompletableFuture<Void> action = openIterationEditor();
+        CompletableFuture<Void> action = openEditor("Edit Iteration Settings…");
         if (MacIterationSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
@@ -289,7 +294,7 @@ class MainMenuBarFxTest {
     @Test
     void invalidIterationInputShowsErrorAndKeepsSceneUnchanged() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
-        CompletableFuture<Void> action = openIterationEditor();
+        CompletableFuture<Void> action = openEditor("Edit Iteration Settings…");
         if (MacIterationSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
@@ -334,6 +339,80 @@ class MainMenuBarFxTest {
         action.get(10, TimeUnit.SECONDS);
 
         assertEquals(new IterationSettings(420, 70), fx(() -> view.sceneSnapshot().iterations()));
+    }
+
+    private void assertCompletedIterations(IterationSettings expected) throws Exception {
+        await(() -> surface().completedRender() != null
+                && surface().completedRender().scene().iterations().equals(expected)
+                && !command("Render", "Edit Iteration Settings…").isDisable());
+        fx(() -> {
+            assertEquals(expected.baseIterations(), surface().completedRender().frame().request().maxIterations());
+            RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
+            assertTrue(badge.getTooltip().getText().contains("Iterations: " + expected.baseIterations()));
+            return null;
+        });
+    }
+
+    @Test
+    void juliaMenuAppliesBothParametersToTheCompletedFrame() throws Exception {
+        fx(() -> { command("Fractal", "Julia").fire(); return null; });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
+        FractalScene initial = fx(view::sceneSnapshot);
+        CompletableFuture<Void> action = openEditor("Edit Julia Parameters…");
+        DialogPane pane = awaitDialog("Julia Parameters");
+        JuliaParameters expected = new JuliaParameters(-0.4, 0.6);
+        fx(() -> {
+            input(pane, "julia-real").setText("-0.4");
+            input(pane, "julia-imaginary").setText("0.6");
+            assertEquals(initial, view.sceneSnapshot());
+            confirm(pane);
+            return null;
+        });
+        action.get(10, TimeUnit.SECONDS);
+        await(() -> surface().completedRender() != null
+                && surface().completedRender().scene().juliaParameters().equals(expected)
+                && !command("Render", "Edit Julia Parameters…").isDisable());
+        var completed = fx(() -> surface().completedRender());
+        assertEquals(initial.withJuliaParameters(expected), fx(view::sceneSnapshot));
+        var frame = completed.frame();
+        var reference = new FractalCalculator(new JuliaFormula(expected.real(), expected.imaginary()))
+                .calculate(frame.request().width(), frame.request().height(),
+                        frame.renderGrid(), frame.request().maxIterations());
+        for (int index = 0; index < reference.size(); index++) {
+            assertEquals(reference.iterations(index), frame.samplePlane().iterations(index), "Iterations at " + index);
+            assertEquals(reference.escaped(index), frame.samplePlane().escaped(index), "Escape at " + index);
+            assertEquals(reference.smoothIterations(index), frame.samplePlane().smoothIterations(index), "Smooth value at " + index);
+        }
+    }
+
+    @Test
+    void juliaMenuKeepsTheSceneAndFrameWhenInvalidDraftIsCancelled() throws Exception {
+        fx(() -> { command("Fractal", "Julia").fire(); return null; });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
+        FractalScene initial = fx(view::sceneSnapshot);
+        var completed = fx(() -> surface().completedRender());
+        CompletableFuture<Void> action = openEditor("Edit Julia Parameters…");
+        DialogPane pane = awaitDialog("Julia Parameters");
+        fx(() -> {
+            input(pane, "julia-real").setText("NaN");
+            input(pane, "julia-imaginary").setText("0.6");
+            confirm(pane);
+            assertTrue(pane.getScene().getWindow().isShowing());
+            assertEquals("NaN", input(pane, "julia-real").getText());
+            assertEquals("0.6", input(pane, "julia-imaginary").getText());
+            assertTrue(pane.lookup("#dialog-validation-error").isVisible());
+            assertEquals(initial, view.sceneSnapshot());
+            assertEquals(completed, surface().completedRender());
+            ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+            return null;
+        });
+        action.get(10, TimeUnit.SECONDS);
+        assertEquals(initial, fx(view::sceneSnapshot));
+        assertEquals(completed, fx(() -> surface().completedRender()));
+    }
+
+    private FractalSurface surface() {
+        return (FractalSurface) view.getChildrenUnmodifiable().getFirst();
     }
 
     @Test
@@ -381,11 +460,11 @@ class MainMenuBarFxTest {
         return items.stream().filter(item -> title.equals(item.getText())).findFirst().orElseThrow();
     }
 
-    private CompletableFuture<Void> openIterationEditor() throws Exception {
+    private CompletableFuture<Void> openEditor(String title) throws Exception {
         CompletableFuture<Void> finished = new CompletableFuture<>();
         fx(() -> {
             MenuItem item = renderMenu().getItems().stream()
-                    .filter(candidate -> "Edit Iteration Settings…".equals(candidate.getText()))
+                    .filter(candidate -> title.equals(candidate.getText()))
                     .findFirst().orElseThrow();
             assertFalse(item.isDisable());
             Platform.runLater(() -> {

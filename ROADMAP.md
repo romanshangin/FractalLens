@@ -190,8 +190,11 @@ delivery foundation should be completed first.
 
 ### P2. Product foundation and user workflows
 
-- [ ] **P2.1.** Complete iteration/Julia editing and the zoom/iteration presentation in
-  section 4.
+- [x] **P2.1.** Complete iteration/Julia editing and the zoom/iteration presentation in
+  section 4. Existing controls passed current-source portable, active-desktop
+  JavaFX/native and manual macOS acceptance. Menu-to-frame regressions verify
+  the applied iteration limit and exact Julia samples; restart checks preserve
+  both editors' values. See [acceptance and platform limits](docs/platform/MACOS_UI.md#p21-acceptance).
 - [ ] **P2.2.** Build undo/redo and bookmarks on the versioned scene format, then add
   copyable/shareable viewport presets.
 - [ ] **P2.3.** Consolidate the duplicate section 5/6 export requirements into one tiled,
@@ -297,8 +300,11 @@ Remaining items in this section follow the cross-section order in section 0.
 - [x] Add Reset View.
 - [x] Display and edit center coordinates where appropriate.
 - [x] Support native macOS trackpad pinch zoom, continuous two-finger panning, and directional swipe panning.
-- [ ] Display zoom and iteration count.
-- [ ] Add iteration controls and editable Julia parameters.
+- [x] Display zoom and iteration count in the viewport badge tooltip, including
+  the effective render budget and compact scientific notation for large values.
+- [x] Add iteration controls and editable Julia parameters. Both editors apply
+  their paired values atomically, retain invalid drafts, support reset/cancel,
+  and persist through session restore. See [P2.1 acceptance](docs/platform/MACOS_UI.md#p21-acceptance).
 - [x] Add keyboard navigation and render progress/status.
 - [x] Show user-facing errors instead of printing stack traces.
 - [ ] Add copyable/shareable viewport presets.
