@@ -221,14 +221,14 @@ class MainMenuBarFxTest {
         if (MacIterationSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
-                var sheet = AppKitIterationProbe.sheet(menuBar);
+                var sheet = AppKitParameterProbe.sheet(menuBar);
                 assertNotNull(sheet);
-                assertEquals(Integer.toString(initial.iterations().baseIterations()), AppKitIterationProbe.text(sheet, "base"));
-                assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()), AppKitIterationProbe.text(sheet, "zoom"));
-                AppKitIterationProbe.text(sheet, "base", "420");
-                AppKitIterationProbe.text(sheet, "zoom", "70");
+                assertEquals(Integer.toString(initial.iterations().baseIterations()), AppKitParameterProbe.text(sheet, "first"));
+                assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()), AppKitParameterProbe.text(sheet, "second"));
+                AppKitParameterProbe.text(sheet, "first", "420");
+                AppKitParameterProbe.text(sheet, "second", "70");
                 assertEquals(initial, view.sceneSnapshot());
-                AppKitIterationProbe.action(sheet, "apply");
+                AppKitParameterProbe.action(sheet, "apply");
                 return null;
             });
             await(() -> view.sceneSnapshot().iterations().equals(new IterationSettings(420, 70)));
@@ -263,13 +263,13 @@ class MainMenuBarFxTest {
         if (MacIterationSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
-                var sheet = AppKitIterationProbe.sheet(menuBar);
-                AppKitIterationProbe.text(sheet, "base", "420");
-                AppKitIterationProbe.text(sheet, "zoom", "70");
-                AppKitIterationProbe.action(sheet, "reset");
-                assertEquals("300", AppKitIterationProbe.text(sheet, "base"));
-                assertEquals("50", AppKitIterationProbe.text(sheet, "zoom"));
-                AppKitIterationProbe.action(sheet, "cancel");
+                var sheet = AppKitParameterProbe.sheet(menuBar);
+                AppKitParameterProbe.text(sheet, "first", "420");
+                AppKitParameterProbe.text(sheet, "second", "70");
+                AppKitParameterProbe.action(sheet, "reset");
+                assertEquals("300", AppKitParameterProbe.text(sheet, "first"));
+                assertEquals("50", AppKitParameterProbe.text(sheet, "second"));
+                AppKitParameterProbe.action(sheet, "cancel");
                 return null;
             });
             fx(() -> { assertEquals(initial, view.sceneSnapshot()); return null; });
@@ -298,22 +298,22 @@ class MainMenuBarFxTest {
         if (MacIterationSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
-                var sheet = AppKitIterationProbe.sheet(menuBar);
+                var sheet = AppKitParameterProbe.sheet(menuBar);
                 for (String invalid : List.of("not a number", "0", "2147483648", "999999999999999999999")) {
-                    AppKitIterationProbe.text(sheet, "base", invalid);
-                    AppKitIterationProbe.action(sheet, "apply");
-                    assertTrue(AppKitIterationProbe.showing(sheet));
-                    assertEquals(invalid, AppKitIterationProbe.text(sheet, "base"));
-                    assertFalse(AppKitIterationProbe.text(sheet, "error").isEmpty());
+                    AppKitParameterProbe.text(sheet, "first", invalid);
+                    AppKitParameterProbe.action(sheet, "apply");
+                    assertTrue(AppKitParameterProbe.showing(sheet));
+                    assertEquals(invalid, AppKitParameterProbe.text(sheet, "first"));
+                    assertFalse(AppKitParameterProbe.text(sheet, "error").isEmpty());
                     assertEquals(initial, view.sceneSnapshot());
                 }
-                AppKitIterationProbe.text(sheet, "base", "420");
-                AppKitIterationProbe.text(sheet, "zoom", "-1");
-                AppKitIterationProbe.action(sheet, "apply");
-                assertTrue(AppKitIterationProbe.showing(sheet));
+                AppKitParameterProbe.text(sheet, "first", "420");
+                AppKitParameterProbe.text(sheet, "second", "-1");
+                AppKitParameterProbe.action(sheet, "apply");
+                assertTrue(AppKitParameterProbe.showing(sheet));
                 assertEquals(initial, view.sceneSnapshot());
-                AppKitIterationProbe.text(sheet, "zoom", "70");
-                AppKitIterationProbe.action(sheet, "apply");
+                AppKitParameterProbe.text(sheet, "second", "70");
+                AppKitParameterProbe.action(sheet, "apply");
                 return null;
             });
             await(() -> view.sceneSnapshot().iterations().equals(new IterationSettings(420, 70)));
@@ -359,16 +359,36 @@ class MainMenuBarFxTest {
         await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
         FractalScene initial = fx(view::sceneSnapshot);
         CompletableFuture<Void> action = openEditor("Edit Julia Parameters…");
-        DialogPane pane = awaitDialog("Julia Parameters");
         JuliaParameters expected = new JuliaParameters(-0.4, 0.6);
-        fx(() -> {
-            input(pane, "julia-real").setText("-0.4");
-            input(pane, "julia-imaginary").setText("0.6");
-            assertEquals(initial, view.sceneSnapshot());
-            confirm(pane);
-            return null;
-        });
-        action.get(10, TimeUnit.SECONDS);
+        if (MacJuliaSheet.isAvailable()) {
+            action.get(10, TimeUnit.SECONDS);
+            fx(() -> {
+                var sheet = AppKitParameterProbe.juliaSheet(menuBar);
+                assertNotNull(sheet);
+                command("Render", "Edit Julia Parameters…").fire();
+                assertSame(sheet, AppKitParameterProbe.juliaSheet(menuBar));
+                command("Render", "Edit Iteration Settings…").fire();
+                assertNull(AppKitParameterProbe.sheet(menuBar));
+                assertTrue(sheet.isOpen());
+                assertEquals(Double.toString(initial.juliaParameters().real()), AppKitParameterProbe.text(sheet, "first"));
+                assertEquals(Double.toString(initial.juliaParameters().imaginary()), AppKitParameterProbe.text(sheet, "second"));
+                AppKitParameterProbe.text(sheet, "first", "-0.4");
+                AppKitParameterProbe.text(sheet, "second", "0.6");
+                assertEquals(initial, view.sceneSnapshot());
+                AppKitParameterProbe.action(sheet, "apply");
+                return null;
+            });
+        } else {
+            DialogPane pane = awaitDialog("Julia Parameters");
+            fx(() -> {
+                input(pane, "julia-real").setText("-0.4");
+                input(pane, "julia-imaginary").setText("0.6");
+                assertEquals(initial, view.sceneSnapshot());
+                confirm(pane);
+                return null;
+            });
+            action.get(10, TimeUnit.SECONDS);
+        }
         await(() -> surface().completedRender() != null
                 && surface().completedRender().scene().juliaParameters().equals(expected)
                 && !command("Render", "Edit Julia Parameters…").isDisable());
@@ -392,21 +412,41 @@ class MainMenuBarFxTest {
         FractalScene initial = fx(view::sceneSnapshot);
         var completed = fx(() -> surface().completedRender());
         CompletableFuture<Void> action = openEditor("Edit Julia Parameters…");
-        DialogPane pane = awaitDialog("Julia Parameters");
-        fx(() -> {
-            input(pane, "julia-real").setText("NaN");
-            input(pane, "julia-imaginary").setText("0.6");
-            confirm(pane);
-            assertTrue(pane.getScene().getWindow().isShowing());
-            assertEquals("NaN", input(pane, "julia-real").getText());
-            assertEquals("0.6", input(pane, "julia-imaginary").getText());
-            assertTrue(pane.lookup("#dialog-validation-error").isVisible());
-            assertEquals(initial, view.sceneSnapshot());
-            assertEquals(completed, surface().completedRender());
-            ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
-            return null;
-        });
-        action.get(10, TimeUnit.SECONDS);
+        if (MacJuliaSheet.isAvailable()) {
+            action.get(10, TimeUnit.SECONDS);
+            fx(() -> {
+                var sheet = AppKitParameterProbe.juliaSheet(menuBar);
+                AppKitParameterProbe.text(sheet, "first", "NaN");
+                AppKitParameterProbe.text(sheet, "second", "0.6");
+                AppKitParameterProbe.action(sheet, "apply");
+                assertTrue(sheet.isOpen());
+                assertEquals("NaN", AppKitParameterProbe.text(sheet, "first"));
+                assertEquals("0.6", AppKitParameterProbe.text(sheet, "second"));
+                assertFalse(AppKitParameterProbe.text(sheet, "error").isEmpty());
+                assertEquals(initial, view.sceneSnapshot());
+                assertEquals(completed, surface().completedRender());
+                AppKitParameterProbe.action(sheet, "cancel");
+                return null;
+            });
+            var sheet = fx(() -> AppKitParameterProbe.juliaSheet(menuBar));
+            await(() -> !sheet.isOpen());
+        } else {
+            DialogPane pane = awaitDialog("Julia Parameters");
+            fx(() -> {
+                input(pane, "julia-real").setText("NaN");
+                input(pane, "julia-imaginary").setText("0.6");
+                confirm(pane);
+                assertTrue(pane.getScene().getWindow().isShowing());
+                assertEquals("NaN", input(pane, "julia-real").getText());
+                assertEquals("0.6", input(pane, "julia-imaginary").getText());
+                assertTrue(pane.lookup("#dialog-validation-error").isVisible());
+                assertEquals(initial, view.sceneSnapshot());
+                assertEquals(completed, surface().completedRender());
+                ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+                return null;
+            });
+            action.get(10, TimeUnit.SECONDS);
+        }
         assertEquals(initial, fx(view::sceneSnapshot));
         assertEquals(completed, fx(() -> surface().completedRender()));
     }

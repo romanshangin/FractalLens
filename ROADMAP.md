@@ -200,9 +200,10 @@ delivery foundation should be completed first.
 - [ ] **P2.3.** Consolidate the duplicate section 5/6 export requirements into one tiled,
   cancellable high-resolution/off-screen pipeline based on `FractalScene` and
   an independent `RenderTarget`.
-- [ ] **P2.4.** Reduce dialog modality, then extend the AppKit bridge only where a native
-  sheet materially improves behavior. Finish multi-display context-menu
-  validation when suitable hardware is available.
+- [ ] **P2.4.** Make every modal window on macOS native through AppKit, including
+  parameter forms and alerts. Reduce unnecessary modality, retain JavaFX fallback
+  when the bridge is unavailable and on other platforms, and finish multi-display
+  context-menu validation when suitable hardware is available.
 - [ ] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
   exact fallback is a material user-visible cost.
 
@@ -331,16 +332,19 @@ Remaining items in this section follow the cross-section order in section 0.
   Go to Coordinates, a nonmodal palette editor with live preview, and a nonmodal
   Help window. Show export completion unobtrusively inside the application;
   reserve modal alerts for errors or decisions requiring user action.
-- [ ] Extend the planned AppKit bridge to native dialogs: use `NSAlert` sheets
-  for actionable messages and custom sheets with native fields and buttons for
-  forms such as Go to Coordinates. Retain JavaFX dialogs on other platforms.
+- [ ] Make all modal windows on macOS native: use AppKit `NSAlert` sheets for
+  actionable messages and custom sheets with native fields and buttons for
+  forms such as Go to Coordinates. Audit every remaining modal entry point,
+  including coordinate/palette editors, Help, export messages and confirmations;
+  either remove unnecessary modality or provide the appropriate native window.
+  Retain JavaFX fallback when the bridge is unavailable and on other platforms.
   `WINDOW_MODAL` and CSS alone do not provide a native AppKit sheet. Validate
   ownership, focus restoration, cancellation, input validation, appearance
   changes, full screen, and callbacks without blocking rendering.
-  The first native form is implemented for Iteration Settings using an AppKit
-  `NSPanel` sheet and native fields/buttons, with JavaFX fallback. Other forms,
-  native alerts and the remaining platform acceptance checks are still open;
-  see `MACOS_UI.md`.
+  Iteration Settings and Julia Parameters use a shared AppKit `NSPanel` sheet
+  with native fields/buttons and JavaFX fallback. Other forms, native alerts and
+  the remaining platform acceptance checks are still open; see
+  `docs/platform/MACOS_UI.md`.
 
 ## 5. Add history and reproducibility
 

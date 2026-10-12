@@ -53,16 +53,16 @@ class MacIterationSheetFxTest {
         try {
             for (String appearance : java.util.List.of("NSAppearanceNameAqua", "NSAppearanceNameDarkAqua")) {
                 fx(() -> {
-                    AppKitIterationProbe.appearance(sheet, appearance);
-                    AppKitIterationProbe.text(sheet, "base", "invalid draft");
-                    AppKitIterationProbe.action(sheet, "apply");
+                    AppKitParameterProbe.appearance(sheet, appearance);
+                    AppKitParameterProbe.text(sheet, "first", "invalid draft");
+                    AppKitParameterProbe.action(sheet, "apply");
                     assertTrue(sheet.isOpen());
-                    assertTrue(AppKitIterationProbe.showing(sheet));
-                    assertEquals("invalid draft", AppKitIterationProbe.text(sheet, "base"));
+                    assertTrue(AppKitParameterProbe.showing(sheet));
+                    assertEquals("invalid draft", AppKitParameterProbe.text(sheet, "first"));
                     return null;
                 });
             }
-            fx(() -> { AppKitIterationProbe.action(sheet, "cancel"); return null; });
+            fx(() -> { AppKitParameterProbe.action(sheet, "cancel"); return null; });
             fx(() -> { assertEquals(0, applied.get()); return null; });
         } finally { fx(() -> { sheet.close(); owner.close(); return null; }); }
     }
@@ -80,7 +80,7 @@ class MacIterationSheetFxTest {
             fx(() -> {
                 var sheet = MacIterationSheet.show(owner, new IterationSettings(), ignored -> applied.incrementAndGet());
                 assertTrue(sheet.isOpen());
-                AppKitIterationProbe.action(sheet, "apply");
+                AppKitParameterProbe.action(sheet, "apply");
                 sheet.close();
                 sheet.close();
                 assertFalse(sheet.isOpen());

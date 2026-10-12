@@ -1,20 +1,21 @@
 #import <Cocoa/Cocoa.h>
 #include <jni.h>
-#include <limits.h>
 
-@interface FractalIterationSession : NSObject <NSWindowDelegate, NSTextFieldDelegate>
+@interface FractalParameterSession : NSObject <NSWindowDelegate, NSTextFieldDelegate>
 @property NSPanel *panel;
 @property NSWindow *owner;
-@property NSTextField *base;
-@property NSTextField *zoom;
+@property NSTextField *first;
+@property NSTextField *second;
 @property NSTextField *error;
 @property BOOL cancelled;
 @property BOOL finished;
-@property int defaultBase;
-@property int defaultZoom;
+@property NSString *defaultFirst;
+@property NSString *defaultSecond;
+@property NSString *validationError;
 @property JavaVM *vm;
 @property jobject callback;
 @property jmethodID completion;
+@property jmethodID validation;
 @end
 
 static JNIEnv *sheetEnvironment(JavaVM *vm, BOOL *attached) {
@@ -35,32 +36,53 @@ static BOOL sheetMainThread(JNIEnv *env) {
     return NO;
 }
 
-static BOOL parseCount(NSString *draft, BOOL positive, int *value) {
-    NSString *text = [draft stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    const char *bytes = text.UTF8String;
-    if (!bytes || !*bytes) return NO;
-    if (*bytes == '+') bytes++;
-    if (!*bytes) return NO;
-    long long result = 0;
-    for (; *bytes; bytes++) {
-        if (*bytes < '0' || *bytes > '9') return NO;
-        result = result * 10 + (*bytes - '0');
-        if (result > INT_MAX) return NO;
-    }
-    if (positive && result == 0) return NO;
-    *value = (int)result;
-    return YES;
+static jstring javaString(JNIEnv *env, NSString *text) {
+    NSUInteger length = text.length;
+    unichar *characters = malloc(length * sizeof(unichar));
+    if (length && !characters) return NULL;
+    [text getCharacters:characters range:NSMakeRange(0, length)];
+    jstring result = (*env)->NewString(env, (const jchar *)characters, (jsize)length);
+    free(characters);
+    return result;
 }
 
-@implementation FractalIterationSession
+static NSString *nativeString(JNIEnv *env, jstring text) {
+    const jchar *characters = (*env)->GetStringChars(env, text, NULL);
+    if (!characters) return nil;
+    NSString *result = [NSString stringWithCharacters:(const unichar *)characters
+                                              length:(NSUInteger)(*env)->GetStringLength(env, text)];
+    (*env)->ReleaseStringChars(env, text, characters);
+    return result;
+}
+
+// Parsing stays in Java so the native and fallback editors accept identical values.
+static jint invalidField(FractalParameterSession *session) {
+    BOOL attached;
+    JNIEnv *env = sheetEnvironment(session.vm, &attached);
+    if (!env) return 1;
+    jstring first = javaString(env, session.first.stringValue);
+    jstring second = javaString(env, session.second.stringValue);
+    jint result = 1;
+    if (first && second && !(*env)->ExceptionCheck(env))
+        result = (*env)->CallIntMethod(env, session.callback, session.validation, first, second);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionDescribe(env);
+        (*env)->ExceptionClear(env);
+        result = 1;
+    }
+    if (first) (*env)->DeleteLocalRef(env, first);
+    if (second) (*env)->DeleteLocalRef(env, second);
+    if (attached) (*session.vm)->DetachCurrentThread(session.vm);
+    return result;
+}
+
+@implementation FractalParameterSession
 - (void)apply:(id)sender {
     (void)sender;
-    int base = 0, zoom = 0;
-    BOOL validBase = parseCount(self.base.stringValue, YES, &base);
-    BOOL validZoom = parseCount(self.zoom.stringValue, NO, &zoom);
-    if (!validBase || !validZoom) {
-        self.error.stringValue = @"Enter a positive base count and a non-negative zoom increment.";
-        NSTextField *invalid = validBase ? self.zoom : self.base;
+    jint invalidIndex = invalidField(self);
+    if (invalidIndex != 0) {
+        self.error.stringValue = self.validationError;
+        NSTextField *invalid = invalidIndex == 1 ? self.first : self.second;
         [self.panel makeFirstResponder:invalid];
         [invalid selectText:nil];
         return;
@@ -73,16 +95,15 @@ static BOOL parseCount(NSString *draft, BOOL positive, int *value) {
 }
 - (void)reset:(id)sender {
     (void)sender;
-    self.base.stringValue = [NSString stringWithFormat:@"%d", self.defaultBase];
-    self.zoom.stringValue = [NSString stringWithFormat:@"%d", self.defaultZoom];
+    self.first.stringValue = self.defaultFirst;
+    self.second.stringValue = self.defaultSecond;
     self.error.stringValue = @"";
-    [self.panel makeFirstResponder:self.base];
-    [self.base selectText:nil];
+    [self.panel makeFirstResponder:self.first];
+    [self.first selectText:nil];
 }
 - (void)controlTextDidChange:(NSNotification *)notification {
     (void)notification;
-    int base, zoom;
-    if (parseCount(self.base.stringValue, YES, &base) && parseCount(self.zoom.stringValue, NO, &zoom))
+    if (invalidField(self) == 0)
         self.error.stringValue = @"";
 }
 - (BOOL)windowShouldClose:(NSWindow *)sender {
@@ -110,50 +131,56 @@ static NSButton *button(NSString *title, id target, SEL action) {
     return view;
 }
 
-JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacIterationSheet_open
-(JNIEnv *env, jobject callback, jlong windowHandle, jint base, jint zoom, jint defaultBase, jint defaultZoom) {
+JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
+(JNIEnv *env, jobject callback, jlong windowHandle, jstring title, jstring hintText,
+ jstring firstLabel, jstring secondLabel, jstring firstId, jstring secondId,
+ jstring first, jstring second, jstring defaultFirst, jstring defaultSecond, jstring errorText) {
     if (!sheetMainThread(env)) return 0;
     NSWindow *owner = (__bridge NSWindow *)(void *)(intptr_t)windowHandle;
     if (!owner.isVisible || owner.attachedSheet) return 0;
-    FractalIterationSession *session = [FractalIterationSession new];
+    FractalParameterSession *session = [FractalParameterSession new];
     JavaVM *vm = NULL;
     (*env)->GetJavaVM(env, &vm);
     session.vm = vm;
-    session.completion = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, callback), "completed", "(ZII)V");
+    session.completion = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, callback), "completed", "(ZLjava/lang/String;Ljava/lang/String;)V");
     if (!session.completion) return 0;
+    session.validation = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, callback),
+            "invalidField", "(Ljava/lang/String;Ljava/lang/String;)I");
+    if (!session.validation) return 0;
     session.callback = (*env)->NewGlobalRef(env, callback);
     if (!session.callback) return 0;
     session.owner = owner;
-    session.defaultBase = defaultBase;
-    session.defaultZoom = defaultZoom;
+    session.defaultFirst = nativeString(env, defaultFirst);
+    session.defaultSecond = nativeString(env, defaultSecond);
+    session.validationError = nativeString(env, errorText);
     session.panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 480, 250)
             styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
             backing:NSBackingStoreBuffered defer:NO];
-    session.panel.title = @"Iteration Settings";
+    session.panel.title = nativeString(env, title);
     session.panel.releasedWhenClosed = NO;
     session.panel.delegate = session;
     session.panel.backgroundColor = NSColor.windowBackgroundColor;
-    NSTextField *heading = label(@"Iteration Settings");
+    NSTextField *heading = label(session.panel.title);
     heading.font = [NSFont boldSystemFontOfSize:15];
-    NSTextField *hint = label(@"Set the base render budget and how much it grows as you zoom in.");
+    NSTextField *hint = label(nativeString(env, hintText));
     hint.textColor = NSColor.secondaryLabelColor;
-    session.base = [NSTextField textFieldWithString:[NSString stringWithFormat:@"%d", base]];
-    session.zoom = [NSTextField textFieldWithString:[NSString stringWithFormat:@"%d", zoom]];
-    session.base.identifier = @"iteration-base";
-    session.zoom.identifier = @"iteration-zoom";
-    session.base.accessibilityLabel = @"Base iterations";
-    session.zoom.accessibilityLabel = @"Additional per zoom level";
-    session.base.delegate = session;
-    session.zoom.delegate = session;
-    [(NSTextFieldCell *)session.base.cell setSendsActionOnEndEditing:NO];
-    [(NSTextFieldCell *)session.zoom.cell setSendsActionOnEndEditing:NO];
-    session.base.target = session;
-    session.base.action = @selector(apply:);
-    session.zoom.target = session;
-    session.zoom.action = @selector(apply:);
+    session.first = [NSTextField textFieldWithString:nativeString(env, first)];
+    session.second = [NSTextField textFieldWithString:nativeString(env, second)];
+    session.first.identifier = nativeString(env, firstId);
+    session.second.identifier = nativeString(env, secondId);
+    session.first.accessibilityLabel = nativeString(env, firstLabel);
+    session.second.accessibilityLabel = nativeString(env, secondLabel);
+    session.first.delegate = session;
+    session.second.delegate = session;
+    [(NSTextFieldCell *)session.first.cell setSendsActionOnEndEditing:NO];
+    [(NSTextFieldCell *)session.second.cell setSendsActionOnEndEditing:NO];
+    session.first.target = session;
+    session.first.action = @selector(apply:);
+    session.second.target = session;
+    session.second.action = @selector(apply:);
     NSGridView *grid = [NSGridView gridViewWithViews:@[
-        @[label(@"Base iterations"), session.base],
-        @[label(@"Additional per zoom level"), session.zoom]]];
+        @[label(nativeString(env, firstLabel)), session.first],
+        @[label(nativeString(env, secondLabel)), session.second]]];
     grid.rowSpacing = 12;
     grid.columnSpacing = 12;
     [grid columnAtIndex:0].width = 180;
@@ -188,25 +215,27 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacIterationSheet_open
         [session.error.widthAnchor constraintEqualToAnchor:body.widthAnchor],
         [session.error.heightAnchor constraintGreaterThanOrEqualToConstant:32],
         [actions.widthAnchor constraintEqualToAnchor:body.widthAnchor]]];
-    session.base.nextKeyView = session.zoom;
-    session.zoom.nextKeyView = reset;
+    session.first.nextKeyView = session.second;
+    session.second.nextKeyView = reset;
     reset.nextKeyView = cancel;
     cancel.nextKeyView = apply;
-    apply.nextKeyView = session.base;
-    session.panel.initialFirstResponder = session.base;
+    apply.nextKeyView = session.first;
+    session.panel.initialFirstResponder = session.first;
     [owner beginSheet:session.panel completionHandler:^(NSModalResponse response) {
         session.finished = YES;
         [session.panel orderOut:nil];
         if (session.cancelled) return;
-        int resultBase = 0, resultZoom = 0;
-        BOOL accepted = response == NSModalResponseOK
-                && parseCount(session.base.stringValue, YES, &resultBase)
-                && parseCount(session.zoom.stringValue, NO, &resultZoom);
+        BOOL accepted = response == NSModalResponseOK && invalidField(session) == 0;
         BOOL attached;
         JNIEnv *callbackEnv = sheetEnvironment(session.vm, &attached);
         if (callbackEnv) {
-            (*callbackEnv)->CallVoidMethod(callbackEnv, session.callback, session.completion,
-                    (jboolean)accepted, (jint)resultBase, (jint)resultZoom);
+            jstring resultFirst = javaString(callbackEnv, session.first.stringValue);
+            jstring resultSecond = javaString(callbackEnv, session.second.stringValue);
+            if (resultFirst && resultSecond && !(*callbackEnv)->ExceptionCheck(callbackEnv))
+                (*callbackEnv)->CallVoidMethod(callbackEnv, session.callback, session.completion,
+                        (jboolean)accepted, resultFirst, resultSecond);
+            if (resultFirst) (*callbackEnv)->DeleteLocalRef(callbackEnv, resultFirst);
+            if (resultSecond) (*callbackEnv)->DeleteLocalRef(callbackEnv, resultSecond);
             if ((*callbackEnv)->ExceptionCheck(callbackEnv)) {
                 (*callbackEnv)->ExceptionDescribe(callbackEnv);
                 (*callbackEnv)->ExceptionClear(callbackEnv);
@@ -214,15 +243,15 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacIterationSheet_open
             if (attached) (*session.vm)->DetachCurrentThread(session.vm);
         }
     }];
-    [session.base selectText:nil];
+    [session.first selectText:nil];
     return (jlong)(intptr_t)(__bridge_retained void *)session;
 }
 
-JNIEXPORT void JNICALL Java_com_shangin_fractal_ui_MacIterationSheet_dispose
+JNIEXPORT void JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_dispose
 (JNIEnv *env, jclass type, jlong handle) {
     (void)type;
     if (!sheetMainThread(env) || !handle) return;
-    FractalIterationSession *session = (__bridge_transfer FractalIterationSession *)(void *)(intptr_t)handle;
+    FractalParameterSession *session = (__bridge_transfer FractalParameterSession *)(void *)(intptr_t)handle;
     session.cancelled = YES;
     if (!session.finished) [session.owner endSheet:session.panel returnCode:NSModalResponseCancel];
 }
