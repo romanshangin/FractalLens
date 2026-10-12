@@ -51,6 +51,7 @@ final class MainMenuBar extends MenuBar {
     private boolean rendering = true;
     private FractalPreset currentFractal;
     private MacIterationSheet iterationSheet;
+    private MacJuliaSheet juliaSheet;
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalPreset initialFractal,
                 PalettePreset initialPalette, Runnable onExport) {
@@ -200,9 +201,9 @@ final class MainMenuBar extends MenuBar {
     }
 
     private void showIterations() {
+        if (parameterSheetOpen()) return;
         if (MacIterationSheet.isAvailable()) {
             try {
-                if (iterationSheet != null && iterationSheet.isOpen()) return;
                 iterationSheet = MacIterationSheet.show(stage, fractalView.sceneSnapshot().iterations(),
                         fractalView::setIterations);
                 return;
@@ -217,8 +218,24 @@ final class MainMenuBar extends MenuBar {
 
     private void showJuliaParameters() {
         if (currentFractal != FractalPreset.JULIA) return;
+        if (parameterSheetOpen()) return;
+        if (MacJuliaSheet.isAvailable()) {
+            try {
+                juliaSheet = MacJuliaSheet.show(stage, fractalView.sceneSnapshot().juliaParameters(),
+                        fractalView::setJuliaParameters);
+                return;
+            } catch (ReflectiveOperationException | LinkageError | RuntimeException error) {
+                System.getLogger(MainMenuBar.class.getName()).log(System.Logger.Level.WARNING,
+                        "Native Julia sheet unavailable; using JavaFX dialog", error);
+            }
+        }
         FractalDialogs.juliaParameters(stage, fractalView.sceneSnapshot().juliaParameters())
                 .ifPresent(fractalView::setJuliaParameters);
+    }
+
+    private boolean parameterSheetOpen() {
+        return iterationSheet != null && iterationSheet.isOpen()
+                || juliaSheet != null && juliaSheet.isOpen();
     }
 
     private void showCoordinates() {

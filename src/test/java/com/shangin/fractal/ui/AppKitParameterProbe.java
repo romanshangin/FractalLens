@@ -8,32 +8,38 @@ import java.lang.foreign.FunctionDescriptor;
 import static java.lang.foreign.ValueLayout.*;
 
 /** Test-only inspection of the native sheet and its real target/action handlers. */
-final class AppKitIterationProbe {
+final class AppKitParameterProbe {
     static MacIterationSheet sheet(MainMenuBar menu) throws Exception {
         var field = MainMenuBar.class.getDeclaredField("iterationSheet");
         field.setAccessible(true);
         return (MacIterationSheet) field.get(menu);
     }
 
-    static MemorySegment session(MacIterationSheet sheet) throws Exception {
-        var field = MacIterationSheet.class.getDeclaredField("handle");
+    static MacJuliaSheet juliaSheet(MainMenuBar menu) throws Exception {
+        var field = MainMenuBar.class.getDeclaredField("juliaSheet");
+        field.setAccessible(true);
+        return (MacJuliaSheet) field.get(menu);
+    }
+
+    static MemorySegment session(MacParameterSheet<?> sheet) throws Exception {
+        var field = MacParameterSheet.class.getDeclaredField("handle");
         field.setAccessible(true);
         long handle = field.getLong(sheet);
-        if (handle == 0) throw new AssertionError("Native iteration sheet must be open");
+        if (handle == 0) throw new AssertionError("Native parameter sheet must be open");
         return MemorySegment.ofAddress(handle);
     }
 
-    static MemorySegment field(MacIterationSheet sheet, String name) throws Exception {
+    static MemorySegment field(MacParameterSheet<?> sheet, String name) throws Exception {
         return (MemorySegment) AppKitMenuProbe.message(session(sheet), name, ADDRESS);
     }
 
-    static String text(MacIterationSheet sheet, String name) throws Exception {
+    static String text(MacParameterSheet<?> sheet, String name) throws Exception {
         var string = (MemorySegment) AppKitMenuProbe.message(field(sheet, name), "stringValue", ADDRESS);
         var bytes = (MemorySegment) AppKitMenuProbe.message(string, "UTF8String", ADDRESS);
         return bytes.reinterpret(Long.MAX_VALUE).getString(0);
     }
 
-    static void text(MacIterationSheet sheet, String name, String value) throws Exception {
+    static void text(MacParameterSheet<?> sheet, String name, String value) throws Exception {
         try (Arena arena = Arena.ofConfined()) {
             var type = objcClass("NSString", arena);
             var replacement = (MemorySegment) AppKitMenuProbe.message(type, "stringWithUTF8String:", ADDRESS,
@@ -51,16 +57,16 @@ final class AppKitIterationProbe {
         catch (Throwable failure) { throw new AssertionError(failure); }
     }
 
-    static void action(MacIterationSheet sheet, String action) throws Exception {
+    static void action(MacParameterSheet<?> sheet, String action) throws Exception {
         AppKitMenuProbe.message(session(sheet), action + ":", null,
                 new java.lang.foreign.MemoryLayout[]{ADDRESS}, MemorySegment.NULL);
     }
 
-    static boolean showing(MacIterationSheet sheet) throws Exception {
+    static boolean showing(MacParameterSheet<?> sheet) throws Exception {
         return (byte) AppKitMenuProbe.message(field(sheet, "panel"), "isVisible", JAVA_BYTE) != 0;
     }
 
-    static void appearance(MacIterationSheet sheet, String name) throws Exception {
+    static void appearance(MacParameterSheet<?> sheet, String name) throws Exception {
         try (Arena arena = Arena.ofConfined()) {
             var appKit = SymbolLookup.libraryLookup("/System/Library/Frameworks/AppKit.framework/AppKit", Arena.global());
             var string = appKit.find(name).orElseThrow().reinterpret(ADDRESS.byteSize()).get(ADDRESS, 0);

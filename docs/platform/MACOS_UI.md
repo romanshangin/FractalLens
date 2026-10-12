@@ -501,8 +501,9 @@ including opening and cancelling in full screen and returning to windowed mode.
 Light/high-contrast layout, live OS preference changes, Increase Contrast,
 Reduce Transparency,
 multiple displays, VoiceOver, Intel macOS and the Windows
-and Linux fallback runtime remain unverified. Other dialogs are still JavaFX;
-this first native form does not establish application-wide HIG compliance.
+and Linux fallback runtime remain unverified. Other dialogs were still JavaFX
+at this validation point; this first native form did not establish
+application-wide HIG compliance.
 
 Final validation on 2026-10-04: the portable suite reported 500 tests, zero
 failures/errors and 69 opt-in skips. The targeted desktop suite reported 18
@@ -514,3 +515,64 @@ described above.
 mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-sheet-cache" \
   -DreuseForks=false -Dtest=MainMenuBarFxTest,FractalDialogsFxTest,MacIterationSheetFxTest,MacContextMenuFxTest test
 ```
+
+### Native Julia parameters sheet
+
+On macOS, Edit Julia Parameters opens an owner-associated AppKit `NSPanel`
+sheet using the same native presentation and lifecycle as Iteration Settings.
+`MacParameterSheet` and `FractalParameterSheet.m` share the native controls,
+semantic colors, asynchronous completion and owner-closure disposal. The
+editors retain separate value types, defaults and validation rules.
+
+Julia's Real and Imaginary fields start with the current scene constant.
+Reset to Defaults changes both drafts to `-0.8` and `0.156` without applying
+or closing. Apply validates both components with Java's finite-double parsing
+contract before atomically updating the scene on the JavaFX thread. Empty,
+malformed, NaN, infinite and overflowing values keep the sheet open with an
+inline error and the invalid field selected. Return applies; Escape and Cancel
+leave the scene unchanged. Closing the owner or disposing a session suppresses
+queued Apply results. Reopening an active editor keeps the existing sheet;
+opening the other parameter editor is ignored until that sheet closes.
+JavaFX remains the fallback on other platforms or if native presentation fails.
+
+The roadmap requires every modal window on macOS to use AppKit, while retaining
+the JavaFX fallback. Coordinate/palette editors, Help and application alerts
+still require native conversion or removal of unnecessary modality. The overall
+requirement remains open.
+
+Validation on 2026-10-12 used macOS 27.0.1 on Apple Silicon, JavaFX 26.0.2,
+Maven JDK 26.0.2 (Java release target 25), and desktop launcher JDK 25
+(update 4, patch 1):
+
+- `mvn clean test` passed with 507 tests, no failures/errors and 76 opt-in
+  skips. The final `mvn test` after the overlapping-editor guard passed with
+  the same counts.
+- The active-desktop suite below passed 22 tests with no failures/errors/skips.
+  It covers both native editors, inherited Aqua/Dark Aqua, finite Julia input,
+  reset/cancel, queued-result suppression, duplicate/cross-editor opening,
+  JavaFX forms, and exact completed-frame Julia samples against a CPU reference.
+- An isolated source copy with the `macos-native-menu` profile disabled passed
+  all 15 `MainMenuBarFxTest` and `FractalDialogsFxTest` tests. The missing native
+  library warning was expected; this checks fallback on macOS rather than
+  Windows/Linux runtime behavior.
+- A separate temporary development bundle running the candidate application
+  and a temporary session store confirmed the dark native layout, initial
+  selection, Tab, Return, inline NaN validation/correction, Reset followed by
+  Apply or Cancel, Escape, full-screen opening/cancellation and return to the
+  window. Applied values were confirmed by reopening the editor and by the
+  temporary saved scene. The user's open application/session was preserved.
+  The first custom launch omitted module exports needed for application-menu
+  naming; repeating with the configured exports removed those Java exceptions.
+  macOS emitted a sandbox-extension diagnostic for the temporary bundle, without
+  preventing the checked interactions.
+
+```sh
+mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-native-julia-cache" \
+  -DreuseForks=false \
+  -Dtest=MacJuliaSheetFxTest,MacIterationSheetFxTest,MainMenuBarFxTest,FractalDialogsFxTest test
+```
+
+Aqua/Dark Aqua inheritance and draft preservation were checked automatically;
+light layout was not visually inspected. Live OS preference changes, Increase
+Contrast, Reduce Transparency, VoiceOver, multiple displays, Intel macOS, and
+Windows/Linux fallback execution remain unverified.
