@@ -299,8 +299,9 @@ export function createCodexRunner(options: {
       const result = spawnSync(command[0], [
         ...command.slice(1), 'exec', '--model', role.model,
         '--config', `model_reasoning_effort="${role.effort}"`,
-        '--sandbox', role.sandbox,
-        ...(role.sandbox === 'read-only' ? ['--config', 'approval_policy="never"'] : ['--approve-for-me']), '--ephemeral',
+        ...(role.sandbox === 'read-only'
+          ? ['--sandbox', 'read-only', '--config', 'approval_policy="never"']
+          : ['--approve-for-me']), '--ephemeral',
         '--cd', repository,
         '--output-last-message', output, '-',
       ], { cwd: repository, input: prompt, stdio: ['pipe', log, log], timeout: timeoutMs, killSignal: 'SIGKILL', shell: false });
