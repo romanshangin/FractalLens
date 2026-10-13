@@ -60,7 +60,7 @@ class MacSystemMenuFxTest {
             });
             await(stage::isFocused);
             await(() -> ((FractalView) view.getCenter()).hasCompletedFrame());
-            var expected = List.of("File", "Edit", "View", "Fractal", "Go to", "Color", "Render", "Window", "Help");
+            var expected = List.of("File", "Edit", "View", "Fractal", "Go to", "Bookmarks", "Color", "Render", "Window", "Help");
             assertEquals(expected, nativeCommands());
 
             // An unowned window with no menu exercises Glass's application-default

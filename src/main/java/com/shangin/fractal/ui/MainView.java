@@ -174,6 +174,7 @@ public class MainView extends BorderPane {
                     + exception.getMessage());
         }
         exportService.close();
+        menuBar.close();
         fractalView.close();
     }
 }

@@ -46,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @EnabledIfSystemProperty(named = "fractal.fx.tests", matches = "true")
 class MainMenuBarFxTest {
+    @org.junit.jupiter.api.io.TempDir java.nio.file.Path bookmarkDirectory;
     private Stage stage;
     private FractalView view;
     private MainMenuBar menuBar;
@@ -67,7 +68,8 @@ class MainMenuBarFxTest {
         fx(() -> {
             stage = new Stage();
             view = new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE, false);
-            menuBar = new MainMenuBar(stage, view, FractalPreset.MANDELBROT, PalettePreset.ICE, () -> {});
+            menuBar = new MainMenuBar(stage, view, FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE), () -> {},
+                    new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory));
             BorderPane root = new BorderPane(view);
             root.setTop(menuBar);
             stage.setScene(new Scene(root, 320, 240));
@@ -83,6 +85,7 @@ class MainMenuBarFxTest {
             Window.getWindows().stream()
                     .filter(window -> window != stage)
                     .toList().forEach(Window::hide);
+            menuBar.close();
             view.close();
             stage.close();
             return null;
@@ -140,7 +143,9 @@ class MainMenuBarFxTest {
         fx(() -> {
             view.close();
             view = new FractalView(customized, true);
-            menuBar = new MainMenuBar(stage, view, customized, () -> {});
+            menuBar.close();
+            menuBar = new MainMenuBar(stage, view, customized, () -> {},
+                    new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory));
             BorderPane root = (BorderPane) stage.getScene().getRoot();
             root.setCenter(view);
             root.setTop(menuBar);
@@ -184,6 +189,145 @@ class MainMenuBarFxTest {
         await(() -> !colorItem("Reset Colors to Defaults").isDisable());
         assertEquals(before, fx(view::sceneSnapshot));
         assertArrayEquals(originalPixels, fx(this::displayedPixels));
+    }
+
+    @Test
+    void sceneUndoRedoRestoresPixelsMenusAndDiscardsNewBranch() throws Exception {
+        FractalScene initial = fx(view::sceneSnapshot);
+        int[] pixels = fx(this::displayedPixels);
+        fx(() -> { command("Fractal", "Julia").fire(); return null; });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
+        FractalScene julia = fx(view::sceneSnapshot);
+        fx(() -> { command("Edit", "Undo").fire(); return null; });
+        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        fx(() -> {
+            assertEquals(initial, view.sceneSnapshot());
+            assertArrayEquals(pixels, displayedPixels());
+            assertTrue(((RadioMenuItem) command("Fractal", "Mandelbrot")).isSelected());
+            assertTrue(command("Render", "Edit Julia Parameters…").isDisable());
+            assertFalse(command("Edit", "Redo").isDisable());
+            return null;
+        });
+        fx(() -> { command("Edit", "Redo").fire(); return null; });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
+        assertEquals(julia, fx(view::sceneSnapshot));
+        fx(() -> {
+            command("Edit", "Undo").fire();
+            view.setIterations(new IterationSettings(420, 70));
+            assertTrue(command("Edit", "Redo").isDisable());
+            command("Edit", "Undo").fire();
+            return null;
+        });
+        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        assertEquals(initial, fx(view::sceneSnapshot));
+        assertArrayEquals(pixels, fx(this::displayedPixels));
+    }
+
+    @Test
+    void clipboardPresetAndBookmarkRestoreCompleteScene() throws Exception {
+        FractalScene initial = fx(view::sceneSnapshot);
+        fx(() -> { command("View", "Copy Scene Preset").fire(); view.setFractal(FractalPreset.JULIA); return null; });
+        fx(() -> { command("View", "Apply Scene Preset from Clipboard").fire(); return null; });
+        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        assertEquals(initial, fx(view::sceneSnapshot));
+        await(() -> !menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
+                .findFirst().orElseThrow().isDisable());
+        var save = fireLater(commandFx("Bookmarks", "Add Bookmark…"));
+        DialogPane pane = awaitDialog("Add Bookmark");
+        fx(() -> { confirm(pane); assertTrue(pane.lookup("#dialog-validation-error").isVisible()); return null; });
+        fx(() -> { input(pane, "bookmark-name").setText("My scene"); confirm(pane); return null; });
+        save.get(10, TimeUnit.SECONDS);
+        await(() -> menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
+                .findFirst().orElseThrow().getItems().stream().anyMatch(item -> "My scene".equals(item.getText())));
+        fx(() -> { view.setFractal(FractalPreset.JULIA); command("Bookmarks/My scene", "Restore").fire(); return null; });
+        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        assertEquals(initial, fx(view::sceneSnapshot));
+        assertEquals(initial, new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory).load().getFirst().scene());
+        fx(() -> { command("Bookmarks/My scene", "Delete").fire(); return null; });
+        await(() -> !menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
+                .findFirst().orElseThrow().isDisable());
+        assertTrue(new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory).load().isEmpty());
+    }
+
+    @Test
+    void pinchWithIntermediateRenderIsOneUndoAction() throws Exception {
+        FractalScene initial = fx(view::sceneSnapshot);
+        fx(() -> {
+            view.fireEvent(new javafx.scene.input.ZoomEvent(javafx.scene.input.ZoomEvent.ZOOM_STARTED,
+                    100, 80, 100, 80, false, false, false, false, false, false, 1, 1, null));
+            view.fireEvent(new javafx.scene.input.ZoomEvent(javafx.scene.input.ZoomEvent.ZOOM,
+                    100, 80, 100, 80, false, false, false, false, false, false, 1.2, 1.2, null));
+            return null;
+        });
+        await(() -> !view.sceneSnapshot().viewport().equals(initial.viewport()) && view.isLatencyIdle());
+        fx(() -> {
+            view.fireEvent(new javafx.scene.input.ZoomEvent(javafx.scene.input.ZoomEvent.ZOOM,
+                    100, 80, 100, 80, false, false, false, false, false, false, 1.2, 1.44, null));
+            view.fireEvent(new javafx.scene.input.ZoomEvent(javafx.scene.input.ZoomEvent.ZOOM_FINISHED,
+                    100, 80, 100, 80, false, false, false, false, false, false, 1, 1.44, null));
+            view.undoScene();
+            return null;
+        });
+        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        assertEquals(initial, fx(view::sceneSnapshot));
+        assertFalse(fx(view::canUndo));
+        assertTrue(fx(view::canRedo));
+    }
+
+    @Test
+    void textUndoKeepsSceneHistoryUntouched() throws Exception {
+        fx(() -> { view.setIterations(new IterationSettings(420, 70)); return null; });
+        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        FractalScene scene = fx(view::sceneSnapshot);
+        TextField field = fx(() -> {
+            TextField input = new TextField("draft");
+            ((BorderPane) stage.getScene().getRoot()).setBottom(input);
+            stage.toFront(); stage.requestFocus(); input.requestFocus();
+            input.appendText(" changed");
+            return input;
+        });
+        await(() -> field.isFocused() && stage.isFocused());
+        fx(() -> {
+            command("Edit", "Undo").fire();
+            assertEquals("draft", field.getText());
+            assertEquals(scene, view.sceneSnapshot());
+            assertTrue(view.canUndo());
+            command("Edit", "Redo").fire();
+            assertEquals("draft changed", field.getText());
+            return null;
+        });
+    }
+
+    private MenuItem commandFx(String menu, String title) throws Exception {
+        return fx(() -> command(menu, title));
+    }
+
+    @Test
+    void invalidClipboardLeavesSceneAndHistoryUnchanged() throws Exception {
+        FractalScene initial = fx(view::sceneSnapshot);
+        fx(() -> {
+            var content = new javafx.scene.input.ClipboardContent();
+            content.putString("{\"schemaVersion\":999}");
+            javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
+            command("View", "Apply Scene Preset from Clipboard").fire();
+            assertEquals(initial, view.sceneSnapshot());
+            assertFalse(view.canUndo());
+            return null;
+        });
+        DialogPane error = awaitDialog("Invalid scene preset");
+        fx(() -> { ((Button) error.lookupButton(ButtonType.OK)).fire(); return null; });
+    }
+
+    @Test
+    void pendingZoomCanBeUndoneAndResizeDoesNotAddHistory() throws Exception {
+        FractalScene initial = fx(view::sceneSnapshot);
+        fx(() -> { view.zoom(true); view.undoScene(); return null; });
+        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        assertEquals(initial, fx(view::sceneSnapshot));
+        fx(() -> { stage.setWidth(stage.getWidth() + 30); return null; });
+        await(() -> view.isLatencyIdle());
+        assertFalse(fx(view::canUndo));
+        assertTrue(fx(view::canRedo));
     }
 
     private int[] displayedPixels() {
@@ -516,6 +660,15 @@ class MainMenuBarFxTest {
                 }
             });
             return null;
+        });
+        return finished;
+    }
+
+    private CompletableFuture<Void> fireLater(MenuItem item) {
+        CompletableFuture<Void> finished = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            try { item.fire(); finished.complete(null); }
+            catch (Throwable failure) { finished.completeExceptionally(failure); }
         });
         return finished;
     }

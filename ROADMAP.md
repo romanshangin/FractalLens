@@ -196,7 +196,9 @@ delivery foundation should be completed first.
   the applied iteration limit and exact Julia samples; restart checks preserve
   both editors' values. See [acceptance and platform limits](docs/platform/MACOS_UI.md#p21-acceptance).
 - [ ] **P2.2.** Build undo/redo and bookmarks on the versioned scene format, then add
-  copyable/shareable viewport presets.
+  copyable/shareable viewport presets. Implementation and regression coverage
+  are present; visible workflow acceptance remains pending. See
+  [scene workflows](docs/architecture/SESSION_FORMAT.md#scene-history-bookmarks-and-shared-presets-p22).
 - [ ] **P2.3.** Consolidate the duplicate section 5/6 export requirements into one tiled,
   cancellable high-resolution/off-screen pipeline based on `FractalScene` and
   an independent `RenderTarget`.

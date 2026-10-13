@@ -17,6 +17,7 @@ import com.shangin.fractal.render.FractalRenderService;
 import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.SceneHistory;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import com.shangin.fractal.scene.AntialiasSettings;
@@ -73,6 +74,11 @@ public class FractalView extends StackPane {
     private final FractalCamera camera;
     private final FractalContextMenu contextMenu;
     private FractalScene scene;
+    private final SceneHistory history;
+    private Consumer<FractalScene> sceneChangedHandler = ignored -> {};
+    private boolean restoringScene;
+    private boolean resizingScene;
+    private boolean continuousGesture;
     private RenderPriority renderPriority = RenderPriority.center();
     private Consumer<Viewport> viewportChangedHandler = ignored -> {};
     private Consumer<Boolean> renderingChangedHandler = ignored -> {};
@@ -156,6 +162,7 @@ public class FractalView extends StackPane {
                 : new FractalRenderController(fractalSurface, renderService, recolorOperation);
         this.loadingScreenEnabled = loadingScreenEnabled;
         scene = java.util.Objects.requireNonNull(initialScene, "Initial scene must not be null");
+        history = new SceneHistory(scene);
         modeIndicator.setIterations(scene.iterations().baseIterations());
         camera = restored
                 ? new FractalCamera(scene.fractal(), scene.viewport())
@@ -249,8 +256,9 @@ public class FractalView extends StackPane {
             return;
         }
 
+        history.record(sceneSnapshot());
         stopColorCyclingForSceneChange();
-        interactionRender.cancel();
+        cancelSceneInteraction();
         renderController.cancelCurrent();
         showLoadingScreen();
         camera.setPreset(preset, width, height);
@@ -264,11 +272,12 @@ public class FractalView extends StackPane {
         int width = (int) getWidth();
         int height = (int) getHeight();
         if (width < 2 || height < 2) return;
+        history.record(sceneSnapshot());
         camera.goTo(destination, width, height,
                 Math.max(2, fractalSurface.renderWidth()), Math.max(2, fractalSurface.renderHeight()));
         dismissContextMenu();
         stopColorCyclingForSceneChange();
-        interactionRender.cancel();
+        cancelSceneInteraction();
         renderController.cancelCurrent();
         showLoadingScreen();
         scene = scene.withViewport(camera.viewport());
@@ -301,8 +310,9 @@ public class FractalView extends StackPane {
             return;
         }
 
+        history.record(sceneSnapshot());
         stopColorCyclingForSceneChange();
-        interactionRender.cancel();
+        cancelSceneInteraction();
         renderController.cancelCurrent();
         showLoadingScreen();
         camera.reset(width, height);
@@ -388,7 +398,7 @@ public class FractalView extends StackPane {
         ColoringSettings settings = new ColoringSettings(
                 preset, preset.stops(), scene.coloring().colorScale(), scene.coloring().offset(),
                 scene.coloring().histogramColoring(), scene.coloring().orbitTrap());
-        scene = scene.withColoring(settings);
+        changeScene(scene.withColoring(settings));
         colorCycleOffset = settings.offset();
         configurePalette(preset);
         renderController.cancelRecolor();
@@ -403,7 +413,7 @@ public class FractalView extends StackPane {
 
     void setIterations(IterationSettings settings) {
         dismissContextMenu();
-        scene = scene.withIterations(settings);
+        changeScene(scene.withIterations(settings));
         renderController.cancelCurrent();
         fractalSurface.invalidateRefinement();
         recalculate();
@@ -411,7 +421,7 @@ public class FractalView extends StackPane {
 
     void setJuliaParameters(JuliaParameters parameters) {
         dismissContextMenu();
-        scene = scene.withJuliaParameters(parameters);
+        changeScene(scene.withJuliaParameters(parameters));
         if (scene.fractal() == FractalPreset.JULIA) {
             renderController.cancelCurrent();
             fractalSurface.invalidateRefinement();
@@ -425,7 +435,7 @@ public class FractalView extends StackPane {
         ColoringSettings settings = new ColoringSettings(
                 current.palette(), stops, current.colorScale(), current.offset(),
                 current.histogramColoring(), current.orbitTrap());
-        scene = scene.withColoring(settings);
+        changeScene(scene.withColoring(settings));
         configurePalette(stops);
         renderController.cancelRecolor();
         if (settings.histogramColoring() || settings.orbitTrap() != OrbitTrap.NONE) {
@@ -440,7 +450,7 @@ public class FractalView extends StackPane {
     void resetColorsToDefaults() {
         stopColorCyclingForSceneChange();
         ColoringSettings defaults = new ColoringSettings(PalettePreset.ICE);
-        scene = scene.withColoring(defaults);
+        changeScene(scene.withColoring(defaults));
         colorCycleOffset = defaults.offset();
         configurePalette(defaults.paletteStops());
         renderController.cancelRecolor();
@@ -452,9 +462,9 @@ public class FractalView extends StackPane {
     public void setOrbitTrap(OrbitTrap orbitTrap) {
         stopColorCyclingForSceneChange();
         ColoringSettings current = scene.coloring();
-        scene = scene.withColoring(new ColoringSettings(
+        changeScene(scene.withColoring(new ColoringSettings(
                 current.palette(), current.paletteStops(), current.colorScale(), current.offset(),
-                current.histogramColoring(), orbitTrap));
+                current.histogramColoring(), orbitTrap)));
         renderController.cancelCurrent();
         fractalSurface.invalidateRefinement();
         recalculate();
@@ -487,7 +497,7 @@ public class FractalView extends StackPane {
         ColoringSettings settings = new ColoringSettings(
                 current.palette(), current.paletteStops(), current.colorScale(), current.offset(),
                 enabled, current.orbitTrap());
-        scene = scene.withColoring(settings);
+        changeScene(scene.withColoring(settings));
         renderController.cancelCurrent();
         fractalSurface.invalidateRefinement();
         recalculate();
@@ -532,6 +542,7 @@ public class FractalView extends StackPane {
             renderController.recolor(settings, () -> {
                 if (hasSameAnimationBase(scene.coloring(), settings)) {
                     scene = scene.withColoring(settings);
+                    history.replaceCurrent(sceneSnapshot());
                 }
             });
         }
@@ -562,10 +573,10 @@ public class FractalView extends StackPane {
 
     public void setSamplingPattern(SamplingPattern pattern) {
         stopColorCyclingForSceneChange();
-        scene = scene.withAntialiasing(new AntialiasSettings(
+        changeScene(scene.withAntialiasing(new AntialiasSettings(
                 pattern,
                 scene.antialiasing().renderMode()
-        ));
+        )));
         renderController.cancelCurrent();
         fractalSurface.invalidateRefinement();
         recalculate();
@@ -573,10 +584,10 @@ public class FractalView extends StackPane {
 
     public void setInteractiveRenderMode(InteractiveRenderMode renderMode) {
         stopColorCyclingForSceneChange();
-        scene = scene.withAntialiasing(new AntialiasSettings(
+        changeScene(scene.withAntialiasing(new AntialiasSettings(
                 scene.antialiasing().samplingPattern(),
                 renderMode
-        ));
+        )));
         renderController.cancelCurrent();
         recalculate();
     }
@@ -615,6 +626,7 @@ public class FractalView extends StackPane {
 
     private void configureZoom() {
         setOnScrollStarted(event -> {
+            continuousGesture = true;
             trackpadScrollActive = true;
             event.consume();
         });
@@ -622,6 +634,9 @@ public class FractalView extends StackPane {
         setOnScrollFinished(event -> {
             latency().boundary("scroll_finished");
             trackpadScrollActive = false;
+            continuousGesture = false;
+            interactionRender.finish();
+            recordScene();
             event.consume();
         });
 
@@ -729,13 +744,16 @@ public class FractalView extends StackPane {
 
     private void configureTrackpadGestures() {
         setOnZoomStarted(event -> {
+            continuousGesture = true;
             interactionRender.zoomStarted();
             event.consume();
         });
 
         setOnZoomFinished(event -> {
             latency().boundary("pinch_finished");
+            continuousGesture = false;
             interactionRender.zoomFinished();
+            recordScene();
             event.consume();
         });
 
@@ -836,8 +854,9 @@ public class FractalView extends StackPane {
         latency().input("resize");
         dismissContextMenu();
         resizePending = true;
+        recordScene();
         stopColorCyclingForSceneChange();
-        interactionRender.cancel();
+        cancelSceneInteraction();
         renderController.cancelCurrent();
         colorCyclePaused = true;
         resizeRender.playFromStart();
@@ -883,7 +902,12 @@ public class FractalView extends StackPane {
         camera.resize(width, height, oldRenderHeight, fractalSurface.renderHeight());
         resizePending = false;
         resetPriority();
-        recalculate(!resizeDefaultView);
+        resizingScene = true;
+        try {
+            recalculate(!resizeDefaultView);
+        } finally {
+            resizingScene = false;
+        }
     }
 
     private void recalculate() {
@@ -912,6 +936,9 @@ public class FractalView extends StackPane {
                 );
 
         scene = scene.withViewport(camera.viewport());
+        if (resizingScene) history.replaceCurrent(scene);
+        else if (!restoringScene && !continuousGesture) history.record(scene);
+        sceneChangedHandler.accept(scene);
         viewportChangedHandler.accept(scene.viewport());
 
         RenderTarget target = new RenderTarget(
@@ -926,6 +953,78 @@ public class FractalView extends StackPane {
                 defaultViewport,
                 preserveIterationLimit
         );
+    }
+
+    private void recordScene() {
+        history.record(sceneSnapshot());
+        sceneChangedHandler.accept(sceneSnapshot());
+    }
+
+    private void changeScene(FractalScene next) {
+        history.record(sceneSnapshot());
+        scene = next.withViewport(camera.viewport());
+        recordScene();
+    }
+
+    void setOnSceneChanged(Consumer<FractalScene> handler) {
+        sceneChangedHandler = java.util.Objects.requireNonNull(handler);
+    }
+
+    boolean canUndo() { return history.canUndo() || !history.current().equals(sceneSnapshot()); }
+    boolean canRedo() { return history.canRedo() && history.current().equals(sceneSnapshot()); }
+
+    void undoScene() {
+        recordScene();
+        if (history.canUndo()) restoreScene(history.undo());
+    }
+
+    void redoScene() {
+        recordScene();
+        if (history.canRedo()) restoreScene(history.redo());
+    }
+
+    void applyScene(FractalScene replacement) {
+        java.util.Objects.requireNonNull(replacement);
+        // Validate sharing against the selected formula's existing precision gate before mutation.
+        FractalCamera candidate = new FractalCamera(replacement.fractal(), replacement.viewport());
+        candidate.goTo(replacement.viewport(), Math.max(2, (int) getWidth()),
+                Math.max(2, (int) getHeight()), Math.max(2, fractalSurface.renderWidth()),
+                Math.max(2, fractalSurface.renderHeight()));
+        recordScene();
+        history.record(replacement);
+        restoreScene(replacement);
+    }
+
+    private void cancelSceneInteraction() {
+        interactionRender.cancel();
+        continuousGesture = false;
+        trackpadScrollActive = false;
+        trackpadPanSourceViewport = null;
+        panSourceViewport = null;
+        panning = false;
+        panChanged = false;
+    }
+
+    private void restoreScene(FractalScene replacement) {
+        dismissContextMenu();
+        stopColorCyclingForSceneChange();
+        cancelSceneInteraction();
+        renderController.cancelCurrent();
+        fractalSurface.invalidateRefinement();
+        if (scene.fractal() != replacement.fractal()) showLoadingScreen();
+        scene = replacement;
+        camera.restore(scene.fractal(), scene.viewport(), (int) getWidth(), (int) getHeight());
+        colorCycleOffset = scene.coloring().offset();
+        configurePalette(scene.coloring().paletteStops());
+        resetPriority();
+        fractalSurface.showPreview(camera.viewport());
+        sceneChangedHandler.accept(scene);
+        restoringScene = true;
+        try {
+            recalculate();
+        } finally {
+            restoringScene = false;
+        }
     }
 
     public void close() {
@@ -991,6 +1090,7 @@ public class FractalView extends StackPane {
         renderController.cancelCurrent();
         colorCyclePaused = true;
         interactionRender.requestZoomRender();
+        sceneChangedHandler.accept(sceneSnapshot());
     }
 
     private void configurePan() {
