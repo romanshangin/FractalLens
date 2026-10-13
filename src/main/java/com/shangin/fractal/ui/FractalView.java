@@ -486,7 +486,7 @@ public class FractalView extends StackPane {
             colorCycleOffset = scene.coloring().offset();
             return;
         }
-        colorCycling = enabled;
+        colorCycling = true;
         colorCycleOffset = scene.coloring().offset();
         lastCycleTick = 0L;
     }

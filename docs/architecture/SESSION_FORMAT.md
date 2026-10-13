@@ -107,6 +107,10 @@ Applying or restoring a preset is undoable.
 Restoration cancels pending gestures, recoloring and superseded rendering,
 updates the camera without decimal rounding, and synchronizes menus and title.
 
+The application module opens its `app` package to `javafx.graphics` for
+reflective JavaFX startup. The `app` and `ui` packages are not exported APIs;
+scene-typed bookmark and view operations remain internal to the module.
+
 Developer regression commands:
 
 ```shell

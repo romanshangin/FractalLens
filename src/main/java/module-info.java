@@ -6,7 +6,7 @@ module com.shangin.fractal {
     requires org.lwjgl.vulkan;
     requires org.lwjgl.shaderc;
 
-    exports com.shangin.fractal.app to javafx.graphics;
-    exports com.shangin.fractal.ui to javafx.graphics;
+    // JavaFX launches the application reflectively; internal model types are not an API.
+    opens com.shangin.fractal.app to javafx.graphics;
 
 }
