@@ -1011,6 +1011,10 @@ public class FractalView extends StackPane {
         cancelSceneInteraction();
         renderController.cancelCurrent();
         fractalSurface.invalidateRefinement();
+        // Restored snapshots own their scale; an earlier resize must not rescale them.
+        resizeRender.stop();
+        resizePending = false;
+        fractalSurface.resizeBuffer((int) getWidth(), (int) getHeight());
         if (scene.fractal() != replacement.fractal()) showLoadingScreen();
         scene = replacement;
         camera.restore(scene.fractal(), scene.viewport(), (int) getWidth(), (int) getHeight());

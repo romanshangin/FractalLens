@@ -62,9 +62,13 @@ Edit → Undo and Redo restore complete `FractalScene` snapshots, including the
 formula, exact decimal viewport, Julia parameters, iterations, coloring and
 interactive antialiasing settings. The shortcuts are the platform shortcut key
 with Z and Shift+Z. When a text field is focused, these commands continue to
-operate on its draft instead of the scene. History is local to the current
-window session and retains the most recent 100 actions. A new scene action
-after Undo discards Redo; selecting an unchanged value does not add an action.
+operate on its draft instead of the scene. Undo/Redo availability follows focus
+and draft history changes without reopening the Edit menu. History is local to
+the current window session and retains the most recent 100 actions. A new scene
+action after Undo discards Redo; selecting an unchanged value does not add an action.
+
+Restoring a snapshot during a pending window resize uses the new render
+dimensions while retaining the snapshot's exact viewport scale.
 
 Drag and pinch changes are grouped at their gesture boundary; wheel events are
 grouped by the existing render debounce. Window resize, display dimensions,

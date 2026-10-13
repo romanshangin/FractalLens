@@ -276,7 +276,11 @@ class MainMenuBarFxTest {
 
     @Test
     void textUndoKeepsSceneHistoryUntouched() throws Exception {
-        fx(() -> { view.setIterations(new IterationSettings(420, 70)); return null; });
+        fx(() -> {
+            menuBar.setUseSystemMenuBar(false);
+            view.setIterations(new IterationSettings(420, 70));
+            return null;
+        });
         await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
         FractalScene scene = fx(view::sceneSnapshot);
         TextField field = fx(() -> {
@@ -288,12 +292,97 @@ class MainMenuBarFxTest {
         });
         await(() -> field.isFocused() && stage.isFocused());
         fx(() -> {
-            command("Edit", "Undo").fire();
+            runEditAccelerator("Undo");
             assertEquals("draft", field.getText());
+            assertTrue(command("Edit", "Undo").isDisable());
+            assertFalse(command("Edit", "Redo").isDisable());
             assertEquals(scene, view.sceneSnapshot());
             assertTrue(view.canUndo());
-            command("Edit", "Redo").fire();
+            runEditAccelerator("Redo");
             assertEquals("draft changed", field.getText());
+            return null;
+        });
+    }
+
+    @Test
+    void canvasFocusReenablesSceneAcceleratorsAfterEmptyTextHistory() throws Exception {
+        FractalScene initial = fx(view::sceneSnapshot);
+        fx(() -> {
+            menuBar.setUseSystemMenuBar(false);
+            view.setIterations(new IterationSettings(420, 70));
+            return null;
+        });
+        await(() -> view.isLatencyIdle());
+        FractalScene changed = fx(view::sceneSnapshot);
+        TextField field = fx(() -> {
+            TextField input = new TextField("draft");
+            ((BorderPane) stage.getScene().getRoot()).setBottom(input);
+            stage.toFront();
+            stage.requestFocus();
+            input.requestFocus();
+            return input;
+        });
+        await(() -> field.isFocused() && stage.isFocused());
+        fx(() -> {
+            Menu edit = menuBar.getMenus().stream().filter(menu -> "Edit".equals(menu.getText()))
+                    .findFirst().orElseThrow();
+            edit.getOnShowing().handle(new javafx.event.Event(Menu.ON_SHOWING));
+            assertTrue(command("Edit", "Undo").isDisable());
+            view.requestFocus();
+            return null;
+        });
+        await(view::isFocused);
+        fx(() -> { runEditAccelerator("Undo"); return null; });
+        await(() -> view.isLatencyIdle());
+        assertEquals(initial, fx(view::sceneSnapshot));
+        fx(() -> { runEditAccelerator("Redo"); return null; });
+        await(() -> view.isLatencyIdle());
+        assertEquals(changed, fx(view::sceneSnapshot));
+    }
+
+    private void runEditAccelerator(String title) {
+        MenuItem item = command("Edit", title);
+        assertFalse(item.isDisable());
+        Runnable accelerator = stage.getScene().getAccelerators().get(item.getAccelerator());
+        assertNotNull(accelerator, "Edit shortcut must be registered with the scene");
+        accelerator.run();
+    }
+
+    @Test
+    void pendingHeightResizeDoesNotChangeRestoredSnapshots() throws Exception {
+        FractalScene first = fx(() -> view.sceneSnapshot().withViewport(
+                new com.shangin.fractal.math.Viewport(view.sceneSnapshot().viewport().center(),
+                        new java.math.BigDecimal("0.5000000000000000000000000001"))));
+        fx(() -> { view.applyScene(first); return null; });
+        await(() -> view.isLatencyIdle());
+        fx(() -> { view.setIterations(new IterationSettings(420, 70)); return null; });
+        await(() -> view.isLatencyIdle());
+        FractalScene second = fx(view::sceneSnapshot);
+        assertRestoredDuringResize(first, view::undoScene);
+        assertRestoredDuringResize(second, view::redoScene);
+        FractalScene preset = first.withIterations(new IterationSettings(360, 80));
+        assertRestoredDuringResize(preset, () -> view.applyScene(preset));
+        fx(() -> { view.undoScene(); return null; });
+        await(() -> view.isLatencyIdle());
+        assertEquals(second, fx(view::sceneSnapshot));
+    }
+
+    private void assertRestoredDuringResize(FractalScene expected, Runnable restore) throws Exception {
+        fx(() -> {
+            // Keep the parent layout from replacing the deliberately resized test viewport.
+            view.setManaged(false);
+            view.resize(view.getWidth(), view.getHeight() + 40);
+            restore.run();
+            assertEquals(expected, view.sceneSnapshot());
+            return null;
+        });
+        await(() -> view.isLatencyIdle());
+        fx(() -> {
+            assertEquals(expected, view.sceneSnapshot());
+            FractalSurface surface = (FractalSurface) view.getChildrenUnmodifiable().stream()
+                    .filter(FractalSurface.class::isInstance).findFirst().orElseThrow();
+            assertEquals(surface.renderHeightFor((int) view.getHeight()), surface.renderHeight());
+            assertEquals(expected, surface.completedRender().scene());
             return null;
         });
     }

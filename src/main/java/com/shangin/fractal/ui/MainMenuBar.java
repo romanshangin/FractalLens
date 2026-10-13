@@ -11,6 +11,10 @@ import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
+import javafx.beans.InvalidationListener;
+import javafx.beans.value.ChangeListener;
+import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -39,6 +43,12 @@ final class MainMenuBar extends MenuBar {
     private final ToggleGroup sampling = new ToggleGroup();
     private MenuItem undo;
     private MenuItem redo;
+    private Scene observedScene;
+    private TextInputControl observedTextInput;
+    private final InvalidationListener textHistoryListener = observable -> updateHistoryAvailability();
+    private final ChangeListener<Node> focusListener = (observable, oldValue, newValue) -> updateHistoryAvailability();
+    private final ChangeListener<Scene> sceneListener = (observable, oldValue, newValue) -> observeScene(newValue);
+    private final InvalidationListener windowFocusListener = observable -> updateHistoryAvailability();
     private final Stage stage;
     private final FractalView fractalView;
     private final MenuItem export;
@@ -154,6 +164,9 @@ final class MainMenuBar extends MenuBar {
                 command("Copy Scene Preset", shortcut(KeyCode.C, KeyCombination.SHIFT_DOWN), sceneActions::copyPreset),
                 command("Apply Scene Preset from Clipboard", shortcut(KeyCode.V, KeyCombination.SHIFT_DOWN), sceneActions::pastePreset));
         getMenus().setAll(file, editMenu(), view, fractal, goTo, sceneActions.bookmarksMenu(), color, render, window, help);
+        stage.sceneProperty().addListener(sceneListener);
+        stage.focusedProperty().addListener(windowFocusListener);
+        observeScene(stage.getScene());
         fractalView.setOnSceneChanged(this::syncScene);
         stage.sceneProperty().addListener((observable, oldScene, scene) -> {
             if (scene != null) {
@@ -322,8 +335,7 @@ final class MainMenuBar extends MenuBar {
             TextInputControl input = focusedTextInput();
             boolean editable = input != null && input.isEditable();
             boolean selected = input != null && input.getSelection().getLength() > 0;
-            undo.setDisable(input != null ? !editable || !input.isUndoable() : !fractalView.canUndo());
-            redo.setDisable(input != null ? !editable || !input.isRedoable() : !fractalView.canRedo());
+            updateHistoryAvailability();
             cut.setDisable(!editable || !selected);
             copy.setDisable(!selected);
             paste.setDisable(!editable);
@@ -336,6 +348,10 @@ final class MainMenuBar extends MenuBar {
 
     void close() {
         stage.removeEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN, hiddenHandler);
+        stage.sceneProperty().removeListener(sceneListener);
+        stage.focusedProperty().removeListener(windowFocusListener);
+        if (observedScene != null) observedScene.focusOwnerProperty().removeListener(focusListener);
+        observeTextInput(null);
         sceneActions.close();
         if (iterationSheet != null) iterationSheet.close();
         if (juliaSheet != null) juliaSheet.close();
@@ -353,11 +369,39 @@ final class MainMenuBar extends MenuBar {
         quality.selectToggle(quality.getToggles().get(scene.antialiasing().renderMode().ordinal()));
         sampling.selectToggle(sampling.getToggles().get(scene.antialiasing().samplingPattern().ordinal()));
         histogram.setSelected(scene.coloring().histogramColoring());
-        undo.setDisable(!fractalView.canUndo());
-        redo.setDisable(!fractalView.canRedo());
+        updateHistoryAvailability();
         stage.setTitle(scene.fractal() + " — FractalLens");
         updateDestinations(scene.fractal());
         updateAvailability();
+    }
+
+    private void observeScene(Scene scene) {
+        if (observedScene != null) observedScene.focusOwnerProperty().removeListener(focusListener);
+        observedScene = scene;
+        if (scene != null) scene.focusOwnerProperty().addListener(focusListener);
+        updateHistoryAvailability();
+    }
+
+    private void observeTextInput(TextInputControl input) {
+        if (observedTextInput == input) return;
+        if (observedTextInput != null) {
+            observedTextInput.undoableProperty().removeListener(textHistoryListener);
+            observedTextInput.redoableProperty().removeListener(textHistoryListener);
+            observedTextInput.editableProperty().removeListener(textHistoryListener);
+        }
+        observedTextInput = input;
+        if (input != null) {
+            input.undoableProperty().addListener(textHistoryListener);
+            input.redoableProperty().addListener(textHistoryListener);
+            input.editableProperty().addListener(textHistoryListener);
+        }
+    }
+
+    private void updateHistoryAvailability() {
+        TextInputControl input = focusedTextInput();
+        observeTextInput(input);
+        undo.setDisable(input != null ? !input.isEditable() || !input.isUndoable() : !fractalView.canUndo());
+        redo.setDisable(input != null ? !input.isEditable() || !input.isRedoable() : !fractalView.canRedo());
     }
 
     private static MenuItem textCommand(String title, KeyCode key, Consumer<TextInputControl> action) {
