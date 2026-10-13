@@ -68,25 +68,24 @@ branch; it can still advance after the check.
 
 ## Roles and transitions
 
-| Stage | Skill | Model | Reasoning effort | Sandbox |
-| --- | --- | --- | --- | --- |
-| IMPLEMENT / IMPLEMENT_FIXES | `implement-task` | `gpt-6.1-sol` | medium | workspace-write |
-| REVIEW | `review-task` | `gpt-6.1-sol` | medium | read-only |
-| VERIFY | `verify-task` | `gpt-6-luna` | medium | read-only |
-| DELIVER | `deliver-task` | `gpt-6-luna` | low | workspace-write |
+| Stage | Skill | Model | Reasoning effort | Sandbox | Escalation |
+| --- | --- | --- | --- | --- | --- |
+| IMPLEMENT / IMPLEMENT_FIXES | `implement-task` | `gpt-6.1-sol` | medium | workspace-write | allowed |
+| REVIEW | `review-task` | `gpt-6.1-sol` | medium | read-only | never |
+| VERIFY | `verify-task` | `gpt-6-luna` | medium | workspace-write | never |
+| DELIVER | `deliver-task` | `gpt-6-luna` | low | workspace-write | allowed |
 
-REV/VER receive `approval_policy="never"` and never `--approve-for-me`.
-Their sandboxed local commands cannot edit the candidate or request an
-escalation. Sandbox policies govern local commands; externally configured MCP
-servers and connectors have separate controls. The repository identity guard
-also detects candidate changes made outside sandboxed local commands.
-
-Strict read-only also blocks build-output/cache/temp writes. The local macOS
-CLI's `:read-only` sandbox probe denied both repository and temporary-file
-writes. Checks requiring those writes cannot run under this policy: report
-`INCOMPLETE` and stop, without substituting DEV self-validation for independent
-VER. A writable-output test harness would be a separate capability design;
-v1 does not automatically grant workspace writes to make Maven pass.
+REVIEW and VERIFY receive their explicit `--sandbox` setting and
+`approval_policy="never"`, without `--approve-for-me`. IMPLEMENT,
+IMPLEMENT_FIXES and DELIVER use `--approve-for-me` to allow approval review.
+VERIFY may create normal build, test and diagnostic artifacts in ignored build
+directories or outside the repository. It must not modify candidate source,
+tests, build configuration, dependencies, documentation or other content that
+affects validation. The orchestrator checks candidate identity after VERIFY;
+nonignored untracked artifacts also change identity and stop the run.
+Checks needing unavailable network, desktop or other access remain `INCOMPLETE`;
+VERIFY cannot escalate. Sandbox policies govern local commands; external MCP
+servers and connectors have separate controls.
 
 Each invocation starts a fresh ephemeral CLI session with the task and only the
 latest relevant handoffs. The runner reads the final message file; CLI progress
@@ -133,7 +132,7 @@ only REV evidence is required. Full reports remain in private run artifacts.
 | REVIEW `INCOMPLETE` | STOP |
 | VERIFY `FAIL` | IMPLEMENT_FIXES, then fresh REVIEW and VERIFY |
 | VERIFY `PASS` | DELIVER |
-| VERIFY `INCOMPLETE` | STOP |
+| VERIFY `INCOMPLETE` | Save human verification checkpoint; STOP; explicit resume starts at VERIFY |
 | Any DELIVER status | STOP; report PR and CI state |
 | Missing/invalid status, executor error, or timeout | STOP as `INCOMPLETE` |
 
@@ -210,13 +209,15 @@ The default timeout is 1,800 seconds per executor. Adjust it with
 `--stage-timeout-seconds` (1 through 86,400). A timeout kills the CLI process and
 stops the workflow without retrying. This is a process timeout, not a complete
 supervisor for every tool subprocess; inspect remaining work before restarting.
-There is no automatic resume. A rerun starts at IMPLEMENT; do not blindly rerun
-after a partially completed delivery.
+A new `--task` run starts at IMPLEMENT. Only a valid, identity-checked
+`VERIFY=INCOMPLETE` result creates a resumable checkpoint. Executor errors,
+timeouts, candidate mutations, incomplete review, and any delivery result do
+not create one; inspect private artifacts before deciding how to proceed.
 
 Each live run creates a private `fractallens-task-*` directory under the system
 temporary directory. Each invocation has a separate numbered directory with
 `prompt.txt`, `execution.log`, `report.md`, and an error file when applicable.
-The run root contains `result.json`. No artifact directory is granted through
+The run root contains `result.json` and atomically replaced `state.json`. No artifact directory is granted through
 `--add-dir`; the CLI host writes its own final-message file. Prompts prohibit
 inspection of other roles' private prompts/logs. This limits supplied context,
 but is not a hard read-isolation boundary for processes under the same user.
@@ -228,6 +229,57 @@ Exit code `0` means requested delivery completed, including when reported CI is
 pending or failed. It does not mean CI passed or acceptance is complete. Exit
 code `1` means `BLOCKED`, `INCOMPLETE`, or an invalid invocation. After DELIVER,
 the runner does not poll CI, repair CI failures, or make the human merge decision.
+
+## Resume and human verification
+
+After VERIFY reports `INCOMPLETE`, the run's private `state.json` retains the
+task, repository and branch, frozen remote base, verification policy, shared
+repair budget, complete stage history, candidate identity and `nextStage=VERIFY`.
+For example, a review repair followed by missing UI acceptance retains:
+
+```text
+IMPLEMENT       READY_FOR_REVIEW
+REVIEW          FINDINGS
+IMPLEMENT_FIXES READY_FOR_REVIEW
+REVIEW          CLEAN
+VERIFY          INCOMPLETE
+repairRounds = 1
+nextStage = VERIFY
+```
+
+Perform the missing manual acceptance on that exact candidate. Save a private
+UTF-8 evidence file outside the candidate (or in ignored output), describing
+which checks ran, their results, platform/environment, and remaining gaps. Then:
+
+```sh
+node scripts/task-orchestrator.ts --resume "${TEMP_DIR}/fractallens-task-example" \
+  --human-evidence "${TEMP_DIR}/manual-acceptance.md"
+```
+
+`--resume` alone retries VERIFY without new manual evidence. The evidence file
+must be nonempty and at most 65,536 characters. The verifier receives the current
+implementation, matching CLEAN review, previous incomplete verification report,
+and any saved/new human evidence. It assesses coverage and remaining gaps;
+manual evidence does not directly authorize PASS or skip VERIFY. PASS allows
+DELIVER, FAIL uses the remaining repair budget and requires fresh review, and
+INCOMPLETE saves another checkpoint. Fixes invalidate prior human evidence.
+Earlier IMPLEMENT/REVIEW stages are not repeated unless resumed VERIFY finds a
+failure requiring fixes.
+
+Resume refreshes the remote base and requires the same base SHA, named branch,
+and candidate fingerprint before invoking any model. Changes require fresh
+review and verification. Task, repository, base, verification policy and repair
+limit cannot be overridden on resume; CLI executable and timeout may be changed.
+`--dry-run` displays the resumed plan without fetching, consuming the checkpoint
+or invoking models. It does not establish current candidate/base freshness.
+
+Runs use an exclusive `active.lock` directory and consume the old checkpoint
+before model execution. Completed delivery, executor errors or unexpected
+results cannot replay from that checkpoint. A crash leaves the lock and a
+potentially nonresumable state: inspect running processes, repository and
+private artifacts before removing the stale lock. Do not edit `state.json` to
+bypass a gate. Checkpoints and human evidence are local trusted inputs, not
+signed attestations or proof that reported checks actually ran. Keep them private.
 
 ## Local validation
 
@@ -242,6 +294,8 @@ sandbox/approval arguments, strict status parsing, exception messages, timeout, 
 behavior. Temporary Git fixtures check hashing, ignored outputs, staging/commit
 invariance, file modes, symlinks, unrelated work preservation, remote base refresh,
 frozen comparisons and stopping before delivery when the base moves or is unavailable.
+Resume tests cover persisted history/budget, manual evidence assessment, repeated
+pauses, checkpoint consumption, stale source/branch/base rejection and run locks.
 They spend no model tokens and
 perform no Git delivery. They do not establish live model availability,
 authentication, real role behavior, PR creation, CI results, or desktop access.

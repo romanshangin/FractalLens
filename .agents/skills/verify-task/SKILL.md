@@ -36,6 +36,16 @@ If a prerequisite is unmet or cannot be established, report `INCOMPLETE` and
 stop this stage without invoking another workflow.
 
 Do not invoke other workflow skills from this skill.
+You may create normal build, test, and diagnostic artifacts required by
+verification.
+
+Do not modify the candidate source, tests, build configuration,
+dependencies, documentation, or other validation-relevant content.
+
+The orchestrator verifies candidate identity after this stage.
+Keep generated artifacts in ignored build directories or outside the repository;
+nonignored untracked files are part of the candidate identity.
+
 Do not implement fixes.
 Do not commit, push, create a pull request, or merge changes.
 
