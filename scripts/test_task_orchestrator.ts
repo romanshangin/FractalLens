@@ -342,9 +342,9 @@ console.log('FAIL - this log must never be parsed as the report');
     const args = JSON.parse(readFileSync(reportFile, 'utf8'));
     assert.equal(args[args.indexOf('--model') + 1], ROLES[stage].model);
     assert.equal(args[args.indexOf('--config') + 1], `model_reasoning_effort="${ROLES[stage].effort}"`);
-    assert.equal(args.includes('--approve-for-me'), ROLES[stage].sandbox === 'workspace-write');
-    if (ROLES[stage].sandbox === 'read-only') {
-      assert.equal(args[args.indexOf('--sandbox') + 1], 'read-only');
+    assert.equal(args.includes('--approve-for-me'), ROLES[stage].escalation === 'allowed');
+    if (ROLES[stage].escalation === 'never') {
+      assert.equal(args[args.indexOf('--sandbox') + 1], stage === 'REVIEW' ? 'read-only' : 'workspace-write');
       assert.ok(args.includes('approval_policy="never"'));
     } else {
       assert.ok(!args.includes('--sandbox'), '--approve-for-me must not be combined with --sandbox');
@@ -557,4 +557,166 @@ test('candidate checks permit task-only commit while preserving unrelated user w
   assert.equal(readFileSync(join(repository, 'notes.txt'), 'utf8'), 'Unrelated user work');
   assert.equal(git('ls-files', 'notes.txt'), '');
   assert.match(git('status', '--porcelain'), /notes.txt/);
+});
+
+test('VERIFY writes build artifacts but candidate mutations prevent a resumable checkpoint', async t => {
+  for (const mutateSource of [false, true]) {
+    const { repository, identity } = gitFixture(t);
+    const reports = ['READY_FOR_REVIEW', withEvidence('CLEAN'), 'INCOMPLETE'];
+    const result = await runWorkflow({ ...BASE, task: 'Synthetic', computeCandidate: identity, runStage: async request => {
+      if (request.stage === 'VERIFY') {
+        mkdirSync(join(repository, 'ignored'));
+        writeFileSync(join(repository, 'ignored/report.txt'), 'Diagnostic output');
+        if (mutateSource) writeFileSync(join(repository, 'tracked.txt'), 'Forbidden mutation');
+      }
+      return reports.shift()!;
+    } });
+    assert.equal(result.status, 'INCOMPLETE');
+    assert.equal(Boolean(result.checkpoint), !mutateSource);
+  }
+});
+
+test('resume retains repair history and budget, reassesses human evidence and requires PASS', async () => {
+  const paused = await scripted(['READY_FOR_REVIEW', 'FINDINGS', 'READY_FOR_REVIEW', 'CLEAN', 'INCOMPLETE']).result;
+  assert.equal(paused.checkpoint?.nextStage, 'VERIFY');
+  assert.equal(paused.checkpoint?.repairRounds, 1);
+  const requests: Request[] = [];
+  const resume = (checkpoint: NonNullable<typeof paused.checkpoint>, reports: string[], humanEvidence?: string) =>
+    runWorkflow({ ...BASE, task: 'Synthetic', checkpoint, humanEvidence, computeCandidate: () => CANDIDATE,
+      runStage: async request => { requests.push(request); return reports.shift()!; } });
+  const again = await resume(paused.checkpoint!, ['INCOMPLETE'], 'Manual macOS UI acceptance passed');
+  assert.equal(again.checkpoint?.repairRounds, 1);
+  assert.deepEqual(requests.map(r => r.stage), ['VERIFY']);
+  assert.match(stagePrompt(requests[0], '/project'), /Manual macOS UI acceptance passed/);
+  const delivered = await resume(again.checkpoint!, [withEvidence('PASS'), 'DELIVERED']);
+  assert.equal(delivered.status, 'DELIVERED');
+  assert.deepEqual(requests.map(r => r.stage), ['VERIFY', 'VERIFY', 'DELIVER']);
+  assert.equal(requests[1].humanEvidence, 'Manual macOS UI acceptance passed');
+  assert.equal(delivered.checkpoint, undefined);
+  const failed = await resume(paused.checkpoint!, ['FAIL', 'READY_FOR_REVIEW', withEvidence('CLEAN'), 'INCOMPLETE']);
+  assert.equal(failed.checkpoint?.repairRounds, 2);
+  assert.equal(failed.checkpoint?.humanEvidence, undefined, 'Fixes invalidate manual evidence');
+  const exhausted = await runWorkflow({ ...BASE, task: 'Synthetic', checkpoint: failed.checkpoint!,
+    maxRepairRounds: 2, computeCandidate: () => CANDIDATE, runStage: async () => 'FAIL' });
+  assert.equal(exhausted.status, 'BLOCKED');
+  assert.equal(exhausted.checkpoint, undefined);
+});
+
+test('invalid checkpoint histories and stale candidates never invoke a resumed executor', async () => {
+  const paused = await scripted(['READY_FOR_REVIEW', 'CLEAN', 'INCOMPLETE']).result;
+  for (const checkpoint of [
+    { ...paused.checkpoint!, repairRounds: 1 },
+    { ...paused.checkpoint!, history: [] },
+    { ...paused.checkpoint!, history: paused.history.slice(0, -1) },
+    { ...paused.checkpoint!, nextStage: 'DELIVER' as 'VERIFY' },
+    { ...paused.checkpoint!, candidate: { ...CANDIDATE, contentId: 'other' } },
+  ]) {
+    await assert.rejects(runWorkflow({ ...BASE, task: 'Synthetic', checkpoint,
+      computeCandidate: () => CANDIDATE, runStage: async () => assert.fail('Must not invoke') }));
+  }
+  const stale = await runWorkflow({ ...BASE, task: 'Synthetic', checkpoint: paused.checkpoint,
+    computeCandidate: () => ({ ...CANDIDATE, contentId: 'changed' }), runStage: async () => assert.fail('Must not invoke') });
+  assert.match(stale.reason, /Candidate changed before VERIFY/);
+  assert.equal(stale.checkpoint, undefined);
+});
+
+function pausedCli(t: TestContext) {
+  const fixture = remoteFixture(t);
+  const { repository } = fixture;
+  const root = dirname(repository);
+  for (const skill of new Set(Object.values(ROLES).map(role => role.skill))) {
+    const directory = join(repository, '.agents/skills', skill);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'SKILL.md'), 'Synthetic skill');
+  }
+  const log = join(root, 'calls.jsonl');
+  const fake = join(root, 'fake-codex');
+  writeFileSync(fake, `#!/usr/bin/env node
+const fs = require('node:fs');
+const input = fs.readFileSync(0, 'utf8');
+const stage = input.match(/Execute only stage ([A-Z_]+)/)[1];
+const log = ${JSON.stringify(log)};
+const previous = fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '';
+fs.appendFileSync(log, JSON.stringify({stage, input}) + '\\n');
+const args = process.argv.slice(2);
+let status = stage === 'REVIEW' ? (previous.includes('"stage":"REVIEW"') ? 'CLEAN' : 'FINDINGS')
+  : stage === 'VERIFY' ? (input.includes('Manual acceptance passed') ? 'PASS' : 'INCOMPLETE')
+  : stage === 'DELIVER' ? 'DELIVERED' : 'READY_FOR_REVIEW';
+const fence = String.fromCharCode(96).repeat(3);
+if (['CLEAN', 'PASS'].includes(status)) status += '\\n' + fence + 'delivery-handoff\\n' + JSON.stringify({checks:['Synthetic checks passed'], limitations:[]}) + '\\n' + fence;
+fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], status);
+`);
+  chmodSync(fake, 0o755);
+  const script = join(dirname(fileURLToPath(import.meta.url)), 'task-orchestrator.ts');
+  const cli = (...args: string[]) => spawnSync(process.execPath, [script, ...args, '--codex', fake], { encoding: 'utf8' });
+  const initial = cli('--repo', repository, '--task', 'Synthetic resume');
+  assert.equal(initial.status, 1, initial.stderr);
+  const runDirectory = initial.stdout.match(/Private run directory: (.+)/)![1];
+  t.after(() => rmSync(runDirectory, { recursive: true, force: true }));
+  const stateFile = join(runDirectory, 'state.json');
+  const state = () => JSON.parse(readFileSync(stateFile, 'utf8'));
+  const calls = () => readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  return { ...fixture, cli, calls, runDirectory, stateFile, state, root };
+}
+
+test('CLI resumes a private checkpoint from VERIFY and consumes it after delivery', t => {
+  if (process.platform === 'win32') { t.skip('Executable fixture uses a POSIX shebang'); return; }
+  const fixture = pausedCli(t);
+  const { cli, runDirectory, state, calls, root } = fixture;
+  assert.equal(state().checkpoint.repairRounds, 1);
+  assert.equal(state().checkpoint.nextStage, 'VERIFY');
+  const snapshot = readFileSync(join(runDirectory, 'state.json'), 'utf8');
+  const dryRun = cli('--resume', runDirectory, '--dry-run');
+  assert.equal(dryRun.status, 0, dryRun.stderr);
+  assert.deepEqual(JSON.parse(dryRun.stdout).stages.map((stage: { stage: Stage }) => stage.stage), ['VERIFY', 'DELIVER']);
+  assert.equal(readFileSync(join(runDirectory, 'state.json'), 'utf8'), snapshot);
+  assert.equal(calls().length, 5);
+  const paused = cli('--resume', runDirectory);
+  assert.equal(paused.status, 1, paused.stderr);
+  assert.equal(state().checkpoint.history.length, 6);
+  const evidence = join(root, 'manual-evidence.md');
+  writeFileSync(evidence, 'Manual acceptance passed: macOS; focus, Apply, Cancel and Escape checked.');
+  const resumed = cli('--resume', runDirectory, '--human-evidence', evidence);
+  assert.equal(resumed.status, 0, resumed.stderr);
+  assert.deepEqual(calls().map(call => call.stage), ['IMPLEMENT', 'REVIEW', 'IMPLEMENT_FIXES', 'REVIEW', 'VERIFY', 'VERIFY', 'VERIFY', 'DELIVER']);
+  assert.equal(state().checkpoint, null);
+  const before = calls().length;
+  assert.equal(cli('--resume', runDirectory).status, 1);
+  assert.equal(calls().length, before, 'Completed delivery must never replay');
+});
+
+test('CLI rejects changed source, branch, remote base, locked runs and policy overrides before execution', t => {
+  if (process.platform === 'win32') { t.skip('Executable fixture uses a POSIX shebang'); return; }
+  const { cli, runDirectory, calls, repository, git, root } = pausedCli(t);
+  const before = calls().length;
+  for (const args of [['--skip-verification'], ['--task', 'Other'], ['--max-repair-rounds=3'], ['--base', 'origin/main'], ['--repo', repository]]) {
+    assert.equal(cli('--resume', runDirectory, ...args).status, 1);
+  }
+  mkdirSync(join(runDirectory, 'active.lock'));
+  assert.equal(cli('--resume', runDirectory).status, 1);
+  rmSync(join(runDirectory, 'active.lock'), { recursive: true });
+  writeFileSync(join(repository, 'tracked.txt'), 'Modified source');
+  assert.match(cli('--resume', runDirectory).stderr, /Checkpoint candidate, branch or remote base changed/);
+  git('restore', 'tracked.txt');
+  git('switch', '-c', 'chore/other');
+  assert.equal(cli('--resume', runDirectory).status, 1);
+  git('switch', 'chore/synthetic-task');
+  git('commit', '--allow-empty', '-m', 'Advance remote main');
+  git('push', 'origin', 'HEAD:refs/heads/main');
+  assert.equal(cli('--resume', runDirectory).status, 1);
+  assert.equal(calls().length, before);
+  const evidence = join(root, 'empty.md');
+  writeFileSync(evidence, '');
+  assert.equal(cli('--resume', runDirectory, '--human-evidence', evidence).status, 1);
+});
+
+
+test('CLI consumes a checkpoint when resumed execution fails, without blind retry', t => {
+  if (process.platform === 'win32') { t.skip('Executable fixture uses a POSIX shebang'); return; }
+  const { cli, runDirectory, state, root, calls } = pausedCli(t);
+  writeFileSync(join(root, 'fake-codex'), '#!/usr/bin/env node\nprocess.exit(7);\n');
+  assert.equal(cli('--resume', runDirectory).status, 1);
+  assert.equal(state().checkpoint, null);
+  assert.equal(cli('--resume', runDirectory).status, 1);
+  assert.equal(calls().length, 5);
 });

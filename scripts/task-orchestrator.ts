@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, lstatSync, mkdtempSync, openSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -21,20 +21,29 @@ export type Request = {
   maxRepairRounds: number;
   handoffs: Handoff[];
   candidate?: CandidateIdentity;
+  humanEvidence?: string;
+};
+export type Checkpoint = {
+  candidate: CandidateIdentity;
+  repairRounds: number;
+  nextStage: 'VERIFY';
+  history: Handoff[];
+  humanEvidence?: string;
 };
 export type WorkflowResult = {
   status: FinalStatus;
   reason: string;
   repairRounds: number;
   history: Handoff[];
+  checkpoint?: Checkpoint;
 };
 
 export const ROLES = {
-  IMPLEMENT: { skill: 'implement-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'workspace-write', statuses: ['READY_FOR_REVIEW', 'BLOCKED'] },
-  IMPLEMENT_FIXES: { skill: 'implement-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'workspace-write', statuses: ['READY_FOR_REVIEW', 'BLOCKED'] },
-  REVIEW: { skill: 'review-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'read-only', statuses: ['CLEAN', 'FINDINGS', 'INCOMPLETE'] },
-  VERIFY: { skill: 'verify-task', model: 'gpt-6-luna', effort: 'medium', sandbox: 'read-only', statuses: ['PASS', 'FAIL', 'INCOMPLETE'] },
-  DELIVER: { skill: 'deliver-task', model: 'gpt-6-luna', effort: 'low', sandbox: 'workspace-write', statuses: ['DELIVERED', 'BLOCKED', 'INCOMPLETE'] },
+  IMPLEMENT: { skill: 'implement-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['READY_FOR_REVIEW', 'BLOCKED'] },
+  IMPLEMENT_FIXES: { skill: 'implement-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['READY_FOR_REVIEW', 'BLOCKED'] },
+  REVIEW: { skill: 'review-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'read-only', escalation: 'never', statuses: ['CLEAN', 'FINDINGS', 'INCOMPLETE'] },
+  VERIFY: { skill: 'verify-task', model: 'gpt-6-luna', effort: 'medium', sandbox: 'workspace-write', escalation: 'never', statuses: ['PASS', 'FAIL', 'INCOMPLETE'] },
+  DELIVER: { skill: 'deliver-task', model: 'gpt-6-luna', effort: 'low', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['DELIVERED', 'BLOCKED', 'INCOMPLETE'] },
 } as const;
 
 export function prepareBase(repository: string, baseRef: string): {
@@ -154,6 +163,64 @@ function deliveryHandoffs(review: Handoff, verification: Handoff | undefined, ex
   return handoffs;
 }
 
+// Only an identity-checked VERIFY=INCOMPLETE is resumable. Unknown execution
+// results and delivery mutations require inspection, never an automatic retry.
+function validateCheckpoint(checkpoint: Checkpoint, maxRepairRounds: number): {
+  implementation: Handoff; review: Handoff;
+} {
+  if (!checkpoint || checkpoint.nextStage !== 'VERIFY' || !Array.isArray(checkpoint.history)
+      || !Number.isInteger(checkpoint.repairRounds) || checkpoint.repairRounds < 0
+      || checkpoint.repairRounds > maxRepairRounds
+      || (checkpoint.humanEvidence !== undefined && typeof checkpoint.humanEvidence !== 'string')) {
+    throw new Error('Invalid verification checkpoint');
+  }
+  let next: Stage = 'IMPLEMENT';
+  let rounds = 0;
+  let implementation: Handoff | undefined;
+  let review: Handoff | undefined;
+  for (const [index, handoff] of checkpoint.history.entries()) {
+    if (!handoff || handoff.stage !== next || parseStatus(handoff.stage, handoff.report) !== handoff.status) {
+      throw new Error('Invalid checkpoint history');
+    }
+    switch (handoff.stage) {
+      case 'IMPLEMENT':
+      case 'IMPLEMENT_FIXES':
+        if (handoff.status !== 'READY_FOR_REVIEW') throw new Error('Checkpoint implementation is not ready');
+        implementation = handoff;
+        review = undefined;
+        next = 'REVIEW';
+        break;
+      case 'REVIEW':
+        if (handoff.status === 'CLEAN') {
+          compactHandoff(handoff);
+          review = handoff;
+          next = 'VERIFY';
+        } else if (handoff.status === 'FINDINGS') {
+          rounds++;
+          next = 'IMPLEMENT_FIXES';
+        } else throw new Error('Checkpoint review is incomplete');
+        break;
+      case 'VERIFY':
+        if (handoff.status === 'FAIL') {
+          rounds++;
+          next = 'IMPLEMENT_FIXES';
+        } else if (handoff.status !== 'INCOMPLETE') throw new Error('Checkpoint verification is not incomplete');
+        if (handoff.status === 'INCOMPLETE' && index === checkpoint.history.length - 1 && !sameCandidate(handoff.candidate, checkpoint.candidate)) {
+          throw new Error('Stale checkpoint verification');
+        }
+        break;
+      default: throw new Error('Delivery checkpoints cannot be resumed');
+    }
+    if (rounds > maxRepairRounds || (index === checkpoint.history.length - 1
+        && (handoff.stage !== 'VERIFY' || handoff.status !== 'INCOMPLETE'))) {
+      throw new Error('Checkpoint is not a verification pause');
+    }
+  }
+  if (!implementation || !review || next !== 'VERIFY' || rounds !== checkpoint.repairRounds
+      || !sameCandidate(review.candidate, checkpoint.candidate)) throw new Error('Stale or incomplete checkpoint');
+  return { implementation, review };
+}
+
 export async function runWorkflow(options: {
   task: string;
   baseRef: string;
@@ -162,6 +229,8 @@ export async function runWorkflow(options: {
   beforeDelivery: () => void;
   verificationRequired?: boolean;
   maxRepairRounds?: number;
+  checkpoint?: Checkpoint;
+  humanEvidence?: string;
   computeCandidate: () => CandidateIdentity;
   runStage: (request: Request) => Promise<string>;
 }): Promise<WorkflowResult> {
@@ -170,15 +239,18 @@ export async function runWorkflow(options: {
   if (!Number.isInteger(maxRepairRounds) || maxRepairRounds < 0 || maxRepairRounds > 3) {
     throw new Error('Repair limit must be an integer from 0 to 3');
   }
-  let stage: Stage = 'IMPLEMENT';
-  let repairRounds = 0;
-  const history: Handoff[] = [];
-  let implementation: Handoff | undefined;
-  let review: Handoff | undefined;
+  const resumed = options.checkpoint ? validateCheckpoint(options.checkpoint, maxRepairRounds) : undefined;
+  if (options.checkpoint && !verificationRequired) throw new Error('Cannot skip verification on resume');
+  let stage: Stage = resumed ? 'VERIFY' : 'IMPLEMENT';
+  let repairRounds = options.checkpoint?.repairRounds ?? 0;
+  const history: Handoff[] = [...(options.checkpoint?.history ?? [])];
+  let implementation: Handoff | undefined = resumed?.implementation;
+  let review: Handoff | undefined = resumed?.review;
   let verification: Handoff | undefined;
   let repairCause: Handoff | undefined;
   let reReviewEvidence: Handoff[] = [];
-  let expectedCandidate: CandidateIdentity | undefined;
+  let expectedCandidate: CandidateIdentity | undefined = options.checkpoint?.candidate;
+  let humanEvidence = [options.checkpoint?.humanEvidence, options.humanEvidence].filter(Boolean).join('\n\n') || undefined;
   const finish = (status: FinalStatus, reason: string): WorkflowResult => ({ status, reason, repairRounds, history });
 
   while (true) {
@@ -192,10 +264,10 @@ export async function runWorkflow(options: {
       const handoffs = stage === 'IMPLEMENT' ? []
         : stage === 'IMPLEMENT_FIXES' ? [repairCause!]
         : stage === 'REVIEW' ? [implementation!, ...reReviewEvidence]
-        : stage === 'VERIFY' ? [implementation!, review!]
+        : stage === 'VERIFY' ? [implementation!, review!, ...(history.at(-1)?.stage === 'VERIFY' ? [history.at(-1)!] : [])]
         : deliveryHandoffs(review!, verification, expectedCandidate!);
       const report = await runStage({ stage, task, baseRef, prBase, baseRevision, verificationRequired, repairRound: repairRounds, maxRepairRounds, handoffs,
-        candidate: independentStage ? expectedCandidate : undefined });
+        candidate: independentStage ? expectedCandidate : undefined, humanEvidence: stage === 'VERIFY' ? humanEvidence : undefined });
       handoff = { stage, status: parseStatus(stage, report), report, candidate: independentStage ? expectedCandidate : undefined };
       if (independentStage && !sameCandidate(expectedCandidate, computeCandidate())) {
         history.push(handoff);
@@ -203,6 +275,7 @@ export async function runWorkflow(options: {
       }
       if ((stage === 'IMPLEMENT' || stage === 'IMPLEMENT_FIXES') && handoff.status === 'READY_FOR_REVIEW') {
         expectedCandidate = Object.freeze({ ...computeCandidate() });
+        humanEvidence = undefined;
       }
       if (stage === 'REVIEW' && handoff.status === 'CLEAN') compactHandoff(handoff);
       if (stage === 'VERIFY' && handoff.status === 'PASS') deliveryHandoffs(review!, handoff, expectedCandidate!);
@@ -237,7 +310,8 @@ export async function runWorkflow(options: {
         break;
       case 'VERIFY':
         verification = handoff;
-        if (handoff.status === 'INCOMPLETE') return finish('INCOMPLETE', 'Verification is incomplete');
+        if (handoff.status === 'INCOMPLETE') return { ...finish('INCOMPLETE', 'Verification is incomplete'),
+          checkpoint: { candidate: expectedCandidate!, repairRounds, nextStage: 'VERIFY', history, humanEvidence } };
         if (handoff.status === 'PASS') {
           stage = 'DELIVER';
           break;
@@ -276,6 +350,8 @@ export function stagePrompt(request: Request, repository: string): string {
     `Repair round: ${request.repairRound} of at most ${request.maxRepairRounds}.`,
     request.candidate ? `Orchestrator-computed candidate (do not invent or recompute an alternative ID): ${JSON.stringify(request.candidate)}` : '',
     ROLES[request.stage].sandbox === 'read-only' ? 'Repository access is read-only and escalation is disabled. If required checks need unavailable writes, network or desktop access, report INCOMPLETE; do not broaden permissions or claim a skipped check passed.' : '',
+    request.stage === 'VERIFY' ? 'You may create normal build, test, and diagnostic artifacts required by verification. Do not modify candidate source, tests, build configuration, dependencies, documentation, or other validation-relevant content. The orchestrator verifies candidate identity after this stage. Escalation is disabled; report INCOMPLETE if required access is unavailable. Keep artifacts in ignored build directories or outside the repository.' : '',
+    request.stage === 'VERIFY' && request.humanEvidence ? `Human verification evidence for this candidate (assess coverage and remaining gaps; this is not an automatic PASS):\n${request.humanEvidence}` : '',
     request.stage === 'IMPLEMENT_FIXES' ? 'Fix the task-related findings or failures in the latest handoffs. Preserve the task branch.' : '',
     request.stage === 'REVIEW' && request.handoffs.length > 1 ? 'Re-review the complete current diff. Check closure of every previous finding/failure below; historical CLEAN/FAIL reports are evidence, not current acceptance.' : '',
     request.stage === 'REVIEW' || request.stage === 'VERIFY' ? 'For CLEAN or PASS, include exactly one fenced delivery-handoff block containing JSON: {"checks":["<concise command/result/coverage summary>"],"limitations":[]}. Do not include candidate IDs; the orchestrator attaches them after checking repository state. Keep the block under 6000 characters, each array at most 16 strings of at most 512 characters. Full details belong outside this compact block.' : '',
@@ -307,8 +383,8 @@ export function createCodexRunner(options: {
       const result = spawnSync(command[0], [
         ...command.slice(1), 'exec', '--model', role.model,
         '--config', `model_reasoning_effort="${role.effort}"`,
-        ...(role.sandbox === 'read-only'
-          ? ['--sandbox', 'read-only', '--config', 'approval_policy="never"']
+        ...(role.escalation === 'never'
+          ? ['--sandbox', role.sandbox, '--config', 'approval_policy="never"']
           : ['--approve-for-me']), '--ephemeral',
         '--cd', repository,
         '--output-last-message', output, '-',
@@ -324,11 +400,32 @@ export function createCodexRunner(options: {
   };
 }
 
+type SavedRun = {
+  version: 1;
+  repository: string;
+  branch: string;
+  task: string;
+  baseRef: string;
+  prBase: string;
+  baseRevision: string;
+  verificationRequired: boolean;
+  maxRepairRounds: number;
+  checkpoint: Checkpoint | null;
+};
+
+function writeState(runDirectory: string, state: SavedRun): void {
+  const temporary = join(runDirectory, 'state.json.tmp');
+  writeFileSync(temporary, JSON.stringify(state, null, 2), { mode: 0o600 });
+  renameSync(temporary, join(runDirectory, 'state.json'));
+}
+
 const HELP = `Usage: node scripts/task-orchestrator.ts --task "Task description" [options]
 
 Runs IMPLEMENT -> REVIEW -> VERIFY -> DELIVER, with at most three repair rounds.
 Execution authorizes standard commit, push and PR publication; never merge or close.
 
+  --resume <run-directory>       Resume an identity-checked VERIFY=INCOMPLETE checkpoint
+  --human-evidence <file>        UTF-8 manual acceptance evidence for resumed VERIFY
   --dry-run                      Show the plan without running models or publishing
   --skip-verification            Explicitly skip independent VER (default: required)
   --max-repair-rounds <0..3>      Shared REV/VER repair limit (default: 3)
@@ -341,38 +438,83 @@ Execution authorizes standard commit, push and PR publication; never merge or cl
 
 export async function main(args: string[]): Promise<number> {
   const { values } = parseArgs({ args, options: {
+    resume: { type: 'string' }, 'human-evidence': { type: 'string' },
     task: { type: 'string' }, 'dry-run': { type: 'boolean' }, 'skip-verification': { type: 'boolean' },
     'max-repair-rounds': { type: 'string', default: '3' }, 'stage-timeout-seconds': { type: 'string', default: '1800' },
     repo: { type: 'string' }, base: { type: 'string', default: 'origin/main' }, codex: { type: 'string', default: 'codex' }, help: { type: 'boolean' },
   } });
   if (values.help) { console.log(HELP); return 0; }
-  if (!values.task?.trim()) throw new Error('--task is required');
-  const maxRepairRounds = Number(values['max-repair-rounds']);
+  if (values.resume && (values.task !== undefined || values.repo !== undefined || values['skip-verification']
+      || args.some(arg => /^(--base|--max-repair-rounds)(=|$)/.test(arg)))) {
+    throw new Error('Resume preserves task, repository, base and verification/repair policy; do not override them');
+  }
+  if (values['human-evidence'] && !values.resume) throw new Error('--human-evidence requires --resume');
+  const saved = values.resume ? JSON.parse(readFileSync(join(resolve(values.resume), 'state.json'), 'utf8')) as SavedRun : undefined;
+  if (saved && (saved.version !== 1 || typeof saved.repository !== 'string' || typeof saved.branch !== 'string'
+      || typeof saved.task !== 'string' || typeof saved.baseRef !== 'string' || typeof saved.prBase !== 'string'
+      || typeof saved.baseRevision !== 'string' || saved.verificationRequired !== true || !saved.checkpoint)) {
+    throw new Error('Run has no resumable verification checkpoint');
+  }
+  const task = saved?.task ?? values.task;
+  if (!task?.trim()) throw new Error('--task is required');
+  const maxRepairRounds = saved?.maxRepairRounds ?? Number(values['max-repair-rounds']);
   const timeoutSeconds = Number(values['stage-timeout-seconds']);
   if (!Number.isInteger(maxRepairRounds) || maxRepairRounds < 0 || maxRepairRounds > 3) throw new Error('Repair limit must be an integer from 0 to 3');
   if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds > 86400) throw new Error('Stage timeout must be an integer from 1 to 86400 seconds');
-  const repository = realpathSync(resolve(values.repo ?? join(dirname(fileURLToPath(import.meta.url)), '..')));
+  const repository = realpathSync(resolve(saved?.repository ?? values.repo ?? join(dirname(fileURLToPath(import.meta.url)), '..')));
   const git = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: repository, encoding: 'utf8' });
   if (git.status !== 0 || realpathSync(git.stdout.trim()) !== repository) throw new Error('--repo must be a Git repository root');
   for (const role of Object.values(ROLES)) {
     if (!existsSync(join(repository, '.agents/skills', role.skill, 'SKILL.md'))) throw new Error(`Missing ${role.skill} skill`);
   }
-  const verificationRequired = !values['skip-verification'];
+  const verificationRequired = saved?.verificationRequired ?? !values['skip-verification'];
+  const baseRef = saved?.baseRef ?? values.base!;
+  if (saved) validateCheckpoint(saved.checkpoint!, maxRepairRounds);
+  const humanEvidence = values['human-evidence'] ? readFileSync(resolve(values['human-evidence']), 'utf8') : undefined;
+  if (humanEvidence !== undefined && (!humanEvidence.trim() || humanEvidence.length > 65536)) throw new Error('Human evidence must contain 1 to 65536 characters');
   if (values['dry-run']) {
-    console.log(JSON.stringify({ task: values.task, verificationRequired, maxRepairRounds, base: values.base,
-      stages: ['IMPLEMENT', 'REVIEW', ...(verificationRequired ? ['VERIFY'] : []), 'DELIVER'].map(stage => ({ stage, ...ROLES[stage as Stage] })),
+    console.log(JSON.stringify({ task, verificationRequired, maxRepairRounds, base: baseRef,
+      stages: (saved ? ['VERIFY', 'DELIVER'] : ['IMPLEMENT', 'REVIEW', ...(verificationRequired ? ['VERIFY'] : []), 'DELIVER']).map(stage => ({ stage, ...ROLES[stage as Stage] })),
       repair: 'REVIEW FINDINGS or VERIFY FAIL -> IMPLEMENT_FIXES -> REVIEW', stop: 'After DELIVER; human merge only',
     }, null, 2));
     return 0;
   }
-  const base = prepareBase(repository, values.base!);
-  const runDirectory = mkdtempSync(join(tmpdir(), 'fractallens-task-'));
-  console.log(`Private run directory: ${runDirectory}`);
-  const result = await runWorkflow({ task: values.task, baseRef: base.baseRef, prBase: base.prBase, baseRevision: base.baseRevision, beforeDelivery: base.assertFresh, verificationRequired, maxRepairRounds,
-    computeCandidate: () => computeCandidateIdentity(repository, base.baseRevision),
-    runStage: createCodexRunner({ repository, runDirectory, command: [values.codex!], timeoutMs: timeoutSeconds * 1000 }),
-  });
-  writeFileSync(join(runDirectory, 'result.json'), JSON.stringify(result, null, 2), { mode: 0o600 });
+  const runDirectory = saved ? realpathSync(resolve(values.resume!)) : mkdtempSync(join(tmpdir(), 'fractallens-task-'));
+  const lock = join(runDirectory, 'active.lock');
+  mkdirSync(lock, { mode: 0o700 }); // Existing locks fail closed, including after a crash.
+  let result: WorkflowResult;
+  try {
+    if (saved && JSON.stringify(JSON.parse(readFileSync(join(runDirectory, 'state.json'), 'utf8'))) !== JSON.stringify(saved)) {
+      throw new Error('Checkpoint changed while acquiring the run lock');
+    }
+    const branch = (): string => {
+      const result = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], { cwd: repository, encoding: 'utf8' });
+      if (result.status !== 0) throw new Error('Workflow requires a named branch');
+      return result.stdout.trim();
+    };
+    const base = prepareBase(repository, baseRef);
+    if (saved && (base.baseRevision !== saved.baseRevision || base.prBase !== saved.prBase
+        || branch() !== saved.branch || !sameCandidate(saved.checkpoint!.candidate, computeCandidateIdentity(repository, saved.baseRevision)))) {
+      throw new Error('Checkpoint candidate, branch or remote base changed; fresh review and verification are required');
+    }
+    // Consume the checkpoint before invoking a model. A crash or unknown result
+    // cannot replay verification/delivery from a stale successful gate.
+    const state: SavedRun = { version: 1, repository, branch: branch(), task, baseRef: base.baseRef,
+      prBase: base.prBase, baseRevision: base.baseRevision, verificationRequired, maxRepairRounds, checkpoint: null };
+    writeState(runDirectory, state);
+    console.log(`Private run directory: ${runDirectory}`);
+    result = await runWorkflow({ task, baseRef: base.baseRef, prBase: base.prBase, baseRevision: base.baseRevision,
+      beforeDelivery: base.assertFresh, verificationRequired, maxRepairRounds,
+      checkpoint: saved?.checkpoint ?? undefined, humanEvidence,
+      computeCandidate: () => computeCandidateIdentity(repository, base.baseRevision),
+      runStage: createCodexRunner({ repository, runDirectory, command: [values.codex!], timeoutMs: timeoutSeconds * 1000 }),
+    });
+    writeFileSync(join(runDirectory, 'result.json'), JSON.stringify(result, null, 2), { mode: 0o600 });
+    writeState(runDirectory, { ...state, branch: branch(), checkpoint: result.checkpoint ?? null });
+    if (result.checkpoint) console.log(`Human verification checkpoint saved. Resume with --resume ${runDirectory} [--human-evidence <file>].`);
+  } finally {
+    rmSync(lock, { recursive: true });
+  }
   console.log(`${result.status}\nReason: ${result.reason}\nRepair rounds: ${result.repairRounds}`);
   const last = result.history.at(-1);
   if (last) console.log(`Final stage report:\n${last.report}`);
