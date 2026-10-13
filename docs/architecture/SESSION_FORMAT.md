@@ -63,8 +63,9 @@ formula, exact decimal viewport, Julia parameters, iterations, coloring and
 interactive antialiasing settings. The shortcuts are the platform shortcut key
 with Z and Shift+Z. When a text field is focused, these commands continue to
 operate on its draft instead of the scene. Undo/Redo availability follows focus
-and draft history changes without reopening the Edit menu. History is local to
-the current window session and retains the most recent 100 actions. A new scene
+and draft history changes, including in separate dialog windows, without
+reopening the Edit menu. History is local to the current window session and
+retains the most recent 100 actions. A new scene
 action after Undo discards Redo; selecting an unchanged value does not add an action.
 
 Restoring a snapshot during a pending window resize uses the new render
@@ -100,7 +101,9 @@ scene. Share the copied text, or copy the contents of a scene/bookmark JSON file
 and apply it. No render dimensions or machine paths are included. Legacy
 version 1 scenes remain accepted; unsupported versions, malformed values and
 viewports beyond a formula's existing precision gate are rejected without
-partially changing the scene. Applying or restoring a preset is undoable.
+partially changing the scene or history. Precision validation uses the future
+render target at the current window dimensions, including a pending resize.
+Applying or restoring a preset is undoable.
 Restoration cancels pending gestures, recoloring and superseded rendering,
 updates the camera without decimal rounding, and synchronizes menus and title.
 

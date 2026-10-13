@@ -13,6 +13,7 @@ import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.beans.value.ChangeListener;
+import javafx.collections.ListChangeListener;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.CheckMenuItem;
@@ -47,8 +48,16 @@ final class MainMenuBar extends MenuBar {
     private TextInputControl observedTextInput;
     private final InvalidationListener textHistoryListener = observable -> updateHistoryAvailability();
     private final ChangeListener<Node> focusListener = (observable, oldValue, newValue) -> updateHistoryAvailability();
-    private final ChangeListener<Scene> sceneListener = (observable, oldValue, newValue) -> observeScene(newValue);
-    private final InvalidationListener windowFocusListener = observable -> updateHistoryAvailability();
+    private final ChangeListener<Scene> sceneListener = (observable, oldValue, newValue) -> observeActiveScene();
+    private final InvalidationListener windowFocusListener = observable -> observeActiveScene();
+    private final java.util.Set<Window> observedWindows = new java.util.HashSet<>();
+    private final ListChangeListener<Window> windowsListener = change -> {
+        while (change.next()) {
+            for (Window window : change.getRemoved()) unobserveWindow(window);
+            for (Window window : change.getAddedSubList()) observeWindow(window);
+        }
+        observeActiveScene();
+    };
     private final Stage stage;
     private final FractalView fractalView;
     private final MenuItem export;
@@ -164,9 +173,11 @@ final class MainMenuBar extends MenuBar {
                 command("Copy Scene Preset", shortcut(KeyCode.C, KeyCombination.SHIFT_DOWN), sceneActions::copyPreset),
                 command("Apply Scene Preset from Clipboard", shortcut(KeyCode.V, KeyCombination.SHIFT_DOWN), sceneActions::pastePreset));
         getMenus().setAll(file, editMenu(), view, fractal, goTo, sceneActions.bookmarksMenu(), color, render, window, help);
-        stage.sceneProperty().addListener(sceneListener);
-        stage.focusedProperty().addListener(windowFocusListener);
-        observeScene(stage.getScene());
+        Window.getWindows().addListener(windowsListener);
+        // Observe the owner before it is shown, then any separate dialog windows.
+        observeWindow(stage);
+        Window.getWindows().forEach(this::observeWindow);
+        observeActiveScene();
         fractalView.setOnSceneChanged(this::syncScene);
         stage.sceneProperty().addListener((observable, oldScene, scene) -> {
             if (scene != null) {
@@ -348,8 +359,8 @@ final class MainMenuBar extends MenuBar {
 
     void close() {
         stage.removeEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN, hiddenHandler);
-        stage.sceneProperty().removeListener(sceneListener);
-        stage.focusedProperty().removeListener(windowFocusListener);
+        Window.getWindows().removeListener(windowsListener);
+        java.util.List.copyOf(observedWindows).forEach(this::unobserveWindow);
         if (observedScene != null) observedScene.focusOwnerProperty().removeListener(focusListener);
         observeTextInput(null);
         sceneActions.close();
@@ -373,6 +384,25 @@ final class MainMenuBar extends MenuBar {
         stage.setTitle(scene.fractal() + " — FractalLens");
         updateDestinations(scene.fractal());
         updateAvailability();
+    }
+
+    private void observeWindow(Window window) {
+        if (!observedWindows.add(window)) return;
+        window.sceneProperty().addListener(sceneListener);
+        window.focusedProperty().addListener(windowFocusListener);
+    }
+
+    private void unobserveWindow(Window window) {
+        observedWindows.remove(window);
+        window.sceneProperty().removeListener(sceneListener);
+        window.focusedProperty().removeListener(windowFocusListener);
+    }
+
+    private void observeActiveScene() {
+        Scene scene = Window.getWindows().stream().filter(Window::isFocused)
+                .map(Window::getScene).filter(java.util.Objects::nonNull)
+                .findFirst().orElse(stage.getScene());
+        observeScene(scene);
     }
 
     private void observeScene(Scene scene) {

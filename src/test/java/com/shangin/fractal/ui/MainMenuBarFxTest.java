@@ -305,6 +305,55 @@ class MainMenuBarFxTest {
     }
 
     @Test
+    void bookmarkDialogTracksTextHistoryAndFocusWithoutOpeningEditMenu() throws Exception {
+        fx(() -> { view.setIterations(new IterationSettings(420, 70)); return null; });
+        await(view::isLatencyIdle);
+        FractalScene scene = fx(view::sceneSnapshot);
+        var dialog = fx(() -> {
+            var editor = FractalDialogs.bookmarkNameDialog(stage);
+            editor.show();
+            return editor;
+        });
+        TextField field = fx(() -> input(dialog.getDialogPane(), "bookmark-name"));
+        await(() -> field.isFocused() && dialog.getDialogPane().getScene().getWindow().isFocused());
+        fx(() -> {
+            assertTrue(command("Edit", "Undo").isDisable());
+            field.appendText("draft");
+            assertFalse(command("Edit", "Undo").isDisable());
+            command("Edit", "Undo").fire();
+            assertEquals("", field.getText());
+            assertTrue(command("Edit", "Undo").isDisable());
+            assertFalse(command("Edit", "Redo").isDisable());
+            command("Edit", "Redo").fire();
+            assertEquals("draft", field.getText());
+            assertTrue(command("Edit", "Redo").isDisable());
+            // A second field must replace the observed draft history in this scene.
+            TextField other = new TextField();
+            dialog.getDialogPane().setExpandableContent(other);
+            dialog.getDialogPane().setExpanded(true);
+            other.requestFocus();
+            assertTrue(command("Edit", "Undo").isDisable());
+            other.appendText("other");
+            assertFalse(command("Edit", "Undo").isDisable());
+            field.requestFocus();
+            command("Edit", "Undo").fire();
+            assertEquals("", field.getText());
+            assertEquals("other", other.getText());
+            assertEquals(scene, view.sceneSnapshot());
+            dialog.close();
+            stage.toFront(); stage.requestFocus(); view.requestFocus();
+            return null;
+        });
+        await(() -> stage.isFocused() && view.isFocused());
+        fx(() -> {
+            assertFalse(command("Edit", "Undo").isDisable());
+            assertTrue(command("Edit", "Redo").isDisable());
+            assertEquals(scene, view.sceneSnapshot());
+            return null;
+        });
+    }
+
+    @Test
     void canvasFocusReenablesSceneAcceleratorsAfterEmptyTextHistory() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
         fx(() -> {
@@ -365,6 +414,45 @@ class MainMenuBarFxTest {
         fx(() -> { view.undoScene(); return null; });
         await(() -> view.isLatencyIdle());
         assertEquals(second, fx(view::sceneSnapshot));
+    }
+
+    @Test
+    void presetPrecisionUsesPendingRenderDimensionsBeforeChangingSceneOrHistory() throws Exception {
+        fx(() -> {
+            view.setManaged(false);
+            view.resize(320, 240);
+            view.applyScene(view.sceneSnapshot());
+            return null;
+        });
+        await(view::isLatencyIdle);
+        fx(() -> { view.setIterations(new IterationSettings(420, 70)); return null; });
+        await(view::isLatencyIdle);
+        fx(() -> { view.undoScene(); return null; });
+        await(view::isLatencyIdle);
+        fx(() -> {
+            FractalScene initial = view.sceneSnapshot();
+            boolean undo = view.canUndo();
+            boolean redo = view.canRedo();
+            FractalSurface surface = (FractalSurface) view.getChildrenUnmodifiable().stream()
+                    .filter(FractalSurface.class::isInstance).findFirst().orElseThrow();
+            var viewport = new com.shangin.fractal.math.Viewport("1", "0", "2e-12");
+            FractalScene preset = initial.withFractal(FractalPreset.BURNING_SHIP, viewport);
+            // The same preset is valid for the old buffer, but not the pending taller target.
+            new FractalCamera(preset.fractal(), viewport).goTo(viewport, 320, 240,
+                    surface.renderWidth(), surface.renderHeight());
+            view.resize(320, 900);
+            assertThrows(IllegalArgumentException.class, () -> view.applyScene(preset));
+            assertEquals(initial, view.sceneSnapshot());
+            assertEquals(undo, view.canUndo());
+            assertEquals(redo, view.canRedo());
+            assertEquals(initial, surface.completedRender().scene());
+            // Restore the original size before the pending resize fires.
+            view.resize(320, 240);
+            view.redoScene();
+            return null;
+        });
+        await(view::isLatencyIdle);
+        assertEquals(new IterationSettings(420, 70), fx(() -> view.sceneSnapshot().iterations()));
     }
 
     private void assertRestoredDuringResize(FractalScene expected, Runnable restore) throws Exception {

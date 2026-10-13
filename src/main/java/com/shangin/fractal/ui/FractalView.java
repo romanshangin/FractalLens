@@ -988,8 +988,8 @@ public class FractalView extends StackPane {
         // Validate sharing against the selected formula's existing precision gate before mutation.
         FractalCamera candidate = new FractalCamera(replacement.fractal(), replacement.viewport());
         candidate.goTo(replacement.viewport(), Math.max(2, (int) getWidth()),
-                Math.max(2, (int) getHeight()), Math.max(2, fractalSurface.renderWidth()),
-                Math.max(2, fractalSurface.renderHeight()));
+                Math.max(2, (int) getHeight()), fractalSurface.renderWidthFor((int) getWidth()),
+                fractalSurface.renderHeightFor((int) getHeight()));
         recordScene();
         history.record(replacement);
         restoreScene(replacement);
