@@ -312,9 +312,13 @@ console.log('FAIL - this log must never be parsed as the report');
     const args = JSON.parse(readFileSync(reportFile, 'utf8'));
     assert.equal(args[args.indexOf('--model') + 1], ROLES[stage].model);
     assert.equal(args[args.indexOf('--config') + 1], `model_reasoning_effort="${ROLES[stage].effort}"`);
-    assert.equal(args[args.indexOf('--sandbox') + 1], ROLES[stage].sandbox);
     assert.equal(args.includes('--approve-for-me'), ROLES[stage].sandbox === 'workspace-write');
-    if (ROLES[stage].sandbox === 'read-only') assert.ok(args.includes('approval_policy="never"'));
+    if (ROLES[stage].sandbox === 'read-only') {
+      assert.equal(args[args.indexOf('--sandbox') + 1], 'read-only');
+      assert.ok(args.includes('approval_policy="never"'));
+    } else {
+      assert.ok(!args.includes('--sandbox'), '--approve-for-me must not be combined with --sandbox');
+    }
     assert.ok(args.includes('--ephemeral'));
     assert.ok(!args.includes('--add-dir'));
     assert.equal(dirname(args[args.indexOf('--output-last-message') + 1]), join(root, stageDirectory));
