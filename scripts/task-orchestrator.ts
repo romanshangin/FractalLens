@@ -265,6 +265,14 @@ export function stagePrompt(request: Request, repository: string): string {
     `Frozen comparison base revision: ${request.baseRevision}. Use this SHA for branch-base and diff provenance throughout this run.`,
     `Intended pull-request base branch: ${request.prBase}. Use this branch for PR creation/update; do not substitute main.`,
     `verificationRequired=${request.verificationRequired}. This is explicit caller policy; required project tests still apply.`,
+    request.stage === 'IMPLEMENT' || request.stage === 'IMPLEMENT_FIXES'
+      ? 'verificationRequired controls the later independent VERIFY stage after REVIEW=CLEAN. ' +
+        'Do not treat independent verification or manual acceptance checks as implementation blockers unless ' +
+        'AGENTS.md or the task explicitly defines them as implementation-stage gates. ' +
+        'When implementation is complete and required developer self-validation passed, report READY_FOR_REVIEW ' +
+        'and explicitly list verification gaps, including manual UI acceptance not performed. ' +
+        'READY_FOR_REVIEW means ready for independent review, not full task acceptance.'
+      : '',
     `Repair round: ${request.repairRound} of at most ${request.maxRepairRounds}.`,
     request.candidate ? `Orchestrator-computed candidate (do not invent or recompute an alternative ID): ${JSON.stringify(request.candidate)}` : '',
     ROLES[request.stage].sandbox === 'read-only' ? 'Repository access is read-only and escalation is disabled. If required checks need unavailable writes, network or desktop access, report INCOMPLETE; do not broaden permissions or claim a skipped check passed.' : '',

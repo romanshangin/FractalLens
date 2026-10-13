@@ -143,6 +143,16 @@ values above three are rejected. Exceeding the limit returns `BLOCKED` with a
 review or verification repair-limit reason. Repairs invalidate old handoffs;
 a prior `CLEAN` or `PASS` cannot bypass fresh review after a fix.
 
+`READY_FOR_REVIEW` means implementation is complete and required developer
+self-validation passed; it is not full task acceptance. Independent verification
+or manual UI acceptance that cannot be performed during implementation is
+reported as a verification gap and does not by itself block IMPLEMENT or
+IMPLEMENT_FIXES, unless `AGENTS.md` or the task explicitly makes that check an
+implementation-stage gate. Required developer self-validation remains mandatory.
+`verificationRequired` selects only the transition after REVIEW `CLEAN`: VERIFY
+or DELIVER. When VERIFY cannot perform a required acceptance check, it reports
+`INCOMPLETE` and the workflow stops before delivery.
+
 Independent verification is required by default. Only explicit caller policy
 may skip the stage:
 

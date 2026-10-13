@@ -292,6 +292,36 @@ test('stage prompts explicitly bind skills, skip policy and role boundaries', ()
   }
 });
 
+test('implementation prompts separate developer validation from independent acceptance for both policies', () => {
+  for (const stage of Object.keys(ROLES) as Stage[]) {
+    for (const verificationRequired of [false, true]) {
+      const prompt = stagePrompt({ ...BASE, stage, task: 'Synthetic task', verificationRequired,
+        repairRound: 0, maxRepairRounds: 3, handoffs: [] }, '/project');
+      if (stage === 'IMPLEMENT' || stage === 'IMPLEMENT_FIXES') {
+        assert.match(prompt, /verificationRequired controls the later independent VERIFY stage after REVIEW=CLEAN/);
+        assert.match(prompt, /Do not treat independent verification or manual acceptance checks as implementation blockers/);
+        assert.match(prompt, /AGENTS\.md or the task explicitly defines them as implementation-stage gates/);
+        assert.match(prompt, /required developer self-validation passed, report READY_FOR_REVIEW/);
+        assert.match(prompt, /explicitly list verification gaps, including manual UI acceptance not performed/);
+        assert.match(prompt, /READY_FOR_REVIEW means ready for independent review, not full task acceptance/);
+      } else {
+        assert.doesNotMatch(prompt, /report READY_FOR_REVIEW/);
+      }
+    }
+  }
+});
+
+test('unavailable manual acceptance allows review then stops at independent verification', async () => {
+  const run = scripted(['READY_FOR_REVIEW\nAutomated developer self-validation passed.\n' +
+    'Verification gaps: manual UI acceptance not performed.', 'CLEAN',
+    'INCOMPLETE\nRequired manual UI acceptance unavailable.']);
+  const result = await run.result;
+  assert.equal(result.status, 'INCOMPLETE');
+  assert.equal(result.repairRounds, 0);
+  assert.deepEqual(run.requests.map(r => r.stage), ['IMPLEMENT', 'REVIEW', 'VERIFY']);
+  assert.match(run.requests[1].handoffs[0].report, /manual UI acceptance not performed/);
+});
+
 test('Codex adapter selects requested models/efforts and consumes only the final report file', async t => {
   const root = mkdtempSync(join(tmpdir(), 'fractallens-adapter-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
