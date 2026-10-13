@@ -153,6 +153,8 @@ for macOS and GPU integration, `packaging/` for runtime distribution, and
   measurement inputs.
 - [Publication provenance](docs/development/PUBLICATION.md) — historical evidence, redactions
   and limits on replaying archived experiments.
+- [Task orchestrator](docs/development/TASK_ORCHESTRATOR.md) — sequential DEV, REV,
+  optional VER, and PR delivery with bounded repair rounds and human merge.
 
 ## License
 

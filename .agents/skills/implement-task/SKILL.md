@@ -1,9 +1,39 @@
 ---
 name: implement-task
-description: Implement a requested FractalLens change with repository-aware discovery, planning, scoped edits, tests, and documentation. Use for feature, fix, refactoring, performance, or roadmap implementation; not for review-only, verification-only, or pull-request delivery requests.
+description: >
+  Implement a requested FractalLens change with repository-aware discovery,
+  planning, scoped edits, developer self-validation, tests, and documentation.
+  Use only for implementation or implementation fixes. Do not perform or invoke
+  independent review, independent verification, or pull-request delivery.
 ---
 
 # Implement a FractalLens task
+
+## Role boundary
+
+This skill is the implementation stage of the task workflow.
+
+Its responsibility ends when the requested change is implemented,
+developer self-validation is complete, and the implementation handoff
+has been reported.
+
+Developer self-validation is part of implementation and is not independent
+verification.
+
+Do not invoke or perform:
+
+- `review-task`;
+- `verify-task`;
+- `deliver-task`;
+- independent code review;
+- independent post-review verification;
+- pull-request delivery.
+
+Do not commit, push, create a pull request, or merge changes as part of this
+skill. Delivery is handled separately by `deliver-task`.
+
+After reporting the implementation handoff, stop and wait for the user or
+orchestrator to start the next workflow stage.
 
 Follow all project-wide rules and constraints in `AGENTS.md`.
 
@@ -11,12 +41,15 @@ Follow all project-wide rules and constraints in `AGENTS.md`.
 
 1. Before making any change, inspect the current branch and working tree as a
    read-only baseline. Inspect existing tracked modifications, staged changes,
-   and untracked files, then create a new dedicated task branch. Unless the
-   user explicitly specifies another base or branch name, create the branch
-   from `main` using the change-based naming rule in `AGENTS.md`
-   (`feature/`, `fix/`, or `chore/`). Treat all pre-existing work as
-   user-owned and preserve it while creating the branch. Do not edit files
-   until the new branch has been created and its base has been verified.
+   and untracked files. If the current branch is already the dedicated branch
+   for the requested task, including one prepared by the user or orchestrator,
+   continue using it. Otherwise, create the dedicated task branch according to
+   `AGENTS.md` before editing files. Unless the user explicitly specifies
+   another base or branch name, create it from `main` using the naming rule in
+   `AGENTS.md`. Treat all pre-existing work as
+   user-owned and preserve it; do not switch branches if doing so would disturb
+   that work. Do not edit files until the task branch is established and its
+   base and merge base have been verified. Never use `main` as the task branch.
 2. Resolve the requested outcome and boundaries. Distinguish required behavior,
    explicitly requested cleanup, and incidental improvements. Do not expand the
    scope for unrelated cleanup, modernization, formatting, or architectural
@@ -94,43 +127,13 @@ approach:
 
 ## Performance changes
 
-Treat an unmeasured performance change as an optimization candidate, not a
-confirmed optimization.
+For performance work, read [the benchmark protocol](references/performance.md)
+and follow the established benchmark and validation documents for the affected
+subsystem.
 
-Before implementation:
-
-- identify the suspected bottleneck;
-- select fixed workloads and a control implementation or baseline code state;
-- define the correctness gate and retain/reject metrics;
-- reuse an established benchmark protocol when one exists.
-
-Initial bottleneck diagnosis may use lightweight exploratory measurements. Apply
-the controlled protocol below before using results for a `retain` or `reject`
-decision:
-
-- compare identical scenes, dimensions, iteration limits, antialiasing settings,
-  and precision modes;
-- record backend, JDK, JavaFX, LWJGL, hardware, power state, inputs, and code
-  state;
-- use a fresh output directory and separate warm-up from measured repetitions;
-- measure first-visible latency, completion time, and publication latency when
-  they affect users;
-- validate rendered output as well as timing;
-- use at least three repetitions for basic reproducibility and enough
-  alternating control/candidate pairs and JVM starts for a retain/reject
-  decision;
-- do not infer a memory leak from RSS, JFR, NMT, or one short run alone;
-- do not compare runs collected under materially different thermal or power
-  conditions.
-
-Stop tuning once the predefined retain/reject threshold is clearly met or the
-agreed experiment budget is exhausted. Do not repeatedly vary unrelated
-parameters until a favorable result appears.
-
-After the experiment, record an explicit `retain`, `reject`, or `inconclusive`
-decision. Do not leave a rejected or inconclusive candidate active in the final
-implementation. Keep the commands, parameters, summary, and necessary raw
-evidence in the appropriate validation or results document.
+Do not treat an unmeasured candidate as an optimization. Preserve correctness
+gates and compare against a valid control. Record `retain`, `reject`, or
+`inconclusive` before handoff.
 
 ## Finish the implementation phase
 
@@ -138,16 +141,38 @@ Review the resulting diff for scope, accidental formatting churn, debug logging,
 temporary benchmark code, generated files, commented-out code, stale TODOs, and
 unrelated dependency changes.
 
-Implementation-time checks provide fast feedback and guide the change. Do not
-defer basic regression-test development or immediately relevant checks until
-verification. Then use the `verify-task` skill for final risk-appropriate
-validation of the completed diff.
+Implementation-time checks are developer self-validation. Run the tests and
+checks required to establish that the implementation is ready for independent
+review, including the portable suite required by `AGENTS.md` where applicable
+and relevant subsystem checks. Do not defer basic regression-test development
+or immediately relevant checks until independent verification.
 
-Do not commit, push, or create a pull request unless the user explicitly requests
-delivery. Report:
+Do not invoke `verify-task`. Independent verification is a separate workflow
+stage started explicitly by the user or orchestrator after independent review.
 
-- what behavior changed;
+If required developer self-validation fails, investigate and fix failures that
+belong to the requested task before handoff. Do not report the implementation
+as ready while known task-related failures remain. If a concrete blocker
+prevents completion or required validation, report `BLOCKED` with the evidence.
+
+## Report the implementation handoff
+
+Start the report with exactly one implementation status:
+
+- `READY_FOR_REVIEW` — the requested implementation is complete and required
+  developer self-validation passed;
+- `BLOCKED` — implementation or required developer self-validation cannot be
+  completed because of a concrete repository, environment, dependency,
+  requirement, or platform blocker.
+
+Then report:
+
+- behavior changed;
 - files materially changed;
-- tests, benchmarks, and validation executed, with their results;
+- tests and developer self-validation executed, with results;
 - documentation or evidence updated;
-- remaining risks and unverified areas.
+- known risks and areas not validated by the developer;
+- blocking issue, when status is `BLOCKED`.
+
+Do not report `READY_FOR_REVIEW` while a known task-related required check is
+failing, skipped, unrun, or could not be verified.
