@@ -147,6 +147,20 @@ review, including the portable suite required by `AGENTS.md` where applicable
 and relevant subsystem checks. Do not defer basic regression-test development
 or immediately relevant checks until independent verification.
 
+Developer self-validation must cover the checks reasonably available during
+implementation. Checks that belong to independent verification, require a
+separate environment, manual UI inspection, platform-specific hardware, or
+unavailable external capabilities may remain unverified at implementation
+handoff. Report them explicitly as verification gaps. Such gaps do not by
+themselves prevent `READY_FOR_REVIEW` unless `AGENTS.md` or the task explicitly
+defines the check as an implementation-stage gate.
+
+`READY_FOR_REVIEW` means the developer believes the implementation is ready for
+independent review; it does not mean the task is fully accepted.
+`verificationRequired` controls whether a separate independent verification
+stage will run after `REVIEW=CLEAN`. It must not be used to turn independent
+verification checks into implementation blockers.
+
 Do not invoke `verify-task`. Independent verification is a separate workflow
 stage started explicitly by the user or orchestrator after independent review.
 
@@ -171,8 +185,8 @@ Then report:
 - files materially changed;
 - tests and developer self-validation executed, with results;
 - documentation or evidence updated;
-- known risks and areas not validated by the developer;
+- known risks and verification gaps, including manual UI acceptance not performed;
 - blocking issue, when status is `BLOCKED`.
 
-Do not report `READY_FOR_REVIEW` while a known task-related required check is
-failing, skipped, unrun, or could not be verified.
+Do not report `READY_FOR_REVIEW` while a known task-related required developer
+self-validation check is failing, skipped, unrun, or could not be verified.
