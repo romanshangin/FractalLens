@@ -101,20 +101,24 @@ export function computeCandidateIdentity(repository: string, base = 'origin/main
     if (stage !== '0' || mode === '160000') throw new Error('Unmerged paths and submodules are unsupported candidates');
     tracked.set(entry.slice(separator + 1), mode);
   }
-  const paths = new Set([...tracked.keys(), ...decodePaths(git('ls-files', '--others', '--exclude-standard', '-z')).split('\0').filter(Boolean)]);
+  const changedTrackedPaths = decodePaths(git('diff', '--no-renames', '--name-only', '-z', baseRevision)).split('\0').filter(Boolean);
+  const paths = new Set([...changedTrackedPaths, ...decodePaths(git('ls-files', '--others', '--exclude-standard', '-z')).split('\0').filter(Boolean)]);
   const fileMode = spawnSync('git', ['config', '--bool', '--get', 'core.filemode'], { cwd: repository, encoding: 'utf8' });
   if (fileMode.error || (fileMode.status !== 0 && fileMode.status !== 1)) throw new Error('Cannot establish Git file-mode policy');
   const observeExecutable = fileMode.stdout.trim() !== 'false';
   const symlinkPolicy = spawnSync('git', ['config', '--bool', '--get', 'core.symlinks'], { cwd: repository, encoding: 'utf8' });
   if (symlinkPolicy.error || (symlinkPolicy.status !== 0 && symlinkPolicy.status !== 1)) throw new Error('Cannot establish Git symlink policy');
   const root = realpathSync(repository);
-  const hash = createHash('sha256').update('fractallens-working-tree-v1\n');
+  const hash = createHash('sha256').update('fractallens-working-tree-v2\n');
   for (const path of [...paths].sort()) {
     const file = join(root, path);
     let stat;
     try { stat = lstatSync(file); }
     catch (error) {
-      if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) continue;
+      if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+        hash.update(JSON.stringify([path, 'deleted']) + '\n');
+        continue;
+      }
       throw error;
     }
     const parent = relative(root, realpathSync(dirname(file)));
