@@ -65,4 +65,32 @@ class BookmarkStoreTest {
         store.save("a", scene);
         assertEquals(2, store.load().size());
     }
+
+    @Test void countsUnicodeCharactersAndPersistsLongNamesWithoutOversizedFilenames() throws Exception {
+        var store = new BookmarkStore(directory);
+        for (String name : java.util.List.of("x".repeat(80), "\u0416".repeat(80), "🌌".repeat(80))) {
+            assertEquals(name, BookmarkStore.validateName("  " + name + "  "));
+            store.save(name, scene);
+            assertTrue(new BookmarkStore(directory).load().contains(new BookmarkStore.Bookmark(name, scene)));
+            store.save(name, scene.withColoring(new com.shangin.fractal.scene.ColoringSettings(PalettePreset.FIRE)));
+            store.delete(name);
+            assertTrue(store.load().isEmpty());
+        }
+        assertThrows(IllegalArgumentException.class, () -> BookmarkStore.validateName("🌌".repeat(81)));
+        assertThrows(IllegalArgumentException.class, () -> BookmarkStore.validateName("\uD800"));
+    }
+
+    @Test void preservesLegacySingleFileNamesAlongsideNestedNames() throws Exception {
+        String legacy = "\u0416".repeat(40);
+        String filename = java.util.HexFormat.of().formatHex(legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8)) + ".json";
+        new LastSessionStore(directory.resolve(filename)).save(scene);
+        var store = new BookmarkStore(directory);
+        store.save("🌌".repeat(80), scene);
+        assertEquals(2, store.load().size());
+        assertTrue(store.load().contains(new BookmarkStore.Bookmark(legacy, scene)));
+        store.save(legacy, scene);
+        assertTrue(Files.exists(directory.resolve(filename)));
+        store.delete(legacy);
+        assertEquals(1, store.load().size());
+    }
 }

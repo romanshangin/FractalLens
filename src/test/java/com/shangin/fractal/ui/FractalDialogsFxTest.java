@@ -56,6 +56,29 @@ class FractalDialogsFxTest {
                 .map(type -> (Button) dialog.getDialogPane().lookupButton(type))
                 .filter(Button::isDefaultButton).findFirst().orElseThrow();
     }
+
+    @Test void bookmarkFallbackUsesCharacterLimitAndPreservesInvalidDraft() throws Exception {
+        var dialog = fx(() -> FractalDialogs.bookmarkNameDialog(owner));
+        try {
+            fx(() -> { dialog.show(); return null; });
+            fx(() -> {
+                var name = field(dialog, "bookmark-name");
+                assertSame(name, dialog.getDialogPane().getScene().getFocusOwner());
+                String invalid = "🌌".repeat(81);
+                name.setText(invalid);
+                primary(dialog).fire();
+                assertTrue(dialog.isShowing());
+                assertEquals(invalid, name.getText());
+                assertEquals(com.shangin.fractal.app.BookmarkStore.NAME_ERROR,
+                        ((Label) dialog.getDialogPane().lookup("#dialog-validation-error")).getText());
+                name.setText("🌌".repeat(80));
+                name.fireEvent(new ActionEvent());
+                assertFalse(dialog.isShowing());
+                assertEquals("🌌".repeat(80), dialog.getResult());
+                return null;
+            });
+        } finally { fx(() -> { dialog.close(); return null; }); }
+    }
     private static TextField field(Dialog<?> dialog, String id) {
         return (TextField) dialog.getDialogPane().lookup("#" + id);
     }

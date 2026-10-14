@@ -195,9 +195,12 @@ delivery foundation should be completed first.
   JavaFX/native and manual macOS acceptance. Menu-to-frame regressions verify
   the applied iteration limit and exact Julia samples; restart checks preserve
   both editors' values. See [acceptance and platform limits](docs/platform/MACOS_UI.md#p21-acceptance).
-- [ ] **P2.2.** Build undo/redo and bookmarks on the versioned scene format, then add
-  copyable/shareable viewport presets. Implementation and regression coverage
-  are present; visible workflow acceptance remains pending. See
+- [x] **P2.2.** Build undo/redo and bookmarks on the versioned scene format, then add
+  copyable/shareable viewport presets. The owner accepted P2.2 on 2026-10-14
+  after successful manual Undo/Redo, bookmark persistence/replacement/deletion,
+  and valid/invalid clipboard-preset checks. The native name sheet passed macOS
+  developer UI checks; platform limits remain recorded in the UI documentation.
+  This product acceptance does not replace review or delivery of the current fixes. See
   [scene workflows](docs/architecture/SESSION_FORMAT.md#scene-history-bookmarks-and-shared-presets-p22).
 - [ ] **P2.3.** Consolidate the duplicate section 5/6 export requirements into one tiled,
   cancellable high-resolution/off-screen pipeline based on `FractalScene` and
@@ -310,7 +313,7 @@ Remaining items in this section follow the cross-section order in section 0.
   and persist through session restore. See [P2.1 acceptance](docs/platform/MACOS_UI.md#p21-acceptance).
 - [x] Add keyboard navigation and render progress/status.
 - [x] Show user-facing errors instead of printing stack traces.
-- [ ] Add copyable/shareable viewport presets.
+- [x] Add copyable/shareable viewport presets. See P2.2 acceptance above.
 - [x] Replace the macOS canvas context menu with a native AppKit `NSMenu` for
   system-managed appearance and behavior. Add a small Objective-C/JNI bridge
   and package its native library, retaining the JavaFX menu on other platforms.
@@ -343,7 +346,7 @@ Remaining items in this section follow the cross-section order in section 0.
   `WINDOW_MODAL` and CSS alone do not provide a native AppKit sheet. Validate
   ownership, focus restoration, cancellation, input validation, appearance
   changes, full screen, and callbacks without blocking rendering.
-  Iteration Settings and Julia Parameters use a shared AppKit `NSPanel` sheet
+  Iteration Settings, Julia Parameters and Add Bookmark use shared AppKit `NSPanel` sheets
   with native fields/buttons and JavaFX fallback. Other forms, native alerts and
   the remaining platform acceptance checks are still open; see
   `docs/platform/MACOS_UI.md`.
@@ -352,7 +355,7 @@ Remaining items in this section follow the cross-section order in section 0.
 
 - [x] Introduce an immutable `FractalScene` containing formula, viewport, iteration settings, and coloring, and pair every completed frame with the exact scene snapshot it represents.
 - [x] Keep transient output dimensions and scheduling priority in a separate immutable `RenderTarget` so window resizes do not alter scene history.
-- [ ] Add undo/redo and bookmarks based on `FractalScene` snapshots.
+- [x] Add undo/redo and bookmarks based on `FractalScene` snapshots. See P2.2 acceptance above.
 - [x] Add JSON serialization and last-session restore. The current versioned
   schema and atomic recovery behavior are documented in `docs/architecture/SESSION_FORMAT.md`.
 - [ ] Add arbitrary-resolution export by combining a scene snapshot with an independent render target.

@@ -94,7 +94,7 @@ final class MainMenuBar extends MenuBar {
                 Runnable onExport, BookmarkStore bookmarks) {
         this.stage = stage;
         this.fractalView = fractalView;
-        sceneActions = new SceneActions(stage, fractalView, bookmarks);
+        sceneActions = new SceneActions(stage, fractalView, bookmarks, this::parameterSheetOpen);
         stage.addEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN, hiddenHandler);
         FractalPreset initialFractal = initialScene.fractal();
         currentFractal = initialFractal;
@@ -278,7 +278,8 @@ final class MainMenuBar extends MenuBar {
 
     private boolean parameterSheetOpen() {
         return iterationSheet != null && iterationSheet.isOpen()
-                || juliaSheet != null && juliaSheet.isOpen();
+                || juliaSheet != null && juliaSheet.isOpen()
+                || sceneActions.hasOpenSheet();
     }
 
     private void showCoordinates() {

@@ -134,7 +134,8 @@ static NSButton *button(NSString *title, id target, SEL action) {
 JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
 (JNIEnv *env, jobject callback, jlong windowHandle, jstring title, jstring hintText,
  jstring firstLabel, jstring secondLabel, jstring firstId, jstring secondId,
- jstring first, jstring second, jstring defaultFirst, jstring defaultSecond, jstring errorText) {
+ jstring first, jstring second, jstring defaultFirst, jstring defaultSecond, jstring errorText,
+ jboolean singleField, jstring confirmTitle) {
     if (!sheetMainThread(env)) return 0;
     NSWindow *owner = (__bridge NSWindow *)(void *)(intptr_t)windowHandle;
     if (!owner.isVisible || owner.attachedSheet) return 0;
@@ -178,12 +179,13 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
     session.first.action = @selector(apply:);
     session.second.target = session;
     session.second.action = @selector(apply:);
-    NSGridView *grid = [NSGridView gridViewWithViews:@[
+    NSArray *rows = singleField ? @[@[label(nativeString(env, firstLabel)), session.first]] : @[
         @[label(nativeString(env, firstLabel)), session.first],
-        @[label(nativeString(env, secondLabel)), session.second]]];
+        @[label(nativeString(env, secondLabel)), session.second]];
+    NSGridView *grid = [NSGridView gridViewWithViews:rows];
     grid.rowSpacing = 12;
     grid.columnSpacing = 12;
-    [grid columnAtIndex:0].width = 180;
+    [grid columnAtIndex:0].width = singleField ? 60 : 180;
     [grid columnAtIndex:0].xPlacement = NSGridCellPlacementLeading;
     [grid columnAtIndex:1].xPlacement = NSGridCellPlacementFill;
     grid.yPlacement = NSGridCellPlacementCenter;
@@ -191,12 +193,13 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
     session.error.identifier = @"dialog-validation-error";
     NSButton *reset = button(@"Reset to Defaults", session, @selector(reset:));
     NSButton *cancel = button(@"Cancel", session, @selector(cancel:));
-    NSButton *apply = button(@"Apply", session, @selector(apply:));
+    NSButton *apply = button(nativeString(env, confirmTitle), session, @selector(apply:));
     cancel.keyEquivalent = @"\033";
     apply.keyEquivalent = @"\r";
     NSView *spacer = [NSView new];
     [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
-    NSStackView *actions = [NSStackView stackViewWithViews:@[reset, spacer, cancel, apply]];
+    NSStackView *actions = [NSStackView stackViewWithViews:singleField
+            ? @[spacer, cancel, apply] : @[reset, spacer, cancel, apply]];
     actions.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     actions.spacing = 8;
     NSStackView *body = [NSStackView stackViewWithViews:@[heading, hint, grid, session.error, actions]];
@@ -215,7 +218,7 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
         [session.error.widthAnchor constraintEqualToAnchor:body.widthAnchor],
         [session.error.heightAnchor constraintGreaterThanOrEqualToConstant:32],
         [actions.widthAnchor constraintEqualToAnchor:body.widthAnchor]]];
-    session.first.nextKeyView = session.second;
+    session.first.nextKeyView = singleField ? cancel : session.second;
     session.second.nextKeyView = reset;
     reset.nextKeyView = cancel;
     cancel.nextKeyView = apply;

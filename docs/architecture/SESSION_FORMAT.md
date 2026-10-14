@@ -82,17 +82,34 @@ serialized scene contract.
 
 The Bookmarks menu provides Add Bookmark, Reload Bookmarks, and a submenu for
 each saved name with Restore and Delete. Names are trimmed, case-sensitive and
-limited to 80 UTF-8 bytes without control characters. Saving an existing name
+limited to 80 Unicode code points (characters, not UTF-8 bytes), without control
+characters or malformed Unicode. Saving an existing name
 replaces that bookmark. Each bookmark is a normal scene JSON file in a
 `bookmarks` directory beside `last-session.json`; filenames contain the
 lowercase hexadecimal UTF-8 encoding of the name, preventing path traversal
-and case-insensitive filesystem collisions. Bookmark storage uses the same
+and case-insensitive filesystem collisions. Encoded names longer than 160
+characters are split into directory components of at most 160 characters,
+followed by the final `.json` filename. This bounds filename lengths even for
+80 emoji. Existing single-file bookmarks retain their paths and remain readable,
+replaceable and deletable without migration. Bookmark storage uses the same
 atomic publication, 1 MiB read limit and previous-generation recovery as the
 session store. Delete removes both primary and recovery files. Corruption with
 no valid recovery copy is reported and preserved for recovery; Reload retries
 after the files or directory permissions have been repaired. Storage runs on a
-single background worker. Closing the window suppresses late UI callbacks and
+single background worker. Menu containers remain openable during storage work;
+Add, Reload, Restore and Delete are disabled individually until it finishes.
+Saved or reloaded entries become actionable immediately, including in the
+native macOS menu, without reopening the menu or changing window focus.
+Closing the window suppresses late UI callbacks and
 allows already submitted writes to finish.
+
+On macOS, Add Bookmark uses an owner-associated AppKit sheet with one native
+name field, Save and Cancel. Return saves; Escape and Cancel discard the draft.
+Invalid names keep the sheet open with a character-based inline error. Storage
+starts asynchronously only after a valid Save. Closing the owner suppresses
+pending Save callbacks. Bookmark and parameter sheets cannot overlap. The
+JavaFX name dialog remains the fallback on other platforms or if the native
+bridge cannot present the sheet.
 
 View → Copy Scene Preset places the versioned scene JSON on the clipboard
 (shortcut key + Shift+C). View → Apply Scene Preset from Clipboard
@@ -125,3 +142,19 @@ acceptance should inspect scene Undo/Redo, bookmark naming (focus, invalid
 name, Enter, Escape and Cancel), save/restore after restart, and copied preset
 application in the running app. Model tests and skipped graphical tests do not
 establish that acceptance.
+
+Owner manual acceptance on 2026-10-14 covered bookmarks with nondefault scene
+coordinates, Julia parameters, iterations and coloring; restart and Restore;
+replacement and Delete (including absence after restart); and the original
+name dialog's focus, validation, Return, Escape and Cancel. This acceptance
+predates the native bookmark name sheet and its character-limit change. Separate
+macOS developer checks of the replacement dialog are recorded in
+[macOS UI](../platform/MACOS_UI.md#native-bookmark-name-sheet).
+
+The owner subsequently confirmed both manual clipboard-preset stages without
+errors: copying and applying a configured scene restored its settings, while
+an unsupported schema showed an error without changing the current scene.
+The owner explicitly accepted P2.2 as complete on 2026-10-14. This records
+product workflow acceptance; it does not replace review, independent
+verification where required, or delivery of the current bookmark fixes, and
+does not extend the documented platform coverage.
