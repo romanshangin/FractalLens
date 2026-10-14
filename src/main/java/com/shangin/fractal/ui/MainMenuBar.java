@@ -1,5 +1,6 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.BookmarkStore;
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.PalettePreset;
@@ -10,6 +11,11 @@ import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
+import javafx.beans.InvalidationListener;
+import javafx.beans.value.ChangeListener;
+import javafx.collections.ListChangeListener;
+import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -31,6 +37,27 @@ import java.util.function.Consumer;
 
 /** Native macOS menus, with an in-window fallback on other desktop platforms. */
 final class MainMenuBar extends MenuBar {
+    private final SceneActions sceneActions;
+    private final javafx.event.EventHandler<javafx.stage.WindowEvent> hiddenHandler = event -> close();
+    private final ToggleGroup fractals = new ToggleGroup();
+    private final ToggleGroup quality = new ToggleGroup();
+    private final ToggleGroup sampling = new ToggleGroup();
+    private MenuItem undo;
+    private MenuItem redo;
+    private Scene observedScene;
+    private TextInputControl observedTextInput;
+    private final InvalidationListener textHistoryListener = observable -> updateHistoryAvailability();
+    private final ChangeListener<Node> focusListener = (observable, oldValue, newValue) -> updateHistoryAvailability();
+    private final ChangeListener<Scene> sceneListener = (observable, oldValue, newValue) -> observeActiveScene();
+    private final InvalidationListener windowFocusListener = observable -> observeActiveScene();
+    private final java.util.Set<Window> observedWindows = new java.util.HashSet<>();
+    private final ListChangeListener<Window> windowsListener = change -> {
+        while (change.next()) {
+            for (Window window : change.getRemoved()) unobserveWindow(window);
+            for (Window window : change.getAddedSubList()) observeWindow(window);
+        }
+        observeActiveScene();
+    };
     private final Stage stage;
     private final FractalView fractalView;
     private final MenuItem export;
@@ -60,8 +87,15 @@ final class MainMenuBar extends MenuBar {
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalScene initialScene,
                 Runnable onExport) {
+        this(stage, fractalView, initialScene, onExport, BookmarkStore.systemDefault());
+    }
+
+    MainMenuBar(Stage stage, FractalView fractalView, FractalScene initialScene,
+                Runnable onExport, BookmarkStore bookmarks) {
         this.stage = stage;
         this.fractalView = fractalView;
+        sceneActions = new SceneActions(stage, fractalView, bookmarks);
+        stage.addEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN, hiddenHandler);
         FractalPreset initialFractal = initialScene.fractal();
         currentFractal = initialFractal;
         PalettePreset initialPalette = initialScene.coloring().palette();
@@ -89,7 +123,7 @@ final class MainMenuBar extends MenuBar {
         stage.fullScreenProperty().addListener((observable, oldValue, active) ->
                 fullScreen.setText(active ? "Exit Full Screen" : "Enter Full Screen"));
         view.getItems().addAll(new SeparatorMenuItem(), fullScreen);
-        Menu fractal = choices("Fractal", FractalPreset.values(), initialFractal, new ToggleGroup(), preset -> {
+        Menu fractal = choices("Fractal", FractalPreset.values(), initialFractal, fractals, preset -> {
             currentFractal = preset;
             fractalView.setFractal(preset);
             updateDestinations(preset);
@@ -122,10 +156,10 @@ final class MainMenuBar extends MenuBar {
         render.getItems().setAll(
                 choices("Display Quality", InteractiveRenderMode.values(),
                         initialScene.antialiasing().renderMode(),
-                        new ToggleGroup(), fractalView::setInteractiveRenderMode),
+                        quality, fractalView::setInteractiveRenderMode),
                 choices("Antialiasing Pattern", SamplingPattern.values(),
                         initialScene.antialiasing().samplingPattern(),
-                        new ToggleGroup(), fractalView::setSamplingPattern),
+                        sampling, fractalView::setSamplingPattern),
                 new SeparatorMenuItem(),
                 command("Edit Iteration Settings…", null, this::showIterations),
                 command("Edit Julia Parameters…", null, this::showJuliaParameters),
@@ -135,7 +169,16 @@ final class MainMenuBar extends MenuBar {
                 command("Zoom", null, () -> stage.setMaximized(!stage.isMaximized())));
         Menu help = new Menu("Help", null, command("FractalLens Help", null, () -> FractalDialogs.help(stage)));
         updateDestinations(initialFractal);
-        getMenus().setAll(file, editMenu(), view, fractal, goTo, color, render, window, help);
+        view.getItems().addAll(new SeparatorMenuItem(),
+                command("Copy Scene Preset", shortcut(KeyCode.C, KeyCombination.SHIFT_DOWN), sceneActions::copyPreset),
+                command("Apply Scene Preset from Clipboard", shortcut(KeyCode.V, KeyCombination.SHIFT_DOWN), sceneActions::pastePreset));
+        getMenus().setAll(file, editMenu(), view, fractal, goTo, sceneActions.bookmarksMenu(), color, render, window, help);
+        Window.getWindows().addListener(windowsListener);
+        // Observe the owner before it is shown, then any separate dialog windows.
+        observeWindow(stage);
+        Window.getWindows().forEach(this::observeWindow);
+        observeActiveScene();
+        fractalView.setOnSceneChanged(this::syncScene);
         stage.sceneProperty().addListener((observable, oldScene, scene) -> {
             if (scene != null) {
                 // Also accept the unshifted +/= key and the numeric keypad.
@@ -282,10 +325,17 @@ final class MainMenuBar extends MenuBar {
         return menu;
     }
 
-    private static Menu editMenu() {
-        MenuItem undo = textCommand("Undo", KeyCode.Z, TextInputControl::undo);
-        MenuItem redo = command("Redo", shortcut(KeyCode.Z, KeyCombination.SHIFT_DOWN),
-                () -> withTextInput(TextInputControl::redo));
+    private Menu editMenu() {
+        undo = command("Undo", shortcut(KeyCode.Z), () -> {
+            TextInputControl input = focusedTextInput();
+            if (input != null) input.undo();
+            else fractalView.undoScene();
+        });
+        redo = command("Redo", shortcut(KeyCode.Z, KeyCombination.SHIFT_DOWN), () -> {
+            TextInputControl input = focusedTextInput();
+            if (input != null) input.redo();
+            else fractalView.redoScene();
+        });
         MenuItem cut = textCommand("Cut", KeyCode.X, TextInputControl::cut);
         MenuItem copy = textCommand("Copy", KeyCode.C, TextInputControl::copy);
         MenuItem paste = textCommand("Paste", KeyCode.V, TextInputControl::paste);
@@ -296,14 +346,92 @@ final class MainMenuBar extends MenuBar {
             TextInputControl input = focusedTextInput();
             boolean editable = input != null && input.isEditable();
             boolean selected = input != null && input.getSelection().getLength() > 0;
-            undo.setDisable(!editable || !input.isUndoable());
-            redo.setDisable(!editable || !input.isRedoable());
+            updateHistoryAvailability();
             cut.setDisable(!editable || !selected);
             copy.setDisable(!selected);
             paste.setDisable(!editable);
             selectAll.setDisable(input == null);
         });
+        undo.setDisable(!fractalView.canUndo());
+        redo.setDisable(!fractalView.canRedo());
         return menu;
+    }
+
+    void close() {
+        stage.removeEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN, hiddenHandler);
+        Window.getWindows().removeListener(windowsListener);
+        java.util.List.copyOf(observedWindows).forEach(this::unobserveWindow);
+        if (observedScene != null) observedScene.focusOwnerProperty().removeListener(focusListener);
+        observeTextInput(null);
+        sceneActions.close();
+        if (iterationSheet != null) iterationSheet.close();
+        if (juliaSheet != null) juliaSheet.close();
+    }
+
+    private void syncScene(FractalScene scene) {
+        currentFractal = scene.fractal();
+        viewport = scene.viewport();
+        paletteStops = scene.coloring().paletteStops();
+        orbitTrap = scene.coloring().orbitTrap();
+        fractals.selectToggle(fractals.getToggles().get(scene.fractal().ordinal()));
+        palettes.selectToggle(paletteStops.equals(scene.coloring().palette().stops())
+                ? palettes.getToggles().get(scene.coloring().palette().ordinal()) : null);
+        orbitTraps.selectToggle(orbitTraps.getToggles().get(orbitTrap.ordinal()));
+        quality.selectToggle(quality.getToggles().get(scene.antialiasing().renderMode().ordinal()));
+        sampling.selectToggle(sampling.getToggles().get(scene.antialiasing().samplingPattern().ordinal()));
+        histogram.setSelected(scene.coloring().histogramColoring());
+        updateHistoryAvailability();
+        stage.setTitle(scene.fractal() + " — FractalLens");
+        updateDestinations(scene.fractal());
+        updateAvailability();
+    }
+
+    private void observeWindow(Window window) {
+        if (!observedWindows.add(window)) return;
+        window.sceneProperty().addListener(sceneListener);
+        window.focusedProperty().addListener(windowFocusListener);
+    }
+
+    private void unobserveWindow(Window window) {
+        observedWindows.remove(window);
+        window.sceneProperty().removeListener(sceneListener);
+        window.focusedProperty().removeListener(windowFocusListener);
+    }
+
+    private void observeActiveScene() {
+        Scene scene = Window.getWindows().stream().filter(Window::isFocused)
+                .map(Window::getScene).filter(java.util.Objects::nonNull)
+                .findFirst().orElse(stage.getScene());
+        observeScene(scene);
+    }
+
+    private void observeScene(Scene scene) {
+        if (observedScene != null) observedScene.focusOwnerProperty().removeListener(focusListener);
+        observedScene = scene;
+        if (scene != null) scene.focusOwnerProperty().addListener(focusListener);
+        updateHistoryAvailability();
+    }
+
+    private void observeTextInput(TextInputControl input) {
+        if (observedTextInput == input) return;
+        if (observedTextInput != null) {
+            observedTextInput.undoableProperty().removeListener(textHistoryListener);
+            observedTextInput.redoableProperty().removeListener(textHistoryListener);
+            observedTextInput.editableProperty().removeListener(textHistoryListener);
+        }
+        observedTextInput = input;
+        if (input != null) {
+            input.undoableProperty().addListener(textHistoryListener);
+            input.redoableProperty().addListener(textHistoryListener);
+            input.editableProperty().addListener(textHistoryListener);
+        }
+    }
+
+    private void updateHistoryAvailability() {
+        TextInputControl input = focusedTextInput();
+        observeTextInput(input);
+        undo.setDisable(input != null ? !input.isEditable() || !input.isUndoable() : !fractalView.canUndo());
+        redo.setDisable(input != null ? !input.isEditable() || !input.isRedoable() : !fractalView.canRedo());
     }
 
     private static MenuItem textCommand(String title, KeyCode key, Consumer<TextInputControl> action) {

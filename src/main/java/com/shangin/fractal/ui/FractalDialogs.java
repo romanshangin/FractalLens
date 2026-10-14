@@ -1,5 +1,7 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.BookmarkStore;
+
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.math.Viewport;
@@ -253,6 +255,37 @@ final class FractalDialogs {
         dialog.getDialogPane().setPrefWidth(520);
         DialogAppearance.install(dialog, owner, () -> dialog.getDialogPane().lookupButton(ButtonType.CLOSE));
         DialogAppearance.buttons(dialog, ButtonType.CLOSE);
+        return dialog;
+    }
+
+    static Dialog<String> bookmarkNameDialog(Window owner) {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Add Bookmark");
+        dialog.setHeaderText("Save the current scene");
+        TextField name = new TextField();
+        name.setId("bookmark-name");
+        name.setPromptText("Bookmark name (existing names are replaced)");
+        Label error = errorLabel();
+        VBox content = new VBox(14, name, error);
+        content.getStyleClass().add("dialog-body");
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().setPrefWidth(480);
+        ButtonType save = new ButtonType("Save", ButtonData.OK_DONE);
+        DialogAppearance.install(dialog, owner, () -> name);
+        Button confirm = DialogAppearance.buttons(dialog, save, ButtonType.CANCEL);
+        confirm.addEventFilter(ActionEvent.ACTION, event -> {
+            try {
+                BookmarkStore.validateName(name.getText());
+                clearError(dialog, error);
+            } catch (IllegalArgumentException exception) {
+                showError(dialog, error, exception.getMessage());
+                name.requestFocus();
+                event.consume();
+            }
+        });
+        name.setOnAction(event -> { confirm.fire(); event.consume(); });
+        dialog.setResultConverter(button -> button == save
+                ? BookmarkStore.validateName(name.getText()) : null);
         return dialog;
     }
 

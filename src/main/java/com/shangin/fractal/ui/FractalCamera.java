@@ -61,6 +61,15 @@ public final class FractalCamera {
         preserveViewportAtInitialSize = false;
     }
 
+    /** Installs an already validated scene snapshot without coordinate rounding. */
+    void restore(FractalPreset preset, Viewport viewport, int width, int height) {
+        this.preset = Objects.requireNonNull(preset);
+        this.viewport = Objects.requireNonNull(viewport);
+        viewportWidth = width;
+        viewportHeight = height;
+        preserveViewportAtInitialSize = width < 2 || height < 2;
+    }
+
     public Viewport defaultViewport(
             int width,
             int height

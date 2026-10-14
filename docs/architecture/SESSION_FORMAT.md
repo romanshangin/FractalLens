@@ -55,3 +55,73 @@ An interrupted write therefore leaves either the complete old primary or the
 complete new primary. Temporary files are not considered during startup. If
 the primary is malformed or unreadable as a scene, the last valid backup is
 used. Both JSON documents are bounded to 1 MiB before parsing.
+
+## Scene history, bookmarks and shared presets (P2.2)
+
+Edit → Undo and Redo restore complete `FractalScene` snapshots, including the
+formula, exact decimal viewport, Julia parameters, iterations, coloring and
+interactive antialiasing settings. The shortcuts are the platform shortcut key
+with Z and Shift+Z. When a text field is focused, these commands continue to
+operate on its draft instead of the scene. Undo/Redo availability follows focus
+and draft history changes, including in separate dialog windows, without
+reopening the Edit menu. History is local to the current window session and
+retains the most recent 100 actions. A new scene
+action after Undo discards Redo; selecting an unchanged value does not add an action.
+
+Restoring a snapshot during a pending window resize uses the new render
+dimensions while retaining the snapshot's exact viewport scale.
+
+Drag and pinch changes are grouped at their gesture boundary; wheel events are
+grouped by the existing render debounce. Window resize, display dimensions,
+render scheduling and individual palette-animation frames do not add history
+entries. Resize updates the current scene; saved history snapshots retain their
+original mathematical scale and are rendered at the current window dimensions
+when restored. Palette animation is stopped when a saved scene is restored.
+The deep-zoom AA override remains a transient renderer setting, outside the
+serialized scene contract.
+
+The Bookmarks menu provides Add Bookmark, Reload Bookmarks, and a submenu for
+each saved name with Restore and Delete. Names are trimmed, case-sensitive and
+limited to 80 UTF-8 bytes without control characters. Saving an existing name
+replaces that bookmark. Each bookmark is a normal scene JSON file in a
+`bookmarks` directory beside `last-session.json`; filenames contain the
+lowercase hexadecimal UTF-8 encoding of the name, preventing path traversal
+and case-insensitive filesystem collisions. Bookmark storage uses the same
+atomic publication, 1 MiB read limit and previous-generation recovery as the
+session store. Delete removes both primary and recovery files. Corruption with
+no valid recovery copy is reported and preserved for recovery; Reload retries
+after the files or directory permissions have been repaired. Storage runs on a
+single background worker. Closing the window suppresses late UI callbacks and
+allows already submitted writes to finish.
+
+View → Copy Scene Preset places the versioned scene JSON on the clipboard
+(shortcut key + Shift+C). View → Apply Scene Preset from Clipboard
+(shortcut key + Shift+V) validates the complete document before changing the
+scene. Share the copied text, or copy the contents of a scene/bookmark JSON file
+and apply it. No render dimensions or machine paths are included. Legacy
+version 1 scenes remain accepted; unsupported versions, malformed values and
+viewports beyond a formula's existing precision gate are rejected without
+partially changing the scene or history. Precision validation uses the future
+render target at the current window dimensions, including a pending resize.
+Applying or restoring a preset is undoable.
+Restoration cancels pending gestures, recoloring and superseded rendering,
+updates the camera without decimal rounding, and synchronizes menus and title.
+
+The application module opens its `app` package to `javafx.graphics` for
+reflective JavaFX startup. The `app` and `ui` packages are not exported APIs;
+scene-typed bookmark and view operations remain internal to the module.
+
+Developer regression commands:
+
+```shell
+mvn -Dtest=SceneHistoryTest,BookmarkStoreTest,FractalSceneJsonTest test
+mvn test
+mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-p22-fx" -DreuseForks=false -Dtest=MainMenuBarFxTest,FractalResizeFxTest,MacSystemMenuFxTest test
+```
+
+The JavaFX/native command requires an active desktop session. The separate
+fullscreen resize checks also require `-Dfractal.fx.fullscreen=true`. Visible
+acceptance should inspect scene Undo/Redo, bookmark naming (focus, invalid
+name, Enter, Escape and Cancel), save/restore after restart, and copied preset
+application in the running app. Model tests and skipped graphical tests do not
+establish that acceptance.
