@@ -173,35 +173,36 @@ before DELIVER even when VER is skipped. A mismatch or calculation failure
 stops as `INCOMPLETE`; mutations already made by delivery are not undone.
 Only matching, code-stamped REV/VER evidence can reach delivery.
 
-One deterministic algorithm covers the complete checkout candidate:
+One deterministic algorithm covers tracked paths changed against the frozen base
+and nonignored untracked paths:
 
 1. Use the frozen base commit and compute its merge base with HEAD.
-2. Enumerate index-tracked and nonignored untracked paths with Git's NUL-delimited
-   output; sort decoded UTF-8 paths in JavaScript string order. Omit missing/deleted files.
-3. For each file, hash a newline-terminated JSON record of repository-relative
-   path, Git mode, and SHA-256 of bytes (or symlink target bytes). Git's
+2. Enumerate tracked paths changed from the frozen base to the checkout, plus
+   nonignored untracked paths, with Git's NUL-delimited output; sort decoded
+   UTF-8 paths in JavaScript string order. Disable rename detection so that
+   renamed paths are represented as a deletion and an addition.
+3. For each present file, hash a newline-terminated JSON record of its
+   repository-relative path, Git mode, and SHA-256 of bytes (or symlink target
+   bytes). Git's
    `core.filemode` and `core.symlinks` policies govern checkout representations.
-4. Prefix the aggregate SHA-256 input with `fractallens-working-tree-v1` and a
+   Record deleted changed paths explicitly.
+4. Prefix the aggregate SHA-256 input with `fractallens-working-tree-v2` and a
    newline; publish its digest as `sha256:<digest>`.
 
 File timestamps and staging state do not enter the hash. Staging or committing
 identical content preserves identity. Ignored generated files do not enter it;
-tracked ignored files still do. Unmerged paths, submodules, unsupported file
-types, non-UTF-8 paths, assume-unchanged/skip-worktree flags, and paths escaping
-the repository fail closed. The
-calculator does not mutate the index or write Git objects.
+unchanged tracked files outside the candidate diff do not enter it. Unmerged
+paths, submodules, unsupported file types, non-UTF-8 paths,
+assume-unchanged/skip-worktree flags, and paths escaping the repository fail
+closed. The calculator does not mutate the index or write Git objects.
 
-V1 fingerprints all tracked and nonignored untracked checkout files as the
-validation environment; it does not infer a task-file subset. Preserve unrelated
-user work and stage only intended task changes. Unrelated build, configuration,
-or fixture changes that affect validation require an isolated candidate, as
-specified by the workflow skills. Unchanged unrelated files can remain dirty
-after delivery; a globally clean checkout is not required. Staging and committing
-only the task files preserves the fingerprint.
-The guard detects local content/base changes; it does not prove that all intended
-task files were committed, that model-reported checks passed, or that a remote PR
-exists. The delivery role must check intended staging, local/remote task SHA,
-and PR head/base. The guard is not an atomic repository lock.
+The candidate includes all changes from the frozen base to the checkout. Keep
+unrelated user edits out of the candidate branch and stage only intended task
+changes. The guard detects local content/base changes; it does not prove that
+all intended task files were committed, that model-reported checks passed, or
+that a remote PR exists. The delivery role must check intended staging,
+local/remote task SHA, and PR head/base. The guard is not an atomic repository
+lock.
 
 ## Stop behavior and private artifacts
 

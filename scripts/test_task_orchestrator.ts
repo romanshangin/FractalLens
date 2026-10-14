@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ import type { Request, Stage } from './task-orchestrator.ts';
 const BASE = { baseRef: 'origin/main', prBase: 'main', baseRevision: 'synthetic-base', beforeDelivery: () => {} };
 const CANDIDATE = { baseRevision: 'synthetic-base', mergeBase: 'synthetic-merge-base', contentId: 'synthetic-content' };
 
-function gitFixture(t: TestContext) {
+function gitFixture(t: TestContext, withUnrelatedTrackedFile = false) {
   const root = mkdtempSync(join(tmpdir(), 'fractallens-identity-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const repository = join(root, 'repository');
@@ -27,6 +27,7 @@ function gitFixture(t: TestContext) {
   git('config', 'user.name', 'Synthetic Author');
   git('config', 'user.email', 'noreply@example.org');
   writeFileSync(join(repository, 'tracked.txt'), 'Initial content\n');
+  if (withUnrelatedTrackedFile) writeFileSync(join(repository, 'unrelated.txt'), 'Unchanged baseline content\n');
   writeFileSync(join(repository, '.gitignore'), 'ignored/\n');
   git('add', '--all');
   git('commit', '-m', 'Synthetic base');
@@ -53,6 +54,39 @@ test('identity covers tracked, untracked and deleted content and survives stagin
   assert.deepEqual(identity(), untracked);
   rmSync(join(repository, 'tracked.txt'));
   assert.notEqual(identity().contentId, untracked.contentId);
+});
+
+test('identity is independent of unchanged tracked files outside the candidate diff', t => {
+  const withoutExtraFile = gitFixture(t);
+  const withExtraFile = gitFixture(t, true);
+  for (const fixture of [withoutExtraFile, withExtraFile]) {
+    writeFileSync(join(fixture.repository, 'tracked.txt'), 'Candidate change\n');
+  }
+  assert.equal(withoutExtraFile.identity().contentId, withExtraFile.identity().contentId);
+});
+
+test('staging and committing a rename preserve candidate identity', t => {
+  const { repository, git, identity } = gitFixture(t);
+  git('config', 'diff.renames', 'true');
+  renameSync(join(repository, 'tracked.txt'), join(repository, 'renamed.txt'));
+  const renamed = identity();
+  git('add', '--all');
+  assert.deepEqual(identity(), renamed);
+  git('commit', '-m', 'Synthetic rename');
+  assert.deepEqual(identity(), renamed);
+});
+
+test('restoring and staging the source of a rename change candidate identity', t => {
+  const { repository, git, identity } = gitFixture(t);
+  git('config', 'diff.renames', 'true');
+  const source = join(repository, 'tracked.txt');
+  const original = readFileSync(source);
+  renameSync(source, join(repository, 'renamed.txt'));
+  git('add', '--all');
+  const renamed = identity();
+  writeFileSync(source, original);
+  git('add', 'tracked.txt');
+  assert.notEqual(identity().contentId, renamed.contentId);
 });
 
 test('ignored build output does not affect identity; base advancement does', t => {
@@ -90,6 +124,7 @@ test('file modes and symlink targets are part of the canonical candidate', t => 
 test('unavailable base and unsupported submodule candidates fail closed', t => {
   const { repository, git, identity } = gitFixture(t);
   assert.throws(() => computeCandidateIdentity(repository, 'missing-base'));
+  writeFileSync(join(repository, 'tracked.txt'), 'Candidate change\n');
   git('update-index', '--assume-unchanged', 'tracked.txt');
   assert.throws(identity, /Assume-unchanged/);
   git('update-index', '--no-assume-unchanged', 'tracked.txt');
