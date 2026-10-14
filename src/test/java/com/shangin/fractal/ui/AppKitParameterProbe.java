@@ -9,6 +9,14 @@ import static java.lang.foreign.ValueLayout.*;
 
 /** Test-only inspection of the native sheet and its real target/action handlers. */
 final class AppKitParameterProbe {
+    static MacBookmarkSheet bookmarkSheet(MainMenuBar menu) throws Exception {
+        var actionsField = MainMenuBar.class.getDeclaredField("sceneActions");
+        actionsField.setAccessible(true);
+        var sheetField = SceneActions.class.getDeclaredField("bookmarkSheet");
+        sheetField.setAccessible(true);
+        return (MacBookmarkSheet) sheetField.get(actionsField.get(menu));
+    }
+
     static MacIterationSheet sheet(MainMenuBar menu) throws Exception {
         var field = MainMenuBar.class.getDeclaredField("iterationSheet");
         field.setAccessible(true);

@@ -244,7 +244,8 @@ antialiasing settings are preserved.
 - [JavaFX MenuBar](https://openjfx.io/javadoc/26/javafx.controls/javafx/scene/control/MenuBar.html)
 
 This is a JavaFX implementation with native macOS menus, window controls, and
-file chooser. The coordinate and gradient editors use JavaFX controls, not
+file chooser. Iteration Settings, Julia Parameters and Add Bookmark use native
+AppKit sheets with JavaFX fallback. The coordinate and gradient editors use JavaFX controls, not
 AppKit or SwiftUI. Scene controls are grouped under their task menus; there
 are currently no separate application-wide preferences.
 
@@ -515,6 +516,42 @@ described above.
 mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-sheet-cache" \
   -DreuseForks=false -Dtest=MainMenuBarFxTest,FractalDialogsFxTest,MacIterationSheetFxTest,MacContextMenuFxTest test
 ```
+
+### Native bookmark name sheet
+
+Bookmarks → Add Bookmark uses the shared asynchronous AppKit `NSPanel` bridge
+with a single native name field, Save and Cancel. There is no Reset action.
+The field receives initial focus; Return saves and Escape cancels. Invalid
+drafts stay editable with an inline error using a limit of 80 characters
+(Unicode code points), including non-ASCII names and emoji. Validation is
+shared with the JavaFX fallback and bookmark storage. The sheet inherits the
+owner's native appearance and suppresses queued Save callbacks after owner
+closure. It cannot overlap Iteration Settings or Julia Parameters sheets.
+The JavaFX dialog is retained on other platforms and on native bridge failure.
+
+Developer regression command (active macOS desktop required):
+
+```shell
+mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-bookmark-sheet" -DreuseForks=false -Dtest=MacBookmarkSheetFxTest,MacIterationSheetFxTest,MacJuliaSheetFxTest,MainMenuBarFxTest,FractalDialogsFxTest,MacSystemMenuFxTest test
+```
+
+Developer checks on 2026-10-14 used macOS 27.0.1, Apple Silicon and JavaFX 26.0.2.
+The graphical command passed 40 tests without skips, covering native Save and
+Cancel, invalid-draft retention, inherited Aqua/Dark Aqua, owner closure,
+duplicate opening, editor overlap and native menu availability. `mvn clean test`
+passed 442 executed tests with 92 opt-in skips. An isolated source copy built
+without the `macos-native-menu` profile passed seven JavaFX tests, including
+the actual Add Bookmark fallback, persistence workflow and character validation.
+Storage regressions cover 80 ASCII, Cyrillic and supplementary Unicode characters,
+replacement, restart/readback, deletion and legacy single-file compatibility.
+
+A separate temporary-profile application launch visibly exposed an AppKit
+accessibility `sheet` with one focused name field and Save/Cancel. Empty Return
+showed the character-based error; correcting the field to a name containing
+an emoji and pressing Return saved it and immediately enabled Restore/Delete.
+Repeated opening, Cancel and Escape left no extra bookmarks. The live desktop
+used dark appearance; light layout, Intel macOS, Windows/Linux desktop,
+fullscreen and multiple displays were not visually checked for this sheet.
 
 ### Native Julia parameters sheet
 

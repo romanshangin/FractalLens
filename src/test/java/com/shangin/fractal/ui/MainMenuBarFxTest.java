@@ -230,23 +230,144 @@ class MainMenuBarFxTest {
         fx(() -> { command("View", "Apply Scene Preset from Clipboard").fire(); return null; });
         await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
         assertEquals(initial, fx(view::sceneSnapshot));
-        await(() -> !menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
-                .findFirst().orElseThrow().isDisable());
-        var save = fireLater(commandFx("Bookmarks", "Add Bookmark…"));
-        DialogPane pane = awaitDialog("Add Bookmark");
-        fx(() -> { confirm(pane); assertTrue(pane.lookup("#dialog-validation-error").isVisible()); return null; });
-        fx(() -> { input(pane, "bookmark-name").setText("My scene"); confirm(pane); return null; });
-        save.get(10, TimeUnit.SECONDS);
+        await(() -> !command("Bookmarks", "Add Bookmark…").isDisable());
+        saveBookmark("My scene", true);
         await(() -> menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
                 .findFirst().orElseThrow().getItems().stream().anyMatch(item -> "My scene".equals(item.getText())));
+        assertBookmarkCommands(false);
+        saveBookmark("My scene", false);
+        await(() -> !command("Bookmarks", "Add Bookmark…").isDisable());
+        assertBookmarkCommands(false);
+        fx(() -> { command("Bookmarks", "Reload Bookmarks").fire(); return null; });
+        await(() -> !command("Bookmarks", "Add Bookmark…").isDisable());
+        assertBookmarkCommands(false);
         fx(() -> { view.setFractal(FractalPreset.JULIA); command("Bookmarks/My scene", "Restore").fire(); return null; });
         await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
         assertEquals(initial, fx(view::sceneSnapshot));
         assertEquals(initial, new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory).load().getFirst().scene());
-        fx(() -> { command("Bookmarks/My scene", "Delete").fire(); return null; });
-        await(() -> !menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
-                .findFirst().orElseThrow().isDisable());
+        fx(() -> {
+            command("Bookmarks/My scene", "Delete").fire();
+            assertBookmarkCommandsOnFxThread(true);
+            return null;
+        });
+        await(() -> !command("Bookmarks", "Add Bookmark…").isDisable());
+        assertEquals(3, fx(() -> menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
+                .findFirst().orElseThrow().getItems().size()));
         assertTrue(new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory).load().isEmpty());
+    }
+
+    @Test
+    void failedBookmarkReloadReenablesCommandsAndAllowsRetry() throws Exception {
+        await(() -> !command("Bookmarks", "Reload Bookmarks").isDisable());
+        var invalid = bookmarkDirectory.resolve("invalid.json");
+        java.nio.file.Files.writeString(invalid, "{}");
+        fx(() -> {
+            command("Bookmarks", "Reload Bookmarks").fire();
+            assertTrue(command("Bookmarks", "Reload Bookmarks").isDisable());
+            assertTrue(command("Bookmarks", "Add Bookmark…").isDisable());
+            return null;
+        });
+        DialogPane error = awaitDialog("Bookmark storage failed");
+        fx(() -> {
+            ((Button) error.lookupButton(ButtonType.OK)).fire();
+            assertFalse(command("Bookmarks", "Reload Bookmarks").isDisable());
+            assertFalse(command("Bookmarks", "Add Bookmark…").isDisable());
+            if (System.getProperty("os.name", "").startsWith("Mac")) {
+                AppKitMenuProbe.updateSubmenu("Bookmarks");
+                assertTrue(AppKitMenuProbe.enabled("Bookmarks/Reload Bookmarks"));
+                assertTrue(AppKitMenuProbe.enabled("Bookmarks/Add Bookmark…"));
+            }
+            return null;
+        });
+        java.nio.file.Files.delete(invalid);
+        fx(() -> { command("Bookmarks", "Reload Bookmarks").fire(); return null; });
+        await(() -> !command("Bookmarks", "Reload Bookmarks").isDisable());
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledOnOs(org.junit.jupiter.api.condition.OS.MAC)
+    void bookmarkAndParameterSheetsDoNotOverlapOrSaveOnCancel() throws Exception {
+        fx(() -> {
+            command("Bookmarks", "Add Bookmark…").fire();
+            var sheet = AppKitParameterProbe.bookmarkSheet(menuBar);
+            assertNotNull(sheet);
+            AppKitParameterProbe.text(sheet, "first", "Unsaved scene");
+            command("Bookmarks", "Add Bookmark…").fire();
+            assertSame(sheet, AppKitParameterProbe.bookmarkSheet(menuBar));
+            assertEquals("Unsaved scene", AppKitParameterProbe.text(sheet, "first"));
+            command("Render", "Edit Iteration Settings…").fire();
+            assertNull(AppKitParameterProbe.sheet(menuBar));
+            AppKitParameterProbe.action(sheet, "cancel");
+            return null;
+        });
+        fx(() -> {
+            assertFalse(AppKitParameterProbe.bookmarkSheet(menuBar).isOpen());
+            command("Render", "Edit Iteration Settings…").fire();
+            var iterations = AppKitParameterProbe.sheet(menuBar);
+            assertNotNull(iterations);
+            command("Bookmarks", "Add Bookmark…").fire();
+            assertFalse(AppKitParameterProbe.bookmarkSheet(menuBar).isOpen());
+            assertTrue(iterations.isOpen());
+            AppKitParameterProbe.action(iterations, "cancel");
+            return null;
+        });
+        assertTrue(new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory).load().isEmpty());
+    }
+
+    private void assertBookmarkCommands(boolean busy) throws Exception {
+        fx(() -> { assertBookmarkCommandsOnFxThread(busy); return null; });
+    }
+
+    private void saveBookmark(String name, boolean checkInvalid) throws Exception {
+        var save = fireLater(commandFx("Bookmarks", "Add Bookmark…"));
+        if (MacBookmarkSheet.isAvailable()) {
+            save.get(10, TimeUnit.SECONDS);
+            fx(() -> {
+                var sheet = AppKitParameterProbe.bookmarkSheet(menuBar);
+                assertNotNull(sheet, "The bookmark command must open a native sheet on macOS");
+                assertTrue(AppKitParameterProbe.showing(sheet));
+                if (checkInvalid) {
+                    AppKitParameterProbe.action(sheet, "apply");
+                    assertEquals(com.shangin.fractal.app.BookmarkStore.NAME_ERROR,
+                            AppKitParameterProbe.text(sheet, "error"));
+                }
+                AppKitParameterProbe.text(sheet, "first", name);
+                AppKitParameterProbe.action(sheet, "apply");
+                return null;
+            });
+        } else {
+            DialogPane pane = awaitDialog("Add Bookmark");
+            if (checkInvalid) {
+                fx(() -> { confirm(pane); assertTrue(pane.lookup("#dialog-validation-error").isVisible()); return null; });
+            }
+            fx(() -> { input(pane, "bookmark-name").setText(name); confirm(pane); return null; });
+            save.get(10, TimeUnit.SECONDS);
+        }
+        await(() -> !command("Bookmarks", "Add Bookmark…").isDisable()
+                && menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
+                .findFirst().orElseThrow().getItems().stream().anyMatch(item -> name.equals(item.getText())));
+    }
+
+    private void assertBookmarkCommandsOnFxThread(boolean busy) {
+        Menu bookmarks = menuBar.getMenus().stream().filter(menu -> "Bookmarks".equals(menu.getText()))
+                .findFirst().orElseThrow();
+        assertFalse(bookmarks.isDisable(), "The menu container must remain openable during storage");
+        assertFalse(((Menu) bookmarks.getItems().getLast()).isDisable());
+        for (String path : List.of("Bookmarks", "Bookmarks/My scene")) {
+            Menu menu = path.equals("Bookmarks") ? bookmarks : (Menu) bookmarks.getItems().getLast();
+            for (MenuItem item : menu.getItems()) {
+                if (item instanceof Menu || item instanceof javafx.scene.control.SeparatorMenuItem) continue;
+                assertEquals(busy, item.isDisable(), path + "/" + item.getText());
+                if (System.getProperty("os.name", "").startsWith("Mac")) {
+                    assertEquals(!busy, AppKitMenuProbe.enabled(path + "/" + item.getText()));
+                }
+            }
+        }
+        if (System.getProperty("os.name", "").startsWith("Mac")) {
+            AppKitMenuProbe.updateSubmenu("Bookmarks");
+            assertEquals(!busy, AppKitMenuProbe.enabled("Bookmarks/My scene/Restore"));
+            assertEquals(!busy, AppKitMenuProbe.enabled("Bookmarks/My scene/Delete"));
+        }
     }
 
     @Test

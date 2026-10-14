@@ -25,7 +25,20 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
         if (!owner.isShowing()) throw new IllegalStateException("Sheet owner must be showing");
         long window = MacContextMenu.windowHandle(owner);
         handle = open(window, title, hint, firstLabel, secondLabel, firstId, secondId,
-                first, second, defaultFirst, defaultSecond, error);
+                first, second, defaultFirst, defaultSecond, error, false, "Apply");
+        finishOpening();
+    }
+
+    final void showSingleFieldNative(String title, String hint, String label, String id,
+                                     String error, String confirmTitle) throws ReflectiveOperationException {
+        requireFxThread();
+        if (!owner.isShowing()) throw new IllegalStateException("Sheet owner must be showing");
+        handle = open(MacContextMenu.windowHandle(owner), title, hint, label, "", id, "",
+                "", "", "", "", error, true, confirmTitle);
+        finishOpening();
+    }
+
+    private void finishOpening() {
         if (handle == 0) throw new IllegalStateException("Cannot create parameter sheet");
         owner.showingProperty().addListener(ownerShowing);
     }
@@ -68,6 +81,7 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
 
     private native long open(long window, String title, String hint, String firstLabel, String secondLabel,
                              String firstId, String secondId, String first, String second,
-                             String defaultFirst, String defaultSecond, String error);
+                             String defaultFirst, String defaultSecond, String error,
+                             boolean singleField, String confirmTitle);
     private static native void dispose(long handle);
 }
