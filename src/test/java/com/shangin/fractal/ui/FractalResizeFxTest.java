@@ -19,6 +19,7 @@ import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.scene.Scene;
+import javafx.scene.layout.StackPane;
 import javafx.scene.control.DialogPane;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
@@ -53,6 +54,12 @@ class FractalResizeFxTest {
     @AfterAll
     static void stopFx() { Platform.exit(); }
 
+    private static FractalView fractalView(MainView main) {
+        return ((StackPane) main.getCenter()).getChildren().stream()
+                .filter(FractalView.class::isInstance)
+                .map(FractalView.class::cast).findFirst().orElseThrow();
+    }
+
     private static <T> T fx(Callable<T> action) throws Exception {
         FutureTask<T> task = new FutureTask<>(action);
         Platform.runLater(task);
@@ -72,6 +79,12 @@ class FractalResizeFxTest {
             assertTrue(badge.getText().contains("Failed"));
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.COMPLETE, 15_000_000));
             assertTrue(badge.getText().contains("Complete 15 ms"));
+            badge.setExportStatus("Export PNG 42%");
+            assertTrue(badge.getText().contains("Complete 15 ms · Export PNG 42%"));
+            badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
+            assertTrue(badge.getText().endsWith("Export PNG 42%"));
+            badge.setExportStatus("");
+            assertFalse(badge.getText().contains("Export PNG"));
             badge.setZoom(new java.math.BigDecimal("1234567"));
             badge.setIterations(1_234_567);
             assertTrue(badge.getTooltip().getText().contains("Zoom: ≈1.23 × 10^6"));
@@ -209,7 +222,7 @@ class FractalResizeFxTest {
                 assertEquals("Render failed", pane.getHeaderText());
                 assertEquals("The image could not be rendered: Controlled render failure",
                         pane.getContentText());
-                FractalView view = (FractalView) main.getCenter();
+                FractalView view = fractalView(main);
                 RenderModeIndicator badge = view.getChildrenUnmodifiable().stream()
                         .filter(RenderModeIndicator.class::isInstance)
                         .map(RenderModeIndicator.class::cast).findFirst().orElseThrow();
@@ -239,7 +252,7 @@ class FractalResizeFxTest {
                 (service, frame, coloring, colors, backend) -> {
                     throw new IllegalStateException("Controlled recolor failure");
                 }));
-        FractalView view = (FractalView) main.getCenter();
+        FractalView view = fx(() -> fractalView(main));
         CountDownLatch dialogShown = new CountDownLatch(1);
         ListChangeListener<Window> listener = change -> {
             while (change.next()) {
@@ -293,6 +306,81 @@ class FractalResizeFxTest {
     }
 
     @Test
+    void exportCompletionClearsStatusAfterFourSeconds() throws Exception {
+        Stage stage = fx(Stage::new);
+        MainView main = fx(() -> new MainView(stage, new com.shangin.fractal.app.LastSessionStore(
+                temporaryDirectory.resolve("export-session.json"))));
+        try {
+            RenderModeIndicator badge = fx(() -> (RenderModeIndicator)
+                    fractalView(main).getChildrenUnmodifiable().get(1));
+            fx(() -> {
+                stage.setScene(new Scene(main, 320, 240));
+                stage.show();
+                main.startExport(fractalView(main).sceneSnapshot(), new RenderTarget(17, 13),
+                        temporaryDirectory.resolve("completed.png"));
+                assertTrue(badge.getText().contains("Export PNG 0%"));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> badge.getText().contains("PNG saved")), 10);
+            assertTrue(java.nio.file.Files.exists(temporaryDirectory.resolve("completed.png")));
+            awaitCondition(() -> fx(() -> !badge.getText().contains("PNG saved")), 6);
+        } finally {
+            fx(() -> { main.close(); stage.close(); return null; });
+        }
+    }
+
+    @Test
+    void closingDuringExportOffersReturnAndConfirmedCancellation() throws Exception {
+        Stage stage = fx(Stage::new);
+        MainView main = fx(() -> new MainView(stage, new com.shangin.fractal.app.LastSessionStore(
+                temporaryDirectory.resolve("close-session.json"))));
+        try {
+            fx(() -> {
+                stage.setScene(new Scene(main, 320, 240));
+                stage.setOnHidden(event -> main.close());
+                stage.show();
+                main.startExport(fractalView(main).sceneSnapshot(), new RenderTarget(2000, 2000),
+                        temporaryDirectory.resolve("closing.png"));
+                Platform.runLater(() -> answerExportClose("No, Return"));
+                var request = new javafx.stage.WindowEvent(stage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST);
+                stage.fireEvent(request);
+                assertTrue(request.isConsumed());
+                assertTrue(stage.isShowing());
+                Platform.runLater(() -> answerExportClose("Yes, Close"));
+                var menus = (MainMenuBar) main.getTop();
+                menus.getMenus().stream().filter(menu -> menu.getText().equals("File"))
+                        .flatMap(menu -> menu.getItems().stream())
+                        .filter(item -> "Close Window".equals(item.getText())).findFirst().orElseThrow().fire();
+                assertFalse(stage.isShowing());
+                return null;
+            });
+        } finally {
+            fx(() -> { main.close(); stage.close(); return null; });
+        }
+    }
+
+    private static void awaitCondition(Callable<Boolean> condition, int seconds) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds);
+        while (!condition.call()) {
+            assertTrue(System.nanoTime() < deadline, "Timed out waiting for export status");
+            Thread.sleep(20);
+        }
+    }
+
+    private static void answerExportClose(String answer) {
+        Stage dialog = Window.getWindows().stream().filter(window -> window instanceof Stage candidate
+                && "Export in progress".equals(candidate.getTitle()))
+                .map(Stage.class::cast).findFirst().orElseThrow();
+        DialogPane pane = (DialogPane) dialog.getScene().getRoot();
+        var stay = pane.getButtonTypes().stream().filter(button -> button.getText().equals("No, Return"))
+                .findFirst().orElseThrow();
+        assertTrue(((javafx.scene.control.Button) pane.lookupButton(stay)).isDefaultButton());
+        pane.getButtonTypes().stream().filter(button -> button.getText().equals(answer))
+                .findFirst().map(pane::lookupButton).map(javafx.scene.control.Button.class::cast)
+                .orElseThrow().fire();
+    }
+
+    @Test
     void mainViewRestoresTheSavedSceneBeforeItsFirstRender() throws Exception {
         var restored = new FractalScene(
                 FractalPreset.JULIA,
@@ -310,7 +398,7 @@ class FractalResizeFxTest {
         var stage = fx(javafx.stage.Stage::new);
         var main = fx(() -> new MainView(stage, store));
         try {
-            var view = fx(() -> (FractalView) main.getCenter());
+            var view = fx(() -> fractalView(main));
             assertEquals(restored, fx(view::sceneSnapshot));
             assertEquals("Julia — FractalLens", fx(stage::getTitle));
         } finally {
@@ -328,7 +416,7 @@ class FractalResizeFxTest {
                 temporaryDirectory.resolve("missing-session.json"));
         var stage = fx(javafx.stage.Stage::new);
         var main = fx(() -> new MainView(stage, store));
-        var view = fx(() -> (FractalView) main.getCenter());
+        var view = fx(() -> fractalView(main));
         var surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
         try {
             changeView(view, surface, () -> {
@@ -501,7 +589,7 @@ class FractalResizeFxTest {
         var zoom = new java.math.BigDecimal(values.get(2).split(": ", 2)[1]);
         var stage = fx(javafx.stage.Stage::new);
         var main = fx(() -> new MainView(stage));
-        var view = fx(() -> (FractalView) main.getCenter());
+        var view = fx(() -> fractalView(main));
         var surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
         try {
             fx(() -> {

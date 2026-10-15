@@ -14,11 +14,12 @@ public final class ExportFileName {
             double centerReal,
             double centerImaginary
     ) {
+        // Retained for source compatibility; the palette is intentionally omitted from the filename.
+        Objects.requireNonNull(paletteName);
         return String.format(
                 Locale.ROOT,
-                "%s_%s_%.12g_%+.12gi.png",
+                "%s_%.12g_%+.12gi.png",
                 normalize(fractalName),
-                normalize(paletteName),
                 centerReal,
                 centerImaginary
         );

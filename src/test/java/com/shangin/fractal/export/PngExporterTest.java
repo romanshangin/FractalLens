@@ -9,11 +9,21 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PngExporterTest {
 
     @TempDir
     Path tempDirectory;
+
+    @Test
+    void cancellationIsCheckedDuringPngEncoding() {
+        var checks = new java.util.concurrent.atomic.AtomicInteger();
+        assertThrows(java.util.concurrent.CancellationException.class, () -> PngExporter.write(
+                tempDirectory.resolve("cancelled.png"), 16, 16, new int[256],
+                () -> checks.incrementAndGet() > 18));
+        assertTrue(checks.get() > 18);
+    }
 
     @Test
     void writesPixelsAtRequestedDimensions() throws Exception {

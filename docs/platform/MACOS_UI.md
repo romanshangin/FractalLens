@@ -220,7 +220,20 @@ inactive after the JavaFX parent is re-enabled.
 Deep zoom antialiasing is available only in deep zoom. Palette animation is unavailable
 when histogram coloring or an orbit trap is active; its checkmark clears when
 navigation or a scene change stops animation. Export becomes available after
-a completed frame exists, and is disabled while an export is running.
+a completed frame exists. It opens an independent width/height editor and a
+system save panel, then renders the captured scene off-screen. While active,
+the same command becomes **Cancel Export PNG** and remains available during
+navigation. Completion appears as a nonmodal in-window status; errors still use
+an alert. The new size editor uses the shared JavaFX dialog appearance; making
+all modal forms native belongs to P2.4. See the
+[export contract and acceptance gaps](../architecture/PNG_EXPORT.md).
+
+PNG export progress shares the bottom-left render indicator. Results clear after
+four seconds. Export filenames omit the palette; the size editor offers Export…
+and an approximate size before compression. Closing during export asks for
+confirmation, with No, Return as the default/Escape action; Yes, Close cancels the
+export and continues shutdown. macOS system Quit uses the same close-request path.
+
 
 Color → Palette lists the default Ice preset first, followed by Ocean, Fire,
 Plasma, Forest, Grayscale, Aurora, Sunset, Twilight, Coral, Desert, Emerald,
