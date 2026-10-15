@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ExportFileNameTest {
 
     @Test
-    void includesNormalizedNamesAndApproximateComplexCenter() {
+    void omitsPaletteAndIncludesNormalizedFractalAndApproximateCenter() {
         assertEquals(
-                "mandelbrot_ice_-0.743643887037_+0.131825904205i.png",
+                "mandelbrot_-0.743643887037_+0.131825904205i.png",
                 ExportFileName.create(
                         "Mandelbrot",
                         "Ice",
@@ -22,7 +22,7 @@ class ExportFileNameTest {
     @Test
     void makesNamesPortable() {
         assertEquals(
-                "julia_set_blue_gold_0.00000000000_+0.00000000000i.png",
+                "julia_set_0.00000000000_+0.00000000000i.png",
                 ExportFileName.create(" Julia Set ", "Blue / Gold", 0.0, 0.0)
         );
     }

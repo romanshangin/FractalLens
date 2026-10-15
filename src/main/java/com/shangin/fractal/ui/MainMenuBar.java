@@ -106,9 +106,9 @@ final class MainMenuBar extends MenuBar {
         export = command("Export PNG…", shortcut(KeyCode.E, KeyCombination.SHIFT_DOWN), onExport);
         export.setDisable(true);
         Menu file = new Menu("File", null, export, new SeparatorMenuItem(),
-                command("Close Window", shortcut(KeyCode.W), stage::close));
+                command("Close Window", shortcut(KeyCode.W), this::requestWindowClose));
         if (!System.getProperty("os.name", "").startsWith("Mac")) {
-            file.getItems().addAll(new SeparatorMenuItem(), command("Quit", shortcut(KeyCode.Q), Platform::exit));
+            file.getItems().addAll(new SeparatorMenuItem(), command("Quit", shortcut(KeyCode.Q), this::requestWindowClose));
         }
         Menu view = new Menu("View", null,
                 command("Zoom In", new KeyCharacterCombination("+", KeyCombination.SHORTCUT_DOWN),
@@ -213,9 +213,15 @@ final class MainMenuBar extends MenuBar {
                 .toList());
     }
 
+    private void requestWindowClose() {
+        var request = new javafx.stage.WindowEvent(stage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST);
+        stage.fireEvent(request);
+        if (!request.isConsumed()) stage.close();
+    }
+
     void setExportInProgress(boolean active) {
         exporting = active;
-        export.setText(active ? "Exporting PNG…" : "Export PNG…");
+        export.setText(active ? "Cancel Export PNG" : "Export PNG…");
         updateAvailability();
     }
 
@@ -225,7 +231,7 @@ final class MainMenuBar extends MenuBar {
         // when only the parent is re-enabled after rendering.
         setCommandsDisabled(color, rendering);
         setCommandsDisabled(render, rendering);
-        export.setDisable(exporting || !fractalView.hasCompletedFrame());
+        export.setDisable(!exporting && !fractalView.hasCompletedFrame());
         deepAntialiasing.setDisable(rendering || !deepZoom);
         animation.setDisable(rendering || histogram.isSelected() || orbitTrap != OrbitTrap.NONE);
         render.getItems().stream()

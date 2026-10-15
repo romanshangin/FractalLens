@@ -1048,6 +1048,16 @@ public class FractalView extends StackPane {
         return fractalSurface.hasCompletedFrame();
     }
 
+    void setExportStatus(String message) {
+        modeIndicator.setExportStatus(message);
+    }
+
+    RenderTarget exportTarget() {
+        CompletedRender completed = fractalSurface.completedRender();
+        if (completed == null) throw new IllegalStateException("No completed frame is available");
+        return new RenderTarget(completed.frame().job().width(), completed.frame().job().height());
+    }
+
     public void exportAntialiasedPng(
             AdaptivePngExportService exportService,
             Path path,

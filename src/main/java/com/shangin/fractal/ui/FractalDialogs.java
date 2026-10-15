@@ -1,6 +1,8 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.app.BookmarkStore;
+import com.shangin.fractal.render.RenderTarget;
+import com.shangin.fractal.export.AdaptivePngExportService;
 
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.math.PreciseComplex;
@@ -31,6 +33,73 @@ import java.util.Optional;
 /** Focused editors reached from the menu bar; none occupies canvas space. */
 final class FractalDialogs {
     private FractalDialogs() {}
+
+    static Dialog<RenderTarget> exportSizeDialog(
+            Window owner, RenderTarget current) {
+        Dialog<RenderTarget> dialog = new Dialog<>();
+        dialog.setTitle("Export PNG");
+        TextField width = new TextField(Integer.toString(current.width()));
+        TextField height = new TextField(Integer.toString(current.height()));
+        width.setId("export-width");
+        height.setId("export-height");
+        GridPane fields = new GridPane(12, 12);
+        fields.addRow(0, label("Width (pixels)", width), width);
+        fields.addRow(1, label("Height (pixels)", height), height);
+        Label hint = new Label("Render a scene snapshot at independent dimensions. "
+                + "The center and vertical span stay fixed; width changes the horizontal span. "
+                + "Adaptive antialiasing is included. Cancel Export PNG stops the export.");
+        hint.setWrapText(true);
+        hint.getStyleClass().add("dialog-hint");
+        Label error = errorLabel();
+        Label estimate = new Label();
+        estimate.setId("export-size-estimate");
+        estimate.setWrapText(true);
+        estimate.getStyleClass().add("dialog-hint");
+        Runnable updateEstimate = () -> {
+            try {
+                RenderTarget target = parseExportTarget(width, height);
+                double mib = ((long) target.width() * target.height() * 4.0 + target.height()) / (1024 * 1024);
+                estimate.setText(String.format(java.util.Locale.ROOT,
+                        "PNG size: up to about %.1f MiB before compression. "
+                        + "The saved file is usually smaller; its size depends on image detail.", mib));
+            } catch (IllegalArgumentException exception) {
+                estimate.setText("Enter valid dimensions to estimate the PNG size.");
+            }
+        };
+        width.textProperty().addListener(ignored -> updateEstimate.run());
+        height.textProperty().addListener(ignored -> updateEstimate.run());
+        updateEstimate.run();
+        VBox content = new VBox(14, hint, fields, estimate, error);
+        content.getStyleClass().add("dialog-body");
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().setPrefWidth(480);
+        ButtonType export = new ButtonType("Export…", ButtonData.OK_DONE);
+        DialogAppearance.install(dialog, owner, () -> width);
+        Button confirm = DialogAppearance.buttons(dialog, export, ButtonType.CANCEL);
+        confirm.addEventFilter(ActionEvent.ACTION, event -> {
+            try {
+                var target = parseExportTarget(width, height);
+                AdaptivePngExportService.validateTarget(target);
+            } catch (IllegalArgumentException exception) {
+                showError(dialog, error, exception.getMessage());
+                event.consume();
+            }
+        });
+        width.setOnAction(event -> { confirm.fire(); event.consume(); });
+        height.setOnAction(event -> { confirm.fire(); event.consume(); });
+        dialog.setResultConverter(button -> button == export ? parseExportTarget(width, height) : null);
+        return dialog;
+    }
+
+    private static RenderTarget parseExportTarget(
+            TextField width, TextField height) {
+        try {
+            return new RenderTarget(
+                    Integer.parseInt(width.getText().trim()), Integer.parseInt(height.getText().trim()));
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("Width and height must be whole numbers of at least 2");
+        }
+    }
 
     static Optional<PreciseComplex> coordinates(Window owner, Viewport viewport,
                                                 BigDecimal zoom, boolean deepZoom) {
@@ -286,6 +355,19 @@ final class FractalDialogs {
         name.setOnAction(event -> { confirm.fire(); event.consume(); });
         dialog.setResultConverter(button -> button == save
                 ? BookmarkStore.validateName(name.getText()) : null);
+        return dialog;
+    }
+
+    static Alert exportCloseDialog(Window owner) {
+        ButtonType close = new ButtonType("Yes, Close", ButtonData.YES);
+        ButtonType stay = new ButtonType("No, Return", ButtonData.CANCEL_CLOSE);
+        Alert dialog = new Alert(Alert.AlertType.CONFIRMATION);
+        dialog.setTitle("Export in progress");
+        dialog.setHeaderText("Close FractalLens?");
+        dialog.setContentText("A PNG export is still in progress. Closing will cancel it.");
+        dialog.getDialogPane().setPrefWidth(480);
+        DialogAppearance.install(dialog, owner, () -> dialog.getDialogPane().lookupButton(stay));
+        DialogAppearance.buttons(dialog, stay, close);
         return dialog;
     }
 

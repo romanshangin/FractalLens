@@ -48,7 +48,7 @@ public class FractalApplication extends Application {
         stage.show();
         stage.centerOnScreen();
         Platform.runLater(() -> MacApplicationMenu.setName("FractalLens"));
-        mainView.getCenter().requestFocus();
+        mainView.requestFocus();
     }
 
     @Override

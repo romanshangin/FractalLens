@@ -93,6 +93,77 @@ class MainMenuBarFxTest {
     }
 
     @Test
+    void exportDimensionsRetainInvalidDraftAndApplyIndependentTarget() throws Exception {
+        FractalScene original = fx(view::sceneSnapshot);
+        var dialog = fx(() -> {
+            var editor = FractalDialogs.exportSizeDialog(stage, view.exportTarget());
+            editor.show();
+            return editor;
+        });
+        TextField width = fx(() -> input(dialog.getDialogPane(), "export-width"));
+        await(width::isFocused);
+        fx(() -> {
+            TextField height = input(dialog.getDialogPane(), "export-height");
+            width.setText("2147483647");
+            height.setText("2147483647");
+            confirm(dialog.getDialogPane());
+            assertTrue(dialog.isShowing());
+            assertEquals("2147483647", width.getText());
+            assertTrue(dialog.getDialogPane().lookup("#dialog-validation-error").isVisible());
+            width.setText("3840");
+            height.setText("2160");
+            assertTrue(((javafx.scene.control.Label) dialog.getDialogPane()
+                    .lookup("#export-size-estimate")).getText().contains("31.6 MiB"));
+            assertTrue(dialog.getDialogPane().getButtonTypes().stream()
+                    .anyMatch(button -> button.getText().equals("Export…")));
+            width.setText("invalid");
+            assertTrue(((javafx.scene.control.Label) dialog.getDialogPane()
+                    .lookup("#export-size-estimate")).getText().contains("Enter valid dimensions"));
+            width.setText("67");
+            height.setText("41");
+            width.fireEvent(new javafx.event.ActionEvent());
+            assertFalse(dialog.isShowing());
+            assertEquals(new com.shangin.fractal.render.RenderTarget(67, 41), dialog.getResult());
+            assertEquals(original, view.sceneSnapshot());
+            return null;
+        });
+    }
+
+    @Test
+    void exportDimensionsCancelLeavesSceneAndHistoryUntouched() throws Exception {
+        fx(() -> {
+            FractalScene original = view.sceneSnapshot();
+            boolean undoDisabled = command("Edit", "Undo").isDisable();
+            var dialog = FractalDialogs.exportSizeDialog(stage, view.exportTarget());
+            dialog.show();
+            input(dialog.getDialogPane(), "export-width").setText("invalid");
+            ((Button) dialog.getDialogPane().lookupButton(ButtonType.CANCEL)).fire();
+            assertFalse(dialog.isShowing());
+            assertNull(dialog.getResult());
+            assertEquals(original, view.sceneSnapshot());
+            assertEquals(undoDisabled, command("Edit", "Undo").isDisable());
+            return null;
+        });
+    }
+
+    @Test
+    void exportMenuKeepsCancellationAvailableDuringNavigation() throws Exception {
+        fx(() -> {
+            menuBar.setExportInProgress(true);
+            assertFalse(command("File", "Cancel Export PNG").isDisable());
+            view.setFractal(FractalPreset.JULIA);
+            assertFalse(command("File", "Cancel Export PNG").isDisable());
+            return null;
+        });
+        await(view::hasCompletedFrame);
+        fx(() -> {
+            menuBar.setExportInProgress(false);
+            assertFalse(command("File", "Export PNG…").isDisable());
+            return null;
+        });
+    }
+
+    @Test
     void paletteMenuStartsWithDefaultAndAppliesEveryPreset() throws Exception {
         fx(() -> {
             Menu palette = (Menu) colorItem("Palette");

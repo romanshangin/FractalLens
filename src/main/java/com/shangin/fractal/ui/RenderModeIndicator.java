@@ -23,6 +23,7 @@ final class RenderModeIndicator extends Label {
     private final ProgressIndicator spinner = new ProgressIndicator();
     private final StackPane statusIcon = new StackPane(dot, spinner);
     private final Tooltip details = new Tooltip();
+    private String exportStatus = "";
     private boolean deepZoom;
     private boolean deepAntialiasing;
     private RenderStatus status = new RenderStatus(RenderStatus.State.IDLE, 0);
@@ -93,6 +94,11 @@ final class RenderModeIndicator extends Label {
         update();
     }
 
+    void setExportStatus(String message) {
+        exportStatus = Objects.requireNonNull(message);
+        update();
+    }
+
     private void update() {
         String mode = deepZoom ? "Deep Zoom" : "Standard";
         String state = switch (status.state()) {
@@ -103,7 +109,7 @@ final class RenderModeIndicator extends Label {
             case CANCELLED -> "Interrupted";
             case FAILED -> "Failed";
         };
-        setText(mode + " · " + state);
+        setText(mode + " · " + state + (exportStatus.isEmpty() ? "" : " · " + exportStatus));
         String color = deepZoom ? "#e89a91" : "#7dc9e8";
         dot.setFill(Color.web(color));
         spinner.setStyle("-fx-progress-color: " + color + "; -fx-padding: 0;");

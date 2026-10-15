@@ -13,6 +13,7 @@ import javafx.scene.control.SeparatorMenuItem;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.scene.Scene;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.Pane;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterAll;
@@ -59,7 +60,7 @@ class MacSystemMenuFxTest {
                 return null;
             });
             await(stage::isFocused);
-            await(() -> ((FractalView) view.getCenter()).hasCompletedFrame());
+            await(() -> fractalView(view).hasCompletedFrame());
             var expected = List.of("File", "Edit", "View", "Fractal", "Go to", "Bookmarks", "Color", "Render", "Window", "Help");
             assertEquals(expected, nativeCommands());
 
@@ -102,7 +103,7 @@ class MacSystemMenuFxTest {
         var view = fx(() -> new MainView(stage, new LastSessionStore(directory.resolve("gated.json")),
                 new FractalRenderService(backend)));
         var bar = (MainMenuBar) fx(view::getTop);
-        var canvas = (FractalView) fx(view::getCenter);
+        var canvas = fx(() -> fractalView(view));
         try {
             fx(() -> {
                 stage.setScene(new Scene(view, 320, 240));
@@ -196,6 +197,12 @@ class MacSystemMenuFxTest {
         } finally {
             fx(() -> { timer.stop(); return null; });
         }
+    }
+
+    private static FractalView fractalView(MainView main) {
+        return ((StackPane) main.getCenter()).getChildren().stream()
+                .filter(FractalView.class::isInstance)
+                .map(FractalView.class::cast).findFirst().orElseThrow();
     }
 
     private static <T> T fx(Callable<T> action) throws Exception {

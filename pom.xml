@@ -21,6 +21,7 @@
         <maven.compiler.version>3.15.0</maven.compiler.version>
         <maven.surefire.version>3.5.5</maven.surefire.version>
         <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
+        <fractal.test.platformOptions></fractal.test.platformOptions>
     </properties>
 
     <dependencies>
@@ -71,7 +72,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.version}</version>
                 <configuration>
-                    <argLine>--enable-native-access=org.lwjgl,com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.stage=com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.tk=com.shangin.fractal --add-modules=ALL-MODULE-PATH --sun-misc-unsafe-memory-access=deny</argLine>
+                    <argLine>--enable-native-access=org.lwjgl,com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.stage=com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.tk=com.shangin.fractal --add-modules=ALL-MODULE-PATH --sun-misc-unsafe-memory-access=deny ${fractal.test.platformOptions}</argLine>
                     <systemPropertyVariables>
                         <fractal.gpu.enabled>false</fractal.gpu.enabled>
                     </systemPropertyVariables>
@@ -99,6 +100,10 @@
         <profile>
             <id>macos-native-menu</id>
             <activation><os><family>mac</family></os></activation>
+            <properties>
+                <!-- Production startup tests need the same Glass access as javafx:run. -->
+                <fractal.test.platformOptions>--add-exports=javafx.graphics/com.sun.glass.ui=com.shangin.fractal --add-opens=javafx.graphics/com.sun.glass.ui.mac=com.shangin.fractal</fractal.test.platformOptions>
+            </properties>
             <build><plugins><plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
