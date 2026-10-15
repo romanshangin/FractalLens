@@ -64,7 +64,6 @@ final class PaletteStopEditor extends VBox {
         TextField editor = stopRows.getLast().position.getEditor();
         editor.requestFocus();
         editor.selectAll();
-        onValidationChanged.run();
     }
 
     private void appendRow(ColorStop stop) {
@@ -79,6 +78,12 @@ final class PaletteStopEditor extends VBox {
 
     List<ColorStop> getStops() {
         return currentStops();
+    }
+
+    List<ColorStop> previewStops() {
+        return stopRows.stream().map(row -> new ColorStop(
+                Objects.requireNonNull(parsePosition(row.position.getEditor().getText())),
+                toArgb(row.color.getValue()))).toList();
     }
 
     TextField initialFocus() { return stopRows.getFirst().position.getEditor(); }
@@ -111,6 +116,7 @@ final class PaletteStopEditor extends VBox {
 
     private void fireChanged() {
         if (!updating) {
+            onValidationChanged.run();
             onChanged.accept(currentStops());
         }
     }
@@ -127,7 +133,6 @@ final class PaletteStopEditor extends VBox {
         TextField editor = stopRows.get(Math.min(index, stopRows.size() - 1)).position.getEditor();
         editor.requestFocus();
         editor.selectAll();
-        onValidationChanged.run();
     }
 
     private void updateRemoveButtons() {

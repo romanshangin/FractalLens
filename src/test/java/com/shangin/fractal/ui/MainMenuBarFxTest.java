@@ -338,9 +338,8 @@ class MainMenuBarFxTest {
             assertTrue(command("Bookmarks", "Add Bookmark…").isDisable());
             return null;
         });
-        DialogPane error = awaitDialog("Bookmark storage failed");
+        dismissMessage("Bookmark storage failed");
         fx(() -> {
-            ((Button) error.lookupButton(ButtonType.OK)).fire();
             assertFalse(command("Bookmarks", "Reload Bookmarks").isDisable());
             assertFalse(command("Bookmarks", "Add Bookmark…").isDisable());
             if (System.getProperty("os.name", "").startsWith("Mac")) {
@@ -357,6 +356,8 @@ class MainMenuBarFxTest {
 
     @Test
     @org.junit.jupiter.api.condition.EnabledOnOs(org.junit.jupiter.api.condition.OS.MAC)
+    @org.junit.jupiter.api.condition.EnabledIf(value = "nativeSheetsAvailable",
+            disabledReason = "Native sheet overlap requires the packaged AppKit bridge")
     void bookmarkAndParameterSheetsDoNotOverlapOrSaveOnCancel() throws Exception {
         fx(() -> {
             command("Bookmarks", "Add Bookmark…").fire();
@@ -384,6 +385,8 @@ class MainMenuBarFxTest {
         });
         assertTrue(new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory).load().isEmpty());
     }
+
+    static boolean nativeSheetsAvailable() { return MacParameterSheet.isAvailable(); }
 
     private void assertBookmarkCommands(boolean busy) throws Exception {
         fx(() -> { assertBookmarkCommandsOnFxThread(busy); return null; });
@@ -683,8 +686,7 @@ class MainMenuBarFxTest {
             assertFalse(view.canUndo());
             return null;
         });
-        DialogPane error = awaitDialog("Invalid scene preset");
-        fx(() -> { ((Button) error.lookupButton(ButtonType.OK)).fire(); return null; });
+        dismissMessage("Invalid scene preset");
     }
 
     @Test
@@ -1073,6 +1075,27 @@ class MainMenuBarFxTest {
                 .map(window -> (DialogPane) window.getScene().getRoot())
                 .filter(pane -> header.equals(pane.getHeaderText()))
                 .findFirst().orElseThrow());
+    }
+
+    private void dismissMessage(String title) throws Exception {
+        if (MacParameterSheet.isAvailable()) {
+            await(() -> MacParameterSheet.hasOpenSheet(stage));
+            fx(() -> {
+                var sheet = AppKitParameterProbe.activeSheet(stage);
+                assertInstanceOf(MacNoticeSheet.class, sheet);
+                var alert = AppKitParameterProbe.field(sheet, "alert");
+                var message = (java.lang.foreign.MemorySegment) AppKitMenuProbe.message(alert, "messageText",
+                        java.lang.foreign.ValueLayout.ADDRESS);
+                var bytes = (java.lang.foreign.MemorySegment) AppKitMenuProbe.message(message, "UTF8String",
+                        java.lang.foreign.ValueLayout.ADDRESS);
+                assertEquals(title, bytes.reinterpret(Long.MAX_VALUE).getString(0));
+                AppKitParameterProbe.clickAlert(sheet, false);
+                return null;
+            });
+        } else {
+            var pane = awaitDialog(title);
+            fx(() -> { ((Button) pane.lookupButton(ButtonType.OK)).fire(); return null; });
+        }
     }
 
     private static DialogPane awaitDialog(String title) throws Exception {

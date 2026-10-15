@@ -2,7 +2,17 @@
 #include <jni.h>
 
 @interface FractalParameterSession : NSObject <NSWindowDelegate, NSTextFieldDelegate>
-@property NSPanel *panel;
+- (void)cancel:(id)sender;
+@property NSWindow *panel;
+@property NSAlert *alert;
+@property id escapeMonitor;
+@property NSImageView *preview;
+@property NSTextField *estimate;
+@property BOOL modeless;
+@property NSMutableArray<NSTextField *> *positions;
+@property NSMutableArray<NSColorWell *> *colors;
+@property NSStackView *paletteRows;
+@property NSMutableArray<NSButton *> *removeButtons;
 @property NSWindow *owner;
 @property NSTextField *first;
 @property NSTextField *second;
@@ -16,6 +26,15 @@
 @property jobject callback;
 @property jmethodID completion;
 @property jmethodID validation;
+@end
+
+/** Modeless panels route Escape through the same cancellation lifecycle as buttons. */
+@interface FractalPanel : NSPanel
+@end
+@implementation FractalPanel
+- (void)cancelOperation:(id)sender {
+    [(FractalParameterSession *)self.delegate cancel:sender];
+}
 @end
 
 static JNIEnv *sheetEnvironment(JavaVM *vm, BOOL *attached) {
@@ -55,13 +74,63 @@ static NSString *nativeString(JNIEnv *env, jstring text) {
     return result;
 }
 
+static NSString *firstDraft(FractalParameterSession *session) {
+    if (!session.positions) return session.first ? session.first.stringValue : @"";
+    NSMutableArray *drafts = [NSMutableArray new];
+    for (NSTextField *field in session.positions) [drafts addObject:field.stringValue];
+    return [drafts componentsJoinedByString:@"\n"];
+}
+
+static NSString *secondDraft(FractalParameterSession *session) {
+    if (!session.colors) return session.second ? session.second.stringValue : @"";
+    NSMutableArray *drafts = [NSMutableArray new];
+    for (NSColorWell *well in session.colors) {
+        NSColor *color = [well.color colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+        uint32_t value = ((uint32_t)lround(color.alphaComponent * 255) << 24)
+                | ((uint32_t)lround(color.redComponent * 255) << 16)
+                | ((uint32_t)lround(color.greenComponent * 255) << 8)
+                | (uint32_t)lround(color.blueComponent * 255);
+        [drafts addObject:[NSString stringWithFormat:@"%d", (int32_t)value]];
+    }
+    return [drafts componentsJoinedByString:@"\n"];
+}
+
+static void complete(FractalParameterSession *session, BOOL accepted) {
+    if (session.escapeMonitor) {
+        [NSEvent removeMonitor:session.escapeMonitor];
+        session.escapeMonitor = nil;
+    }
+    session.finished = YES;
+    [session.panel orderOut:nil];
+    for (NSColorWell *well in session.colors) {
+        if (well.isActive) [[NSColorPanel sharedColorPanel] orderOut:nil];
+        [well deactivate];
+    }
+    if (session.cancelled) return;
+    BOOL attached;
+    JNIEnv *env = sheetEnvironment(session.vm, &attached);
+    if (env) {
+        jstring first = javaString(env, firstDraft(session));
+        jstring second = javaString(env, secondDraft(session));
+        if (first && second && !(*env)->ExceptionCheck(env))
+            (*env)->CallVoidMethod(env, session.callback, session.completion, (jboolean)accepted, first, second);
+        if (first) (*env)->DeleteLocalRef(env, first);
+        if (second) (*env)->DeleteLocalRef(env, second);
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionDescribe(env);
+            (*env)->ExceptionClear(env);
+        }
+        if (attached) (*session.vm)->DetachCurrentThread(session.vm);
+    }
+}
+
 // Parsing stays in Java so the native and fallback editors accept identical values.
 static jint invalidField(FractalParameterSession *session) {
     BOOL attached;
     JNIEnv *env = sheetEnvironment(session.vm, &attached);
     if (!env) return 1;
-    jstring first = javaString(env, session.first.stringValue);
-    jstring second = javaString(env, session.second.stringValue);
+    jstring first = javaString(env, firstDraft(session));
+    jstring second = javaString(env, secondDraft(session));
     jint result = 1;
     if (first && second && !(*env)->ExceptionCheck(env))
         result = (*env)->CallIntMethod(env, session.callback, session.validation, first, second);
@@ -77,21 +146,81 @@ static jint invalidField(FractalParameterSession *session) {
 }
 
 @implementation FractalParameterSession
+- (void)updatePreview {
+    if (!self.preview && !self.estimate) return;
+    BOOL attached;
+    JNIEnv *env = sheetEnvironment(self.vm, &attached);
+    if (!env) return;
+    jclass type = (*env)->GetObjectClass(env, self.callback);
+    jstring first = javaString(env, firstDraft(self));
+    jstring second = javaString(env, secondDraft(self));
+    if (self.preview) {
+        jmethodID method = (*env)->GetMethodID(env, type, "preview", "(Ljava/lang/String;Ljava/lang/String;)[I");
+        jintArray pixels = NULL;
+        if (method && first && second && !(*env)->ExceptionCheck(env))
+            pixels = (*env)->CallObjectMethod(env, self.callback, method, first, second);
+        if (pixels && !(*env)->ExceptionCheck(env)) {
+            jsize count = (*env)->GetArrayLength(env, pixels);
+            jint *colors = (*env)->GetIntArrayElements(env, pixels, NULL);
+            if (count && colors) {
+                NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                        pixelsWide:count pixelsHigh:1 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES
+                        isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace
+                        bitmapFormat:NSBitmapFormatAlphaNonpremultiplied bytesPerRow:count * 4 bitsPerPixel:32];
+                unsigned char *bytes = rep.bitmapData;
+                for (jsize i = 0; i < count; i++) {
+                    bytes[i * 4] = (colors[i] >> 16) & 255;
+                    bytes[i * 4 + 1] = (colors[i] >> 8) & 255;
+                    bytes[i * 4 + 2] = colors[i] & 255;
+                    bytes[i * 4 + 3] = ((uint32_t)colors[i] >> 24) & 255;
+                }
+                NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(count, 1)];
+                [image addRepresentation:rep];
+                self.preview.image = image;
+            }
+            if (colors) (*env)->ReleaseIntArrayElements(env, pixels, colors, JNI_ABORT);
+            (*env)->DeleteLocalRef(env, pixels);
+        }
+    }
+    if (self.estimate && !(*env)->ExceptionCheck(env)) {
+        jmethodID method = (*env)->GetMethodID(env, type, "estimate", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+        jstring result = NULL;
+        if (method && first && second && !(*env)->ExceptionCheck(env))
+            result = (*env)->CallObjectMethod(env, self.callback, method, first, second);
+        if (result && !(*env)->ExceptionCheck(env)) {
+            self.estimate.stringValue = nativeString(env, result);
+            self.estimate.hidden = self.estimate.stringValue.length == 0;
+            (*env)->DeleteLocalRef(env, result);
+        }
+    }
+    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionDescribe(env); (*env)->ExceptionClear(env); }
+    if (first) (*env)->DeleteLocalRef(env, first);
+    if (second) (*env)->DeleteLocalRef(env, second);
+    (*env)->DeleteLocalRef(env, type);
+    if (attached) (*self.vm)->DetachCurrentThread(self.vm);
+}
+- (void)colorChanged:(id)sender {
+    (void)sender;
+    [self updatePreview];
+}
 - (void)apply:(id)sender {
     (void)sender;
     jint invalidIndex = invalidField(self);
     if (invalidIndex != 0) {
         self.error.stringValue = self.validationError;
-        NSTextField *invalid = invalidIndex == 1 ? self.first : self.second;
+        NSTextField *invalid = self.positions ? self.positions[MIN((NSUInteger)invalidIndex - 1, self.positions.count - 1)]
+                : invalidIndex == 1 ? self.first : self.second;
         [self.panel makeFirstResponder:invalid];
         [invalid selectText:nil];
         return;
     }
-    [self.owner endSheet:self.panel returnCode:NSModalResponseOK];
+    if (self.modeless) complete(self, YES);
+    else [self.owner endSheet:self.panel returnCode:NSModalResponseOK];
 }
 - (void)cancel:(id)sender {
     (void)sender;
-    [self.owner endSheet:self.panel returnCode:NSModalResponseCancel];
+    if (self.modeless) complete(self, NO);
+    else [self.owner endSheet:self.panel returnCode:NSModalResponseCancel];
 }
 - (void)reset:(id)sender {
     (void)sender;
@@ -101,10 +230,90 @@ static jint invalidField(FractalParameterSession *session) {
     [self.panel makeFirstResponder:self.first];
     [self.first selectText:nil];
 }
+- (void)appendPosition:(NSString *)position color:(int32_t)argb {
+    NSTextField *field = [NSTextField textFieldWithString:position];
+    field.accessibilityLabel = @"Color stop position, from 0 to 1";
+    field.delegate = self;
+    [(NSTextFieldCell *)field.cell setSendsActionOnEndEditing:NO];
+    field.target = self;
+    field.action = @selector(apply:);
+    NSColorWell *well = [NSColorWell new];
+    well.color = [NSColor colorWithSRGBRed:((argb >> 16) & 255) / 255.0
+            green:((argb >> 8) & 255) / 255.0 blue:(argb & 255) / 255.0
+            alpha:((uint32_t)argb >> 24) / 255.0];
+    well.accessibilityLabel = @"Color stop color";
+    [NSColorPanel sharedColorPanel].showsAlpha = YES;
+    well.target = self;
+    well.action = @selector(colorChanged:);
+    NSButton *remove = [NSButton buttonWithTitle:@"−" target:self action:@selector(removeStop:)];
+    remove.accessibilityLabel = @"Remove color stop";
+    NSStackView *row = [NSStackView stackViewWithViews:@[field, well, remove]];
+    row.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+    row.spacing = 12;
+    [field.widthAnchor constraintEqualToConstant:160].active = YES;
+    [well.widthAnchor constraintEqualToConstant:100].active = YES;
+    [well.heightAnchor constraintEqualToConstant:28].active = YES;
+    [self.positions addObject:field];
+    [self.colors addObject:well];
+    [self.removeButtons addObject:remove];
+    [self.paletteRows addArrangedSubview:row];
+    for (NSButton *button in self.removeButtons) button.enabled = self.positions.count > 2;
+}
+- (void)removeStop:(NSButton *)sender {
+    NSUInteger index = [self.removeButtons indexOfObject:sender];
+    if (index == NSNotFound || self.positions.count <= 2) return;
+    [self.colors[index] deactivate];
+    NSView *row = self.paletteRows.arrangedSubviews[index];
+    [self.paletteRows removeArrangedSubview:row];
+    [row removeFromSuperview];
+    [self.positions removeObjectAtIndex:index];
+    [self.colors removeObjectAtIndex:index];
+    [self.removeButtons removeObjectAtIndex:index];
+    for (NSButton *button in self.removeButtons) button.enabled = self.positions.count > 2;
+    NSTextField *field = self.positions[MIN(index, self.positions.count - 1)];
+    [self.panel makeFirstResponder:field];
+    [field selectText:nil];
+    if (invalidField(self) == 0) self.error.stringValue = @"";
+    [self updatePreview];
+}
+- (void)addStop:(id)sender {
+    (void)sender;
+    if (invalidField(self) != 0) {
+        self.error.stringValue = self.validationError;
+        return;
+    }
+    BOOL attached;
+    JNIEnv *env = sheetEnvironment(self.vm, &attached);
+    if (!env) return;
+    jclass type = (*env)->GetObjectClass(env, self.callback);
+    jmethodID method = (*env)->GetMethodID(env, type, "addedStop", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+    jstring first = javaString(env, firstDraft(self));
+    jstring second = javaString(env, secondDraft(self));
+    jstring result = NULL;
+    if (method && first && second && !(*env)->ExceptionCheck(env))
+        result = (*env)->CallObjectMethod(env, self.callback, method, first, second);
+    if (result && !(*env)->ExceptionCheck(env)) {
+        NSArray *parts = [nativeString(env, result) componentsSeparatedByString:@"\n"];
+        if (parts.count == 2) {
+            [self appendPosition:parts[0] color:[parts[1] intValue]];
+            [self.panel makeFirstResponder:self.positions.lastObject];
+            [self.positions.lastObject selectText:nil];
+            [self.positions.lastObject scrollRectToVisible:self.positions.lastObject.bounds];
+        }
+    }
+    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionDescribe(env); (*env)->ExceptionClear(env); }
+    if (first) (*env)->DeleteLocalRef(env, first);
+    if (second) (*env)->DeleteLocalRef(env, second);
+    if (result) (*env)->DeleteLocalRef(env, result);
+    (*env)->DeleteLocalRef(env, type);
+    if (attached) (*self.vm)->DetachCurrentThread(self.vm);
+    [self updatePreview];
+}
 - (void)controlTextDidChange:(NSNotification *)notification {
     (void)notification;
     if (invalidField(self) == 0)
         self.error.stringValue = @"";
+    [self updatePreview];
 }
 - (BOOL)windowShouldClose:(NSWindow *)sender {
     (void)sender;
@@ -135,7 +344,8 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
 (JNIEnv *env, jobject callback, jlong windowHandle, jstring title, jstring hintText,
  jstring firstLabel, jstring secondLabel, jstring firstId, jstring secondId,
  jstring first, jstring second, jstring defaultFirst, jstring defaultSecond, jstring errorText,
- jboolean singleField, jstring confirmTitle) {
+ jint kind, jstring confirmTitle) {
+    BOOL singleField = kind == 1;
     if (!sheetMainThread(env)) return 0;
     NSWindow *owner = (__bridge NSWindow *)(void *)(intptr_t)windowHandle;
     if (!owner.isVisible || owner.attachedSheet) return 0;
@@ -151,10 +361,11 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
     session.callback = (*env)->NewGlobalRef(env, callback);
     if (!session.callback) return 0;
     session.owner = owner;
+    session.modeless = kind == 3;
     session.defaultFirst = nativeString(env, defaultFirst);
     session.defaultSecond = nativeString(env, defaultSecond);
     session.validationError = nativeString(env, errorText);
-    session.panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 480, 250)
+    session.panel = [[FractalPanel alloc] initWithContentRect:NSMakeRect(0, 0, 480, 250)
             styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
             backing:NSBackingStoreBuffered defer:NO];
     session.panel.title = nativeString(env, title);
@@ -165,6 +376,7 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
     heading.font = [NSFont boldSystemFontOfSize:15];
     NSTextField *hint = label(nativeString(env, hintText));
     hint.textColor = NSColor.secondaryLabelColor;
+    hint.selectable = YES;
     session.first = [NSTextField textFieldWithString:nativeString(env, first)];
     session.second = [NSTextField textFieldWithString:nativeString(env, second)];
     session.first.identifier = nativeString(env, firstId);
@@ -198,11 +410,54 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
     apply.keyEquivalent = @"\r";
     NSView *spacer = [NSView new];
     [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
-    NSStackView *actions = [NSStackView stackViewWithViews:singleField
+    NSStackView *actions = [NSStackView stackViewWithViews:kind != 0
             ? @[spacer, cancel, apply] : @[reset, spacer, cancel, apply]];
     actions.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     actions.spacing = 8;
-    NSStackView *body = [NSStackView stackViewWithViews:@[heading, hint, grid, session.error, actions]];
+    NSView *editor = grid;
+    if (kind == 3) {
+        session.positions = [NSMutableArray new];
+        session.colors = [NSMutableArray new];
+        session.removeButtons = [NSMutableArray new];
+        session.paletteRows = [NSStackView stackViewWithViews:@[]];
+        session.paletteRows.orientation = NSUserInterfaceLayoutOrientationVertical;
+        session.paletteRows.alignment = NSLayoutAttributeLeading;
+        session.paletteRows.spacing = 8;
+        NSArray *positions = [nativeString(env, first) componentsSeparatedByString:@"\n"];
+        NSArray *colors = [nativeString(env, second) componentsSeparatedByString:@"\n"];
+        for (NSUInteger i = 0; i < positions.count; i++)
+            [session appendPosition:positions[i] color:[colors[i] intValue]];
+        NSScrollView *scroll = [NSScrollView new];
+        scroll.hasVerticalScroller = YES;
+        NSView *document = [NSView new];
+        scroll.documentView = document;
+        session.paletteRows.translatesAutoresizingMaskIntoConstraints = NO;
+        [document addSubview:session.paletteRows];
+        [NSLayoutConstraint activateConstraints:@[
+            [session.paletteRows.leadingAnchor constraintEqualToAnchor:document.leadingAnchor constant:4],
+            [session.paletteRows.topAnchor constraintEqualToAnchor:document.topAnchor constant:4],
+            [session.paletteRows.bottomAnchor constraintEqualToAnchor:document.bottomAnchor constant:-4],
+            [session.paletteRows.trailingAnchor constraintEqualToAnchor:document.trailingAnchor constant:-4]]];
+        document.translatesAutoresizingMaskIntoConstraints = NO;
+        [document.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor].active = YES;
+        [scroll.heightAnchor constraintEqualToConstant:220].active = YES;
+        NSButton *add = button(@"Add Color Stop", session, @selector(addStop:));
+        session.preview = [NSImageView new];
+        session.preview.imageScaling = NSImageScaleAxesIndependently;
+        session.preview.accessibilityLabel = @"Live palette gradient preview";
+        [session.preview.heightAnchor constraintEqualToConstant:28].active = YES;
+        NSStackView *palette = [NSStackView stackViewWithViews:@[session.preview, scroll, add]];
+        palette.orientation = NSUserInterfaceLayoutOrientationVertical;
+        palette.alignment = NSLayoutAttributeLeading;
+        palette.spacing = 8;
+        [scroll.widthAnchor constraintEqualToAnchor:palette.widthAnchor].active = YES;
+        [session.preview.widthAnchor constraintEqualToAnchor:palette.widthAnchor].active = YES;
+        editor = palette;
+    }
+    session.estimate = label(@"");
+    session.estimate.textColor = NSColor.secondaryLabelColor;
+    session.estimate.hidden = YES;
+    NSStackView *body = [NSStackView stackViewWithViews:@[heading, hint, editor, session.estimate, session.error, actions]];
     body.orientation = NSUserInterfaceLayoutOrientationVertical;
     body.alignment = NSLayoutAttributeLeading;
     body.spacing = 14;
@@ -214,39 +469,29 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
         [body.topAnchor constraintEqualToAnchor:session.panel.contentView.topAnchor constant:20],
         [body.bottomAnchor constraintEqualToAnchor:session.panel.contentView.bottomAnchor constant:-20],
         [hint.widthAnchor constraintEqualToAnchor:body.widthAnchor],
-        [grid.widthAnchor constraintEqualToAnchor:body.widthAnchor],
+        [editor.widthAnchor constraintEqualToAnchor:body.widthAnchor],
+        [session.estimate.widthAnchor constraintEqualToAnchor:body.widthAnchor],
         [session.error.widthAnchor constraintEqualToAnchor:body.widthAnchor],
         [session.error.heightAnchor constraintGreaterThanOrEqualToConstant:32],
         [actions.widthAnchor constraintEqualToAnchor:body.widthAnchor]]];
     session.first.nextKeyView = singleField ? cancel : session.second;
-    session.second.nextKeyView = reset;
+    session.second.nextKeyView = kind == 0 ? reset : cancel;
     reset.nextKeyView = cancel;
     cancel.nextKeyView = apply;
     apply.nextKeyView = session.first;
-    session.panel.initialFirstResponder = session.first;
-    [owner beginSheet:session.panel completionHandler:^(NSModalResponse response) {
-        session.finished = YES;
-        [session.panel orderOut:nil];
-        if (session.cancelled) return;
-        BOOL accepted = response == NSModalResponseOK && invalidField(session) == 0;
-        BOOL attached;
-        JNIEnv *callbackEnv = sheetEnvironment(session.vm, &attached);
-        if (callbackEnv) {
-            jstring resultFirst = javaString(callbackEnv, session.first.stringValue);
-            jstring resultSecond = javaString(callbackEnv, session.second.stringValue);
-            if (resultFirst && resultSecond && !(*callbackEnv)->ExceptionCheck(callbackEnv))
-                (*callbackEnv)->CallVoidMethod(callbackEnv, session.callback, session.completion,
-                        (jboolean)accepted, resultFirst, resultSecond);
-            if (resultFirst) (*callbackEnv)->DeleteLocalRef(callbackEnv, resultFirst);
-            if (resultSecond) (*callbackEnv)->DeleteLocalRef(callbackEnv, resultSecond);
-            if ((*callbackEnv)->ExceptionCheck(callbackEnv)) {
-                (*callbackEnv)->ExceptionDescribe(callbackEnv);
-                (*callbackEnv)->ExceptionClear(callbackEnv);
-            }
-            if (attached) (*session.vm)->DetachCurrentThread(session.vm);
-        }
-    }];
-    [session.first selectText:nil];
+    if (kind == 3) [session.panel recalculateKeyViewLoop];
+    session.panel.initialFirstResponder = kind == 3 ? session.positions.firstObject : session.first;
+    [session updatePreview];
+    if (session.modeless) {
+        [owner addChildWindow:session.panel ordered:NSWindowAbove];
+        [session.panel center];
+        [session.panel makeKeyAndOrderFront:nil];
+    } else {
+        [owner beginSheet:session.panel completionHandler:^(NSModalResponse response) {
+            complete(session, response == NSModalResponseOK && invalidField(session) == 0);
+        }];
+    }
+    [(kind == 3 ? session.positions.firstObject : session.first) selectText:nil];
     return (jlong)(intptr_t)(__bridge_retained void *)session;
 }
 
@@ -256,5 +501,92 @@ JNIEXPORT void JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_dispose
     if (!sheetMainThread(env) || !handle) return;
     FractalParameterSession *session = (__bridge_transfer FractalParameterSession *)(void *)(intptr_t)handle;
     session.cancelled = YES;
-    if (!session.finished) [session.owner endSheet:session.panel returnCode:NSModalResponseCancel];
+    if (session.escapeMonitor) {
+        [NSEvent removeMonitor:session.escapeMonitor];
+        session.escapeMonitor = nil;
+    }
+    for (NSColorWell *well in session.colors) {
+        if (well.isActive) [[NSColorPanel sharedColorPanel] orderOut:nil];
+        [well deactivate];
+    }
+    if (session.modeless) [session.owner removeChildWindow:session.panel];
+    if (!session.finished) {
+        if (session.modeless) [session.panel orderOut:nil];
+        else [session.owner endSheet:session.panel returnCode:NSModalResponseCancel];
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openNotice
+(JNIEnv *env, jobject callback, jlong windowHandle, jstring title, jstring message,
+ jboolean confirmation, jboolean modeless) {
+    if (!sheetMainThread(env)) return 0;
+    NSWindow *owner = (__bridge NSWindow *)(void *)(intptr_t)windowHandle;
+    if (!owner.isVisible || (!modeless && owner.attachedSheet)) return 0;
+    FractalParameterSession *session = [FractalParameterSession new];
+    JavaVM *vm = NULL;
+    (*env)->GetJavaVM(env, &vm);
+    session.vm = vm;
+    session.completion = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, callback),
+            "completed", "(ZLjava/lang/String;Ljava/lang/String;)V");
+    if (!session.completion) return 0;
+    session.callback = (*env)->NewGlobalRef(env, callback);
+    if (!session.callback) return 0;
+    session.owner = owner;
+    session.modeless = modeless;
+    if (modeless) {
+        session.panel = [[FractalPanel alloc] initWithContentRect:NSMakeRect(0, 0, 520, 420)
+                styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
+                backing:NSBackingStoreBuffered defer:NO];
+        session.panel.title = nativeString(env, title);
+        session.panel.releasedWhenClosed = NO;
+        session.panel.delegate = session;
+        NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:session.panel.contentView.bounds];
+        scroll.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        scroll.hasVerticalScroller = YES;
+        NSTextView *text = [[NSTextView alloc] initWithFrame:scroll.bounds];
+        text.string = nativeString(env, message);
+        text.editable = NO;
+        text.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
+        text.textColor = NSColor.labelColor;
+        text.backgroundColor = NSColor.windowBackgroundColor;
+        text.textContainerInset = NSMakeSize(20, 20);
+        text.autoresizingMask = NSViewWidthSizable;
+        text.textContainer.widthTracksTextView = YES;
+        scroll.documentView = text;
+        [session.panel.contentView addSubview:scroll];
+        [owner addChildWindow:session.panel ordered:NSWindowAbove];
+        [session.panel center];
+        [session.panel makeKeyAndOrderFront:nil];
+    } else {
+        session.alert = [NSAlert new];
+        session.alert.messageText = nativeString(env, title);
+        session.alert.informativeText = nativeString(env, message);
+        session.alert.alertStyle = NSAlertStyleWarning;
+        [session.alert addButtonWithTitle:confirmation ? @"No, Return" : @"OK"];
+        if (confirmation) [session.alert addButtonWithTitle:@"Yes, Close"];
+        session.alert.buttons[0].keyEquivalent = @"\r";
+        session.panel = session.alert.window;
+        [session.panel setDefaultButtonCell:session.alert.buttons[0].cell];
+        [session.alert beginSheetModalForWindow:owner completionHandler:^(NSModalResponse response) {
+            complete(session, response == (confirmation ? NSAlertSecondButtonReturn : NSAlertFirstButtonReturn));
+        }];
+        if (confirmation) {
+            // One button key equivalent cannot provide both Return and Escape.
+            // Route Escape to the safe button while preserving the default Return action.
+            __weak FractalParameterSession *weakSession = session;
+            session.escapeMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                    handler:^NSEvent *(NSEvent *event) {
+                FractalParameterSession *active = weakSession;
+                NSEventModifierFlags shortcuts = NSEventModifierFlagCommand | NSEventModifierFlagControl
+                        | NSEventModifierFlagOption | NSEventModifierFlagShift;
+                if (active && !active.finished && !active.cancelled && event.window == active.panel
+                        && event.keyCode == 53 && !(event.modifierFlags & shortcuts)) {
+                    [active.alert.buttons[0] performClick:nil];
+                    return nil;
+                }
+                return event;
+            }];
+        }
+    }
+    return (jlong)(intptr_t)(__bridge_retained void *)session;
 }

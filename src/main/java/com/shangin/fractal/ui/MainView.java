@@ -10,7 +10,6 @@ import com.shangin.fractal.render.RenderTarget;
 import javafx.event.EventHandler;
 import com.shangin.fractal.scene.FractalScene;
 import javafx.application.Platform;
-import javafx.scene.control.Alert;
 import javafx.scene.control.MenuBar;
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
@@ -121,10 +120,12 @@ public class MainView extends BorderPane {
         }
 
         FractalScene snapshot = fractalView.sceneSnapshot();
-        var dimensions = FractalDialogs.exportSizeDialog(getScene().getWindow(),
-                fractalView.exportTarget()).showAndWait();
-        if (dimensions.isEmpty()) return;
+        FractalDialogs.exportSize(getScene().getWindow(), fractalView.exportTarget(),
+                dimensions -> chooseExportFile(snapshot, dimensions));
+    }
 
+    private void chooseExportFile(FractalScene snapshot, RenderTarget dimensions) {
+        if (closed || !stage.isShowing() || exporting) return;
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Export fractal as PNG");
         chooser.setInitialFileName(fractalView.suggestedExportFileName());
@@ -140,7 +141,7 @@ public class MainView extends BorderPane {
 
         Path target = withPngExtension(selected.toPath());
 
-        startExport(snapshot, dimensions.orElseThrow(), target);
+        startExport(snapshot, dimensions, target);
     }
 
     void startExport(FractalScene snapshot, RenderTarget dimensions, Path target) {
@@ -180,13 +181,14 @@ public class MainView extends BorderPane {
         if (!exporting || closed) return true;
         if (confirmingClose) return false;
         confirmingClose = true;
-        try {
-            return FractalDialogs.exportCloseDialog(getScene().getWindow()).showAndWait()
-                    .filter(button -> button.getButtonData() == javafx.scene.control.ButtonBar.ButtonData.YES)
-                    .isPresent();
-        } finally {
+        FractalDialogs.confirmExportClose(getScene().getWindow(), accepted -> {
             confirmingClose = false;
-        }
+            if (accepted && !closed && stage.isShowing()) {
+                close();
+                stage.close();
+            }
+        });
+        return false;
     }
 
     static Path withPngExtension(Path path) {
@@ -200,8 +202,7 @@ public class MainView extends BorderPane {
     }
 
     private void showError(String title, String message) {
-        FractalDialogs.messageDialog(getScene().getWindow(), Alert.AlertType.ERROR,
-                title, title, message).showAndWait();
+        FractalDialogs.message(getScene().getWindow(), title, message);
     }
 
     private void exportCompleted(Path path) {

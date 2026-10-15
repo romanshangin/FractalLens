@@ -69,8 +69,10 @@ whether to cancel it and close. **No, Return** is initially focused, is the defa
 button, and handles Escape; **Yes, Close** permits normal shutdown and cancellation.
 The macOS system Quit reaches the same JavaFX window-close request handler.
 Completion and cancellation appear inside the window without a modal success
-alert. Errors retain the existing alert path. The size editor uses JavaFX on all
-platforms; native AppKit forms are the separate P2.4 task.
+alert. On macOS, errors and close decisions now use asynchronous AppKit `NSAlert`
+sheets, and the size editor uses the native field-sheet bridge. Other platforms
+and bridge failures retain the JavaFX forms/alerts. See
+[native windows](../platform/MACOS_UI.md#native-windows-p24).
 
 ## Memory and remaining acceptance
 

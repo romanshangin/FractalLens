@@ -283,13 +283,14 @@ final class MainMenuBar extends MenuBar {
     }
 
     private boolean parameterSheetOpen() {
-        return iterationSheet != null && iterationSheet.isOpen()
+        return MacParameterSheet.hasOpenSheet(stage)
+                || iterationSheet != null && iterationSheet.isOpen()
                 || juliaSheet != null && juliaSheet.isOpen()
                 || sceneActions.hasOpenSheet();
     }
 
     private void showCoordinates() {
-        FractalDialogs.coordinates(stage, viewport, zoom, deepZoom).ifPresent(center ->
+        FractalDialogs.coordinates(stage, viewport, zoom, deepZoom, center ->
                 fractalView.setCenter(center.real(), center.imaginary()));
     }
 
@@ -306,7 +307,7 @@ final class MainMenuBar extends MenuBar {
     }
 
     private void showPalette() {
-        FractalDialogs.palette(stage, paletteStops).ifPresent(stops -> {
+        FractalDialogs.palette(stage, paletteStops, stops -> {
             if (!stops.equals(paletteStops)) {
                 paletteStops = stops;
                 palettes.selectToggle(null);
@@ -370,6 +371,7 @@ final class MainMenuBar extends MenuBar {
         java.util.List.copyOf(observedWindows).forEach(this::unobserveWindow);
         if (observedScene != null) observedScene.focusOwnerProperty().removeListener(focusListener);
         observeTextInput(null);
+        FractalDialogs.close(stage);
         sceneActions.close();
         if (iterationSheet != null) iterationSheet.close();
         if (juliaSheet != null) juliaSheet.close();

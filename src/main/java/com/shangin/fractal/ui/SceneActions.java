@@ -6,7 +6,6 @@ import com.shangin.fractal.scene.FractalSceneJson;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
@@ -46,7 +45,7 @@ final class SceneActions implements AutoCloseable {
     boolean hasOpenSheet() { return bookmarkSheet != null && bookmarkSheet.isOpen(); }
 
     private void addBookmark() {
-        if (closed || busy.get() || sheetOpen.getAsBoolean()) return;
+        if (closed || busy.get() || sheetOpen.getAsBoolean() || MacParameterSheet.hasOpenSheet(owner)) return;
         FractalScene snapshot = view.sceneSnapshot();
         java.util.function.Consumer<String> save = name ->
                 runStorage(() -> { store.save(name, snapshot); return store.load(); });
@@ -132,7 +131,7 @@ final class SceneActions implements AutoCloseable {
     }
 
     private void error(String title, String detail) {
-        FractalDialogs.messageDialog(owner, Alert.AlertType.ERROR, title, title, detail).show();
+        FractalDialogs.message(owner, title, detail);
     }
 
     private MenuItem command(String text, Runnable action) {
