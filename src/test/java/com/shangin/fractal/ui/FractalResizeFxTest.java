@@ -17,7 +17,6 @@ import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
-import javafx.collections.ListChangeListener;
 import javafx.scene.Scene;
 import javafx.scene.layout.StackPane;
 import javafx.scene.control.DialogPane;
@@ -194,34 +193,15 @@ class FractalResizeFxTest {
         Stage stage = fx(Stage::new);
         MainView main = fx(() -> new MainView(stage, store,
                 new FractalRenderService(failingBackend)));
-        CountDownLatch dialogShown = new CountDownLatch(1);
-        ListChangeListener<Window> listener = change -> {
-            while (change.next()) {
-                for (Window added : change.getAddedSubList()) {
-                    if (added instanceof Stage alert && "Render failed".equals(alert.getTitle())) {
-                        dialogShown.countDown();
-                    }
-                }
-            }
-        };
         try {
             fx(() -> {
-                Window.getWindows().addListener(listener);
                 stage.setScene(new Scene(main, 320, 240));
                 stage.show();
                 return null;
             });
-            assertTrue(dialogShown.await(10, TimeUnit.SECONDS),
-                    "A failed render must open an application error dialog");
+            awaitCondition(() -> fx(() -> alertShowing(stage, "Render failed")), 10);
             fx(() -> {
-                Stage alert = Window.getWindows().stream()
-                        .filter(window -> window instanceof Stage shown
-                                && "Render failed".equals(shown.getTitle()))
-                        .map(window -> (Stage) window).findFirst().orElseThrow();
-                DialogPane pane = (DialogPane) alert.getScene().getRoot();
-                assertEquals("Render failed", pane.getHeaderText());
-                assertEquals("The image could not be rendered: Controlled render failure",
-                        pane.getContentText());
+                assertError(stage, "The image could not be rendered: Controlled render failure");
                 FractalView view = fractalView(main);
                 RenderModeIndicator badge = view.getChildrenUnmodifiable().stream()
                         .filter(RenderModeIndicator.class::isInstance)
@@ -231,7 +211,6 @@ class FractalResizeFxTest {
             });
         } finally {
             fx(() -> {
-                Window.getWindows().removeListener(listener);
                 Window.getWindows().stream()
                         .filter(window -> window instanceof Stage alert
                                 && "Render failed".equals(alert.getTitle()))
@@ -253,16 +232,6 @@ class FractalResizeFxTest {
                     throw new IllegalStateException("Controlled recolor failure");
                 }));
         FractalView view = fx(() -> fractalView(main));
-        CountDownLatch dialogShown = new CountDownLatch(1);
-        ListChangeListener<Window> listener = change -> {
-            while (change.next()) {
-                for (Window added : change.getAddedSubList()) {
-                    if (added instanceof Stage alert && "Render failed".equals(alert.getTitle())) {
-                        dialogShown.countDown();
-                    }
-                }
-            }
-        };
         try {
             fx(() -> {
                 stage.setScene(new Scene(main, 320, 240));
@@ -272,28 +241,18 @@ class FractalResizeFxTest {
             FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
             awaitSurfaceComplete(surface);
             fx(() -> {
-                Window.getWindows().addListener(listener);
                 view.setPalette(PalettePreset.FIRE);
                 return null;
             });
-            assertTrue(dialogShown.await(10, TimeUnit.SECONDS),
-                    "A failed recolor must open an application error dialog");
+            awaitCondition(() -> fx(() -> alertShowing(stage, "Render failed")), 10);
             fx(() -> {
-                Stage alert = Window.getWindows().stream()
-                        .filter(window -> window instanceof Stage shown
-                                && "Render failed".equals(shown.getTitle()))
-                        .map(window -> (Stage) window).findFirst().orElseThrow();
-                DialogPane pane = (DialogPane) alert.getScene().getRoot();
-                assertEquals("Render failed", pane.getHeaderText());
-                assertEquals("The image could not be rendered: Controlled recolor failure",
-                        pane.getContentText());
+                assertError(stage, "The image could not be rendered: Controlled recolor failure");
                 assertTrue(surface.hasCompletedFrame(),
                         "A recolor error must leave the completed frame available");
                 return null;
             });
         } finally {
             fx(() -> {
-                Window.getWindows().removeListener(listener);
                 Window.getWindows().stream()
                         .filter(window -> window instanceof Stage alert
                                 && "Render failed".equals(alert.getTitle()))
@@ -334,47 +293,113 @@ class FractalResizeFxTest {
         Stage stage = fx(Stage::new);
         MainView main = fx(() -> new MainView(stage, new com.shangin.fractal.app.LastSessionStore(
                 temporaryDirectory.resolve("close-session.json"))));
+        var exportHeld = new CountDownLatch(1);
+        var releaseExport = new CountDownLatch(1);
+        // Hold the coordinator before submission so export cannot finish between decisions.
+        var serviceField = MainView.class.getDeclaredField("exportService");
+        serviceField.setAccessible(true);
+        var service = serviceField.get(main);
+        var coordinatorField = service.getClass().getDeclaredField("coordinator");
+        coordinatorField.setAccessible(true);
+        var exportCoordinator = (ExecutorService) coordinatorField.get(service);
+        exportCoordinator.submit(() -> {
+            exportHeld.countDown();
+            try { releaseExport.await(); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        });
         try {
+            assertTrue(exportHeld.await(10, TimeUnit.SECONDS));
             fx(() -> {
                 stage.setScene(new Scene(main, 320, 240));
                 stage.setOnHidden(event -> main.close());
                 stage.show();
                 main.startExport(fractalView(main).sceneSnapshot(), new RenderTarget(2000, 2000),
                         temporaryDirectory.resolve("closing.png"));
-                Platform.runLater(() -> answerExportClose("No, Return"));
                 var request = new javafx.stage.WindowEvent(stage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST);
                 stage.fireEvent(request);
                 assertTrue(request.isConsumed());
                 assertTrue(stage.isShowing());
-                Platform.runLater(() -> answerExportClose("Yes, Close"));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> alertShowing(stage, "Export in progress")), 10);
+            fx(() -> { answerExportClose(stage, false); return null; });
+            awaitCondition(() -> fx(() -> !alertShowing(stage, "Export in progress")), 10);
+            fx(() -> {
+                assertTrue(stage.isShowing(), "Returning from the decision must keep the owner open");
                 var menus = (MainMenuBar) main.getTop();
                 menus.getMenus().stream().filter(menu -> menu.getText().equals("File"))
                         .flatMap(menu -> menu.getItems().stream())
                         .filter(item -> "Close Window".equals(item.getText())).findFirst().orElseThrow().fire();
-                assertFalse(stage.isShowing());
+                assertTrue(stage.isShowing(), "Close must wait for the asynchronous decision");
                 return null;
             });
+            awaitCondition(() -> fx(() -> alertShowing(stage, "Export in progress")), 10);
+            fx(() -> { answerExportClose(stage, true); return null; });
+            awaitCondition(() -> fx(() -> !stage.isShowing()), 10);
+            releaseExport.countDown();
+            assertTrue(exportCoordinator.awaitTermination(10, TimeUnit.SECONDS),
+                    "Confirmed closure must drain the cancelled export and release its executor");
+            assertFalse(java.nio.file.Files.exists(temporaryDirectory.resolve("closing.png")),
+                    "Confirmed closure must cancel the unfinished export");
         } finally {
-            fx(() -> { main.close(); stage.close(); return null; });
+            try { fx(() -> { main.close(); stage.close(); return null; }); }
+            finally { releaseExport.countDown(); }
         }
     }
 
     private static void awaitCondition(Callable<Boolean> condition, int seconds) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds);
         while (!condition.call()) {
-            assertTrue(System.nanoTime() < deadline, "Timed out waiting for export status");
+            assertTrue(System.nanoTime() < deadline, "Timed out waiting for application state");
             Thread.sleep(20);
         }
     }
 
-    private static void answerExportClose(String answer) {
-        Stage dialog = Window.getWindows().stream().filter(window -> window instanceof Stage candidate
-                && "Export in progress".equals(candidate.getTitle()))
-                .map(Stage.class::cast).findFirst().orElseThrow();
+    private static Stage fallbackAlert(String title) {
+        return Window.getWindows().stream().filter(Window::isShowing)
+                .filter(window -> window instanceof Stage candidate && title.equals(candidate.getTitle()))
+                .map(Stage.class::cast).findFirst().orElse(null);
+    }
+
+    private static boolean alertShowing(Stage owner, String title) throws Exception {
+        if (MacParameterSheet.isAvailable()) {
+            var sheet = AppKitParameterProbe.activeSheet(owner);
+            return sheet instanceof MacNoticeSheet && AppKitParameterProbe.showing(sheet);
+        }
+        return fallbackAlert(title) != null;
+    }
+
+    private static void assertError(Stage owner, String detail) throws Exception {
+        if (MacParameterSheet.isAvailable()) {
+            var sheet = AppKitParameterProbe.activeSheet(owner);
+            assertInstanceOf(MacNoticeSheet.class, sheet);
+            assertEquals("Render failed", AppKitParameterProbe.alertText(sheet, "messageText"));
+            assertEquals(detail, AppKitParameterProbe.alertText(sheet, "informativeText"));
+            AppKitParameterProbe.clickAlert(sheet, false);
+        } else {
+            var alert = fallbackAlert("Render failed");
+            assertNotNull(alert);
+            DialogPane pane = (DialogPane) alert.getScene().getRoot();
+            assertEquals("Render failed", pane.getHeaderText());
+            assertEquals(detail, pane.getContentText());
+            ((javafx.scene.control.Button) pane.lookupButton(javafx.scene.control.ButtonType.OK)).fire();
+        }
+    }
+
+    private static void answerExportClose(Stage owner, boolean accept) throws Exception {
+        if (MacParameterSheet.isAvailable()) {
+            var sheet = AppKitParameterProbe.activeSheet(owner);
+            assertEquals("Close FractalLens?", AppKitParameterProbe.alertText(sheet, "messageText"));
+            AppKitParameterProbe.clickAlert(sheet, accept);
+            return;
+        }
+        Stage dialog = fallbackAlert("Export in progress");
+        assertNotNull(dialog);
         DialogPane pane = (DialogPane) dialog.getScene().getRoot();
         var stay = pane.getButtonTypes().stream().filter(button -> button.getText().equals("No, Return"))
                 .findFirst().orElseThrow();
         assertTrue(((javafx.scene.control.Button) pane.lookupButton(stay)).isDefaultButton());
+        String answer = accept ? "Yes, Close" : "No, Return";
         pane.getButtonTypes().stream().filter(button -> button.getText().equals(answer))
                 .findFirst().map(pane::lookupButton).map(javafx.scene.control.Button.class::cast)
                 .orElseThrow().fire();

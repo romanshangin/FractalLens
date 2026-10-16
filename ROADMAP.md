@@ -210,7 +210,11 @@ delivery foundation should be completed first.
 - [ ] **P2.4.** Make every modal window on macOS native through AppKit, including
   parameter forms and alerts. Reduce unnecessary modality, retain JavaFX fallback
   when the bridge is unavailable and on other platforms, and finish multi-display
-  context-menu validation when suitable hardware is available.
+  context-menu validation when suitable hardware is available. Native coordinate/
+  export forms and alerts, plus nonmodal palette/Help windows, are implemented;
+  full manual/platform acceptance remains pending. The palette previews the draft
+  gradient live; Apply commits it to the canvas. See
+  [P2.4 implementation](docs/platform/MACOS_UI.md#native-windows-p24).
 - [ ] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
   exact fallback is a material user-visible cost.
 
@@ -348,10 +352,12 @@ Remaining items in this section follow the cross-section order in section 0.
   `WINDOW_MODAL` and CSS alone do not provide a native AppKit sheet. Validate
   ownership, focus restoration, cancellation, input validation, appearance
   changes, full screen, and callbacks without blocking rendering.
-  Iteration Settings, Julia Parameters and Add Bookmark use shared AppKit `NSPanel` sheets
-  with native fields/buttons and JavaFX fallback. Other forms, native alerts and
-  the remaining platform acceptance checks are still open; see
-  `docs/platform/MACOS_UI.md`.
+  Iteration Settings, Julia Parameters, Add Bookmark, Go to Coordinates and Export
+  PNG use shared AppKit `NSPanel` sheets. Errors and close-during-export decisions
+  use `NSAlert`; palette and Help are nonmodal native panels. The palette includes
+  a live draft-gradient preview without changing the canvas until Apply. JavaFX
+  fallback remains available. Full manual/platform acceptance is still open; see
+  `docs/platform/MACOS_UI.md#native-windows-p24`.
 
 ## 5. Add history and reproducibility
 

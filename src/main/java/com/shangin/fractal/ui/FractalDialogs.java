@@ -29,10 +29,85 @@ import javafx.stage.Window;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.Map;
+import java.util.IdentityHashMap;
+import javafx.stage.Modality;
 
 /** Focused editors reached from the menu bar; none occupies canvas space. */
 final class FractalDialogs {
     private FractalDialogs() {}
+
+    private static final Map<Window, MacNoticeSheet> HELP = new IdentityHashMap<>();
+    private static final Map<Window, Dialog<Void>> HELP_FALLBACK = new IdentityHashMap<>();
+    private static final Map<Window, Runnable> PALETTES = new IdentityHashMap<>();
+
+    private static boolean nativeDialog(Runnable show) {
+        if (!MacParameterSheet.isAvailable()) return false;
+        try {
+            show.run();
+            return true;
+        } catch (LinkageError | RuntimeException error) {
+            System.getLogger(FractalDialogs.class.getName()).log(System.Logger.Level.WARNING,
+                    "Native dialog unavailable; using JavaFX dialog", error);
+            return false;
+        }
+    }
+
+    @SuppressWarnings("resource") // ACTIVE owns the asynchronous sheet until completion or owner closure.
+    static void coordinates(Window owner, Viewport viewport, BigDecimal zoom, boolean deepZoom,
+                            Consumer<PreciseComplex> apply) {
+        if (MacParameterSheet.hasOpenSheet(owner)) return;
+        if (!nativeDialog(() -> MacFormSheet.coordinates(owner, viewport.center(),
+                (deepZoom ? "High-precision deep zoom is active. " : "Move the center without changing zoom. ")
+                        + "Zoom × " + zoom.toEngineeringString(), apply)))
+            coordinates(owner, viewport, zoom, deepZoom).ifPresent(apply);
+    }
+
+    static void palette(Window owner, List<ColorStop> stops, Consumer<List<ColorStop>> apply) {
+        if (MacParameterSheet.hasOpenSheet(owner) || PALETTES.containsKey(owner)) return;
+        if (!nativeDialog(() -> {
+            var sheet = MacPaletteSheet.show(owner, stops, apply);
+            PALETTES.put(owner, sheet::close);
+            sheet.onClosed(() -> PALETTES.remove(owner));
+        })) {
+            var dialog = paletteDialog(owner, stops);
+            PALETTES.put(owner, dialog::close);
+            dialog.setOnHidden(event -> {
+                PALETTES.remove(owner);
+                if (owner.isShowing() && dialog.getResult() != null) apply.accept(dialog.getResult());
+            });
+            dialog.show();
+        }
+    }
+
+    @SuppressWarnings("resource") // ACTIVE owns the asynchronous sheet until completion or owner closure.
+    static void exportSize(Window owner, RenderTarget target, Consumer<RenderTarget> apply) {
+        if (MacParameterSheet.hasOpenSheet(owner)) return;
+        if (!nativeDialog(() -> MacFormSheet.export(owner, target, apply)))
+            exportSizeDialog(owner, target).showAndWait().ifPresent(apply);
+    }
+
+    @SuppressWarnings("resource") // ACTIVE owns the asynchronous alert until completion or owner closure.
+    static void message(Window owner, String title, String detail) {
+        MacParameterSheet.whenAvailable(owner, () -> {
+            if (!nativeDialog(() -> MacNoticeSheet.show(owner, title, detail, false, false, ignored -> {})))
+                messageDialog(owner, Alert.AlertType.ERROR, title, title, detail).show();
+        });
+    }
+
+    @SuppressWarnings("resource") // ACTIVE owns the asynchronous alert until completion or owner closure.
+    static void confirmExportClose(Window owner, Consumer<Boolean> result) {
+        MacParameterSheet.whenAvailable(owner, () -> {
+            if (!nativeDialog(() -> MacNoticeSheet.show(owner, "Close FractalLens?",
+                    "A PNG export is still in progress. Closing will cancel it.", true, false, result))) {
+                var dialog = exportCloseDialog(owner);
+                dialog.setOnHidden(event -> result.accept(dialog.getResult() != null
+                        && dialog.getResult().getButtonData() == ButtonData.YES));
+                dialog.show();
+            }
+        });
+    }
 
     static Dialog<RenderTarget> exportSizeDialog(
             Window owner, RenderTarget current) {
@@ -266,6 +341,17 @@ final class FractalDialogs {
     static Dialog<List<ColorStop>> paletteDialog(Window owner, List<ColorStop> stops) {
         Dialog<List<ColorStop>> dialog = new Dialog<>();
         dialog.setTitle("Edit Palette");
+        var preview = new javafx.scene.image.ImageView();
+        preview.setId("palette-preview");
+        preview.setFitWidth(400);
+        preview.setFitHeight(28);
+        Consumer<List<ColorStop>> updatePreview = values -> {
+            var palette = com.shangin.fractal.coloring.GradientPalette.cached(values);
+            var image = new javafx.scene.image.WritableImage(400, 1);
+            for (int i = 0; i < 400; i++) image.getPixelWriter().setArgb(i, 0, palette.color(i / 399.0));
+            preview.setImage(image);
+        };
+        updatePreview.accept(stops);
         PaletteStopEditor editor = new PaletteStopEditor(stops, ignored -> {});
         ScrollPane scroll = new ScrollPane(editor);
         scroll.setFitToWidth(true);
@@ -275,7 +361,7 @@ final class FractalDialogs {
         hint.setWrapText(true);
         hint.getStyleClass().add("dialog-hint");
         Label error = errorLabel();
-        VBox content = new VBox(14, hint, scroll, error);
+        VBox content = new VBox(14, hint, preview, scroll, error);
         VBox.setVgrow(scroll, Priority.ALWAYS);
         content.getStyleClass().add("dialog-body");
         dialog.getDialogPane().setContent(content);
@@ -294,20 +380,17 @@ final class FractalDialogs {
             }
         });
         editor.setOnValidationChanged(() -> {
-            if (error.isVisible() && editor.hasValidEdits()) clearError(dialog, error);
+            if (editor.hasValidEdits()) {
+                updatePreview.accept(editor.previewStops());
+                if (error.isVisible()) clearError(dialog, error);
+            }
         });
         dialog.setResultConverter(button -> button == apply ? editor.getStops() : null);
+        dialog.initModality(Modality.NONE);
         return dialog;
     }
 
-    static void help(Window owner) {
-        helpDialog(owner).showAndWait();
-    }
-
-    static Dialog<Void> helpDialog(Window owner) {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("FractalLens Help");
-        Label content = new Label("Explore the fractal\n\n"
+    private static final String HELP_TEXT = "Explore the fractal\n\n"
                 + "Drag to move. Use arrow keys to pan, Page Up and Page Down to zoom, and Home to reset the view.\n"
                 + "Scroll with a mouse to zoom toward the pointer.\n"
                 + "On a trackpad, pinch to zoom and scroll with two fingers to pan.\n\n"
@@ -317,13 +400,45 @@ final class FractalDialogs {
                 + "Edit iteration settings in Render. For Julia, edit both constant components there; Reset to Defaults restores -0.8 and 0.156 before Apply.\n"
                 + "Deep Zoom Antialiasing becomes available when zooming deeply into Mandelbrot.\n"
                 + "Animate Palette is available when Histogram Coloring and Orbit Trap are off.\n\n"
-                + "Use File → Export PNG… to save the rendered image.");
+                + "Use File → Export PNG… to save the rendered image.";
+
+    static void close(Window owner) {
+        var help = HELP.remove(owner);
+        if (help != null) help.close();
+        var fallbackHelp = HELP_FALLBACK.remove(owner);
+        if (fallbackHelp != null) fallbackHelp.close();
+        var palette = PALETTES.remove(owner);
+        if (palette != null) palette.run();
+        MacParameterSheet.closeOwner(owner);
+    }
+
+    @SuppressWarnings("resource") // HELP retains the panel; onClosed removes an already disposed session.
+    static void help(Window owner) {
+        var existing = HELP.get(owner);
+        if (existing != null && existing.isOpen() || HELP_FALLBACK.containsKey(owner)) return;
+        if (!nativeDialog(() -> {
+            var help = MacNoticeSheet.show(owner, "FractalLens Help", HELP_TEXT, false, true, ignored -> {});
+            HELP.put(owner, help);
+            help.onClosed(() -> HELP.remove(owner));
+        })) {
+            var dialog = helpDialog(owner);
+            HELP_FALLBACK.put(owner, dialog);
+            dialog.setOnHidden(event -> HELP_FALLBACK.remove(owner));
+            dialog.show();
+        }
+    }
+
+    static Dialog<Void> helpDialog(Window owner) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("FractalLens Help");
+        Label content = new Label(HELP_TEXT);
         content.setWrapText(true);
         content.getStyleClass().add("dialog-body");
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().setPrefWidth(520);
         DialogAppearance.install(dialog, owner, () -> dialog.getDialogPane().lookupButton(ButtonType.CLOSE));
         DialogAppearance.buttons(dialog, ButtonType.CLOSE);
+        dialog.initModality(Modality.NONE);
         return dialog;
     }
 

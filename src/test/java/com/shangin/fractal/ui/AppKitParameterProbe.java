@@ -9,6 +9,58 @@ import static java.lang.foreign.ValueLayout.*;
 
 /** Test-only inspection of the native sheet and its real target/action handlers. */
 final class AppKitParameterProbe {
+    static void alertKey(MacParameterSheet<?> sheet, String characters, short keyCode) throws Exception {
+        try (Arena arena = Arena.ofConfined()) {
+            var panel = field(sheet, "panel");
+            var string = (MemorySegment) AppKitMenuProbe.message(objcClass("NSString", arena),
+                    "stringWithUTF8String:", ADDRESS,
+                    new java.lang.foreign.MemoryLayout[]{ADDRESS}, arena.allocateFrom(characters));
+            var point = java.lang.foreign.MemoryLayout.structLayout(JAVA_DOUBLE, JAVA_DOUBLE);
+            var event = (MemorySegment) AppKitMenuProbe.message(objcClass("NSEvent", arena),
+                    "keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:",
+                    ADDRESS, new java.lang.foreign.MemoryLayout[]{JAVA_LONG, point, JAVA_LONG, JAVA_DOUBLE,
+                            JAVA_LONG, ADDRESS, ADDRESS, ADDRESS, JAVA_BYTE, JAVA_SHORT},
+                    10L, arena.allocate(point), 0L, 0.0,
+                    (long) AppKitMenuProbe.message(panel, "windowNumber", JAVA_LONG), MemorySegment.NULL,
+                    string, string, (byte) 0, keyCode);
+            var application = (MemorySegment) AppKitMenuProbe.message(objcClass("NSApplication", arena),
+                    "sharedApplication", ADDRESS);
+            AppKitMenuProbe.message(application, "sendEvent:", null,
+                    new java.lang.foreign.MemoryLayout[]{ADDRESS}, event);
+        }
+    }
+
+    static MacParameterSheet<?> activeSheet(javafx.stage.Window owner) throws Exception {
+        var field = MacParameterSheet.class.getDeclaredField("ACTIVE");
+        field.setAccessible(true);
+        return ((java.util.Map<?, ?>) field.get(null)).get(owner) instanceof MacParameterSheet<?> sheet ? sheet : null;
+    }
+
+    static void clickAlert(MacParameterSheet<?> sheet, boolean accept) throws Exception {
+        var buttons = (MemorySegment) AppKitMenuProbe.message(field(sheet, "alert"), "buttons", ADDRESS);
+        var button = (MemorySegment) AppKitMenuProbe.message(buttons,
+                accept ? "lastObject" : "firstObject", ADDRESS);
+        AppKitMenuProbe.message(button, "performClick:", null,
+                new java.lang.foreign.MemoryLayout[]{ADDRESS}, MemorySegment.NULL);
+    }
+
+    static String alertText(MacParameterSheet<?> sheet, String selector) throws Exception {
+        return nativeString((MemorySegment) AppKitMenuProbe.message(field(sheet, "alert"), selector, ADDRESS));
+    }
+
+    static double[] previewRgba(MacParameterSheet<?> sheet, long x) throws Exception {
+        var image = (MemorySegment) AppKitMenuProbe.message(field(sheet, "preview"), "image", ADDRESS);
+        var representations = (MemorySegment) AppKitMenuProbe.message(image, "representations", ADDRESS);
+        var bitmap = (MemorySegment) AppKitMenuProbe.message(representations, "firstObject", ADDRESS);
+        var color = (MemorySegment) AppKitMenuProbe.message(bitmap, "colorAtX:y:", ADDRESS,
+                new java.lang.foreign.MemoryLayout[]{JAVA_LONG, JAVA_LONG}, x, 0L);
+        return new double[]{
+                (double) AppKitMenuProbe.message(color, "redComponent", JAVA_DOUBLE),
+                (double) AppKitMenuProbe.message(color, "greenComponent", JAVA_DOUBLE),
+                (double) AppKitMenuProbe.message(color, "blueComponent", JAVA_DOUBLE),
+                (double) AppKitMenuProbe.message(color, "alphaComponent", JAVA_DOUBLE)};
+    }
+
     static MacBookmarkSheet bookmarkSheet(MainMenuBar menu) throws Exception {
         var actionsField = MainMenuBar.class.getDeclaredField("sceneActions");
         actionsField.setAccessible(true);
@@ -48,11 +100,15 @@ final class AppKitParameterProbe {
     }
 
     static void text(MacParameterSheet<?> sheet, String name, String value) throws Exception {
+        setText(field(sheet, name), value);
+    }
+
+    static void setText(MemorySegment field, String value) {
         try (Arena arena = Arena.ofConfined()) {
             var type = objcClass("NSString", arena);
             var replacement = (MemorySegment) AppKitMenuProbe.message(type, "stringWithUTF8String:", ADDRESS,
                     new java.lang.foreign.MemoryLayout[]{ADDRESS}, arena.allocateFrom(value));
-            AppKitMenuProbe.message(field(sheet, name), "setStringValue:", null,
+            AppKitMenuProbe.message(field, "setStringValue:", null,
                     new java.lang.foreign.MemoryLayout[]{ADDRESS}, replacement);
         }
     }

@@ -190,6 +190,69 @@ class FractalDialogsFxTest {
         } finally { fx(() -> { dialog.close(); return null; }); }
     }
 
+    @Test void palettePreviewRetainsLastValidGradientUntilAllDraftsAreCorrected() throws Exception {
+        var dialog = fx(() -> FractalDialogs.paletteDialog(owner, List.of(
+                new ColorStop(0, 0xff000000), new ColorStop(1, 0xffffffff))));
+        try {
+            fx(() -> { dialog.show(); return null; });
+            fx(() -> {
+                var pane = dialog.getDialogPane();
+                var editor = (PaletteStopEditor) ((ScrollPane) pane.lookup(".scroll-pane")).getContent();
+                var preview = (javafx.scene.image.ImageView) pane.lookup("#palette-preview");
+                var picker = (ColorPicker) editor.lookup(".color-picker");
+                var position = editor.initialFocus();
+                int[] validPixels = palettePreviewPixels(preview);
+                for (String invalid : List.of("invalid", "NaN", "Infinity", "-0.1", "1.1", "")) {
+                    position.setText(invalid);
+                    primary(dialog).fire();
+                    picker.setValue(Color.RED);
+                    picker.fireEvent(new ActionEvent());
+                    assertEquals(invalid, position.getText());
+                    assertFalse(editor.hasValidEdits());
+                    assertTrue(pane.lookup("#dialog-validation-error").isVisible());
+                    assertArrayEquals(validPixels, palettePreviewPixels(preview),
+                            "Changing color with an invalid position must retain the last valid gradient");
+                }
+                editor.getChildren().stream().filter(Button.class::isInstance)
+                        .map(Button.class::cast).findFirst().orElseThrow().fire();
+                assertArrayEquals(validPixels, palettePreviewPixels(preview),
+                        "Adding a stop must not publish an invalid draft");
+                var rows = (javafx.scene.layout.VBox) editor.getChildren().getFirst();
+                var addedRow = (javafx.scene.layout.HBox) rows.getChildren().getLast();
+                ((Button) addedRow.getChildren().getLast()).fire();
+                assertArrayEquals(validPixels, palettePreviewPixels(preview),
+                        "Removing a stop must not publish a remaining invalid draft");
+
+                position.setText("0.25");
+                assertFalse(pane.lookup("#dialog-validation-error").isVisible());
+                var expected = com.shangin.fractal.coloring.GradientPalette.cached(List.of(
+                        new ColorStop(.25, 0xffff0000), new ColorStop(1, 0xffffffff)));
+                int[] expectedPixels = java.util.stream.IntStream.range(0, 400)
+                        .map(i -> expected.color(i / 399.0)).toArray();
+                assertArrayEquals(expectedPixels, palettePreviewPixels(preview));
+                picker.setValue(Color.BLUE);
+                picker.fireEvent(new ActionEvent());
+                var correctedPalette = com.shangin.fractal.coloring.GradientPalette.cached(List.of(
+                        new ColorStop(.25, 0xff0000ff), new ColorStop(1, 0xffffffff)));
+                assertArrayEquals(java.util.stream.IntStream.range(0, 400)
+                        .map(i -> correctedPalette.color(i / 399.0)).toArray(), palettePreviewPixels(preview),
+                        "Color changes must use the current valid position draft before Apply");
+                primary(dialog).fire();
+                assertFalse(dialog.isShowing());
+                assertEquals(List.of(new ColorStop(.25, 0xff0000ff), new ColorStop(1, 0xffffffff)),
+                        dialog.getResult());
+                return null;
+            });
+        } finally { fx(() -> { dialog.close(); return null; }); }
+    }
+
+    private static int[] palettePreviewPixels(javafx.scene.image.ImageView preview) {
+        int[] pixels = new int[400];
+        preview.getImage().getPixelReader().getPixels(0, 0, 400, 1,
+                PixelFormat.getIntArgbInstance(), pixels, 0, 400);
+        return pixels;
+    }
+
     @Test void juliaEditorResetsBothFieldsAndAppliesOnlyValidValues() throws Exception {
         JuliaParameters custom = new JuliaParameters(-0.4, 0.6);
         var dialog = fx(() -> FractalDialogs.juliaParametersDialog(owner, custom));

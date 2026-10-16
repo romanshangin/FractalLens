@@ -203,8 +203,9 @@ include this library along with the other native dependencies.
 See [AppKit popup positioning](https://developer.apple.com/documentation/appkit/nsmenu/popup(positioning:at:in:)?language=objc)
 and [native tracking cancellation](https://developer.apple.com/documentation/appkit/nsmenu/canceltrackingwithoutanimation()).
 
-Coordinates and custom gradients use owner-associated dialogs with explicit
-Go/Apply and Cancel actions. Coordinate validation keeps invalid input visible
+Coordinates use an owner-associated sheet; custom gradients use a nonmodal
+editor with a live draft-gradient preview. Both retain explicit Go/Apply and
+Cancel actions. Coordinate validation keeps invalid input visible
 and explains how to fix it. The coordinate dialog also exposes a copyable zoom
 value and the current deep-zoom status. Palette edits are drafts until Apply;
 Cancel leaves the current palette unchanged. Editing a preset clears its menu
@@ -224,8 +225,8 @@ a completed frame exists. It opens an independent width/height editor and a
 system save panel, then renders the captured scene off-screen. While active,
 the same command becomes **Cancel Export PNG** and remains available during
 navigation. Completion appears as a nonmodal in-window status; errors still use
-an alert. The new size editor uses the shared JavaFX dialog appearance; making
-all modal forms native belongs to P2.4. See the
+an alert. On macOS the size editor uses AppKit, with the shared JavaFX dialog
+as fallback. See the
 [export contract and acceptance gaps](../architecture/PNG_EXPORT.md).
 
 PNG export progress shares the bottom-left render indicator. Results clear after
@@ -585,10 +586,9 @@ queued Apply results. Reopening an active editor keeps the existing sheet;
 opening the other parameter editor is ignored until that sheet closes.
 JavaFX remains the fallback on other platforms or if native presentation fails.
 
-The roadmap requires every modal window on macOS to use AppKit, while retaining
-the JavaFX fallback. Coordinate/palette editors, Help and application alerts
-still require native conversion or removal of unnecessary modality. The overall
-requirement remains open.
+At the P2.1 validation point, coordinate/palette editors, Help and application
+alerts still required native conversion or removal of unnecessary modality.
+The later P2.4 implementation is described below; its full acceptance remains open.
 
 Validation on 2026-10-12 used macOS 27.0.1 on Apple Silicon, JavaFX 26.0.2,
 Maven JDK 26.0.2 (Java release target 25), and desktop launcher JDK 25
@@ -626,3 +626,141 @@ Aqua/Dark Aqua inheritance and draft preservation were checked automatically;
 light layout was not visually inspected. Live OS preference changes, Increase
 Contrast, Reduce Transparency, VoiceOver, multiple displays, Intel macOS, and
 Windows/Linux fallback execution remain unverified.
+
+
+### Native windows (P2.4)
+
+The production modal-entry audit now routes all application forms and actionable
+messages through AppKit when the bridge is available:
+
+| Entry point | macOS presentation | Fallback |
+| --- | --- | --- |
+| Iteration Settings / Julia Parameters / Add Bookmark | Existing native field sheets | JavaFX owner-modal forms |
+| Go to Coordinates | Native two-field sheet; exact decimal parsing, selectable zoom/deep-zoom hint | JavaFX owner-modal form |
+| Export PNG dimensions | Native two-field sheet with the shared memory-budget validation and live size estimate | JavaFX owner-modal form |
+| Render/export/bookmark/preset errors | Asynchronous `NSAlert` sheet | JavaFX owner-modal alert |
+| Close while exporting (including system Quit) | Asynchronous `NSAlert` decision; Return/Escape defaults to returning | JavaFX owner-modal decision |
+| Edit Palette | Nonmodal native panel with position fields, color wells, add/remove and live gradient preview | Nonmodal JavaFX editor with the same preview |
+| Help | Nonmodal native scrollable text panel | Nonmodal JavaFX Help window |
+| PNG destination / overwrite decision | JavaFX `FileChooser` system save panel | Platform system save panel |
+| Export progress / completion | Existing in-window status | Same |
+
+The palette preview shows the draft gradient using the same OKLab implementation
+as the renderer. It changes as valid positions or colors change; invalid drafts
+remain editable and retain the last valid preview. Apply commits the palette to
+the canvas once, preserving scene-history behavior; Cancel, Escape and window
+closure discard drafts. The native editor supports alpha and retains at least
+two stops. Palette and Help do not prevent canvas navigation or other editors.
+Repeated opening keeps the existing window. Owner shutdown closes these windows.
+
+Native callbacks dispatch application actions with `Platform.runLater`. Closing
+the owner or disposing a session suppresses already queued results. The shared
+owner registry prevents overlapping native modal editors; errors and close
+confirmations wait for the current sheet instead of falling back into a second
+modal window. Native panels inherit system appearance, use semantic colors and
+restore the previous JavaFX focus when the owner becomes active. JavaFX remains
+the fallback on bridge failure and on Windows/Linux. No native modal run loop or
+worker wait is introduced on the JavaFX thread.
+
+Developer validation commands:
+
+```shell
+mvn clean test
+mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-p24-fx" \
+  -DreuseForks=false \
+  -Dtest=MacModalWindowsFxTest,FractalResizeFxTest,MacBookmarkSheetFxTest,MacIterationSheetFxTest,MacJuliaSheetFxTest,FractalDialogsFxTest,MainMenuBarFxTest test
+```
+
+For fallback routing, copy the source tree and `pom.xml` to an isolated directory
+without generated classes, then run there:
+
+```shell
+mvn -P'!macos-native-menu' -Dfractal.fx.tests=true -Dfractal.fallback.tests=true \
+  "-Djavafx.cachedir=${TEMP_DIR}/fractallens-p24-fallback-cache" -DreuseForks=false \
+  -Dtest=DialogRoutingFallbackFxTest,FractalResizeFxTest,FractalDialogsFxTest,MainMenuBarFxTest test
+```
+
+Developer desktop inspection on 2026-10-15 used an isolated temporary application
+profile on Apple Silicon. Dark native coordinate, palette, export-size and Help
+layouts were inspected. Initial selection, invalid coordinate/size drafts,
+coordinate correction with Tab/Return, gradient-preview changes, and Escape
+cancellation were checked. The application completed its initial CPU render.
+This was scoped developer inspection, not independent verification or full manual
+acceptance. The tests cover exact coordinate application, export bounds,
+alpha-preserving palette apply/add/remove, queued alerts, close decisions,
+owner-closure suppression and existing native forms/fallbacks.
+
+The final developer checks passed: `mvn clean test` and `mvn test` each reported
+560 tests (454 executed, 106 opt-in skips, no failures/errors); the six-class
+native desktop suite passed 46 tests without skips. The isolated fallback suite
+reported 34 tests (33 executed, one native-only overlap test skipped, no failures/
+errors); that overlap scenario passed in the native run. The fallback-routing
+class explicitly asserts that the bridge is absent. Existing JavaFX native-access
+warnings and the deliberately missing-library fallback warning were retained.
+
+Repair-round developer validation on 2026-10-15 explicitly covers translucent
+preview pixels and the existing render/recolor error and export-close workflows.
+The preview bitmap declares nonpremultiplied alpha to match the straight ARGB
+supplied by the palette. An AppKit color readback regression for `0x20804020`
+failed on an isolated copy with the original bitmap format (red read as `1.0`
+instead of `128/255`) and passed with the fix. Error tests inspect native alert
+text or the JavaFX fallback and retain the failed-status/completed-frame checks.
+Export-close tests wait for each asynchronous answer and hold the export
+coordinator at a deterministic gate until confirmed closure, then check executor
+drain and absence of the cancelled output.
+
+The repair-round `mvn clean test` passed 560 tests (454 executed, 106 opt-in
+skips). `MacModalWindowsFxTest,FractalResizeFxTest` passed 31 executed tests;
+`DialogRoutingFallbackFxTest,FractalResizeFxTest` in an isolated build without the
+native bridge passed 29 executed tests. Both graphical runs skipped only the two
+separately gated fullscreen tests. No additional manual UI acceptance was
+performed in this repair round; these checks are developer self-validation.
+
+Full manual acceptance remains pending: light layout, live OS appearance and
+accessibility changes, VoiceOver, all focus/keyboard combinations, native color
+panel interactions, full-screen transitions, and mixed-DPI/negative-origin/display-
+edge context menus on multiple physical displays. Windows/Linux and Intel Mac
+runtime checks remain unverified; the universal native library is compiled for
+both macOS architectures. P2.4 remains unchecked until its acceptance gates pass.
+
+The export-close Escape repair preserves Return on the safe default button.
+An `NSButton` has one key equivalent, and setting the default button cell restores
+Return, so assigning Escape to that same button cannot support both keys.
+A local AppKit key monitor routes unmodified Escape only for the confirmation's
+own window to **No, Return**. The monitor uses a weak session reference and is
+removed on either completion or disposal, including owner closure. Keyboard
+regressions dispatch native `NSEvent` key-down events through `NSApplication`
+and check the false result, sheet cleanup and continued owner visibility.
+
+Escape-repair developer checks on 2026-10-15 passed `mvn clean test` (561 reported,
+454 executed, 107 opt-in skips) and the seven-class native desktop command above
+with `-Dfractal.fx.fullscreen=true` (77 executed, no skips). Both runs had zero
+failures/errors. The final keyboard regression failed for Escape, while Return
+passed, on an isolated build with the pre-repair native source; both keys passed
+with the repair. The universal arm64/x86_64 bridge compiled with warnings treated
+as errors. In the running application with a temporary profile, a 4000×4000
+Julia export continued after Escape dismissed its close confirmation and after
+Return dismissed a freshly reopened confirmation. The PNG finished successfully
+and the application then closed normally. These are developer self-validation
+results; fresh independent review and verification remain required for the changed
+candidate. The broader P2.4 acceptance gaps above remain open; fallback runtime
+checks were not repeated for this native-only repair.
+
+The JavaFX palette-preview repair on 2026-10-15 routes color, add/remove and
+position edits through the existing validation callback. Only a fully valid
+draft reaches the preview, using `previewStops()` rather than committed spinner
+values. A regression compares every preview pixel across invalid text and color
+changes, add/remove, correction and a subsequent color change before Apply.
+It failed against the incoming implementation and passed after the repair.
+Developer checks passed `mvn clean test` (562 reported, 454 executed, 108 opt-in
+skips), `FractalDialogsFxTest` in the active desktop (7 executed, no skips), and
+an isolated build without the native bridge running
+`DialogRoutingFallbackFxTest,FractalDialogsFxTest,MainMenuBarFxTest` (35 reported,
+34 executed, one native-only overlap skip). All final runs had zero failures or
+errors; the expected missing-library fallback warnings were retained. Visible
+fallback inspection checked invalid-text retention, Apply rejection, clearing
+the error and updating the gradient after correction, and Escape cancellation.
+Color-change preview correctness was checked by the pixel regression; selecting
+a color through the live JavaFX popup was not established during this inspection.
+No Windows/Linux or Intel Mac runtime acceptance was added. Fresh independent
+review and verification remain required for this changed candidate.
