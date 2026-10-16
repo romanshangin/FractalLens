@@ -21,7 +21,7 @@ try {
     New-Item -ItemType Directory -Force -Path target | Out-Null
     $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
     if ($null -eq $pythonCommand) { $pythonCommand = Get-Command python3 -ErrorAction Stop }
-    & $pythonCommand.Source (Join-Path $PSScriptRoot 'privacy.py') $temporaryLog target/ci-test.log
+    & $pythonCommand.Source (Join-Path $PSScriptRoot '../publication/privacy.py') $temporaryLog target/ci-test.log
     if ($LASTEXITCODE -ne 0) { throw 'Privacy filtering failed; output withheld.' }
     Copy-Item target/ci-test.log $temporaryLog -Force
 

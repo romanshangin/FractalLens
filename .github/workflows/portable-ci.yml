@@ -46,15 +46,15 @@ jobs:
 
       - name: Validate Bash CI test log wrapper
         shell: bash
-        run: bash scripts/test-run-ci-tests
+        run: bash scripts/ci/test-run-ci-tests
 
       - name: Validate PowerShell CI test log wrapper
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/test-run-ci-tests.ps1
+        run: ./scripts/ci/test-run-ci-tests.ps1
 
       - name: Run portable CPU-default tests
         shell: bash
         run: >-
-          bash scripts/run-ci-tests ./mvnw --batch-mode --no-transfer-progress
+          bash scripts/ci/run-ci-tests ./mvnw --batch-mode --no-transfer-progress
           -Dfractal.gpu.enabled=false clean test

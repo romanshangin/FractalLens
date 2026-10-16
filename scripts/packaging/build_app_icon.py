@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "design/app-icon/matte-square.png"
 LEGACY_MASK = ROOT / "design/app-icon/macos-legacy-mask.png"
 DESTINATION = ROOT / "src/main/resources/com/shangin/fractal/app/icons"

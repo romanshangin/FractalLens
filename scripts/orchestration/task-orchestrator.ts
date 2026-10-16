@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { currentEvidence, evidenceSummary, type CheckEvidence } from './validation-evidence.ts';
 
 export type Stage = 'IMPLEMENT' | 'IMPLEMENT_FIXES' | 'REVIEW' | 'VERIFY' | 'DELIVER';
 export type FinalStatus = 'DELIVERED' | 'BLOCKED' | 'INCOMPLETE';
@@ -22,6 +23,8 @@ export type Request = {
   handoffs: Handoff[];
   candidate?: CandidateIdentity;
   humanEvidence?: string;
+  checkContext?: string;
+  evidence?: CheckEvidence[];
 };
 export type Checkpoint = {
   candidate: CandidateIdentity;
@@ -334,6 +337,7 @@ export async function runWorkflow(options: {
 
 export function stagePrompt(request: Request, repository: string): string {
   const role = ROLES[request.stage];
+  const canRunChecks = request.stage === 'IMPLEMENT' || request.stage === 'IMPLEMENT_FIXES' || request.stage === 'VERIFY';
   return [
     `Use $${role.skill} at ${join(repository, '.agents/skills', role.skill, 'SKILL.md')}.`,
     `Execute only stage ${request.stage}. Do not invoke other workflow skills, spawn subagents, or start other chats.`,
@@ -353,6 +357,11 @@ export function stagePrompt(request: Request, repository: string): string {
       : '',
     `Repair round: ${request.repairRound} of at most ${request.maxRepairRounds}.`,
     request.candidate ? `Orchestrator-computed candidate (do not invent or recompute an alternative ID): ${JSON.stringify(request.candidate)}` : '',
+    request.checkContext && canRunChecks ? `Automated validation runner: ${JSON.stringify(process.execPath)} ${JSON.stringify(join(repository, 'scripts/orchestration/check.ts'))} --context ${JSON.stringify(request.checkContext)} --check <checkId>. Built-ins: portable-suite, orchestrator-tests, git-diff-check. Other automated checks: descriptive ID followed by -- <executable> <arguments>. Use this runner to retain execution evidence; never write evidence JSON by hand. A matching PASS returns CACHED PASS without execution. Use --fresh for a concrete diagnostic reason; use --no-reuse for changing external, desktop, hardware or benchmark assumptions. Edits after a check invalidate its evidence.` : '',
+    request.evidence ? `Automated execution evidence for the current candidate and environment (inspect coverage and skips):\n${evidenceSummary(request.evidence)}\nDo not rerun a valid PASS merely for general confidence. State reused versus freshly executed checks. Evidence never substitutes for CLEAN review or authorizes delivery.` : '',
+    request.checkContext && request.stage !== 'DELIVER' ? `Full automated check registry: ${join(dirname(dirname(request.checkContext)), 'evidence', 'checks.json')}. The registry and referenced check output logs are shared between roles; other roles' private prompts/execution logs remain out of scope.` : '',
+    request.evidence && request.stage === 'REVIEW' ? 'REVIEW must not write to the registry or invoke its writing runner. Read code/tests/evidence; run narrow diagnostics only to confirm or falsify a concrete finding.' : '',
+    request.evidence && request.stage === 'VERIFY' ? 'Independently list required acceptance checks, map them to sufficient current evidence, then run only missing checks. Replace stale, insufficient or suspicious evidence; explain forced reruns. Command success does not prove every criterion; missing manual/platform acceptance remains INCOMPLETE.' : '',
     ROLES[request.stage].sandbox === 'read-only' ? 'Repository access is read-only and escalation is disabled. If required checks need unavailable writes, network or desktop access, report INCOMPLETE; do not broaden permissions or claim a skipped check passed.' : '',
     request.stage === 'VERIFY' ? 'You may create normal build, test, and diagnostic artifacts required by verification. Do not modify candidate source, tests, build configuration, dependencies, documentation, or other validation-relevant content. The orchestrator verifies candidate identity after this stage. Escalation is disabled; report INCOMPLETE if required access is unavailable. Keep artifacts in ignored build directories or outside the repository.' : '',
     request.stage === 'VERIFY' && request.humanEvidence ? `Human verification evidence for this candidate (assess coverage and remaining gaps; this is not an automatic PASS):\n${request.humanEvidence}` : '',
@@ -379,7 +388,11 @@ export function createCodexRunner(options: {
     const role = ROLES[request.stage];
     const stageDirectory = mkdtempSync(join(runDirectory, `${++sequence}-${request.stage}-`));
     const output = join(stageDirectory, 'report.md');
-    const prompt = stagePrompt(request, repository);
+    const checkContext = join(stageDirectory, 'check-context.json');
+    writeFileSync(checkContext, JSON.stringify({ version: 1, repository, runDirectory, baseRevision: request.baseRevision, stage: request.stage }), { mode: 0o600 });
+    const evidence = existsSync(join(runDirectory, 'evidence', 'checks.json')) || existsSync(join(runDirectory, 'evidence', 'active.lock'))
+      ? currentEvidence(runDirectory, computeCandidateIdentity(repository, request.baseRevision), repository) : [];
+    const prompt = stagePrompt({ ...request, checkContext, evidence }, repository);
     writeFileSync(join(stageDirectory, 'prompt.txt'), prompt, { mode: 0o600 });
     const log = openSync(join(stageDirectory, 'execution.log'), 'wx', 0o600);
     console.log(`${request.stage} (${role.model}, ${role.effort}; repair round ${request.repairRound})`);
@@ -423,7 +436,7 @@ function writeState(runDirectory: string, state: SavedRun): void {
   renameSync(temporary, join(runDirectory, 'state.json'));
 }
 
-const HELP = `Usage: node scripts/task-orchestrator.ts --task "Task description" [options]
+const HELP = `Usage: node scripts/orchestration/task-orchestrator.ts --task "Task description" [options]
 
 Runs IMPLEMENT -> REVIEW -> VERIFY -> DELIVER, with at most three repair rounds.
 Execution authorizes standard commit, push and PR publication; never merge or close.
@@ -465,7 +478,7 @@ export async function main(args: string[]): Promise<number> {
   const timeoutSeconds = Number(values['stage-timeout-seconds']);
   if (!Number.isInteger(maxRepairRounds) || maxRepairRounds < 0 || maxRepairRounds > 3) throw new Error('Repair limit must be an integer from 0 to 3');
   if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds > 86400) throw new Error('Stage timeout must be an integer from 1 to 86400 seconds');
-  const repository = realpathSync(resolve(saved?.repository ?? values.repo ?? join(dirname(fileURLToPath(import.meta.url)), '..')));
+  const repository = realpathSync(resolve(saved?.repository ?? values.repo ?? join(dirname(fileURLToPath(import.meta.url)), '../..')));
   const git = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: repository, encoding: 'utf8' });
   if (git.status !== 0 || realpathSync(git.stdout.trim()) !== repository) throw new Error('--repo must be a Git repository root');
   for (const role of Object.values(ROLES)) {

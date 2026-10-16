@@ -1,4 +1,4 @@
-"""Contract checks for scripts/package_runtime.py."""
+"""Contract checks for scripts/packaging/package_runtime.py."""
 
 from pathlib import Path
 import os

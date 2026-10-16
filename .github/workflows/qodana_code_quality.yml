@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test report acceptance controls
-        run: PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_check_qodana.py'
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/quality -p 'test_check_qodana.py'
       - name: Community analysis without cloud credentials
         uses: JetBrains/qodana-action@3e8d76ff0e0241618abd808682f426afe84bab3f # v2026.2.2
         with:
@@ -38,14 +38,14 @@ jobs:
       - name: Validate complete analysis and export safe findings
         if: ${{ !cancelled() }}
         run: >-
-          python3 scripts/check_qodana.py
+          python3 scripts/quality/check_qodana.py
           "${{ runner.temp }}/qodana/results"
           target/qodana-reviewed/results.json
       - name: Check report privacy
         if: ${{ !cancelled() && hashFiles('target/qodana-reviewed/results.json') != '' }}
         run: |
-          python3 scripts/check_public_data.py --files target/qodana-reviewed/results.json
-          bash scripts/install-gitleaks
+          python3 scripts/publication/check_public_data.py --files target/qodana-reviewed/results.json
+          bash scripts/publication/install-gitleaks
           "${RUNNER_TEMP}/fractallens-gitleaks/gitleaks" dir target/qodana-reviewed --redact=100 --no-banner --ignore-gitleaks-allow --max-decode-depth 5 --max-target-megabytes 0
       - name: Retain only the checked findings report
         if: ${{ success() }}

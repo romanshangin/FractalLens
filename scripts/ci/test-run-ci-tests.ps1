@@ -16,7 +16,7 @@ try {
 exit 37
 '@ | Set-Content -Path $fixture -Encoding utf8NoBOM
 
-    & $currentPowerShell -NoProfile -File scripts/run-ci-tests.ps1 `
+    & $currentPowerShell -NoProfile -File scripts/ci/run-ci-tests.ps1 `
         $currentPowerShell -NoProfile -File $fixture *> $consoleLog
     $actualExit = $LASTEXITCODE
 

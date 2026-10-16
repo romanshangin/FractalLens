@@ -22,8 +22,8 @@ portable pass is not device conformance or a performance result.
 
 ## Console output and artifacts
 
-Test and packaging commands run through `scripts/run-ci-tests` or its PowerShell
-counterpart. Python 3 is required. `scripts/privacy.py` redacts known home,
+Test and packaging commands run through `scripts/ci/run-ci-tests` or its PowerShell
+counterpart. Python 3 is required. `scripts/publication/privacy.py` redacts known home,
 project and temporary roots, the current login/hostname, email addresses other
 than the approved contact, machine identifiers, addresses and common credential
 forms before output reaches the console or `target/ci-test.log`. Known secret
@@ -50,13 +50,13 @@ secrets or write access. It runs the privacy regression tests, baseline analyzer
 tests and these checks:
 
 ```sh
-python3 scripts/check_public_data.py
-python3 scripts/check_secrets.py --gitleaks /path/to/gitleaks
+python3 scripts/publication/check_public_data.py
+python3 scripts/publication/check_secrets.py --gitleaks /path/to/gitleaks
 ```
 
 The public-data guard scans tracked files plus non-ignored new files, rejects
 raw diagnostic/credential filenames, known prohibited identity patterns and
-unreviewed benchmark paths. `scripts/public_benchmark_files.json` is the explicit
+unreviewed benchmark paths. `scripts/publication/public_benchmark_files.json` is the explicit
 benchmark selection. Extending it requires reviewing the data and updating the
 benchmark index. Known PNG/ICNS assets still require visual and metadata review;
 this text guard does not inspect their pixels or prove binary privacy.
@@ -96,7 +96,7 @@ Maven distribution without changing its declared version or checksum.
 
 The [reviewed baseline](../../.qodana/README.md) preserves 116 accepted source contracts
 as sanitized locations and fingerprints. The zero-new-finding gate does not
-claim a warning-free application. `scripts/check_qodana.py` also rejects missing
+claim a warning-free application. `scripts/quality/check_qodana.py` also rejects missing
 preparation evidence, unsuccessful analysis, unresolved dependency roots, sanity
 findings, and new or changed findings. Baseline updates require source review.
 

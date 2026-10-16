@@ -9,7 +9,7 @@ console_log="$(mktemp "${TMPDIR:-/tmp}/fractallens-ci-console.XXXXXX")"
 trap 'rm -f "$console_log"' EXIT
 
 set +e
-bash scripts/run-ci-tests bash -c \
+bash scripts/ci/run-ci-tests bash -c \
     'printf "probe-start\n"; for ((i = 0; i < 12000; i++)); do printf z; done; printf "\nprobe-end\n"; exit 37' \
     >"$console_log"
 actual_exit=$?

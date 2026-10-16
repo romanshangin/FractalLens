@@ -70,8 +70,8 @@ JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractallens-javafx-cache -Dfrac
 JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractallens-javafx-cache -Dfractal.gpu.enabled=false -Dfractal.latency.output=target/latency-screen.csv' \
   mvn -q -Pinteraction-latency javafx:run
 
-python3 scripts/summarize_interaction_latency.py target/latency-control.csv target/latency-control-summary.csv
-python3 scripts/summarize_interaction_latency.py target/latency-screen.csv target/latency-screen-summary.csv
+python3 scripts/benchmarks/summarize_interaction_latency.py target/latency-control.csv target/latency-control-summary.csv
+python3 scripts/benchmarks/summarize_interaction_latency.py target/latency-screen.csv target/latency-screen-summary.csv
 ```
 
 macOS needs graphical access and screen-capture permission for the screen run.

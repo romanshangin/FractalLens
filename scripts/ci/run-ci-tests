@@ -21,7 +21,7 @@ exit_code=$?
 set -e
 
 mkdir -p target
-python3 "$(dirname "$0")/privacy.py" "$temporary_log" target/ci-test.log
+python3 "$(dirname "$0")/../publication/privacy.py" "$temporary_log" target/ci-test.log
 cp target/ci-test.log "$temporary_log"
 
 output_size="$(wc -c <"$temporary_log" | tr -d ' ')"

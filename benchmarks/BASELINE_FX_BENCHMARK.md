@@ -129,7 +129,7 @@ BASELINE_JAVA=/path/to/jdk/bin/java
   -Dbaseline.warmups=1 -Dbaseline.runs=3 \
   -m com.shangin.fractal/com.shangin.fractal.render.BaselineFxBenchmark
 
-python3 scripts/summarize_baseline_fx.py target/baseline-fx-check \
+python3 scripts/benchmarks/summarize_baseline_fx.py target/baseline-fx-check \
   target/baseline-fx-check/summary.csv
 ```
 

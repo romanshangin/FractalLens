@@ -6,7 +6,7 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 
-BASELINE = Path(__file__).resolve().parents[1] / '.qodana/baseline.sarif.json'
+BASELINE = Path(__file__).resolve().parents[2] / '.qodana/baseline.sarif.json'
 
 
 def fingerprint(result):

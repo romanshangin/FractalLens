@@ -115,7 +115,7 @@
                     <configuration>
                         <executable>/bin/bash</executable>
                         <arguments>
-                            <argument>${project.basedir}/scripts/build-macos-menu</argument>
+                            <argument>${project.basedir}/scripts/macos/build-macos-menu</argument>
                             <argument>${java.home}</argument>
                             <argument>${project.build.outputDirectory}</argument>
                         </arguments>
@@ -199,7 +199,7 @@
                         <artifactId>javafx-maven-plugin</artifactId>
                         <configuration>
                             <!-- Give Dock a real app identity, not the shared Java launcher identity. -->
-                            <executable>${project.basedir}/scripts/macos-java</executable>
+                            <executable>${project.basedir}/scripts/macos/macos-java</executable>
                             <options combine.children="append">
                                 <option>--fractal-java-home=${java.home}</option>
                                 <option>-Xdock:name=FractalLens</option>

@@ -34,9 +34,9 @@ jobs:
 
       - name: Validate CI test log wrapper
         shell: bash
-        run: bash scripts/test-run-ci-tests
+        run: bash scripts/ci/test-run-ci-tests
 
       - name: Run tests
         shell: bash
         run: >-
-          bash scripts/run-ci-tests ./mvnw --batch-mode --no-transfer-progress test
+          bash scripts/ci/run-ci-tests ./mvnw --batch-mode --no-transfer-progress test

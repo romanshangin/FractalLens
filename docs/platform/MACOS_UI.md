@@ -95,7 +95,7 @@ The ICNS contains standard and Retina representations up to 1024 pixels.
 The matte revision removes painted highlights, glow, gradients, and bevels.
 Its unmasked square artwork and native Icon Composer source are in
 `design/app-icon/`; the original glossy concept remains in `design/icon-concepts/`.
-To rebuild PNG, ICNS, and the foreground layer, run `python3 scripts/build_app_icon.py`
+To rebuild PNG, ICNS, and the foreground layer, run `python3 scripts/packaging/build_app_icon.py`
 with Pillow installed. The compatibility mask is derived from Apple's native
 export and is applied only to the flattened Java/ICNS assets, not the native layers.
 See `design/app-icon/README.md` for native compilation and packaging instructions.

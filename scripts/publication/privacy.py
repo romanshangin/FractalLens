@@ -34,7 +34,7 @@ def redact(text, *, project=None, environment=None):
     for key,value in environment.items():
         if len(value) >= 8 and re.search(r'(?:TOKEN|PASSWORD|SECRET|API_KEY|PRIVATE_KEY)',key,re.I):
             text = text.replace(value,'${SECRET}')
-    replacements = [(str(project or Path(__file__).resolve().parents[1]),'${PROJECT_DIR}'),
+    replacements = [(str(project or Path(__file__).resolve().parents[2]),'${PROJECT_DIR}'),
                     (str(Path.home()),'${USER_HOME}'),(tempfile.gettempdir(),'${TEMP_DIR}')]
     for old,new in sorted(replacements,key=lambda x:-len(x[0])):
         if len(old)>3:
