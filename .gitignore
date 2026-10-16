@@ -53,3 +53,6 @@ benchmarks/**/tmp/fractallens-baseline-benchmark.lock
 .env
 .env.*
 /benchmarks/*/
+
+### Claude Code ###
+.claude/settings.*.json

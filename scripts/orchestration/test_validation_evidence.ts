@@ -210,6 +210,10 @@ test('check CLI fixes reserved command definitions and supports explicit targete
   const path = join(f.runDirectory, 'context.json');
   writeFileSync(path, JSON.stringify(f.context));
   assert.throws(() => checkDefinition('portable-suite', ['echo', 'fake-pass']), /Reserved/);
+  const portable = checkDefinition('portable-suite').command;
+  assert.ok(portable.includes(process.platform === 'win32' ? 'mvnw.cmd' : './mvnw'), 'portable-suite must use the Maven Wrapper');
+  assert.ok(!portable.includes('mvn') && !portable.includes('mvn.cmd'), 'portable-suite must not use a system Maven');
+  assert.deepEqual(portable.slice(-3), ['--batch-mode', '--no-transfer-progress', 'test']);
   assert.throws(() => checkDefinition('../escape', ['echo']), /Invalid check/);
   assert.throws(() => checkDefinition('unknown'), /requires an executable/);
   const args = ['--context', path, '--check', 'cli-targeted', '--', process.execPath, 'check.cjs'];

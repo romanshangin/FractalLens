@@ -17,6 +17,9 @@ and the existing Maven cache are used. The macOS/Windows command is:
 ./mvnw --batch-mode --no-transfer-progress -Dfractal.gpu.enabled=false clean test
 ```
 
+`ci.yml` also runs the task orchestrator tests on Ubuntu with Node.js 24 in a
+separate `orchestrator` job.
+
 Native GPU, graphical JavaFX and benchmark profiles remain opt-in. A hosted
 portable pass is not device conformance or a performance result.
 

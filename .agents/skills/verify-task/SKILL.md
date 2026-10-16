@@ -76,7 +76,9 @@ Follow the testing rules, subsystem constraints, and acceptance criteria in
    candidate, definition, environment and log-integrity reuse rules in `AGENTS.md`.
    Independent verification means independently assessing acceptance evidence
    and executing missing checks, not repeating every developer test.
-5. For documentation-only changes, do not run unrelated application tests.
+5. For documentation-only changes, do not run unrelated application tests;
+   the repository hygiene and publication checks below still apply. For
+   changes under `scripts/`, run the matching script tests from `AGENTS.md`.
 6. Identify planned tests and benchmark scripts that initialize JavaFX before
    executing them. Apply the `AGENTS.md` display rule to both: if the current
    sandbox is known to have no display, run in an active desktop session from
@@ -127,7 +129,21 @@ git status --short
 
 Inspect the diff and status for accidental generated output, IDE metadata,
 temporary files, and unrelated changes. Preserve and identify pre-existing
-user-owned changes.
+user-owned changes. `git diff --check` does not cover untracked files; inspect
+intended untracked candidate files directly.
+
+Also run the local working-tree equivalent of the publication checks that
+`publication-checks.yml` applies to every pull request, for every candidate
+including documentation-only changes:
+
+```shell
+python3 scripts/publication/check_public_data.py
+python3 scripts/publication/check_secrets.py --tree
+```
+
+Both are read-only and keep their reports outside the repository. A finding is
+a required-check failure. If Gitleaks is unavailable, classify the secret scan
+as unverified because of an environment limitation.
 
 ## Report the result
 

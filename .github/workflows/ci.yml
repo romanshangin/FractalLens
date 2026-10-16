@@ -40,3 +40,26 @@ jobs:
         shell: bash
         run: >-
           bash scripts/ci/run-ci-tests ./mvnw --batch-mode --no-transfer-progress test
+
+  orchestrator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Native TypeScript type stripping requires Node.js 24 or later.
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+
+      - name: Run task orchestrator tests
+        shell: bash
+        run: >-
+          bash scripts/ci/run-ci-tests node --test
+          scripts/orchestration/test_task_orchestrator.ts
+          scripts/orchestration/test_validation_evidence.ts

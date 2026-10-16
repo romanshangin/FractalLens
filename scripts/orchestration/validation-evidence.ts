@@ -29,9 +29,11 @@ const sameCandidate = (a: CandidateIdentity, b: CandidateIdentity): boolean => a
   && a.mergeBase === b.mergeBase && a.contentId === b.contentId;
 
 function mavenCommand(args: string[]): string[] {
-  // Maven's Windows distribution is a command script. Invoke its interpreter
-  // explicitly with fixed arguments; arbitrary custom commands still use argv.
-  return process.platform === 'win32' ? [process.env.ComSpec ?? 'cmd.exe', '/d', '/c', 'mvn.cmd', ...args] : ['mvn', ...args];
+  // Use the checked-in Maven Wrapper so the pinned Maven version runs. It is
+  // resolved from the repository working directory. The Windows wrapper is a
+  // command script, so invoke its interpreter explicitly with fixed arguments;
+  // arbitrary custom commands still use argv.
+  return process.platform === 'win32' ? [process.env.ComSpec ?? 'cmd.exe', '/d', '/c', 'mvnw.cmd', ...args] : ['./mvnw', ...args];
 }
 
 // Reserved IDs have fixed definitions. Targeted checks use explicit argument arrays;
@@ -57,9 +59,9 @@ export function definitionHash(definition: CheckDefinition): string {
 
 // Conservatively bind reuse to the inherited environment and toolchain output.
 // Values such as JAVA_HOME and JVM flags enter only a private digest, never prompts.
-export function checkEnvironment(): CheckEnvironment {
+export function checkEnvironment(repository = process.cwd()): CheckEnvironment {
   const probe = (executable: string, args: string[]): string => {
-    const result = spawnSync(executable, args, { encoding: 'utf8', timeout: 15_000, shell: false });
+    const result = spawnSync(executable, args, { cwd: repository, encoding: 'utf8', timeout: 15_000, shell: false });
     return JSON.stringify([result.status, (result.error as NodeJS.ErrnoException | undefined)?.code, result.stdout, result.stderr]);
   };
   const java = probe('java', ['-version']);
@@ -86,7 +88,7 @@ function executableHash(command: string, repository: string): string {
 }
 
 function executionEnvironment(definition: CheckDefinition, repository: string): CheckEnvironment {
-  const environment = checkEnvironment();
+  const environment = checkEnvironment(repository);
   return { ...environment, fingerprint: digest(JSON.stringify([environment.fingerprint, executableHash(definition.command[0], repository)])) };
 }
 
@@ -126,7 +128,7 @@ export function currentEvidence(runDirectory: string, candidate: CandidateIdenti
     if (sameCandidate(entry.candidate, candidate)) latest.set(JSON.stringify([entry.checkId, entry.checkDefinitionHash, entry.environment.fingerprint]), entry);
   }
   if (!latest.size) return [];
-  const environment = checkEnvironment();
+  const environment = checkEnvironment(repository);
   return [...latest.values()].filter(entry => {
     const definition = checkDefinition(entry.checkId, ['portable-suite', 'orchestrator-tests', 'git-diff-check'].includes(entry.checkId) ? [] : entry.command, entry.reusable);
     const expectedFingerprint = digest(JSON.stringify([environment.fingerprint, executableHash(definition.command[0], repository)]));

@@ -296,6 +296,8 @@ test('unknown, decorated, later-line and wrong-role statuses do not advance', as
     assert.equal(run.requests.length, 1);
   }
   assert.equal(parseStatus('REVIEW', '\nCLEAN\r\nNo findings'), 'CLEAN');
+  assert.equal(parseStatus('REVIEW', 'CLEAN  \t\nNo findings'), 'CLEAN');
+  assert.throws(() => parseStatus('REVIEW', ' CLEAN.\nNo findings'), /no valid first-line status/);
 });
 
 test('executor rejection stops without trying to repair or deliver', async () => {
