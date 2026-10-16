@@ -4,9 +4,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+import subprocess
 
 from summarize_baseline_pairs import validate_policy, validate_campaign, paired_statistics, summarize
-from prepare_baseline_build import verify_build
+from prepare_baseline_build import native_menu_scripts, verify_build
 
 
 def write_json(path, data):
@@ -155,6 +157,33 @@ class PairValidationTest(unittest.TestCase):
 
 
 class SnapshotTest(unittest.TestCase):
+    def test_native_helper_selection_preserves_old_and_new_revision_layouts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            hooks = root / "empty-hooks"
+            hooks.mkdir()
+            def git(*arguments):
+                return subprocess.check_output(["git", "-c", f"core.hooksPath={hooks}", "-c", "commit.gpgsign=false", *arguments], cwd=root, text=True).strip()
+            git("init", "-b", "main")
+            git("config", "user.name", "Synthetic Author")
+            git("config", "user.email", "noreply@example.org")
+            legacy = root / "scripts/build-macos-menu"
+            legacy.parent.mkdir()
+            legacy.write_text("legacy native helper\n")
+            git("add", ".")
+            git("commit", "-m", "Synthetic legacy layout")
+            previous = git("rev-parse", "HEAD")
+            current = root / "scripts/macos/build-macos-menu"
+            current.parent.mkdir()
+            legacy.rename(current)
+            with patch("prepare_baseline_build.ROOT", root):
+                # Working-tree snapshots must include a moved, not-yet-staged helper.
+                self.assertEqual(["scripts/macos/build-macos-menu"], native_menu_scripts())
+                self.assertEqual(["scripts/build-macos-menu"], native_menu_scripts(previous))
+                git("add", "--all")
+                git("commit", "-m", "Synthetic current layout")
+                self.assertEqual(["scripts/macos/build-macos-menu"], native_menu_scripts("HEAD"))
+
     def test_changed_compiled_file_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             p = Path(temp)

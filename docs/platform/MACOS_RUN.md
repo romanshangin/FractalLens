@@ -2,7 +2,7 @@
 
 Run `mvn compile javafx:run` (or `mvn javafx:run` after compilation).
 The automatically activated `macos-app-name` profile launches through
-`scripts/macos-java`. Dock sees a `FractalLens.app` bundle with its own name,
+`scripts/macos/macos-java`. Dock sees a `FractalLens.app` bundle with its own name,
 identifier and icon, rather than the shared `java` executable.
 
 The launcher creates a small, locally signed development bundle under
@@ -19,7 +19,7 @@ SDK 26 or newer to obtain the current native appearance. An executable built
 with an older SDK gets the compatibility design, including smaller buttons.
 No JavaFX imitation of the title bar or custom window buttons is used.
 
-Run `python3 scripts/test_macos_launcher.py` for opt-in macOS checks of the
+Run `python3 scripts/macos/test_macos_launcher.py` for opt-in macOS checks of the
 SDK identity, bundle signature, concurrent creation, cache reuse, argument
 quoting, `@argfiles`, `JDK_JAVA_OPTIONS` and exit status. Set `JAVA_HOME` to
 check a particular JDK. The native shim uses OpenJDK's exported JLI launcher

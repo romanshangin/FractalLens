@@ -104,9 +104,9 @@ inputs, code state, and decision.
 
 ### Privacy and published data
 
-- Before committing new or generated evidence, run `python3 scripts/check_public_data.py`
-  and a full secret scan via `scripts/check_secrets.py`; include `--tree` for
-  uncommitted files. Keep `scripts/public_benchmark_files.json` and the benchmark
+- Before committing new or generated evidence, run `python3 scripts/publication/check_public_data.py`
+  and a full secret scan via `scripts/publication/check_secrets.py`; include `--tree` for
+  uncommitted files. Keep `scripts/publication/public_benchmark_files.json` and the benchmark
   index consistent when explicitly selecting new evidence. Do not attach
   personal self-hosted runners or expose repository secrets to pull requests.
 
@@ -316,6 +316,21 @@ application test suite. If the full suite cannot run because of an environment
 failure or an explicit user constraint, report that limitation and the exact
 checks that did run; do not imply full validation.
 
+### Reusing automated execution evidence
+
+In an orchestrated task, a required automated check may reuse execution evidence
+from an earlier stage instead of executing the same command again. Evidence must
+match the exact current candidate (base revision, merge base and content), check
+definition and applicable environment, retain an intact execution log, and report
+a successful execution. Use `scripts/orchestration/check.ts` and the private run registry as
+described in `docs/development/TASK_ORCHESTRATOR.md`; a prose handoff alone is not
+reusable execution evidence. Do not repeat a valid PASS merely for confidence.
+Review may run diagnostics for a concrete suspected finding. Verification must
+independently assess coverage, skips and remaining acceptance criteria and run
+missing checks. Reuse does not waive the full portable suite, required subsystem
+checks, visible acceptance or independent review. Stale, insufficient or suspicious
+evidence must be replaced; a skipped required test is not a PASS.
+
 ### JavaFX and visible behavior
 
 Automated model tests are not sufficient evidence for visible UI changes.
@@ -370,7 +385,7 @@ The result applies only to the device, driver, and platform actually used.
 After launcher, bundle-metadata, or launch-option changes, run:
 
 ```shell
-python3 scripts/test_macos_launcher.py
+python3 scripts/macos/test_macos_launcher.py
 ```
 
 Also launch the application:

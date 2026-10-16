@@ -3,7 +3,7 @@ profile:
   name: qodana.starter
 projectJDK: "25"
 # Resolve dependencies before importing a fresh Maven project in the container.
-bootstrap: bash scripts/prepare-qodana
+bootstrap: bash scripts/quality/prepare-qodana
 failureConditions:
   severityThresholds:
     any: 0

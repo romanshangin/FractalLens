@@ -12,7 +12,7 @@ from check_public_data import issues
 from check_secrets import file_hash_finding
 from privacy import PUBLIC_EMAIL, redact, sanitized
 
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 
 
 class PrivacyTest(unittest.TestCase):
@@ -72,7 +72,7 @@ class PrivacyTest(unittest.TestCase):
         if os.name=='nt':self.skipTest('Bash wrapper is covered separately in the hosted shell lane')
         home='/Users/'+'private-fixture'
         with tempfile.TemporaryDirectory() as d:
-            command=['bash',str(ROOT/'scripts/run-ci-tests'),sys.executable,'-c','import sys; print(sys.argv[1]); sys.exit(37)',home]
+            command=['bash',str(ROOT/'scripts/ci/run-ci-tests'),sys.executable,'-c','import sys; print(sys.argv[1]); sys.exit(37)',home]
             result=subprocess.run(command,cwd=d,text=True,capture_output=True)
             self.assertEqual(37,result.returncode)
             self.assertNotIn(home,result.stdout+result.stderr)
@@ -92,13 +92,13 @@ class PrivacyTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             fixture=Path(d)/'fixture.ps1'
             fixture.write_text("[Console]::WriteLine('"+home+"'); exit 37")
-            result=subprocess.run([executable,'-NoProfile','-File',str(ROOT/'scripts/run-ci-tests.ps1'),executable,'-NoProfile','-File',str(fixture)],cwd=d,text=True,capture_output=True)
+            result=subprocess.run([executable,'-NoProfile','-File',str(ROOT/'scripts/ci/run-ci-tests.ps1'),executable,'-NoProfile','-File',str(fixture)],cwd=d,text=True,capture_output=True)
             self.assertEqual(37,result.returncode)
             self.assertNotIn(home,result.stdout+result.stderr)
             self.assertNotIn(home,(Path(d)/'target/ci-test.log').read_text())
 
     def test_guard_cli_rejects_missing_export_report(self):
-        result=subprocess.run([sys.executable,str(ROOT/'scripts/check_public_data.py'),'--files','target/missing-export-report'],capture_output=True,text=True)
+        result=subprocess.run([sys.executable,str(ROOT/'scripts/publication/check_public_data.py'),'--files','target/missing-export-report'],capture_output=True,text=True)
         self.assertNotEqual(0,result.returncode)
         self.assertNotIn('target/missing-export-report',result.stderr)
 

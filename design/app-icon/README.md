@@ -15,7 +15,7 @@ PNG и ICNS приложения находятся в `src/main/resources/com/s
 Из корня проекта, с установленным Pillow:
 
 ```sh
-python3 scripts/build_app_icon.py
+python3 scripts/packaging/build_app_icon.py
 ```
 
 Скомпилировать нативный исходник инструментами Xcode:

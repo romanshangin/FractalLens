@@ -1,5 +1,9 @@
 # Roadmap P1.4 allocation profile — 2026-09-24
 
+Script layout note (2026-10-15): recorded commands below retain their historical
+paths and measurement identities. For new runs, benchmark tools now live in
+`scripts/benchmarks/`; see [the scripts index](../scripts/README.md).
+
 > Historical evidence: results and “current source” below refer to the dated
 > experiment, not a new validation of this checkout. Only the
 > [selected evidence](README.md) is included; entries marked “private archive”

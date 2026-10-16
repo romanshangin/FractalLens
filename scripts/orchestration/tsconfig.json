@@ -9,5 +9,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["task-orchestrator.ts", "test_task_orchestrator.ts"]
+  "include": ["task-orchestrator.ts", "test_task_orchestrator.ts", "check.ts", "validation-evidence.ts", "test_validation_evidence.ts"]
 }

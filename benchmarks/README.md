@@ -17,7 +17,9 @@ claim that every historical analysis can be rerun from the published files.
   [allocation/sustained memory](BASELINE_MEMORY_BENCHMARK.md).
 - [Formula benchmarks](FORMULA_BENCHMARK.md) and [basic benchmark entry point](BENCHMARK.md).
 
-Use the current drivers under `scripts/` with a fresh output directory.
+Use the current drivers under `scripts/benchmarks/` with a fresh output directory.
+See [the scripts index](../scripts/README.md) for functional groups and validation commands.
+Recorded measurement paths and source hashes remain historical.
 Policies under `policies/` include historical rejected candidates as well as
 final gates; select a policy intentionally rather than treating every policy
 as an accepted optimization. Local raw output is needed for analysis but is
