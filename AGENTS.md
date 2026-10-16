@@ -95,7 +95,6 @@ inputs, code state, and decision.
   understood, unavoidable, and the reason is documented.
 - Add or update tests whenever observable behavior changes.
 - Fix root causes rather than only masking symptoms.
-- Preserve unrelated and pre-existing working-tree changes.
 - Update documentation when a change affects user-visible behavior, platform
   support, launch or test commands, a benchmark protocol, a roadmap acceptance
   criterion, a fallback path, or a precision or performance decision.
@@ -104,11 +103,12 @@ inputs, code state, and decision.
 
 ### Privacy and published data
 
-- Before committing new or generated evidence, run `python3 scripts/publication/check_public_data.py`
-  and a full secret scan via `scripts/publication/check_secrets.py`; include `--tree` for
-  uncommitted files. Keep `scripts/publication/public_benchmark_files.json` and the benchmark
-  index consistent when explicitly selecting new evidence. Do not attach
-  personal self-hosted runners or expose repository secrets to pull requests.
+- Before committing new or generated evidence, run the publication checks
+  listed under "Before committing" in the Git policy below.
+- Keep `scripts/publication/public_benchmark_files.json` and the benchmark
+  index consistent when explicitly selecting new evidence.
+- Do not attach personal self-hosted runners or expose repository secrets to
+  pull requests.
 
 - The public benchmark selection is documented in `benchmarks/README.md` and
   `docs/development/PUBLICATION.md`. Keep raw logs, diagnostic dumps and unselected working
@@ -167,6 +167,7 @@ Preserve the existing package boundaries:
 - `math` owns coordinates, viewports, and numeric value types;
 - `render` owns CPU rendering, deep zoom, caches, frame reuse, and progress
   publication;
+- `config` owns iteration-limit policies used to configure renders;
 - `controller` owns rendering orchestration and lifecycle;
 - `ui` owns JavaFX presentation, input, menus, dialogs, and result display;
 - `coloring` owns palettes and coloring algorithms;
@@ -231,7 +232,8 @@ fallback.
 - Do not modify the installed JDK to implement the launcher.
 - The acceptance check for application identity is the visible Dock tooltip
   `FractalLens`; a process name or `localizedName` is insufficient.
-- Preserve normal development launch through `mvn javafx:run`.
+- Preserve normal development launch through `./mvnw compile javafx:run`
+  (the `javafx-maven-plugin` run goal).
 
 ### GPU rules
 
@@ -281,13 +283,18 @@ Numerical correctness takes precedence over a local performance improvement.
 
 Choose validation proportional to the risk of the change.
 
+Run Maven through the checked-in Maven Wrapper so the pinned Maven version is
+used: `./mvnw` on macOS and Linux, `mvnw.cmd` or `.\mvnw.cmd` on Windows. The
+commands below use the POSIX form. A system `mvn` is not a substitute for
+recorded validation.
+
 ### Targeted tests
 
 Run the nearest tests first during development to get fast feedback while
 iterating:
 
 ```shell
-mvn -Dtest=RelevantTest test
+./mvnw -Dtest=RelevantTest test
 ```
 
 List multiple related test classes with a comma when necessary. Passing targeted
@@ -296,25 +303,48 @@ pre-handoff suite.
 
 ### Portable test suite
 
-Before handing off a production-code change, run the full portable suite:
+Before handing off any change under `src/` (production code, resources such as
+CSS, shaders, and native sources, and tests) or to `pom.xml`, `.mvn/`, `mvnw`,
+or `mvnw.cmd`, run the full portable suite:
 
 ```shell
-mvn test
+./mvnw test
 ```
 
 After build, dependency, or module-setting changes, or when stale output is
 possible, use:
 
 ```shell
-mvn clean test
+./mvnw clean test
 ```
 
 Do not substitute targeted tests for the full portable suite before handoff.
 Also run any relevant opt-in JavaFX, GPU, native, or benchmark validation called
-for by the changed subsystem. Documentation-only changes do not require the
+for by the changed subsystem. Changes under `scripts/` require the matching
+script tests below. Changes to scripts that run during the Maven build or wrap
+the CI test command, such as `scripts/macos/build-macos-menu` and
+`scripts/ci/run-ci-tests`, also require the full portable suite. Documentation-only changes do not require the
 application test suite. If the full suite cannot run because of an environment
 failure or an explicit user constraint, report that limitation and the exact
 checks that did run; do not imply full validation.
+
+### Script tests
+
+Run the tests for each changed `scripts/` directory from the repository root:
+
+| Changed directory | Command |
+| --- | --- |
+| `scripts/orchestration/` | `node --test scripts/orchestration/test_task_orchestrator.ts scripts/orchestration/test_validation_evidence.ts` (Node.js 24 or later) |
+| `scripts/benchmarks/` | `python3 -m unittest discover -s scripts/benchmarks -p 'test_*.py'` |
+| `scripts/publication/` | `python3 -m unittest discover -s scripts/publication -p 'test_*.py'` |
+| `scripts/quality/` | `python3 -m unittest discover -s scripts/quality -p 'test_*.py'` |
+| `scripts/packaging/` | `python3 scripts/packaging/test_package_runtime.py` |
+| `scripts/ci/` | `bash scripts/ci/test-run-ci-tests`; for PowerShell changes also `scripts/ci/test-run-ci-tests.ps1` in a PowerShell session |
+| `scripts/macos/` | `python3 scripts/macos/test_macos_launcher.py` (macOS with native developer tools) |
+
+Analyzer tests do not run measurement campaigns. A PowerShell test on macOS is
+not Windows acceptance. Report platform-specific script tests that could not
+run on the current host as not run.
 
 ### Reusing automated execution evidence
 
@@ -352,22 +382,29 @@ Automated model tests are not sufficient evidence for visible UI changes.
 JavaFX integration tests are opt-in:
 
 ```shell
-mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=TASK_SPECIFIC_TEMP_DIRECTORY" -DreuseForks=false -Dtest=RelevantFxTest test
+./mvnw -Dfractal.fx.tests=true "-Djavafx.cachedir=TASK_SPECIFIC_TEMP_DIRECTORY" -DreuseForks=false -Dtest=RelevantFxTest test
 ```
 
 - Run portable JavaFX tests in an active graphical session.
 - Run macOS-specific JavaFX or native-integration tests in an active graphical
   macOS session.
-- If the current sandbox is known to have no display, do not attempt JavaFX
-  integration tests there; run them directly in the active desktop session.
+- Display rule: if the current sandbox is known to have no display, do not
+  attempt JavaFX integration tests or JavaFX-initializing benchmarks there; run
+  them directly in the active desktop session. If an unexpected sandbox run
+  reaches `Screen.getMainScreen` with an empty screen list, rerun the unchanged
+  test in a desktop session and record the sandbox failure as an environment
+  limit.
 - Replace `TASK_SPECIFIC_TEMP_DIRECTORY` with a task-specific directory under
-  the platform's temporary directory.
+  the platform's temporary directory, for example
+  `$TMPDIR/fractallens-fx-<task>` on macOS, `/tmp/fractallens-fx-<task>` on
+  Linux, or `$env:TEMP\fractallens-fx-<task>` in PowerShell. Use a fresh
+  directory per task so cache `.lock` files from other runs do not interfere.
+  The resolved path is machine-specific; do not record it in repository files
+  or published evidence.
 - Use `-DreuseForks=false` when suites that call `Platform.exit()` run together.
 - `No toolkit found`, Prism failures, CVDisplayLink failures,
   `Screen.getMainScreen` failures, and cache `.lock` failures can be environment
-  problems. If an unexpected sandbox run reaches `Screen.getMainScreen` with an
-  empty screen list, rerun the unchanged test in a desktop session and record
-  the sandbox failure as an environment limit.
+  problems; classify them with evidence before attributing them to the product.
 - Do not report a skipped test as passed.
 
 ### GPU tests
@@ -375,7 +412,7 @@ mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=TASK_SPECIFIC_TEMP_DIRECTORY" -Dr
 Run native GPU smoke tests separately:
 
 ```shell
-mvn -Pgpu-smoke test
+./mvnw -Pgpu-smoke test
 ```
 
 The result applies only to the device, driver, and platform actually used.
@@ -388,10 +425,11 @@ After launcher, bundle-metadata, or launch-option changes, run:
 python3 scripts/macos/test_macos_launcher.py
 ```
 
-Also launch the application:
+Also launch the application. Include `compile` so the launch uses the current
+sources and the rebuilt native bridge rather than stale output:
 
 ```shell
-mvn javafx:run
+./mvnw compile javafx:run
 ```
 
 Manually verify Dock identity and any affected system behavior.
@@ -418,9 +456,17 @@ Manually verify Dock identity and any affected system behavior.
 - If the working tree is already dirty, inspect the existing diff before editing
   so that pre-existing user changes can be distinguished from changes made for
   the current task.
-- When the task requires creating a new branch, create it from `main` unless the
-  user explicitly specifies another base. Verify the selected base and the new
-  branch's merge base.
+- Every task that changes repository files starts on its own new task branch.
+  Create the branch before the first edit, including documentation-only and
+  one-line changes. Never edit files for a task while `main` is checked out.
+  Read-only work such as analysis, review, or running checks needs no branch.
+  The only exception is a task branch other than `main` that the user has
+  already selected or created for the current task; see below.
+- Create the new branch from `main` unless the user explicitly specifies
+  another base. Verify the selected base and the new branch's merge base. If
+  pre-existing user changes are present, create the branch in place (for
+  example `git switch -c <branch>`) so those changes are carried over without
+  being stashed, reset, or otherwise disturbed.
 - Name task branches according to the planned changes: `feature/<description>`
   for new or expanded functionality, `fix/<description>` for defect corrections,
   and `chore/<description>` for maintenance, tooling, CI, or documentation.
@@ -431,12 +477,34 @@ Manually verify Dock identity and any affected system behavior.
   disturb pre-existing user changes.
 - When the user has already selected or created the task branch, preserve and
   use that branch unless it is `main`.
-- Treat existing changes as user-owned.
-- Do not delete or overwrite unrelated changes.
+- Treat existing changes as user-owned; do not delete or overwrite unrelated
+  changes.
 - Do not use destructive commands such as `git reset --hard`.
 - Do not include IDE metadata, temporary files, generated output, or unrelated
   benchmark artifacts unless they are explicitly part of the task.
+- Before committing new or generated evidence (benchmark results, logs, test
+  reports, generated files, or diagnostic output), run:
+
+  ```shell
+  python3 scripts/publication/check_public_data.py
+  python3 scripts/publication/check_secrets.py
+  python3 scripts/publication/check_secrets.py --tree
+  ```
+
+  The first secret scan covers the complete Git history; `--tree` covers the
+  working directory, including uncommitted files. `--tree` replaces the history
+  scan rather than extending it, so one run does not cover both. The scans need
+  Gitleaks; CI uses version 8.30.1. Put a local `gitleaks` on `PATH` or pass
+  `--gitleaks <path>`. `scripts/publication/install-gitleaks` is a Linux x64 CI
+  installer only. If Gitleaks is unavailable, report the secret scan as not
+  run.
 - Do not create commits or push changes unless the user explicitly asks.
+  When the user asks to run `scripts/orchestration/task-orchestrator.ts`
+  without `--dry-run`, that request is the explicit authorization for standard
+  delivery described in `docs/development/TASK_ORCHESTRATOR.md`: committing
+  the intended changes, pushing the task branch, and creating or updating its
+  pull request. It never authorizes force-push, merge, close, or auto-merge.
+  Approval for one task or run does not extend to later tasks.
 - Never push directly to `main`.
 - Merge into `main` only through a pull request.
 - Do not create, merge, or close a pull request unless explicitly asked.
@@ -456,5 +524,7 @@ Manually verify Dock identity and any affected system behavior.
   or maintainability issue with limited impact that does not invalidate the main
   workflow. Suggestions with no concrete impact are not Minor findings.
 
-Ignore purely stylistic preferences unless they harm correctness or
-maintainability.
+There is no lower severity level. Do not report nits, informational notes, or
+optional suggestions as findings; mention them, if at all, only as residual
+observations outside the findings list. Ignore purely stylistic preferences
+unless they harm correctness or maintainability.

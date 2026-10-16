@@ -195,5 +195,12 @@ Then report:
 - known risks and verification gaps, including manual UI acceptance not performed;
 - blocking issue, when status is `BLOCKED`.
 
-Do not report `READY_FOR_REVIEW` while a known task-related required developer
-self-validation check is failing, skipped, unrun, or could not be verified.
+Do not report `READY_FOR_REVIEW` while a known task-related failure remains, or
+while a required developer self-validation check that is available in the
+current environment is failing, skipped, or unrun. This includes the portable
+suite where `AGENTS.md` requires it. Checks that may remain unverified at
+handoff under "Finish the implementation phase" (separate environment, manual
+UI inspection, platform-specific hardware, or unavailable external capabilities)
+do not block `READY_FOR_REVIEW`; list them as verification gaps. When
+`AGENTS.md` or the task makes such a check an implementation-stage gate and it
+cannot run, report `BLOCKED`.

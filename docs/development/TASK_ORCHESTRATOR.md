@@ -175,13 +175,15 @@ node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check portabl
 node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check orchestrator-tests
 node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check git-diff-check
 node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check scene-history-targeted \
-  -- mvn --batch-mode --no-transfer-progress -Dtest=SceneHistoryTest test
+  -- ./mvnw --batch-mode --no-transfer-progress -Dtest=SceneHistoryTest test
 ```
 
-`portable-suite` always runs `mvn --batch-mode --no-transfer-progress test`.
+`portable-suite` always runs `./mvnw --batch-mode --no-transfer-progress test`
+through the checked-in Maven Wrapper from the repository root, and the
+environment probe records `./mvnw --version`.
 `orchestrator-tests` runs both TypeScript test files using the current Node
 executable. `git-diff-check` runs `git diff --check`. Reserved IDs reject command
-overrides. On Windows the built-in Maven command explicitly invokes `mvn.cmd`
+overrides. On Windows the built-in Maven command explicitly invokes `mvnw.cmd`
 through `cmd.exe` with fixed arguments. Other IDs require an executable and
 argument array after `--`; choose
 descriptive IDs that identify coverage. Arguments, selectors, profiles and JVM
@@ -395,7 +397,8 @@ node --test scripts/orchestration/test_validation_evidence.ts
 Tests use synthetic handoffs and fake CLI processes. They check routing, shared
 repair limits, historical finding preservation, compact handoffs, candidate
 code-owned identity, per-invocation artifact directories, role/model/effort and
-sandbox/approval arguments, strict status parsing, exception messages, timeout, and dry-run
+sandbox/approval arguments, strict status parsing (trailing whitespace on the
+status line is accepted; decorations are not), exception messages, timeout, and dry-run
 behavior. Temporary Git fixtures check hashing, ignored outputs, staging/commit
 invariance, file modes, symlinks, unrelated work preservation, remote base refresh,
 frozen comparisons and stopping before delivery when the base moves or is unavailable.

@@ -69,8 +69,9 @@ review remains independent.
 ## Review method
 
 1. Determine the comparison base from the user's request, repository state, and
-   Git metadata. Prefer an explicitly named base. Otherwise use the repository's
-   normal integration branch only when it can be established reliably. If the
+   Git metadata. In orchestrated runs, use the supplied base. Otherwise prefer
+   an explicitly named base, then `main` (the task-branch base required by
+   `AGENTS.md`) when the merge base with it can be established. If the
    base cannot be established, review the observable changes relevant to the
    request and state the comparison limitation instead of guessing. Inspect the
    complete relevant diff. Account for existing working-tree changes when they
@@ -84,18 +85,27 @@ review remains independent.
    Do not treat an earlier `CLEAN` result as acceptance of developer fixes.
 4. Look for concrete regressions and material executable-coverage gaps.
    Prioritize:
-   1. mathematical errors or loss of decimal precision;
-   2. stale-frame publication after cancellation or a scene change;
-   3. races and leaks of listeners, executors, or native resources;
-   4. blocking the JavaFX Application Thread;
-   5. broken CPU fallback or cross-platform startup;
-   6. GPU/CPU conformance failures;
-   7. resize, pan, zoom, Reset View, or fractal-change artifacts;
-   8. changed behavior that is regression-prone or contractually important but
+   1. secrets, credentials, or personal and machine-specific data prohibited by
+      the `AGENTS.md` privacy rules in added files, evidence, logs, or
+      generated output, and benchmark files added outside the explicit public
+      selection; the read-only checks
+      `python3 scripts/publication/check_public_data.py` and
+      `python3 scripts/publication/check_secrets.py --tree` may serve as
+      diagnostics;
+   2. mathematical errors or loss of decimal precision;
+   3. stale-frame publication after cancellation or a scene change;
+   4. races and leaks of listeners, executors, or native resources;
+   5. blocking the JavaFX Application Thread;
+   6. broken CPU fallback or cross-platform startup;
+   7. GPU/CPU conformance failures;
+   8. resize, pan, zoom, Reset View, or fractal-change artifacts;
+   9. changed behavior that is regression-prone or contractually important but
       lacks an executable check, creating a concrete validation gap;
-   9. performance regressions, or performance claims lacking a valid control
+   10. performance regressions, or performance claims lacking a valid control
       measurement when the claim is part of the change's acceptance evidence;
-   10. documentation or roadmap claims unsupported by acceptance evidence.
+   11. documentation or roadmap claims unsupported by acceptance evidence;
+   12. accidental generated output, IDE metadata, temporary files, or
+       unrelated changes included in the candidate.
 5. Validate suspected findings against the actual behavior or contract before
    reporting them. Identify the evidence that establishes the issue, such as an
    executable failure, violated invariant, incorrect control or data flow, or a

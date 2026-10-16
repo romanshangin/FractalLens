@@ -11,7 +11,15 @@ Before implementation:
 - identify the suspected bottleneck;
 - select fixed workloads and a control implementation or baseline code state;
 - define the correctness gate and retain/reject metrics;
-- reuse an established benchmark protocol when one exists.
+- reuse an established benchmark protocol when one exists. Start from the
+  index in `benchmarks/README.md`. For CPU retain/reject decisions, the
+  established method compares frozen builds with
+  `scripts/benchmarks/prepare_baseline_build.py` and
+  `scripts/benchmarks/run_baseline_pairs.py` under
+  `benchmarks/BASELINE_PAIRS_BENCHMARK.md`, with a predeclared policy in
+  `benchmarks/policies/`. Take pair counts, process starts, and thresholds
+  from that protocol or the roadmap item rather than choosing them after
+  seeing results.
 
 Initial bottleneck diagnosis may use lightweight exploratory measurements. Apply
 the controlled protocol below before using results for a `retain` or `reject`

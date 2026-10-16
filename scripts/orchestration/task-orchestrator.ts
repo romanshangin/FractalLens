@@ -142,7 +142,8 @@ function sameCandidate(a: CandidateIdentity | undefined, b: CandidateIdentity): 
 }
 
 export function parseStatus(stage: Stage, report: string): string {
-  const status = report.trim().split(/\r?\n/, 1)[0];
+  // Trailing whitespace is formatting noise; decorations and extra words still fail closed.
+  const status = report.trim().split(/\r?\n/, 1)[0].trimEnd();
   if (!(ROLES[stage].statuses as readonly string[]).includes(status)) {
     throw new Error(`${stage} returned no valid first-line status`);
   }
