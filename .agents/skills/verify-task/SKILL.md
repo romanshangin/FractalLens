@@ -69,9 +69,13 @@ Follow the testing rules, subsystem constraints, and acceptance criteria in
    state before and after this stage and owns candidate fields in the handoff.
 3. Identify affected behavior, platforms, modules, fallbacks, and roadmap or
    document acceptance criteria.
-4. Choose the smallest set of checks that proves those behaviors, while still
-   running the full portable suite required by `AGENTS.md` for a production-code
-   change.
+4. List the required acceptance checks and map each to sufficient current
+   automated execution evidence or a missing check. The full portable suite
+   required by `AGENTS.md` remains mandatory for a production-code change, but
+   matching execution evidence may satisfy it without re-execution. Apply the
+   candidate, definition, environment and log-integrity reuse rules in `AGENTS.md`.
+   Independent verification means independently assessing acceptance evidence
+   and executing missing checks, not repeating every developer test.
 5. For documentation-only changes, do not run unrelated application tests.
 6. Identify planned tests and benchmark scripts that initialize JavaFX before
    executing them. Apply the `AGENTS.md` display rule to both: if the current
@@ -81,7 +85,14 @@ Follow the testing rules, subsystem constraints, and acceptance criteria in
 
 ## Run and assess checks
 
-- Start with the nearest targeted tests for fast feedback, then run the required
+- Reuse sufficient current PASS evidence; do not rerun it merely for confidence.
+  A prose handoff alone is not reusable automated execution evidence. Inspect
+  shared registry records and referenced check logs for coverage and skips.
+  Run missing checks through the supplied `scripts/orchestration/check.ts` context in an
+  orchestrated task. Replace stale, insufficient or suspicious evidence;
+  explain any forced rerun. Standalone verification without harness evidence
+  must execute the required checks.
+- For missing checks, start with the nearest targeted tests, then the required
   portable and subsystem-specific checks from `AGENTS.md`.
 - Validate observable output, frame contents, fallback behavior, or visible UI
   behavior where callbacks, logs, or model tests are only proxies.
@@ -139,7 +150,8 @@ remaining gaps. Environment failures alone do not establish `FAIL`.
 Then state:
 
 - the candidate identity, base revision, and matching `CLEAN` review evidence;
-- the exact commands or manual checks executed and whether each passed, failed,
+- the exact commands or manual checks, distinguishing reused execution evidence
+  (original stage and environment) from freshly executed checks, and whether each passed, failed,
   was skipped, or could not be verified;
 - the behavior and acceptance criteria those checks cover;
 - any environment limitation and the evidence for that classification;

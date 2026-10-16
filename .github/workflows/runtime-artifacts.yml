@@ -11,11 +11,11 @@ on:
       - '.github/workflows/runtime-artifacts.yml'
       - 'packaging/**'
       - 'pom.xml'
-      - 'scripts/package_runtime.py'
-      - 'scripts/test_package_runtime.py'
-      - 'scripts/privacy.py'
-      - 'scripts/check_public_data.py'
-      - 'scripts/run-ci-tests'
+      - 'scripts/packaging/package_runtime.py'
+      - 'scripts/packaging/test_package_runtime.py'
+      - 'scripts/publication/privacy.py'
+      - 'scripts/publication/check_public_data.py'
+      - 'scripts/ci/run-ci-tests'
       - 'src/main/**'
   workflow_dispatch:
     inputs:
@@ -83,7 +83,7 @@ jobs:
 
       - name: Validate packaging contracts
         shell: bash
-        run: bash scripts/run-ci-tests ${{ matrix.python }} scripts/test_package_runtime.py
+        run: bash scripts/ci/run-ci-tests ${{ matrix.python }} scripts/packaging/test_package_runtime.py
 
       - name: Select package version
         id: version
@@ -107,14 +107,14 @@ jobs:
       - name: Build installer and run packaged launcher smoke test
         shell: bash
         run: >-
-          bash scripts/run-ci-tests ${{ matrix.python }} scripts/package_runtime.py
+          bash scripts/ci/run-ci-tests ${{ matrix.python }} scripts/packaging/package_runtime.py
           --version '${{ steps.version.outputs.value }}'
 
       - name: Check exportable text reports
         if: success()
         shell: bash
         run: >-
-          ${{ matrix.python }} scripts/check_public_data.py --files
+          ${{ matrix.python }} scripts/publication/check_public_data.py --files
           target/runtime-package/artifact-provenance.json
           target/runtime-package/smoke-report.properties
 

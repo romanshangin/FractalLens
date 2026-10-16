@@ -26,7 +26,7 @@ Set `JAVA_HOME` to a full JDK 25 for the target platform and make Maven
 available through the repository wrapper or `PATH`, then run:
 
 ```shell
-python3 scripts/package_runtime.py --version 1.0.0
+python3 scripts/packaging/package_runtime.py --version 1.0.0
 ```
 
 On Windows, use `python` if that is the installed Python command. WiX Toolset

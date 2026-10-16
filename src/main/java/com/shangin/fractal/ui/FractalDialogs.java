@@ -54,6 +54,7 @@ final class FractalDialogs {
         }
     }
 
+    @SuppressWarnings("resource") // ACTIVE owns the asynchronous sheet until completion or owner closure.
     static void coordinates(Window owner, Viewport viewport, BigDecimal zoom, boolean deepZoom,
                             Consumer<PreciseComplex> apply) {
         if (MacParameterSheet.hasOpenSheet(owner)) return;
@@ -80,12 +81,14 @@ final class FractalDialogs {
         }
     }
 
+    @SuppressWarnings("resource") // ACTIVE owns the asynchronous sheet until completion or owner closure.
     static void exportSize(Window owner, RenderTarget target, Consumer<RenderTarget> apply) {
         if (MacParameterSheet.hasOpenSheet(owner)) return;
         if (!nativeDialog(() -> MacFormSheet.export(owner, target, apply)))
             exportSizeDialog(owner, target).showAndWait().ifPresent(apply);
     }
 
+    @SuppressWarnings("resource") // ACTIVE owns the asynchronous alert until completion or owner closure.
     static void message(Window owner, String title, String detail) {
         MacParameterSheet.whenAvailable(owner, () -> {
             if (!nativeDialog(() -> MacNoticeSheet.show(owner, title, detail, false, false, ignored -> {})))
@@ -93,6 +96,7 @@ final class FractalDialogs {
         });
     }
 
+    @SuppressWarnings("resource") // ACTIVE owns the asynchronous alert until completion or owner closure.
     static void confirmExportClose(Window owner, Consumer<Boolean> result) {
         MacParameterSheet.whenAvailable(owner, () -> {
             if (!nativeDialog(() -> MacNoticeSheet.show(owner, "Close FractalLens?",
@@ -408,6 +412,7 @@ final class FractalDialogs {
         MacParameterSheet.closeOwner(owner);
     }
 
+    @SuppressWarnings("resource") // HELP retains the panel; onClosed removes an already disposed session.
     static void help(Window owner) {
         var existing = HELP.get(owner);
         if (existing != null && existing.isOpen() || HELP_FALLBACK.containsKey(owner)) return;

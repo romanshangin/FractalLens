@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Run the diagnostic input soak with RSS/thermal observations, NMT and optional JFR."""
 import argparse
+import sys
 import csv
 import hashlib
 import json
-from privacy import safe_json, redact
 from pathlib import Path
 import subprocess
 import time
 from datetime import datetime, timezone
 
-ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from publication.privacy import safe_json, redact
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def command(args, timeout=20):

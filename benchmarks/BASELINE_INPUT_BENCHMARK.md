@@ -141,7 +141,7 @@ BASELINE_JAVA=/path/to/jdk/bin/java
   -Dbaseline.sizes=480x270 -Dbaseline.warmups=1 -Dbaseline.runs=3 \
   -m com.shangin.fractal/com.shangin.fractal.render.BaselineInputBenchmark
 
-python3 scripts/summarize_baseline_input.py target/baseline-input-check \
+python3 scripts/benchmarks/summarize_baseline_input.py target/baseline-input-check \
   target/baseline-input-check/summary.csv
 ```
 

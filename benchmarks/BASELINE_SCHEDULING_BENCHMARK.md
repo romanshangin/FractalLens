@@ -101,7 +101,7 @@ java -Xmx4g --module-path "target/classes:$(cat target/baseline-classpath.txt)" 
   -Dbaseline.output=target/scheduling-check \
   -m com.shangin.fractal/com.shangin.fractal.render.BaselineSchedulingBenchmark
 
-python3 scripts/summarize_baseline_scheduling.py target/scheduling-check
+python3 scripts/benchmarks/summarize_baseline_scheduling.py target/scheduling-check
 ```
 
 For the planning-cancellation probe, select `direct-deep-reverse`,
@@ -131,7 +131,7 @@ mvn clean test
 mvn -q -Dfractal.fx.tests=true -Dfractal.render.diagnostics=true \
   -Djavafx.cachedir=/tmp/fractallens-javafx-cache \
   -Dtest=BaselineInputBenchmarkTest test
-python3 -m unittest discover -s scripts -p 'test_summarize_baseline*.py'
+python3 -m unittest discover -s scripts/benchmarks -p 'test_summarize_baseline*.py'
 ```
 
 See [saved validation and the next decision](BASELINE_SCHEDULING_VALIDATION.md).

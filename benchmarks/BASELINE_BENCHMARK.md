@@ -67,7 +67,7 @@ mvn -q -Pbaseline-benchmark -DskipTests verify \
   -Dbaseline.output=target/baseline-check \
   -Dbaseline.revision="$(git rev-parse HEAD)" \
   -Dbaseline.label=current
-python3 scripts/summarize_baseline.py target/baseline-check target/baseline-check/summary.csv
+python3 scripts/benchmarks/summarize_baseline.py target/baseline-check target/baseline-check/summary.csv
 ```
 
 The output directory must not exist. Runs and summaries refuse to overwrite

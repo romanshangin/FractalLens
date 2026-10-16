@@ -9,7 +9,7 @@ import subprocess
 import sys
 from privacy import EMAIL, HOME, HOST, IDENTITY, IP, KEY, MAC, PUBLIC_EMAIL, TOKEN
 
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 FORBIDDEN_SUFFIXES={'.log','.jfr','.hprof','.sarif','.p12','.pfx'}
 MACHINE_TEMP=re.compile(r'/(?:private/)?var/folders/[^\s"\x27]+')
 
@@ -56,7 +56,7 @@ def main():
     parser.add_argument('--files',nargs='+',help='Check generated text reports before export instead of Git files')
     args=parser.parse_args()
     paths=args.files or subprocess.check_output(['git','ls-files','-z','--cached','--others','--exclude-standard'],cwd=ROOT).decode().split('\0')
-    allowed=set(json.loads((ROOT/'scripts/public_benchmark_files.json').read_text()))
+    allowed=set(json.loads((ROOT/'scripts/publication/public_benchmark_files.json').read_text()))
     errors=[]
     for name in sorted(set(filter(None,paths))):
         path=ROOT/name

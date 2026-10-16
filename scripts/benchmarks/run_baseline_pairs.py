@@ -3,7 +3,6 @@
 import argparse
 import fcntl
 import json
-from privacy import safe_json, redact
 import os
 import platform
 from pathlib import Path
@@ -11,6 +10,9 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from publication.privacy import safe_json, redact
 
 from prepare_baseline_build import clean_environment, sha, verify_build
 from summarize_baseline_pairs import validate_policy, validate_campaign, validate_definition, read

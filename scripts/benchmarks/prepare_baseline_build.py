@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Build an exact Git revision into a new, self-contained timing snapshot."""
 import argparse
+import sys
 import hashlib
 import json
-from privacy import safe_json, redact
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import tarfile
 
-ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from publication.privacy import safe_json, redact
+
+ROOT = Path(__file__).resolve().parents[2]
 INJECTED = ("JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "MAVEN_OPTS", "MAVEN_ARGS")
 
 
@@ -49,6 +52,16 @@ def verify_build(directory):
     return data
 
 
+def native_menu_scripts(revision=None):
+    """Retain the native helper layout owned by the selected source revision."""
+    paths = ("scripts/macos/build-macos-menu", "scripts/build-macos-menu")
+    if revision is None:
+        return [path for path in paths if (ROOT / path).is_file()]
+    return [path for path in paths if subprocess.run(
+        ["git", "cat-file", "-e", revision + ":" + path], cwd=ROOT,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("revision", help="Explicit local Git revision; no fetch or checkout mutation")
@@ -69,9 +82,9 @@ def main():
                       cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
         manifest = "BASELINE_FIXTURES.csv"
     if args.working_tree:
-        paths = subprocess.check_output(["git", "ls-files", "-z", "--", "pom.xml", "src", manifest,
-                                         "scripts/build-macos-menu"], cwd=ROOT)
-        for raw in paths.split(b"\0"):
+        paths = subprocess.check_output(["git", "ls-files", "-z", "--", "pom.xml", "src", manifest], cwd=ROOT)
+        selected = paths.split(b"\0") + [os.fsencode(path) for path in native_menu_scripts()]
+        for raw in selected:
             if not raw:
                 continue
             relative = Path(os.fsdecode(raw))
@@ -85,10 +98,8 @@ def main():
     else:
         archive = output / "source.tar"
         archive_paths = ["pom.xml", "src", manifest]
-        # Older benchmark revisions predate the native menu build script.
-        if subprocess.run(["git", "cat-file", "-e", revision + ":scripts/build-macos-menu"],
-                          cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-            archive_paths.append("scripts/build-macos-menu")
+        # Older revisions use the previous layout or predate the native helper.
+        archive_paths.extend(native_menu_scripts(revision))
         with archive.open("xb") as f:
             subprocess.run(["git", "archive", revision, *archive_paths], cwd=ROOT, stdout=f, check=True)
         with tarfile.open(archive) as tar:

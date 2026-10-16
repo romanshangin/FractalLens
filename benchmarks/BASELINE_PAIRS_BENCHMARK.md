@@ -18,9 +18,9 @@ builds offline, and copies compiled classes and ordered dependencies into new
 self-contained directories. Uncommitted changes are excluded.
 
 ```shell
-python3 scripts/prepare_baseline_build.py BASE_COMMIT /tmp/fractallens-build-a \
+python3 scripts/benchmarks/prepare_baseline_build.py BASE_COMMIT /tmp/fractallens-build-a \
   --java /opt/homebrew/opt/openjdk/bin/java
-python3 scripts/prepare_baseline_build.py CANDIDATE_COMMIT /tmp/fractallens-build-b \
+python3 scripts/benchmarks/prepare_baseline_build.py CANDIDATE_COMMIT /tmp/fractallens-build-b \
   --java /opt/homebrew/opt/openjdk/bin/java
 ```
 
@@ -44,12 +44,12 @@ these declared cases; it cannot establish a whole-matrix or whole-app benefit.
 ## Execute without competing work
 
 ```shell
-swiftc scripts/baseline_thermal.swift -o /tmp/fractallens-baseline-thermal
-PYTHONDONTWRITEBYTECODE=1 python3 scripts/run_baseline_pairs.py POLICY.json NEW_OUTPUT \
+swiftc scripts/benchmarks/baseline_thermal.swift -o /tmp/fractallens-baseline-thermal
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/benchmarks/run_baseline_pairs.py POLICY.json NEW_OUTPUT \
   --a /tmp/fractallens-build-a --b /tmp/fractallens-build-b \
   --java /opt/homebrew/opt/openjdk/bin/java \
   --thermal /tmp/fractallens-baseline-thermal
-PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_baseline_pairs.py NEW_OUTPUT
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/benchmarks/summarize_baseline_pairs.py NEW_OUTPUT
 ```
 
 The calibration policies use three fresh process pairs and ten measured

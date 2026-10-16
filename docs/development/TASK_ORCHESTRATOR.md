@@ -15,10 +15,10 @@ For TypeScript checking and IntelliJ IDEA editor support, install the locked
 development-only Node.js type definitions:
 
 ```sh
-npm ci --prefix scripts
+npm ci --prefix scripts/orchestration
 ```
 
-`scripts/tsconfig.json` explicitly loads the `node` types and uses NodeNext
+`scripts/orchestration/tsconfig.json` explicitly loads the `node` types and uses NodeNext
 module resolution, strict checking, and no emitted JavaScript. The scripts
 package declares ES modules so `import.meta` and native `.ts` imports match
 their runtime behavior. Configure IDEA to use this TypeScript project.
@@ -27,13 +27,13 @@ Type definitions are only needed for editing/type checking, not runtime launch.
 Inspect the plan without running models or publishing anything:
 
 ```sh
-node scripts/task-orchestrator.ts --task "P2.3 - Task description" --dry-run
+node scripts/orchestration/task-orchestrator.ts --task "P2.3 - Task description" --dry-run
 ```
 
 Execute the workflow:
 
 ```sh
-node scripts/task-orchestrator.ts --task "P2.3 - Task description"
+node scripts/orchestration/task-orchestrator.ts --task "P2.3 - Task description"
 ```
 
 Executing the workflow authorizes standard delivery of the validated task:
@@ -156,13 +156,116 @@ Independent verification is required by default. Only explicit caller policy
 may skip the stage:
 
 ```sh
-node scripts/task-orchestrator.ts --task "Task description" --skip-verification
+node scripts/orchestration/task-orchestrator.ts --task "Task description" --skip-verification
 ```
 
 This passes `verificationRequired=false` to all executors and the delivery
 gate. It does not waive developer self-validation, project tests, or acceptance
 criteria. The caller must ensure the task permits skipping independent VER;
 v1 does not classify risk or decide whether verification is required.
+
+## Automated check evidence and reuse
+
+Each stage receives a private `check-context.json` path and a compact summary of
+current automated execution evidence. Run developer self-validation and missing
+verification checks through the command shown in the stage prompt:
+
+```sh
+node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check portable-suite
+node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check orchestrator-tests
+node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check git-diff-check
+node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check scene-history-targeted \
+  -- mvn --batch-mode --no-transfer-progress -Dtest=SceneHistoryTest test
+```
+
+`portable-suite` always runs `mvn --batch-mode --no-transfer-progress test`.
+`orchestrator-tests` runs both TypeScript test files using the current Node
+executable. `git-diff-check` runs `git diff --check`. Reserved IDs reject command
+overrides. On Windows the built-in Maven command explicitly invokes `mvn.cmd`
+through `cmd.exe` with fixed arguments. Other IDs require an executable and
+argument array after `--`; choose
+descriptive IDs that identify coverage. Arguments, selectors, profiles and JVM
+flags enter the definition hash. Commands run without a shell. On Windows use
+native executables (or an explicit interpreter for command scripts); implicit
+`.cmd` shell execution for custom commands is not supported.
+
+The harness computes candidate identity before and after execution, captures the
+command's exit status and stdout/stderr, and atomically appends an execution record
+to `evidence/checks.json` under the private run directory. Each record includes
+`checkId`, `candidate`, `checkDefinitionHash`, argument-array `command`,
+`environment`, original `stage`, UTC `timestamp`, `result`, `exitCode`, `reusable`,
+`summary`, relative `log` path and `logHash`. Logs are private, not injected into
+prompts. Maven's final test-count summary retains skipped counts; Node test runs
+use the outer reporter totals rather than counts printed by nested diagnostics.
+Other commands report exit status and require log inspection for coverage.
+An exit-zero check can contain skipped tests; it does not establish that those
+tests passed.
+
+A second identical invocation returns `CACHED PASS` and does not execute the
+command when the latest matching record is reusable PASS, its log is intact,
+and candidate, definition and environment still match. Only actual executions
+create records; a cache hit keeps its original stage and time. Changes to base,
+merge base, tracked/nonignored candidate content or executable definition
+invalidate reuse. Staging or committing identical content and ignored build
+output preserve it. Old records remain for diagnosis after fixes but are not
+supplied as current evidence. A later failure for the same key blocks an older
+PASS. FAIL and INCOMPLETE never skip execution.
+
+Environment comparison is deliberately strict: OS/release, architecture, Node
+version/path, Java and Maven version-probe output, command executable bytes and
+selected tool/runtime variables are hashed. The variable set covers PATH/PATHEXT,
+JAVA/JDK/MAVEN/MVN settings, CLASSPATH, NODE settings, LD/DYLD settings, locale,
+timezone and display identifiers. Values and raw version-probe output remain
+inside a private digest. Unrelated per-role Codex identifiers do not invalidate
+reuse. Environment mismatches cause fresh execution, even for portable checks.
+
+This v1 is a local automated-test cache, not an attestation service. It cannot
+infer changing external services, arbitrary environment variables, GPU/driver
+state, desktop focus/appearance, benchmark power conditions or dependencies
+outside the candidate. Use `--no-reuse` for such checks; the record is retained
+but cannot satisfy future runs by cache hit. Manual acceptance continues through
+`--human-evidence` and independent assessment, never an automatic cached PASS.
+Do not use custom check commands whose meaning depends on untracked external
+scripts or mutable ignored inputs unless reuse is disabled. `--fresh` forces a
+new execution for suspicious evidence or a concrete diagnostic reason; explain
+that reason in the stage report. `--timeout-seconds` accepts 1 through 86,400
+(default 1,800). Missing executables, timeout/signal or candidate identity changes
+produce INCOMPLETE, never PASS. A nonzero command exit produces FAIL; VERIFY must
+still distinguish environment failure from a product defect. Process timeout
+does not guarantee that every descendant has stopped; inspect remaining work.
+
+The stages keep distinct responsibilities:
+
+- IMPLEMENT/IMPLEMENT_FIXES run targeted regression checks while developing and
+  the required portable/subsystem checks on the final candidate before handoff.
+  Edits after a check invalidate it, including documentation or test edits.
+- REVIEW reads code, tests and shared execution evidence. It does not repeat a
+  valid PASS for general confidence. Narrow diagnostics for a concrete suspected
+  finding remain allowed under its existing read-only permissions; their results
+  belong in the review report. REVIEW cannot write harness records.
+- VERIFY independently maps required acceptance criteria to sufficient current
+  execution evidence, executes missing checks and replaces suspicious/insufficient
+  evidence. Report reused and freshly executed checks separately. Required UI,
+  native/platform or manual gaps still mean INCOMPLETE.
+- DELIVER receives the existing compact review/verification handoffs and shared
+  check summary; execution evidence cannot replace CLEAN/PASS gates.
+
+The full registry and referenced check logs are explicitly shared between roles;
+private role prompts/execution logs remain out of scope. Prompts include at most
+16 check summaries of 1,024 characters each; inspect the registry for the rest.
+Malformed registries fail closed. Missing/corrupt logs cannot supply reusable
+evidence. Concurrent harness writers fail closed using `evidence/active.lock`;
+inspect interrupted processes before removing a leftover lock. Evidence is
+not supplied to a subsequent stage while a harness execution lock remains active.
+Artifacts are created outside the candidate checkout with private permissions and must not be
+committed or uploaded. Check contexts/registries are trusted local inputs, not
+signed proof against a malicious local writer. Commands executed directly,
+outside this harness, are not automatically imported from prose or Maven output.
+
+Resume uses the same private evidence directory after the existing branch/base/
+candidate checkpoint guards pass. It does not rerun earlier stages or their
+matching automated checks. The existing state format and delivery gates are
+unchanged; old checkpoints without a registry have no reusable execution evidence.
 
 ## Candidate identity
 
@@ -253,7 +356,7 @@ UTF-8 evidence file outside the candidate (or in ignored output), describing
 which checks ran, their results, platform/environment, and remaining gaps. Then:
 
 ```sh
-node scripts/task-orchestrator.ts --resume "${TEMP_DIR}/fractallens-task-example" \
+node scripts/orchestration/task-orchestrator.ts --resume "${TEMP_DIR}/fractallens-task-example" \
   --human-evidence "${TEMP_DIR}/manual-acceptance.md"
 ```
 
@@ -285,7 +388,8 @@ signed attestations or proof that reported checks actually ran. Keep them privat
 ## Local validation
 
 ```sh
-node --test scripts/test_task_orchestrator.ts
+node --test scripts/orchestration/test_task_orchestrator.ts
+node --test scripts/orchestration/test_validation_evidence.ts
 ```
 
 Tests use synthetic handoffs and fake CLI processes. They check routing, shared
@@ -297,6 +401,9 @@ invariance, file modes, symlinks, unrelated work preservation, remote base refre
 frozen comparisons and stopping before delivery when the base moves or is unavailable.
 Resume tests cover persisted history/budget, manual evidence assessment, repeated
 pauses, checkpoint consumption, stale source/branch/base rejection and run locks.
+Execution-evidence tests run real synthetic commands and check cache hits across
+stages/resume, candidate/definition/environment invalidation, failure supersession,
+log integrity, unavailable execution, timeout, mutation and read-only boundaries.
 They spend no model tokens and
 perform no Git delivery. They do not establish live model availability,
 authentication, real role behavior, PR creation, CI results, or desktop access.

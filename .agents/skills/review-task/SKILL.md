@@ -44,6 +44,14 @@ modifying files, applying fixes, creating commits, pushing, or changing pull
 requests. Read-only diagnostic commands and tests are allowed when they are
 relevant and proportionate.
 
+Inspect supplied automated execution evidence and its referenced logs when
+needed to assess coverage or skips. Do not rerun a sufficient current PASS
+merely for general confidence. A prose developer handoff alone is not reusable
+execution evidence. Keep review read-only; do not write to the check registry.
+Diagnostics for a concrete suspected finding remain allowed, including a fresh
+or extended check when existing evidence cannot confirm or falsify the finding.
+Report diagnostics separately from reused evidence.
+
 Prefer the narrowest diagnostic test or command that can confirm or falsify a
 suspected finding.
 

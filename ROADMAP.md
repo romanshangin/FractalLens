@@ -39,7 +39,7 @@ delivery foundation should be completed first.
   provenance and a clean-machine launch checklist. Signing/notarization may
   remain a separate release step, but packaging must be automated and
   repeatable. The pipeline and build-machine launcher smoke are implemented in
-  `scripts/package_runtime.py` and `.github/workflows/runtime-artifacts.yml`.
+  `scripts/packaging/package_runtime.py` and `.github/workflows/runtime-artifacts.yml`.
   Both hosted jobs and the Windows clean-machine checklist passed. The owner
   accepted P0.2 with an explicit macOS VirtualBuddy/Sonoma exception: the
   default Finder launch crashes in the virtual Metal pipeline, while the

@@ -1,4 +1,4 @@
-"""Opt-in native launcher checks: python3 scripts/test_macos_launcher.py."""
+"""Opt-in native launcher checks: python3 scripts/macos/test_macos_launcher.py."""
 import concurrent.futures
 import os
 from pathlib import Path
@@ -17,8 +17,8 @@ class MacLauncherTest(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix="FractalLens launcher test ")
         cls.addClassCleanup(cls.temp.cleanup)
         cls.root = Path(cls.temp.name)
-        project = Path(__file__).resolve().parent.parent
-        for relative in ("scripts/macos-java", "src/main/macos/FractalLauncher.c",
+        project = Path(__file__).resolve().parents[2]
+        for relative in ("scripts/macos/macos-java", "src/main/macos/FractalLauncher.c",
                          "src/main/macos/Info.plist",
                          "src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns"):
             destination = cls.root / relative
@@ -28,7 +28,7 @@ class MacLauncherTest(unittest.TestCase):
             ["/usr/libexec/java_home"], text=True).strip()
         jdk_link = cls.root / "JDK with spaces"
         jdk_link.symlink_to(java_home)
-        cls.command = [str(cls.root / "scripts/macos-java"),
+        cls.command = [str(cls.root / "scripts/macos/macos-java"),
                        f"--fractal-java-home={jdk_link}"]
         cls.environment = dict(os.environ)
         for name in ("JDK_JAVA_OPTIONS", "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS"):

@@ -93,24 +93,24 @@ Run in a graphical macOS session with the selected JDK, sequentially:
 mvn -q -DskipTests test-compile dependency:build-classpath \
   -Dmdep.includeScope=test -Dmdep.outputFile=target/baseline-classpath.txt
 /usr/bin/swiftc -module-cache-path /tmp/fractallens-swift-module-cache \
-  scripts/baseline_thermal.swift -o target/baseline-thermal
+  scripts/benchmarks/baseline_thermal.swift -o target/baseline-thermal
 
-python3 scripts/run_baseline_memory.py target/new-allocation-run \
+python3 scripts/benchmarks/run_baseline_memory.py target/new-allocation-run \
   --java /path/to/jdk/bin/java --seconds 60 --cycles 2 \
   --thermal target/baseline-thermal --jfr
-python3 scripts/summarize_baseline_memory.py target/new-allocation-run \
+python3 scripts/benchmarks/summarize_baseline_memory.py target/new-allocation-run \
   --jfr /path/to/jdk/bin/jfr
 
-python3 scripts/run_baseline_memory.py target/new-sustained-run \
+python3 scripts/benchmarks/run_baseline_memory.py target/new-sustained-run \
   --java /path/to/jdk/bin/java --seconds 600 --cycles 1 \
   --sizes 1512x982 --thermal target/baseline-thermal
-python3 scripts/summarize_baseline_memory.py target/new-sustained-run
+python3 scripts/benchmarks/summarize_baseline_memory.py target/new-sustained-run
 
 # Optional report figure, using a Python environment with matplotlib:
-python3 scripts/plot_baseline_memory.py target/new-sustained-run \
+python3 scripts/benchmarks/plot_baseline_memory.py target/new-sustained-run \
   target/new-sustained-run/memory.svg
 
-python3 -m unittest discover -s scripts -p 'test_summarize_baseline*.py'
+python3 -m unittest discover -s scripts/benchmarks -p 'test_summarize_baseline*.py'
 ```
 
 Output directories and summaries must be new. `workload/SUCCESS` establishes

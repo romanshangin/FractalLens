@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # javafx:run supplies ordinary Java arguments plus the JDK used by Maven.
-project_dir=$(cd "$(dirname "$0")/.." && pwd)
+project_dir=$(cd "$(dirname "$0")/../.." && pwd)
 java_home=""
 java_args=()
 for arg in "$@"; do

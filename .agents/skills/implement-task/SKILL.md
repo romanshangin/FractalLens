@@ -141,6 +141,13 @@ Review the resulting diff for scope, accidental formatting churn, debug logging,
 temporary benchmark code, generated files, commented-out code, stale TODOs, and
 unrelated dependency changes.
 
+For orchestrated tasks, run automated self-validation through the supplied
+`scripts/orchestration/check.ts` context so execution evidence is retained. Reuse a sufficient
+current PASS under the `AGENTS.md` evidence rules; do not rerun it merely for
+confidence. Required checks must cover the final candidate. Any later candidate
+edit invalidates earlier evidence, including edits to tests or documentation.
+Report reused and freshly executed checks separately.
+
 Implementation-time checks are developer self-validation. Run the tests and
 checks required to establish that the implementation is ready for independent
 review, including the portable suite required by `AGENTS.md` where applicable
