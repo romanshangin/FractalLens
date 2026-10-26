@@ -309,6 +309,34 @@ that a remote PR exists. The delivery role must check intended staging,
 local/remote task SHA, and PR head/base. The guard is not an atomic repository
 lock.
 
+### Standalone stages
+
+Workflow stages run without the orchestrator use the same
+`computeCandidateIdentity` implementation from
+`scripts/orchestration/task-orchestrator.ts`, so identities from standalone and
+orchestrated stages are directly comparable. Resolve the comparison base to a
+commit SHA once, when the first stage records the candidate identity, and pass
+that frozen SHA unchanged to every later calculation for the candidate. Later
+stages take the SHA from the earlier handoff's `baseRevision` instead of
+resolving the base ref again. Run from the repository root with Node.js 24 or
+later; the same command line works in POSIX shells and PowerShell once the base
+variable is set:
+
+```sh
+BASE_REVISION="$(git rev-parse --verify 'main^{commit}')"
+node --input-type=module -e "const { computeCandidateIdentity } = await import('./scripts/orchestration/task-orchestrator.ts'); console.log(JSON.stringify(computeCandidateIdentity(process.cwd(), process.argv[1])));" "$BASE_REVISION"
+```
+
+Use the explicitly named base instead of `main` when the task names one. The
+command only imports the module; it does not start a workflow, mutate the
+index or write Git objects. It prints `{baseRevision, mergeBase, contentId}`;
+report all three fields. A Git tree ID, `git stash create` output, HEAD SHA,
+branch name, or self-computed SHA-256 of files or diffs is not a substitute,
+because later stages cannot compare it with this identity. If the calculation
+fails, the identity is unavailable: report the stage as `INCOMPLETE` instead of
+falling back to another fingerprint. Orchestrated stages do not run this
+command; they use the identity supplied and checked by the orchestrator.
+
 ## Stop behavior and private artifacts
 
 The default timeout is 1,800 seconds per executor. Adjust it with

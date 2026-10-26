@@ -134,17 +134,28 @@ optional improvements as findings.
 
 ## Candidate provenance
 
-Record the intended base revision, comparison merge base, and a content
-identifier covering the complete candidate, including intended uncommitted and
-untracked files. In orchestrated runs, use the identity supplied and checked by
-the orchestrator; do not compute an alternative fingerprint or emit model-owned
-candidate fields in the compact handoff. Standalone reviews may use a tree ID
-or content fingerprint; a branch name or HEAD SHA alone is insufficient for a
-dirty candidate. Include the identity in the report
-so verification and delivery can establish that they assess the same candidate.
+Every workflow stage identifies the candidate with the same calculation:
+`computeCandidateIdentity` in `scripts/orchestration/task-orchestrator.ts`,
+described in `docs/development/TASK_ORCHESTRATOR.md`, section
+`Candidate identity`. It covers the complete candidate, including intended
+uncommitted and untracked files.
 
-Before reporting, confirm that the candidate has not changed during review.
-If it has, report `INCOMPLETE`; do not carry a `CLEAN` result to changed content.
+- In orchestrated runs, use the identity supplied and checked by the
+  orchestrator. Do not recompute it and do not emit model-owned candidate
+  fields in the compact handoff.
+- In a standalone review, freeze the comparison base from step 1 of the review
+  method as a commit SHA, then run the standalone command from that document
+  section with that SHA at the start of the review and again immediately before
+  the report. Both runs must use the same frozen SHA.
+- Report all three fields, `baseRevision`, `mergeBase` and `contentId`, exactly
+  as printed, so verification and delivery can recompute and compare them.
+- Do not replace this identity with a Git tree ID, `git stash create` output,
+  a self-computed SHA-256, a branch name or a HEAD SHA. If the calculation
+  fails, report `INCOMPLETE`.
+
+If the identity before the report differs from the one recorded at the start,
+the candidate changed during review: report `INCOMPLETE` and do not carry a
+`CLEAN` result to changed content.
 
 ## Report the review
 

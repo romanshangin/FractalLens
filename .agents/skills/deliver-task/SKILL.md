@@ -67,9 +67,16 @@ validation documents. Record the explicit skip policy in the delivery report.
 
 Before publishing changed content, require `review-task = CLEAN` and, when
 verification is required, `verify-task = PASS` for the same exact candidate and
-intended base being delivered. Compare the candidate content identifier, base
-revision, comparison merge base, and complete PR diff with the required
-handoffs, including intended uncommitted and untracked files.
+intended base being delivered. Compare the candidate identity
+(`baseRevision`, `mergeBase`, `contentId`) and the complete PR diff with the
+required handoffs, including intended uncommitted and untracked files.
+In standalone delivery, recompute the identity with `computeCandidateIdentity`
+from `scripts/orchestration/task-orchestrator.ts`, using the standalone command
+in `docs/development/TASK_ORCHESTRATOR.md`, section `Candidate identity`, with
+the handoffs' `baseRevision` as the frozen base. All three fields must match
+every required handoff. Do not substitute a Git tree ID, a self-computed
+SHA-256, a branch name or a HEAD SHA; if a handoff lacks any field or the
+calculation fails, treat the gate as missing.
 
 Orchestrated handoffs may contain compact candidate provenance, check results,
 and limitations instead of full developer/reviewer reasoning or execution logs.
