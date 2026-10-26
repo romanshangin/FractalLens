@@ -90,7 +90,7 @@ public final class GpuRenderBenchmark extends Application {
                         boolean aa = name.endsWith("-aa") || name.endsWith("-refined");
                         var mode = name.endsWith("-refined") ? InteractiveRenderMode.REFINED : InteractiveRenderMode.FAST;
                         var scene = new FractalScene(FractalPreset.MANDELBROT, viewport, new IterationSettings(300, 0),
-                                new ColoringSettings(PalettePreset.ICE), new AntialiasSettings(SamplingPattern.REGULAR, mode));
+                                new ColoringSettings(PalettePreset.ICE), new AntialiasSettings(mode));
                         for (int i = -warmup - 1; i < samples; i++) {
                             String phase = i == -warmup - 1 ? "cold" : i < 0 ? "warmup" : "sample";
                             Result[] pair = new Result[2];
@@ -175,7 +175,7 @@ public final class GpuRenderBenchmark extends Application {
                             Platform.requestNextPulse();
                             completed.complete(null);
                         };
-                        if (aa) aaService.refine(done, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(w, h),
+                        if (aa) aaService.refine(done, coloring, RefinedPixelSnapshot.empty(w, h),
                                 Platform::runLater, (region, pixels) -> {
                                     try {
                                         long p = System.nanoTime();

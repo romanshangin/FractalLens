@@ -6,7 +6,6 @@ import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
-import com.shangin.fractal.scene.SamplingPattern;
 
 import java.io.*;
 import java.nio.file.*;
@@ -24,7 +23,8 @@ public final class InteractiveAntialiasBenchmark {
         boolean profile = Boolean.getBoolean("fractal.aa.profile");
         boolean resume = Boolean.getBoolean("aaBenchmark.resume");
         String label = System.getProperty("aaBenchmark.label", "current");
-        SamplingPattern pattern = SamplingPattern.valueOf(System.getProperty("aaBenchmark.pattern", "REGULAR"));
+        // Regular grid is the only sampling pattern; keep the column and reference keys of earlier runs.
+        String pattern = "REGULAR";
         Path output = Path.of(System.getProperty("aaBenchmark.output", "target/aa-benchmark.csv"));
         if (warmups < 1 || runs < 1) throw new IllegalArgumentException("Positive warmups/runs required");
         Files.createDirectories(output.toAbsolutePath().getParent());
@@ -65,8 +65,8 @@ public final class InteractiveAntialiasBenchmark {
                                 viewport, width, height, cap);
                         RenderFrame frame = RenderFrame.create(job);
                         backend.render(frame, () -> false, ignored -> {}, null);
-                        if (resume) measure(service, frame, coloring, pattern, scene.equals("deep"));
-                        Measurement result = measure(service, frame, coloring, pattern, scene.equals("deep"));
+                        if (resume) measure(service, frame, coloring, scene.equals("deep"));
+                        Measurement result = measure(service, frame, coloring, scene.equals("deep"));
                         // The scalar baseline can write full ARGB fixtures; other builds compare every pixel.
                         verifyPixels(scene + "-" + size + "-" + pattern + "-" + resume + "-"
                                 + AntialiasSampleCache.DEFAULT_MAX_BYTES, result.pixels);
@@ -86,7 +86,7 @@ public final class InteractiveAntialiasBenchmark {
     }
 
     private static Measurement measure(InteractiveAntialiasService service, RenderFrame frame,
-                                       SmoothPaletteColoring coloring, SamplingPattern pattern, boolean deep)
+                                       SmoothPaletteColoring coloring, boolean deep)
             throws Exception {
         int width = frame.samplePlane().width(), height = frame.samplePlane().height();
         int[] pixels = new int[width * height];
@@ -103,10 +103,10 @@ public final class InteractiveAntialiasBenchmark {
             }
         };
         if (deep) {
-            service.refineDeep(frame, coloring, pattern, RefinedPixelSnapshot.empty(width, height),
+            service.refineDeep(frame, coloring, RefinedPixelSnapshot.empty(width, height),
                     Runnable::run, publish, () -> done.complete(null), done::completeExceptionally);
         } else {
-            service.refine(frame, coloring, pattern, RefinedPixelSnapshot.empty(width, height),
+            service.refine(frame, coloring, RefinedPixelSnapshot.empty(width, height),
                     Runnable::run, publish, () -> done.complete(null), done::completeExceptionally);
         }
         done.get(180, TimeUnit.SECONDS);

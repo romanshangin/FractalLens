@@ -7,7 +7,6 @@ import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.IterationSettings;
-import com.shangin.fractal.scene.SamplingPattern;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -265,7 +264,6 @@ public final class PerturbationBenchmark {
             service.refineDeep(
                     frame,
                     new SmoothPaletteColoring(PalettePreset.ICE.palette()),
-                    SamplingPattern.REGULAR,
                     RefinedPixelSnapshot.empty(frame.job().width(), frame.job().height()),
                     Runnable::run,
                     (region, colors) -> publishedTiles.incrementAndGet(),

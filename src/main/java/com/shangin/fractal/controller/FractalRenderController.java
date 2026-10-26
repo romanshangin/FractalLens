@@ -9,7 +9,6 @@ import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
-import com.shangin.fractal.scene.SamplingPattern;
 import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
@@ -416,7 +415,6 @@ public final class FractalRenderController implements AutoCloseable {
                         antialiasService.refine(
                                 completedFrame,
                                 completedColoring,
-                                scene.antialiasing().samplingPattern(),
                                 surface.refinedPixelSnapshot(completedFrame),
                                 surface.latency().callbacks("aa", Platform::runLater),
                                 (region, colors) -> surface.displayRefinedTile(
@@ -462,7 +460,6 @@ public final class FractalRenderController implements AutoCloseable {
                             refineDeepFrame(
                                     completedFrame,
                                     completedColoring,
-                                    scene.antialiasing().samplingPattern(),
                                     renderGeneration);
                         } else {
                             renderActivity.finish(renderGeneration);
@@ -473,7 +470,6 @@ public final class FractalRenderController implements AutoCloseable {
                     antialiasService.refine(
                             completedFrame,
                             completedColoring,
-                            scene.antialiasing().samplingPattern(),
                             surface.refinedPixelSnapshot(completedFrame),
                             surface.latency().callbacks("aa", Platform::runLater),
                             (region, colors) -> surface.applyAntialiasing(
@@ -516,20 +512,17 @@ public final class FractalRenderController implements AutoCloseable {
         refineDeepFrame(
                 activeFrame,
                 coloring,
-                completed.scene().antialiasing().samplingPattern(),
                 refinementGeneration);
     }
 
     private void refineDeepFrame(
             RenderFrame frame,
             ColoringStrategy coloring,
-            SamplingPattern samplingPattern,
             long renderGeneration
     ) {
         antialiasService.refineDeep(
                 frame,
                 coloring,
-                samplingPattern,
                 surface.refinedPixelSnapshot(frame),
                 surface.latency().callbacks("aa", Platform::runLater),
                 (region, colors) -> surface.applyAntialiasing(

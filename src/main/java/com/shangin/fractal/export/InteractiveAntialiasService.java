@@ -17,7 +17,6 @@ import com.shangin.fractal.render.BaseColorPhaseCache;
 import com.shangin.fractal.render.PreciseFractalSampler;
 import com.shangin.fractal.render.PreciseRenderGrid;
 import com.shangin.fractal.formula.FractalSample;
-import com.shangin.fractal.scene.SamplingPattern;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -54,7 +53,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private final AntialiasSampleCache sampleCache;
     private final boolean profiling;
     private RenderFrame cachedFrame;
-    private SamplingPattern cachedSamplingPattern;
     private RenderFrame basePhaseFrame;
     private BaseColorPhaseCache basePhaseCache;
     private final ThreadLocal<SmoothColorLookup> recolorLookup =
@@ -94,7 +92,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     public void refine(
             RenderFrame frame,
             ColoringStrategy coloring,
-            SamplingPattern samplingPattern,
             RefinedPixelSnapshot reusedPixels,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
@@ -102,7 +99,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             Consumer<Throwable> onError
     ) {
         startRefinement(
-                frame, coloring, samplingPattern, reusedPixels,
+                frame, coloring, reusedPixels,
                 callbackExecutor, onTileReady, onSuccess, onError, false);
     }
 
@@ -110,7 +107,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     public void refineDeep(
             RenderFrame frame,
             ColoringStrategy coloring,
-            SamplingPattern samplingPattern,
             RefinedPixelSnapshot reusedPixels,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
@@ -118,14 +114,13 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             Consumer<Throwable> onError
     ) {
         startRefinement(
-                frame, coloring, samplingPattern, reusedPixels,
+                frame, coloring, reusedPixels,
                 callbackExecutor, onTileReady, onSuccess, onError, true);
     }
 
     private synchronized void startRefinement(
             RenderFrame frame,
             ColoringStrategy coloring,
-            SamplingPattern samplingPattern,
             RefinedPixelSnapshot reusedPixels,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
@@ -135,7 +130,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     ) {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(coloring);
-        Objects.requireNonNull(samplingPattern);
         Objects.requireNonNull(reusedPixels);
         Objects.requireNonNull(callbackExecutor);
         Objects.requireNonNull(onTileReady);
@@ -153,10 +147,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         long refinementId = generation.incrementAndGet();
         cancelCurrentFuture();
         synchronized (this) {
-            if (cachedFrame != frame || cachedSamplingPattern != samplingPattern) {
+            if (cachedFrame != frame) {
                 sampleCache.clear();
                 cachedFrame = frame;
-                cachedSamplingPattern = samplingPattern;
                 basePhaseFrame = null;
                 basePhaseCache = null;
             }
@@ -165,7 +158,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 refinementId,
                 frame,
                 coloring,
-                samplingPattern,
                 reusedPixels,
                 callbackExecutor,
                 onTileReady,
@@ -179,7 +171,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             long refinementId,
             RenderFrame frame,
             ColoringStrategy coloring,
-            SamplingPattern samplingPattern,
             RefinedPixelSnapshot reusedPixels,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
@@ -227,7 +218,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         refinementId,
                         frame,
                         coloring,
-                        samplingPattern,
                         baseColors,
                         cachedPixels,
                         cachedColors,
@@ -270,7 +260,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             long refinementId,
             RenderFrame frame,
             ColoringStrategy coloring,
-            SamplingPattern samplingPattern,
             int[] baseColors,
             BitSet cachedPixels,
             int[] cachedColors,
@@ -349,10 +338,10 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 FractalSample[] samples = preciseSampler == null
                         ? sampleGrid(
                         calculator, grid, frame.request().maxIterations(),
-                        x, y, samplingPattern, scratch)
+                        x, y, scratch)
                         : sampleDeepGrid(
                         preciseSampler, grid.preciseGrid(), data,
-                        x, y, samplingPattern,
+                        x, y,
                         () -> shouldCancel(refinementId), scratch);
                 if (samples == null) {
                     throw new CancellationException();
@@ -514,7 +503,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             SamplePlane data,
             int pixelX,
             int pixelY,
-            SamplingPattern pattern,
             java.util.function.BooleanSupplier cancelled,
             FractalSample[] samples
     ) {
@@ -531,12 +519,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 if (cancelled.getAsBoolean()) {
                     return null;
                 }
-                double offsetX = ((sampleX + sampleOffset(
-                        pattern, pixelX, pixelY, sampleX, sampleY, 0))
-                        / sampleGridSize) - 0.5;
-                double offsetY = ((sampleY + sampleOffset(
-                        pattern, pixelX, pixelY, sampleX, sampleY, 1))
-                        / sampleGridSize) - 0.5;
+                double offsetX = ((sampleX + 0.5) / sampleGridSize) - 0.5;
+                double offsetY = ((sampleY + 0.5) / sampleGridSize) - 0.5;
                 BigDecimal real = centerReal.add(
                         grid.realStep().multiply(
                                 BigDecimal.valueOf(offsetX), grid.mathContext()),
@@ -612,7 +596,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             int maxIterations,
             int pixelX,
             int pixelY,
-            SamplingPattern pattern,
             FractalSample[] samples
     ) {
         double centerReal = grid.realAt(pixelX);
@@ -620,10 +603,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         int index = 0;
         for (int sampleY = 0; sampleY < SAMPLE_GRID; sampleY++) {
             for (int sampleX = 0; sampleX < SAMPLE_GRID; sampleX++) {
-                double offsetX = ((sampleX + sampleOffset(pattern, pixelX, pixelY, sampleX, sampleY, 0))
-                        / SAMPLE_GRID) - 0.5;
-                double offsetY = ((sampleY + sampleOffset(pattern, pixelX, pixelY, sampleX, sampleY, 1))
-                        / SAMPLE_GRID) - 0.5;
+                double offsetX = ((sampleX + 0.5) / SAMPLE_GRID) - 0.5;
+                double offsetY = ((sampleY + 0.5) / SAMPLE_GRID) - 0.5;
                 samples[index++] = calculator.calculateSample(
                         centerReal + offsetX * grid.realStep(),
                         centerImaginary - offsetY * grid.imaginaryStep(),
@@ -631,24 +612,6 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             }
         }
         return samples;
-    }
-
-    private static double sampleOffset(
-            SamplingPattern pattern, int pixelX, int pixelY,
-            int sampleX, int sampleY, int axis
-    ) {
-        if (pattern == SamplingPattern.REGULAR) {
-            return 0.5;
-        }
-        int seed = pixelX * 0x1f123bb5 ^ pixelY * 0x5f356495
-                ^ sampleX * 0x68bc21eb ^ sampleY * 0x02e5be93 ^ axis * 0x7f4a7c15;
-        int mixed = seed;
-        mixed ^= mixed >>> 16;
-        mixed *= 0x7feb352d;
-        mixed ^= mixed >>> 15;
-        mixed *= 0x846ca68b;
-        mixed ^= mixed >>> 16;
-        return (mixed & 0xffffffffL) / 4294967296.0;
     }
 
     static List<RenderRegion> orderedTiles(

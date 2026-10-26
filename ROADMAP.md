@@ -218,7 +218,7 @@ delivery foundation should be completed first.
 - [ ] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
   exact fallback is a material user-visible cost.
 - [ ] **P2.6.** Add separate render settings and a user-selected antialiasing mode
-  for standard (non-deep) zoom. Gather Display Quality, Antialiasing Pattern and
+  for standard (non-deep) zoom. Gather Display Quality and
   Deep Zoom Antialiasing into one render settings window instead of separate
   Render menu items; on macOS it follows the P2.4 native-window rules with the
   JavaFX fallback. Offer three standard-zoom modes, analogous to the current
@@ -399,6 +399,8 @@ Remaining items in this section follow the cross-section order in section 0.
 - [x] Add weak deterministic export dithering to reduce visible 8-bit gradient quantization without blurring fractal detail.
 - [x] Add cancellable edge-adaptive 4x4 subpixel refinement after the interactive base frame is visible, publishing refined 32x32 tiles progressively, preserving refined overlap across pans, and retaining visible partial results when zoom interrupts an unfinished render.
 - [x] Add deterministic jitter as an optional, reproducible interactive sampling pattern.
+  Later removed together with the Render → Antialiasing Pattern menu item: a local
+  dense-reference comparison found no visible or measurable gain over the regular grid.
 - [x] Add and benchmark exterior distance estimates for Mandelbrot, Julia, and cubic Multibrot; measurements show a 1.4–2x base-pass cost versus roughly 16x for full 4x4 coverage, but exterior estimates alone miss interior-centered boundary pixels.
 - [x] Combine distance candidates with the existing image-space edge detector before using distance estimation to schedule interactive or export supersampling; keep Burning Ship and Tricorn on the current detector because their maps are non-analytic.
 - [x] Treat raw image-space edge filtering as an optional fast display mode; keep the transformed previous frame visible while base tiles arrive, then progressively replace them with refined tiles.
@@ -733,7 +735,8 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   direct/deep transitions, glitch-heavy and BLA-friendly scenes, scaled-exponent
   zoom, pan overlap, reverse navigation, resize-then-drag and cancellation.
   The versioned [matrix and headless runner](benchmarks/BASELINE_BENCHMARK.md) contain
-  28 sequences / 37 steps at three render sizes, with a pinned exact manifest
+  28 sequences / 37 steps at three render sizes (26 / 35 in `9.1-v2`, which
+  drops the deterministic-jitter AA fixtures), with a pinned exact manifest
   and behavioral regressions. See [validation](benchmarks/BASELINE_VALIDATION.md).
 - [x] Measure formula/backend, returned-ARGB, JavaFX base/AA publication and
   input-to-visible-update scopes separately. Record first useful region,
@@ -832,8 +835,8 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
 - [ ] Separately evaluate nested/adaptive subpixel sampling only if sampling
   still dominates. Current direct 4x4 and deep 2x2/4x4 positions are not
   automatically reusable nested grids. Treat changed positions/sample counts
-  as a quality-policy change with dense-reference image comparisons, stable
-  jitter, palette-independent caches and exact export semantics.
+  as a quality-policy change with dense-reference image comparisons,
+  palette-independent caches and exact export semantics.
 
 - [ ] **Exit criterion:** unchanged-quality work passes sample/color and retention tests,
   with a confirmed full-AA improvement under the 9.1 gate and no material first

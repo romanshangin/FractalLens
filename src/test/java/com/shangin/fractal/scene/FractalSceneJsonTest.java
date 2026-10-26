@@ -40,9 +40,7 @@ class FractalSceneJsonTest {
                         -0.125,
                         true,
                         OrbitTrap.UNIT_CIRCLE),
-                new AntialiasSettings(
-                        SamplingPattern.DETERMINISTIC_JITTER,
-                        InteractiveRenderMode.FAST),
+                new AntialiasSettings(InteractiveRenderMode.FAST),
                 new JuliaParameters(0.285, 0.01));
 
         String json = FractalSceneJson.write(scene);
@@ -53,6 +51,25 @@ class FractalSceneJsonTest {
         assertTrue(json.contains("\"centerImaginary\": \"" + imaginary + "\""));
         assertTrue(json.contains("\"scale\": \"" + scale + "\""));
         assertTrue(json.contains("\"juliaParameters\": {\"real\": 0.285, \"imaginary\": 0.01}"));
+        assertTrue(json.contains("\"samplingPattern\": \"REGULAR\""),
+                "Earlier version 2 readers require the sampling pattern field");
+    }
+
+    @Test
+    void readsLegacySamplingPatternsAndRejectsUnknownOnes() {
+        String regular = FractalSceneJson.write(FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.FAST)));
+        String samplingField = "\"samplingPattern\": \"REGULAR\",\n";
+        assertTrue(regular.contains(samplingField));
+        FractalScene expected = FractalSceneJson.read(regular);
+
+        assertEquals(expected, FractalSceneJson.read(regular.replace(
+                samplingField, "\"samplingPattern\": \"DETERMINISTIC_JITTER\",\n")));
+        assertEquals(expected, FractalSceneJson.read(regular.replace(samplingField, "")));
+        assertThrows(IllegalArgumentException.class, () -> FractalSceneJson.read(regular.replace(
+                samplingField, "\"samplingPattern\": \"STOCHASTIC\",\n")));
+        assertThrows(IllegalArgumentException.class, () -> FractalSceneJson.read(regular.replace(
+                samplingField, "\"samplingPattern\": 1,\n")));
     }
 
     @Test

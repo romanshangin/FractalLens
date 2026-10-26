@@ -141,7 +141,7 @@ The native JavaFX regression checks can be run with
 | View | Zoom In (⌘+, also ⌘=), Zoom Out (⌘−), Reset View (⌘0), Go to Coordinates… (⌘L), Enter/Exit Full Screen (⌃⌘F) |
 | Fractal | Mandelbrot, Julia, Multibrot, Burning Ship, Tricorn |
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette, Reset Colors to Defaults |
-| Render | Display Quality, Antialiasing Pattern, Edit Iteration Settings…, Edit Julia Parameters…, Deep Zoom Antialiasing |
+| Render | Display Quality, Edit Iteration Settings…, Edit Julia Parameters…, Deep Zoom Antialiasing |
 | Window | Minimize (⌘M), Zoom |
 | Help | FractalLens Help, including pointer and keyboard navigation |
 
@@ -212,7 +212,7 @@ Cancel leaves the current palette unchanged. Editing a preset clears its menu
 checkmark to indicate a custom gradient.
 
 Color and Render remain openable during startup and later renders. Their action
-items, including palette, orbit-trap, quality and sampling choices, are explicitly
+items, including palette, orbit-trap and quality choices, are explicitly
 disabled while the renderer is busy. Completion updates every action's native
 state even when a menu was opened during rendering; hovering or reopening is not
 required. Disabling only the parent menu lets AppKit validation leave child items
