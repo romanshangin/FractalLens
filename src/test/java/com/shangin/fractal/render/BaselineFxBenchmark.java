@@ -222,7 +222,7 @@ public final class BaselineFxBenchmark {
             var settings = new ColoringSettings(PalettePreset.ICE, PalettePreset.ICE.stops(), ColoringSettings.DEFAULT_COLOR_SCALE,
                     0, step.colors() == BaselineFixtures.Colors.HISTOGRAM, step.job().formula().orbitTrap());
             var scene = new FractalScene(step.job().formula().preset(), step.job().viewport(),
-                    new IterationSettings(step.job().maxIterations(), 0), settings, new AntialiasSettings(step.pattern(), r.effective));
+                    new IterationSettings(step.job().maxIterations(), 0), settings, new AntialiasSettings(r.effective));
             ColoringStrategy initial = settings.createStrategy();
             var surface = ui.surface;
             surface.latency().arm(event -> { if (ui.current == r) r.published(event.stage(), event.nanos()); });
@@ -306,8 +306,8 @@ public final class BaselineFxBenchmark {
                                ColoringStrategy coloring, boolean deep, BiConsumer<RenderRegion, int[]> publish,
                                Runnable success, Consumer<Throwable> failure) {
         var empty = RefinedPixelSnapshot.empty(step.job().width(), step.job().height());
-        if (deep) aa.refineDeep(frame, coloring, step.pattern(), empty, Platform::runLater, publish, success, failure);
-        else aa.refine(frame, coloring, step.pattern(), empty, Platform::runLater, publish, success, failure);
+        if (deep) aa.refineDeep(frame, coloring, empty, Platform::runLater, publish, success, failure);
+        else aa.refine(frame, coloring, empty, Platform::runLater, publish, success, failure);
     }
 
     static final class TimedBackend implements RenderBackend {

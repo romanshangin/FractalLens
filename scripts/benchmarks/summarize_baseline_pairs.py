@@ -15,6 +15,8 @@ from summarize_baseline import SCOPES as HEADLESS_SCOPES
 from summarize_baseline_fx import SCOPES as FX_SCOPES, summarize as validate_fx
 
 KEY = ("fixture", "step", "width", "height")
+# 9.1-v2 removed the deterministic-jitter AA fixtures; frozen 9.1-v1 builds remain valid inputs.
+MATRICES = {"9.1-v1", "9.1-v2"}
 FORBIDDEN = re.compile(r"StartFlightRecording|FlightRecorderOptions|javaagent|agentpath|agentlib|fractal\.(?:aa\.profile|render\.diagnostics)=true|NativeMemoryTracking=(?:summary|detail)")
 
 
@@ -62,7 +64,8 @@ def validate_policy(p):
 def validate_definition(policy, manifest):
     keys = [tuple(r[k] for k in KEY) for r in manifest]
     require(keys and len(set(keys)) == len(keys), "Empty or duplicate fixture manifest")
-    require({r["matrix"] for r in manifest} == {"9.1-v1"}, "Unknown fixture matrix")
+    matrices = {r["matrix"] for r in manifest}
+    require(len(matrices) == 1 and matrices <= MATRICES, "Unknown fixture matrix")
     require({r["fixture"] for r in manifest} == set(policy["fixtures"].split(",")), "Wrong fixture selection")
     for metric in policy["metrics"]:
         require(any(r["fixture"] == metric["fixture"] and r["step"] == metric["step"] for r in manifest), "Metric step absent from manifest")

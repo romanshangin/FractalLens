@@ -5,7 +5,7 @@
 > and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
 [`BaselineInputBenchmark`](../src/test/java/com/shangin/fractal/render/BaselineInputBenchmark.java)
-connects the versioned `9.1-v1` [fixture matrix](BASELINE_BENCHMARK.md) to the
+connects the versioned `9.1-v2` [fixture matrix](BASELINE_BENCHMARK.md) to the
 installed `FractalView` scroll, zoom, mouse and resize handlers. It dispatches
 JavaFX events into a visible scene and includes camera updates, grid snapping,
 debounce, controller preparation, callbacks and base/AA publication. All

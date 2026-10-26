@@ -9,7 +9,6 @@ import com.shangin.fractal.formula.FractalDestination;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.FractalScene;
-import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.beans.value.ChangeListener;
@@ -41,7 +40,6 @@ final class MainMenuBar extends MenuBar {
     private final javafx.event.EventHandler<javafx.stage.WindowEvent> hiddenHandler = event -> close();
     private final ToggleGroup fractals = new ToggleGroup();
     private final ToggleGroup quality = new ToggleGroup();
-    private final ToggleGroup sampling = new ToggleGroup();
     private MenuItem undo;
     private MenuItem redo;
     private Scene observedScene;
@@ -157,9 +155,6 @@ final class MainMenuBar extends MenuBar {
                 choices("Display Quality", InteractiveRenderMode.values(),
                         initialScene.antialiasing().renderMode(),
                         quality, fractalView::setInteractiveRenderMode),
-                choices("Antialiasing Pattern", SamplingPattern.values(),
-                        initialScene.antialiasing().samplingPattern(),
-                        sampling, fractalView::setSamplingPattern),
                 new SeparatorMenuItem(),
                 command("Edit Iteration Settings…", null, this::showIterations),
                 command("Edit Julia Parameters…", null, this::showJuliaParameters),
@@ -387,7 +382,6 @@ final class MainMenuBar extends MenuBar {
                 ? palettes.getToggles().get(scene.coloring().palette().ordinal()) : null);
         orbitTraps.selectToggle(orbitTraps.getToggles().get(orbitTrap.ordinal()));
         quality.selectToggle(quality.getToggles().get(scene.antialiasing().renderMode().ordinal()));
-        sampling.selectToggle(sampling.getToggles().get(scene.antialiasing().samplingPattern().ordinal()));
         histogram.setSelected(scene.coloring().histogramColoring());
         updateHistoryAvailability();
         stage.setTitle(scene.fractal() + " — FractalLens");

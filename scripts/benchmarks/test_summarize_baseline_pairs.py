@@ -68,6 +68,30 @@ class PairValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already exists"):
             summarize(self.root)
 
+    def set_matrix(self, matrix, directories=None):
+        for launch in self.launches:
+            if directories is not None and launch["directory"] not in directories:
+                continue
+            d = self.root / launch["directory"]
+            p = d / "manifest.csv"
+            p.write_text(p.read_text().replace("9.1-v1", matrix))
+            p = d / "environment.txt"
+            p.write_text(p.read_text().replace("matrix=9.1-v1", "matrix=" + matrix))
+
+    def test_accepts_current_matrix_without_jitter_fixtures(self):
+        self.set_matrix("9.1-v2")
+        validate_campaign(self.root)
+
+    def test_rejects_unknown_matrix(self):
+        self.set_matrix("9.1-v3")
+        with self.assertRaisesRegex(ValueError, "Unknown fixture matrix"):
+            validate_campaign(self.root)
+
+    def test_rejects_builds_from_different_matrices(self):
+        self.set_matrix("9.1-v2", {"pair-00-B", "pair-01-B", "pair-02-B"})
+        with self.assertRaisesRegex(ValueError, "contract mismatch"):
+            validate_campaign(self.root)
+
     def test_rejects_changed_order(self):
         self.launches[0], self.launches[1] = self.launches[1], self.launches[0]
         write_json(self.root / "launches.json", self.launches)

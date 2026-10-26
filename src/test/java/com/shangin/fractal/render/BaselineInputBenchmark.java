@@ -22,7 +22,7 @@ import java.util.concurrent.*;
 
 import static com.shangin.fractal.render.BaselineFxBenchmark.fx;
 
-/** Synthetic JavaFX dispatch through the installed production input handlers, seeded by 9.1-v1. */
+/** Synthetic JavaFX dispatch through the installed production input handlers, seeded by the 9.1 fixture matrix. */
 public final class BaselineInputBenchmark {
     static final String VERSION = "9.1-input-v1";
     static final String HEADER = "trial,fixture,step,seed_width,seed_height,gesture,requested_mode,phase,run,status,width,height,cap,aa,sample_hash,argb_hash,first_input_to_preview_ms,first_input_to_preview_post_layout_ms,last_input_to_render_ms,last_input_to_base_ms,last_input_to_aa_ms,last_input_to_complete_ms,last_input_to_post_layout_ms,last_input_to_first_target_ms,last_input_to_first_target_post_layout_ms,render_count";
@@ -165,7 +165,7 @@ public final class BaselineInputBenchmark {
                 var iterations = step.iterationPolicy().equals("fixed")
                         ? new IterationSettings(step.job().maxIterations(), 0) : new IterationSettings();
                 var scene = new FractalScene(step.job().formula().preset(), step.job().viewport(), iterations, colors,
-                        new AntialiasSettings(step.pattern(), mode));
+                        new AntialiasSettings(mode));
                 BaselineInputAccess.surface(view).invalidateRefinement();
                 BaselineInputAccess.seed(view, scene);
                 return null;
@@ -291,7 +291,7 @@ public final class BaselineInputBenchmark {
         boolean deep = BaselineInputAccess.deepZoom(ui.view);
         // The deep toggle is transient: entering deep from a direct seed leaves it disabled.
         var aa = !deep || BaselineInputAccess.deepAa(ui.view) ? BaselineFixtures.Aa.EMPTY : BaselineFixtures.Aa.NONE;
-        return new BaselineFixtures.Step(name, BaselineFixtures.Action.REUSE, frame.job(), "fixed", aa, template.pattern(), template.colors());
+        return new BaselineFixtures.Step(name, BaselineFixtures.Action.REUSE, frame.job(), "fixed", aa, template.colors());
     }
 
     static void verify(Result r) throws Exception {
@@ -325,9 +325,9 @@ public final class BaselineInputBenchmark {
                             expected, (region.y() + y) * width + region.x(), region.width());
                 };
                 if (backend.select(control.job()) instanceof MandelbrotPerturbationRenderBackend) {
-                    aa.refineDeep(control, coloring, r.actual.pattern(), retained, Runnable::run, publish,
+                    aa.refineDeep(control, coloring, retained, Runnable::run, publish,
                             () -> done.complete(null), done::completeExceptionally);
-                } else aa.refine(control, coloring, r.actual.pattern(), retained, Runnable::run, publish,
+                } else aa.refine(control, coloring, retained, Runnable::run, publish,
                         () -> done.complete(null), done::completeExceptionally);
                 done.get(180, TimeUnit.SECONDS);
             }

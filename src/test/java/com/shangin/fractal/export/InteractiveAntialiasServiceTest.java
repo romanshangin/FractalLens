@@ -5,7 +5,6 @@ import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalSample;
 import com.shangin.fractal.render.*;
-import com.shangin.fractal.scene.SamplingPattern;
 import com.shangin.fractal.ui.FractalCamera;
 import org.junit.jupiter.api.Test;
 
@@ -256,7 +255,6 @@ class InteractiveAntialiasServiceTest {
             service.refine(
                     frame,
                     new SmoothPaletteColoring(PalettePreset.ICE.palette()),
-                    SamplingPattern.REGULAR,
                     RefinedPixelSnapshot.empty(48, 32),
                     Runnable::run,
                     (region, colors) -> {
@@ -324,7 +322,6 @@ class InteractiveAntialiasServiceTest {
             service.refineDeep(
                     frame,
                     coloring,
-                    SamplingPattern.REGULAR,
                     RefinedPixelSnapshot.empty(job.width(), job.height()),
                     Runnable::run,
                     (region, colors) -> {
@@ -368,7 +365,6 @@ class InteractiveAntialiasServiceTest {
             service.refineDeep(
                     frame,
                     new SmoothPaletteColoring(PalettePreset.ICE.palette()),
-                    SamplingPattern.REGULAR,
                     RefinedPixelSnapshot.empty(
                             frame.job().width(), frame.job().height()),
                     callback -> {
@@ -412,7 +408,6 @@ class InteractiveAntialiasServiceTest {
             service.refine(
                     frame,
                     new SmoothPaletteColoring(PalettePreset.ICE.palette()),
-                    SamplingPattern.REGULAR,
                     RefinedPixelSnapshot.empty(32, 32),
                     callback -> {
                         callbacks.add(callback);
@@ -457,7 +452,6 @@ class InteractiveAntialiasServiceTest {
             service.refine(
                     frame,
                     (iterations, smooth, escaped, maximum) -> 0xFF123456,
-                    SamplingPattern.REGULAR,
                     RefinedPixelSnapshot.empty(40, 40),
                     Runnable::run,
                     (region, colors) -> {
@@ -531,7 +525,6 @@ class InteractiveAntialiasServiceTest {
                     (iterations, smooth, escaped, maximum) -> iterations == 0
                             ? 0xFF000000
                             : 0xFFFFFFFF,
-                    SamplingPattern.REGULAR,
                     reused,
                     Runnable::run,
                     (region, colors) -> publishedTiles.incrementAndGet(),
@@ -571,7 +564,6 @@ class InteractiveAntialiasServiceTest {
             service.refine(
                     frame,
                     (iterations, smooth, escaped, maximum) -> 0xFF123456,
-                    SamplingPattern.REGULAR,
                     new RefinedPixelSnapshot(
                             width,
                             height,
@@ -610,7 +602,7 @@ class InteractiveAntialiasServiceTest {
         AtomicInteger published = new AtomicInteger();
         try (var service = new InteractiveAntialiasService()) {
             service.refineDeep(frame, new SmoothPaletteColoring(PalettePreset.ICE.palette()),
-                    SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(5, 5), Runnable::run,
+                    RefinedPixelSnapshot.empty(5, 5), Runnable::run,
                     (region, colors) -> published.incrementAndGet(), completed::countDown,
                     failure -> { error.set(failure); completed.countDown(); });
             assertTrue(completed.await(10, TimeUnit.SECONDS));
@@ -655,7 +647,7 @@ class InteractiveAntialiasServiceTest {
             ConcurrentLinkedQueue<Runnable> callbacks = new ConcurrentLinkedQueue<>();
             CountDownLatch queued = new CountDownLatch(2); // tile and completion
             var coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
-            service.refine(frame, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(4, 4),
+            service.refine(frame, coloring, RefinedPixelSnapshot.empty(4, 4),
                     callback -> { callbacks.add(callback); queued.countDown(); },
                     (region, colors) -> fail("Cancelled tile must not be published"),
                     () -> {}, exception -> fail(exception));
@@ -665,7 +657,7 @@ class InteractiveAntialiasServiceTest {
             int calculated = samples.get();
             AtomicInteger published = new AtomicInteger();
             CountDownLatch completed = new CountDownLatch(1);
-            service.refine(frame, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(4, 4),
+            service.refine(frame, coloring, RefinedPixelSnapshot.empty(4, 4),
                     Runnable::run, (region, colors) -> published.incrementAndGet(),
                     completed::countDown, exception -> fail(exception));
             assertTrue(completed.await(5, TimeUnit.SECONDS));
@@ -701,13 +693,13 @@ class InteractiveAntialiasServiceTest {
         var coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
         var cache = new AntialiasSampleCache();
         try (var service = new InteractiveAntialiasService(cache, false, 1)) {
-            service.refine(old, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(4, 4),
+            service.refine(old, coloring, RefinedPixelSnapshot.empty(4, 4),
                     Runnable::run, (region, colors) -> fail("Stale tile published"),
                     () -> fail("Stale completion"), exception -> fail(exception));
             assertTrue(entered.await(5, TimeUnit.SECONDS));
             var completed = new java.util.concurrent.CompletableFuture<int[]>();
             int[] output = new int[16];
-            service.refine(replacement, coloring, SamplingPattern.REGULAR, RefinedPixelSnapshot.empty(4, 4),
+            service.refine(replacement, coloring, RefinedPixelSnapshot.empty(4, 4),
                     Runnable::run, (region, colors) -> System.arraycopy(colors, 0, output, 0, colors.length),
                     () -> completed.complete(output), completed::completeExceptionally);
             release.countDown();
@@ -720,7 +712,7 @@ class InteractiveAntialiasServiceTest {
     }
 
     @Test
-    void cachedRefinementRecolorsWithoutSamplingButInvalidatesChangedPatternAndScale() throws Exception {
+    void cachedRefinementRecolorsWithoutSamplingButInvalidatesChangedScale() throws Exception {
         AtomicInteger samples = new AtomicInteger();
         RenderFrame frame = checkerFrame(new FractalCalculator((r, i, limit) -> {
             samples.incrementAndGet();
@@ -729,20 +721,18 @@ class InteractiveAntialiasServiceTest {
         var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0);
         var fire = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.02, 0.5);
         try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
-            int[] first = refineAndWait(service, frame, ice, SamplingPattern.REGULAR);
+            int[] first = refineAndWait(service, frame, ice);
             assertEquals(16 * 16, samples.get());
             assertEquals(1, service.lastProfile().cacheBatches());
             assertEquals(16 * 16, service.lastProfile().samples());
-            int[] recolored = refineAndWait(service, frame, fire, SamplingPattern.REGULAR);
+            int[] recolored = refineAndWait(service, frame, fire);
             assertFalse(Arrays.equals(first, recolored));
             assertArrayEquals(service.recolorCached(frame, fire), recolored);
             assertEquals(16 * 16, samples.get(), "Retained samples should not be recalculated");
             assertEquals(0, service.lastProfile().cacheBatches());
-            refineAndWait(service, frame, fire, SamplingPattern.DETERMINISTIC_JITTER);
-            assertEquals(2 * 16 * 16, samples.get(), "Changed sample positions invalidate retained samples");
             var scale = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.04, 0.5);
-            refineAndWait(service, frame, scale, SamplingPattern.DETERMINISTIC_JITTER);
-            assertEquals(3 * 16 * 16, samples.get(), "Encoded phases depend on color scale");
+            refineAndWait(service, frame, scale);
+            assertEquals(2 * 16 * 16, samples.get(), "Encoded phases depend on color scale");
         }
     }
 
@@ -757,10 +747,10 @@ class InteractiveAntialiasServiceTest {
     }
 
     private static int[] refineAndWait(InteractiveAntialiasService service, RenderFrame frame,
-                                      SmoothPaletteColoring coloring, SamplingPattern pattern) throws Exception {
+                                      SmoothPaletteColoring coloring) throws Exception {
         var done = new java.util.concurrent.CompletableFuture<int[]>();
         int[] output = new int[16];
-        service.refine(frame, coloring, pattern, RefinedPixelSnapshot.empty(4, 4), Runnable::run,
+        service.refine(frame, coloring, RefinedPixelSnapshot.empty(4, 4), Runnable::run,
                 (region, colors) -> System.arraycopy(colors, 0, output, 0, colors.length),
                 () -> done.complete(output), done::completeExceptionally);
         return done.get(5, TimeUnit.SECONDS);

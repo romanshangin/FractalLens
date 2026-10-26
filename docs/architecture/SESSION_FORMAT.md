@@ -32,7 +32,14 @@ location while both applications are closed. The scene schema is unchanged.
   when absent from older version 2 sessions);
 - palette identity, editable ARGB stops, color scale, offset, histogram mode
   and orbit trap;
-- interactive sampling pattern and render mode.
+- interactive antialiasing render mode.
+
+Interactive antialiasing always samples a regular subpixel grid. The
+`antialiasing.samplingPattern` field is still written as `REGULAR` because
+version 2 readers released before the deterministic-jitter pattern was removed
+require it. On read the field is optional; the removed `DETERMINISTIC_JITTER`
+value is accepted and renders with the regular grid, and any other value is
+rejected.
 
 Decimal viewport values are strings so parsing never passes through binary
 floating point. Enum values use stable Java enum identifiers rather than

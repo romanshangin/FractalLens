@@ -17,7 +17,7 @@ class SceneHistoryTest {
                 .withIterations(new IterationSettings(400, 70))
                 .withJuliaParameters(new JuliaParameters(-0.4, 0.6))
                 .withColoring(new ColoringSettings(PalettePreset.FIRE))
-                .withAntialiasing(new AntialiasSettings(SamplingPattern.DETERMINISTIC_JITTER, InteractiveRenderMode.FAST));
+                .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.FAST));
         history.record(next);
         assertEquals(initial, history.undo());
         assertEquals(next, history.redo());

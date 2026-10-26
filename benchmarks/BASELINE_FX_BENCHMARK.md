@@ -5,7 +5,7 @@
 > and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
 [`BaselineFxBenchmark`](../src/test/java/com/shangin/fractal/render/BaselineFxBenchmark.java)
-uses the same `9.1-v1` fixture objects and exact [manifest](BASELINE_FIXTURES.csv)
+uses the same `9.1-v2` fixture objects and exact [manifest](BASELINE_FIXTURES.csv)
 as the [headless benchmark](BASELINE_BENCHMARK.md). It exercises the production
 `FractalRenderService`, CPU precision selection, frame reuse, `FractalSurface`
 PixelBuffers and `InteractiveAntialiasService` in a visible window. The harness

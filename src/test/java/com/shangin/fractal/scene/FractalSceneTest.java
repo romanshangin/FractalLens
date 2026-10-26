@@ -51,18 +51,10 @@ class FractalSceneTest {
         );
 
         FractalScene updated = source.withAntialiasing(
-                new AntialiasSettings(
-                        SamplingPattern.DETERMINISTIC_JITTER,
-                        InteractiveRenderMode.FAST
-                )
+                new AntialiasSettings(InteractiveRenderMode.FAST)
         );
 
-        assertEquals(SamplingPattern.REGULAR, source.antialiasing().samplingPattern());
         assertEquals(InteractiveRenderMode.REFINED, source.antialiasing().renderMode());
-        assertEquals(
-                SamplingPattern.DETERMINISTIC_JITTER,
-                updated.antialiasing().samplingPattern()
-        );
         assertEquals(InteractiveRenderMode.FAST, updated.antialiasing().renderMode());
         assertEquals(source.viewport(), updated.viewport());
     }

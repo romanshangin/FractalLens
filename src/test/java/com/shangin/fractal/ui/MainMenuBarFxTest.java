@@ -93,6 +93,18 @@ class MainMenuBarFxTest {
     }
 
     @Test
+    void renderMenuOffersNoAntialiasingPatternChoice() throws Exception {
+        List<String> titles = fx(() -> menuBar.getMenus().stream()
+                .filter(menu -> "Render".equals(menu.getText()))
+                .findFirst().orElseThrow().getItems().stream()
+                .map(item -> item instanceof javafx.scene.control.SeparatorMenuItem ? "-" : item.getText())
+                .toList());
+
+        assertEquals(List.of("Display Quality", "-", "Edit Iteration Settings…", "Edit Julia Parameters…",
+                "-", "Deep Zoom Antialiasing"), titles);
+    }
+
+    @Test
     void exportDimensionsRetainInvalidDraftAndApplyIndependentTarget() throws Exception {
         FractalScene original = fx(view::sceneSnapshot);
         var dialog = fx(() -> {

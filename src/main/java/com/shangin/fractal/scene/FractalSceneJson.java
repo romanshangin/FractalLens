@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Versioned JSON representation of a reproducible fractal scene. */
 public final class FractalSceneJson {
@@ -19,6 +20,13 @@ public final class FractalSceneJson {
     public static final int CURRENT_SCHEMA_VERSION = 2;
     private static final int MAX_JSON_LENGTH = 1_048_576;
     private static final int MAX_PALETTE_STOPS = 4_096;
+    /**
+     * Regular grid is the only interactive sampling pattern. Version 2 readers released
+     * before the jitter pattern was removed require this field, so it is still written.
+     */
+    private static final String REGULAR_SAMPLING_PATTERN = "REGULAR";
+    private static final Set<String> LEGACY_SAMPLING_PATTERNS =
+            Set.of(REGULAR_SAMPLING_PATTERN, "DETERMINISTIC_JITTER");
 
     private FractalSceneJson() {}
 
@@ -62,7 +70,7 @@ public final class FractalSceneJson {
                 .append("  },\n")
                 .append("  \"antialiasing\": {\n")
                 .append("    \"samplingPattern\": ")
-                .append(quoted(scene.antialiasing().samplingPattern().name())).append(",\n")
+                .append(quoted(REGULAR_SAMPLING_PATTERN)).append(",\n")
                 .append("    \"renderMode\": ")
                 .append(quoted(scene.antialiasing().renderMode().name())).append("\n")
                 .append("  }\n")
@@ -146,10 +154,14 @@ public final class FractalSceneJson {
                         string(required(coloringObject, "orbitTrap"), "orbitTrap"), "orbitTrap"));
 
         Map<String, Object> antialiasingObject = object(required(root, "antialiasing"), "antialiasing");
+        if (antialiasingObject.containsKey("samplingPattern")) {
+            // Older scenes may select the removed jitter pattern; both values now render the regular grid.
+            String pattern = string(antialiasingObject.get("samplingPattern"), "samplingPattern");
+            if (!LEGACY_SAMPLING_PATTERNS.contains(pattern)) {
+                throw new IllegalArgumentException("Unknown samplingPattern: " + pattern);
+            }
+        }
         AntialiasSettings antialiasing = new AntialiasSettings(
-                enumValue(SamplingPattern.class,
-                        string(required(antialiasingObject, "samplingPattern"), "samplingPattern"),
-                        "samplingPattern"),
                 enumValue(InteractiveRenderMode.class,
                         string(required(antialiasingObject, "renderMode"), "renderMode"), "renderMode"));
         JuliaParameters julia = root.containsKey("juliaParameters")

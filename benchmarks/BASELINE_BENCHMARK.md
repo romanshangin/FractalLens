@@ -4,8 +4,13 @@
 > Keep raw logs and diagnostic captures private; publish only reviewed summaries
 > and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
-Matrix version: `9.1-v1`. The reviewed [manifest](BASELINE_FIXTURES.csv)
-contains 28 sequences / 37 steps at each of 480x270, 1512x982 and 3024x1964.
+Matrix version: `9.1-v2`. The reviewed [manifest](BASELINE_FIXTURES.csv)
+contains 26 sequences / 35 steps at each of 480x270, 1512x982 and 3024x1964.
+`9.1-v2` differs from `9.1-v1` only by removing the two deterministic-jitter AA
+fixtures and the `pattern` column after the application dropped that sampling
+pattern; all other rows are identical apart from the matrix label. Evidence
+recorded with `9.1-v1` keeps that label. The paired analyzer accepts frozen
+builds of either version, but both sides of a campaign must share one manifest.
 Dimensions are **render pixels**, not logical window dimensions. Resize adds
 128x72 render pixels. This is a reproducibility foundation; it does not close
 the allocation/scheduling or sustained thermal baseline.
@@ -31,7 +36,7 @@ are explicit in every manifest row.
 | Fixtures | Purpose |
 | --- | --- |
 | Five preset overviews, exterior, seahorse fixed/adaptive | All implemented formulas; fixed 300 versus actual adaptive 632 at seahorse scale 0.024 |
-| Mandelbrot/Julia regular and deterministic-jitter AA | Production candidate-only 4x4 sampling |
+| Mandelbrot/Julia regular-grid AA | Production candidate-only 4x4 sampling |
 | Julia retained AA | Prepare the same frame once, then time a second refinement with retained sample/base-phase caches; preparation has its own scope |
 | Mandelbrot histogram/trap AA | Histogram construction and cross-trap orbit features; no smooth-cache substitution |
 | Deep glitch / deep glitch AA | Saved production stress coordinates at 1.6e-13, adaptive cap 2488; deep AA uses the production 2x2 then conditional 4x4 policy |
@@ -43,7 +48,7 @@ are explicit in every manifest row.
 | Resize then drag | Keep pixel spacing and cap across resize, then shift by (+17, −11) complex-plane pixel units |
 | Cancel direct/deep | Request cooperative cancellation in the first completed backend-region callback; measure until backend return |
 
-Regular/jitter positions are those in the production sampler at the recorded
+Regular-grid positions are those in the production sampler at the recorded
 revision; `aa_grid` records the grid policy, not a claim that every pixel is
 supersampled. The deep-glitch name identifies the historical stress input;
 it does not assert a current glitch/recovery count. Reprofiling is needed for

@@ -221,8 +221,8 @@ MAVEN_OPTS='-Xmx2g' mvn -Paa-benchmark verify -DskipTests -Dfractal.aa.profile=t
 JAVA_TOOL_OPTIONS='-Xmx2g -Djavafx.cachedir=/tmp/fractallens-javafx-cache -Dfractal.gpu.enabled=false -Dfractal.benchmark.cpuOnly=true -Dfractal.benchmark.scenes=overview-aa,overview-refined -Dfractal.benchmark.output=target/aa-fx-current.csv' mvn -Pgpu-render-benchmark javafx:run
 ```
 
-The headless profile also accepts `aaBenchmark.pattern=DETERMINISTIC_JITTER`,
-`aaBenchmark.resume=true`, `aaBenchmark.scenes=deep` and
+The headless profile also accepts `aaBenchmark.resume=true`,
+`aaBenchmark.scenes=deep` and
 `fractal.aaCache.maxBytes`. The deep diagnostic uses 2488 iterations at scale
 `1.6e-13`, centered at
 `(-0.8317528516858322713653476366999, 0.207813754242134522471317257011028)`;

@@ -50,7 +50,7 @@ class BaselineInputBenchmarkTest {
 
     @ParameterizedTest @EnumSource(InteractiveRenderMode.class)
     void refinedPublicationAndActualAaPolicyAreExplicit(InteractiveRenderMode mode) throws Exception {
-        var fixture = fixture("julia-aa-deterministic_jitter");
+        var fixture = fixture("julia-aa-regular");
         try (var ui = fx(Ui::new)) {
             ui.seed(fixture.steps().getFirst(), mode);
             var r = measure(ui, fixture, fixture.steps().getFirst(), mode, "wheel", 1);
@@ -177,7 +177,7 @@ class BaselineInputBenchmarkTest {
             var home = fx(() -> new com.shangin.fractal.ui.FractalCamera(template.job().formula().preset())
                     .defaultViewport((int) ui.view.getWidth(), (int) ui.view.getHeight()));
             var step = new BaselineFixtures.Step("home", template.action(), new RenderJob(template.job().formula(), home, 96, 66, 300),
-                    "fixed", template.aa(), template.pattern(), template.colors());
+                    "fixed", template.aa(), template.colors());
             var fixture = new BaselineFixtures.Fixture("home-control", java.util.List.of(step));
             ui.seed(step, InteractiveRenderMode.FAST);
             var r = measure(ui, fixture, step, InteractiveRenderMode.FAST, "trackpad", 1);

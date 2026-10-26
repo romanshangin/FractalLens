@@ -5,7 +5,7 @@
 > and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
 `BaselineMemoryBenchmark` reuses the installed-handler input driver and the
-decimal-authoritative `9.1-v1` fixtures. This is a diagnostic workload, not an
+decimal-authoritative `9.1-v2` fixtures. This is a diagnostic workload, not an
 uninstrumented before/after performance gate. Production rendering is unchanged.
 
 ## Workload and ownership

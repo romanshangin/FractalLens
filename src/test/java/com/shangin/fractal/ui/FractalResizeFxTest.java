@@ -15,7 +15,6 @@ import com.shangin.fractal.render.TileTimingStats;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
-import com.shangin.fractal.scene.SamplingPattern;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.layout.StackPane;
@@ -415,8 +414,7 @@ class FractalResizeFxTest {
                         "1.2E-75"),
                 new com.shangin.fractal.scene.IterationSettings(420, 70),
                 new com.shangin.fractal.scene.ColoringSettings(PalettePreset.FIRE),
-                new AntialiasSettings(SamplingPattern.DETERMINISTIC_JITTER,
-                        InteractiveRenderMode.FAST));
+                new AntialiasSettings(InteractiveRenderMode.FAST));
         var store = new com.shangin.fractal.app.LastSessionStore(
                 temporaryDirectory.resolve("last-session.json"));
         store.save(restored);
@@ -799,7 +797,7 @@ class FractalResizeFxTest {
                 surface.resize(80, 60);
                 surface.resizeBuffer(80, 60);
                 camera.resize(80, 60, 100, 60);
-                controller.render(scene(camera).withAntialiasing(new AntialiasSettings(SamplingPattern.REGULAR, mode)),
+                controller.render(scene(camera).withAntialiasing(new AntialiasSettings(mode)),
                         new RenderTarget(80, 60, RenderPriority.center()),
                         camera.defaultViewport(80, 60), true);
                 // No asynchronous render or AA completion is needed for a crop.
@@ -1191,7 +1189,7 @@ class FractalResizeFxTest {
             } else {
                 camera.resize(width, height);
             }
-            controller.render(scene(camera).withAntialiasing(new AntialiasSettings(SamplingPattern.REGULAR, mode)),
+            controller.render(scene(camera).withAntialiasing(new AntialiasSettings(mode)),
                     new RenderTarget(surface.renderWidth(), surface.renderHeight(),
                     RenderPriority.center()), camera.defaultViewport(width, height), resize);
             return null;

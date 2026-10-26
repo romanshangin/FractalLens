@@ -21,7 +21,6 @@ import com.shangin.fractal.scene.SceneHistory;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import com.shangin.fractal.scene.AntialiasSettings;
-import com.shangin.fractal.scene.SamplingPattern;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.animation.PauseTransition;
 import javafx.animation.AnimationTimer;
@@ -243,8 +242,7 @@ public class FractalView extends StackPane {
         if (completed == null) return "incomplete";
         var request = completed.frame().request();
         return "width=" + request.width() + "; height=" + request.height()
-                + "; viewport=" + request.viewport() + "; iterations=" + request.maxIterations()
-                + "; sampling=" + completed.scene().antialiasing().samplingPattern();
+                + "; viewport=" + request.viewport() + "; iterations=" + request.maxIterations();
     }
 
     public void setFractal(FractalPreset preset) {
@@ -571,23 +569,9 @@ public class FractalView extends StackPane {
         renderingChangedHandler.accept(active);
     }
 
-    public void setSamplingPattern(SamplingPattern pattern) {
-        stopColorCyclingForSceneChange();
-        changeScene(scene.withAntialiasing(new AntialiasSettings(
-                pattern,
-                scene.antialiasing().renderMode()
-        )));
-        renderController.cancelCurrent();
-        fractalSurface.invalidateRefinement();
-        recalculate();
-    }
-
     public void setInteractiveRenderMode(InteractiveRenderMode renderMode) {
         stopColorCyclingForSceneChange();
-        changeScene(scene.withAntialiasing(new AntialiasSettings(
-                scene.antialiasing().samplingPattern(),
-                renderMode
-        )));
+        changeScene(scene.withAntialiasing(new AntialiasSettings(renderMode)));
         renderController.cancelCurrent();
         recalculate();
     }

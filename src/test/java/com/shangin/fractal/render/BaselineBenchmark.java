@@ -192,9 +192,9 @@ public final class BaselineBenchmark {
             }
             first.compareAndSet(-1, System.nanoTime() - start);
         };
-        if (deep) service.refineDeep(frame, coloring, step.pattern(), RefinedPixelSnapshot.empty(step.job().width(), step.job().height()),
+        if (deep) service.refineDeep(frame, coloring, RefinedPixelSnapshot.empty(step.job().width(), step.job().height()),
                 Runnable::run, publish, () -> done.complete(null), done::completeExceptionally);
-        else service.refine(frame, coloring, step.pattern(), RefinedPixelSnapshot.empty(step.job().width(), step.job().height()),
+        else service.refine(frame, coloring, RefinedPixelSnapshot.empty(step.job().width(), step.job().height()),
                 Runnable::run, publish, () -> done.complete(null), done::completeExceptionally);
         done.get(180, TimeUnit.SECONDS);
         return new long[]{System.nanoTime() - start, first.get()};
