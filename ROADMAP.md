@@ -841,6 +841,13 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   Mandelbrot, Julia and AA samples. Inspect JIT/allocation profiles; preserve
   arithmetic order and bounded cancellation. Do not repeat rejected manual
   square caching or generic-to-specialized Julia rewrites without new evidence.
+  Status: the base tile pass for Mandelbrot/Julia without orbit traps passed
+  two predeclared gates on Apple M3 Pro
+  ([first spike](benchmarks/INTERLEAVED_ORBIT_RESULTS.md),
+  [follow-up](benchmarks/INTERLEAVED_ORBIT_REFILL_RESULTS.md)). It is retained
+  behind the non-default `fractal.cpu.interleavedOrbits` switch. AA samples,
+  unrolling, other hardware/JVMs and end-to-end interaction latency remain
+  open before any default change.
 - [ ] Compare SIMD lane refill/compaction and workload-specific dispatch,
   including wider x86 FP64 species where available. Keep the current scalar
   fallback; the rejected M3 Pro two-lane masked loop is not the proposed change.

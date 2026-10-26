@@ -64,7 +64,8 @@ public final class FormulaCalculationBenchmark {
         }
     }
 
-    private static List<Scenario> scenarios() {
+    /** Shared with {@link InterleavedOrbitBenchmark} so both measure the same scenes. */
+    static List<Scenario> scenarios() {
         return List.of(
                 scenario(FractalPreset.MANDELBROT, "Mandelbrot", 1.0, -0.75, 0.0),
                 scenario(FractalPreset.MANDELBROT, "Mandelbrot", 100.0, -0.743643887037151, 0.13182590420533),
@@ -91,6 +92,7 @@ public final class FormulaCalculationBenchmark {
 
         return new Scenario(
                 name,
+                preset,
                 preset.createFormula(),
                 defaultViewport.scale(),
                 viewport,
@@ -106,13 +108,7 @@ public final class FormulaCalculationBenchmark {
             int warmups,
             int runs
     ) {
-        IterationPolicy iterationPolicy =
-                new AdaptiveIterationPolicy(ITERATIONS_PER_ZOOM_LEVEL);
-        int maxIterations = iterationPolicy.maxIterations(
-                baseIterations,
-                scenario.defaultScale(),
-                scenario.viewport().scale()
-        );
+        int maxIterations = maxIterations(scenario, baseIterations);
         FractalCalculator calculator = new FractalCalculator(scenario.formula());
         RenderGrid grid = RenderGrid.from(scenario.viewport(), width, height);
 
@@ -153,6 +149,16 @@ public final class FormulaCalculationBenchmark {
         );
     }
 
+    static int maxIterations(Scenario scenario, int baseIterations) {
+        IterationPolicy iterationPolicy =
+                new AdaptiveIterationPolicy(ITERATIONS_PER_ZOOM_LEVEL);
+        return iterationPolicy.maxIterations(
+                baseIterations,
+                scenario.defaultScale(),
+                scenario.viewport().scale()
+        );
+    }
+
     private static double percentile(List<Long> source, double percentile) {
         long[] values = source.stream().mapToLong(Long::longValue).sorted().toArray();
         int index = (int) Math.ceil(percentile * values.length) - 1;
@@ -167,8 +173,9 @@ public final class FormulaCalculationBenchmark {
         return Integer.parseInt(System.getProperty(name, Integer.toString(defaultValue)));
     }
 
-    private record Scenario(
+    record Scenario(
             String name,
+            FractalPreset preset,
             FractalFormula formula,
             double defaultScale,
             Viewport viewport,

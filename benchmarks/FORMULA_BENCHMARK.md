@@ -35,6 +35,11 @@ Record the environment and complete result table before and after every kernel
 optimization. Performance changes should also retain the formula correctness
 tests and bit-for-bit sample comparisons where the optimization permits them.
 
+The paired scalar/2-lane/4-lane interleaved-orbit comparison uses the same
+scenes through `./mvnw -Pinterleaved-orbit-benchmark verify -DskipTests`; see
+[its protocol and results](INTERLEAVED_ORBIT_RESULTS.md) and the
+[scalar pre-loop and parallel-path follow-up](INTERLEAVED_ORBIT_REFILL_RESULTS.md).
+
 ## Deep-zoom gate
 
 Run the Mandelbrot deep-zoom gate with:

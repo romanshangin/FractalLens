@@ -17,8 +17,16 @@ import java.util.function.Consumer;
 public final class ParallelFractalCalculator implements AutoCloseable {
 
     private static final int DEFAULT_TILE_SIZE = 32;
+
+    /**
+     * Non-default experimental switch for the interleaved-orbit tile kernel
+     * (Mandelbrot and Julia without orbit traps only).
+     */
+    static final String INTERLEAVED_ORBITS_PROPERTY = "fractal.cpu.interleavedOrbits";
+
     private final ExecutorService workers;
     private final int tileSize;
+    private final boolean interleavedOrbits;
 
     record Tile(
             int xFrom,
@@ -39,6 +47,14 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             int workerCount,
             int tileSize
     ) {
+        this(workerCount, tileSize, Boolean.getBoolean(INTERLEAVED_ORBITS_PROPERTY));
+    }
+
+    ParallelFractalCalculator(
+            int workerCount,
+            int tileSize,
+            boolean interleavedOrbits
+    ) {
         if (workerCount < 1) {
             throw new IllegalArgumentException("Worker count must be at least 1");
         }
@@ -46,6 +62,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
             throw new IllegalArgumentException("Tile size must be at least 1");
         }
         this.tileSize = tileSize;
+        this.interleavedOrbits = interleavedOrbits;
         workers = RenderDiagnostics.workerPool(
                 workerCount,
                 daemonThreadFactory("fractal-worker"));
@@ -260,6 +277,11 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         FractalCalculator directCalculator =
                 renderRequest.formula().createDirectCalculator();
 
+        InterleavedOrbitKernel interleavedKernel = interleavedKernel(renderRequest.formula());
+        TileKernel tileKernel = interleavedKernel != null
+                ? interleavedKernel::calculateTile
+                : directCalculator::calculateTile;
+
         RenderGrid renderGrid =
                 renderFrame.renderGrid();
 
@@ -325,7 +347,7 @@ public final class ParallelFractalCalculator implements AutoCloseable {
                 boolean completed = true;
 
                 for (RenderRegion missingSpan : missingSpans) {
-                    completed = directCalculator.calculateTile(
+                    completed = tileKernel.calculateTile(
                                     fractalData,
                                     renderGrid,
                                     missingSpan.x(),
@@ -406,6 +428,27 @@ public final class ParallelFractalCalculator implements AutoCloseable {
         }
 
         return tasks;
+    }
+
+    /** Returns the interleaved-orbit kernel when the switch is on and the formula is supported. */
+    InterleavedOrbitKernel interleavedKernel(FormulaDefinition formula) {
+        return interleavedOrbits ? InterleavedOrbitKernel.forDefinition(formula) : null;
+    }
+
+    /** Tile contract shared by the scalar and interleaved-orbit kernels. */
+    @FunctionalInterface
+    private interface TileKernel {
+        boolean calculateTile(
+                SamplePlane samplePlane,
+                RenderGrid renderGrid,
+                int xFrom,
+                int xTo,
+                int yFrom,
+                int yTo,
+                int maxIterations,
+                BooleanSupplier cancelled,
+                PixelReady ready,
+                Consumer<RenderRegion> rowCompleted);
     }
 
     List<Tile> createOrderedTiles(
