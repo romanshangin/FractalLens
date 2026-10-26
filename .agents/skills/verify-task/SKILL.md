@@ -58,15 +58,18 @@ Follow the testing rules, subsystem constraints, and acceptance criteria in
    Record pre-existing changes and treat them as user-owned.
 2. Inspect the requested change and its complete repository diff against the
    appropriate base, including related tests and documentation.
-   Record the intended base revision, comparison merge base, and candidate
-   content identifier from the review handoff. Confirm that this identity
-   covers the current complete candidate, including intended uncommitted and
-   untracked files; a branch name or HEAD SHA alone is insufficient for a dirty
-   candidate. If the candidate or base differs, stop with `INCOMPLETE` until a
-   fresh `CLEAN` review is available.
-   In orchestrated runs, use the orchestrator-supplied identity rather than
-   computing an alternative fingerprint. The orchestrator checks repository
-   state before and after this stage and owns candidate fields in the handoff.
+   Record `baseRevision`, `mergeBase` and `contentId` from the review handoff.
+   In orchestrated runs, use the orchestrator-supplied identity and do not
+   recompute it; the orchestrator checks repository state before and after
+   this stage and owns candidate fields in the handoff. In standalone
+   verification, recompute the identity with `computeCandidateIdentity` from
+   `scripts/orchestration/task-orchestrator.ts`, using the standalone command
+   in `docs/development/TASK_ORCHESTRATOR.md`, section `Candidate identity`,
+   with the review handoff's `baseRevision` as the frozen base. All three
+   fields must match. Do not substitute a Git tree ID, a self-computed
+   SHA-256, a branch name or a HEAD SHA. If the review handoff lacks any of
+   the three fields, the calculation fails, or the candidate or base differs,
+   stop with `INCOMPLETE` until a fresh `CLEAN` review is available.
 3. Identify affected behavior, platforms, modules, fallbacks, and roadmap or
    document acceptance criteria.
 4. List the required acceptance checks and map each to sufficient current
@@ -158,14 +161,17 @@ Start the report with exactly one verification status:
   skipped or unrun required checks.
 
 Before reporting, confirm that the candidate and base still match the review
-handoff. If they changed during verification, report `INCOMPLETE` and identify
+handoff; in standalone verification, recompute the identity with the same
+command and frozen base as in step 2 of the verification scope. If they
+changed during verification, report `INCOMPLETE` and identify
 any failures observed for the earlier candidate. Otherwise a confirmed required
 failure takes precedence over incomplete checks; report `FAIL` and list the
 remaining gaps. Environment failures alone do not establish `FAIL`.
 
 Then state:
 
-- the candidate identity, base revision, and matching `CLEAN` review evidence;
+- the candidate identity (`baseRevision`, `mergeBase`, `contentId`) and the
+  matching `CLEAN` review evidence;
 - the exact commands or manual checks, distinguishing reused execution evidence
   (original stage and environment) from freshly executed checks, and whether each passed, failed,
   was skipped, or could not be verified;
