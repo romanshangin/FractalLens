@@ -217,6 +217,26 @@ delivery foundation should be completed first.
   [P2.4 implementation](docs/platform/MACOS_UI.md#native-windows-p24).
 - [ ] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
   exact fallback is a material user-visible cost.
+- [ ] **P2.6.** Add separate render settings and a user-selected antialiasing mode
+  for standard (non-deep) zoom. Gather Display Quality, Antialiasing Pattern and
+  Deep Zoom Antialiasing into one render settings window instead of separate
+  Render menu items; on macOS it follows the P2.4 native-window rules with the
+  JavaFX fallback. Offer three standard-zoom modes, analogous to the current
+  deep zoom toggle: **Base only** (no antialiasing; new), **Base, then
+  antialiasing** (today's `FAST`), and **Antialiased display** (today's
+  `REFINED`, showing refined tiles only). Extend the existing
+  `InteractiveRenderMode`/`AntialiasSettings` rather than adding a parallel
+  setting, so the mode persists through the versioned scene format, session
+  restore, bookmarks and shared presets, with older scenes keeping their current
+  behavior. Deep zoom keeps its current choices unless a separate measurement
+  justifies more. This does not change the export quality policy.
+  - Acceptance: base-only frames reach `RenderStatus.COMPLETE` without starting
+    refinement, and the badge and loading screen report that correctly.
+    Switching modes during and after a render never shows stale or mixed pixels
+    and reuses compatible samples. Portable and JavaFX regressions cover each
+    mode, persistence and old-scene compatibility. Manual macOS checks cover the
+    settings window (focus, Enter, Escape, Cancel, Apply) in light and dark
+    appearance.
 
 ### P3. Conditional CPU research
 
