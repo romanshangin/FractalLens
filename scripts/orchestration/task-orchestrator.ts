@@ -8,6 +8,7 @@ import { parseArgs } from 'node:util';
 import { currentEvidence, evidenceSummary, type CheckEvidence } from './validation-evidence.ts';
 
 export type Stage = 'IMPLEMENT' | 'IMPLEMENT_FIXES' | 'REVIEW' | 'VERIFY' | 'DELIVER';
+export type Executor = 'codex' | 'claude';
 export type FinalStatus = 'DELIVERED' | 'BLOCKED' | 'INCOMPLETE';
 export type CandidateIdentity = Readonly<{ baseRevision: string; mergeBase: string; contentId: string }>;
 export type Handoff = { stage: Stage; status: string; report: string; candidate?: CandidateIdentity };
@@ -48,6 +49,25 @@ export const ROLES = {
   VERIFY: { skill: 'verify-task', model: 'gpt-6-luna', effort: 'medium', sandbox: 'workspace-write', escalation: 'never', statuses: ['PASS', 'FAIL', 'INCOMPLETE'] },
   DELIVER: { skill: 'deliver-task', model: 'gpt-6-luna', effort: 'low', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['DELIVERED', 'BLOCKED', 'INCOMPLETE'] },
 } as const;
+
+// Claude Code roles keep the skill, status, sandbox and escalation policy of ROLES.
+export const CLAUDE_MODELS = {
+  IMPLEMENT: { model: 'claude-opus-5-5', effort: 'medium' },
+  IMPLEMENT_FIXES: { model: 'claude-opus-5-5', effort: 'medium' },
+  REVIEW: { model: 'claude-opus-5-5', effort: 'medium' },
+  VERIFY: { model: 'claude-sonnet-5-5', effort: 'medium' },
+  DELIVER: { model: 'claude-sonnet-5-5', effort: 'low' },
+} as const satisfies Record<Stage, { model: string; effort: string }>;
+
+export type Role = Omit<(typeof ROLES)[Stage], 'model' | 'effort'> & { readonly model: string; readonly effort: string };
+
+export function roleFor(executor: Executor, stage: Stage): Role {
+  return executor === 'claude' ? { ...ROLES[stage], ...CLAUDE_MODELS[stage] } : ROLES[stage];
+}
+
+function isExecutor(value: unknown): value is Executor {
+  return value === 'codex' || value === 'claude';
+}
 
 export function prepareBase(repository: string, baseRef: string): {
   baseRef: string;
@@ -336,11 +356,14 @@ export async function runWorkflow(options: {
   }
 }
 
-export function stagePrompt(request: Request, repository: string): string {
+export function stagePrompt(request: Request, repository: string, executor: Executor = 'codex'): string {
   const role = ROLES[request.stage];
   const canRunChecks = request.stage === 'IMPLEMENT' || request.stage === 'IMPLEMENT_FIXES' || request.stage === 'VERIFY';
+  const skillFile = join(repository, '.agents/skills', role.skill, 'SKILL.md');
   return [
-    `Use $${role.skill} at ${join(repository, '.agents/skills', role.skill, 'SKILL.md')}.`,
+    executor === 'claude'
+      ? `Read ${skillFile} in full and follow it as the ${role.skill} workflow skill. Resolve relative links in it against its directory.`
+      : `Use $${role.skill} at ${skillFile}.`,
     `Execute only stage ${request.stage}. Do not invoke other workflow skills, spawn subagents, or start other chats.`,
     `The first nonempty line of your final report must be exactly one of: ${role.statuses.join(', ')}.`,
     'Use a bare status without Markdown decoration. Then provide the handoff required by the skill.',
@@ -377,45 +400,118 @@ export function stagePrompt(request: Request, repository: string): string {
   ].filter(Boolean).join('\n\n');
 }
 
-export function createCodexRunner(options: {
+type RunnerOptions = {
   repository: string;
   runDirectory: string;
   command?: string[];
   timeoutMs?: number;
-}): (request: Request) => Promise<string> {
-  const { repository, runDirectory, command = ['codex'], timeoutMs = 30 * 60 * 1000 } = options;
+};
+type StageExecution = {
+  command: string[];
+  role: Role;
+  prompt: string;
+  repository: string;
+  runDirectory: string;
+  stageDirectory: string;
+  log: number;
+  timeoutMs: number;
+};
+
+// Executor-independent stage preparation: private artifacts, check context and evidence.
+function createStageRunner(executor: Executor, options: RunnerOptions,
+    execute: (execution: StageExecution) => string): (request: Request) => Promise<string> {
+  const { repository, runDirectory, command = [executor], timeoutMs = 30 * 60 * 1000 } = options;
   let sequence = 0;
   return async request => {
-    const role = ROLES[request.stage];
+    const role = roleFor(executor, request.stage);
     const stageDirectory = mkdtempSync(join(runDirectory, `${++sequence}-${request.stage}-`));
-    const output = join(stageDirectory, 'report.md');
     const checkContext = join(stageDirectory, 'check-context.json');
     writeFileSync(checkContext, JSON.stringify({ version: 1, repository, runDirectory, baseRevision: request.baseRevision, stage: request.stage }), { mode: 0o600 });
     const evidence = existsSync(join(runDirectory, 'evidence', 'checks.json')) || existsSync(join(runDirectory, 'evidence', 'active.lock'))
       ? currentEvidence(runDirectory, computeCandidateIdentity(repository, request.baseRevision), repository) : [];
-    const prompt = stagePrompt({ ...request, checkContext, evidence }, repository);
+    const prompt = stagePrompt({ ...request, checkContext, evidence }, repository, executor);
     writeFileSync(join(stageDirectory, 'prompt.txt'), prompt, { mode: 0o600 });
     const log = openSync(join(stageDirectory, 'execution.log'), 'wx', 0o600);
     console.log(`${request.stage} (${role.model}, ${role.effort}; repair round ${request.repairRound})`);
     try {
-      const result = spawnSync(command[0], [
-        ...command.slice(1), 'exec', '--model', role.model,
-        '--config', `model_reasoning_effort="${role.effort}"`,
-        ...(role.escalation === 'never'
-          ? ['--sandbox', role.sandbox, '--config', 'approval_policy="never"']
-          : ['--approve-for-me']), '--ephemeral',
-        '--cd', repository,
-        '--output-last-message', output, '-',
-      ], { cwd: repository, input: prompt, stdio: ['pipe', log, log], timeout: timeoutMs, killSignal: 'SIGKILL', shell: false });
-      if (result.error || result.status !== 0) {
-        writeFileSync(join(stageDirectory, 'error.txt'), result.error?.message ?? `Executor exited with ${result.status ?? result.signal}`, { mode: 0o600 });
-        throw new Error('Codex execution did not complete successfully');
-      }
-      return readFileSync(output, 'utf8');
+      return execute({ command, role, prompt, repository, runDirectory, stageDirectory, log, timeoutMs });
     } finally {
       closeSync(log);
     }
   };
+}
+
+export function createCodexRunner(options: RunnerOptions): (request: Request) => Promise<string> {
+  return createStageRunner('codex', options, ({ command, role, prompt, repository, stageDirectory, log, timeoutMs }) => {
+    const output = join(stageDirectory, 'report.md');
+    const result = spawnSync(command[0], [
+      ...command.slice(1), 'exec', '--model', role.model,
+      '--config', `model_reasoning_effort="${role.effort}"`,
+      ...(role.escalation === 'never'
+        ? ['--sandbox', role.sandbox, '--config', 'approval_policy="never"']
+        : ['--approve-for-me']), '--ephemeral',
+      '--cd', repository,
+      '--output-last-message', output, '-',
+    ], { cwd: repository, input: prompt, stdio: ['pipe', log, log], timeout: timeoutMs, killSignal: 'SIGKILL', shell: false });
+    if (result.error || result.status !== 0) {
+      writeFileSync(join(stageDirectory, 'error.txt'), result.error?.message ?? `Executor exited with ${result.status ?? result.signal}`, { mode: 0o600 });
+      throw new Error('Codex execution did not complete successfully');
+    }
+    return readFileSync(output, 'utf8');
+  });
+}
+
+// Claude Code sandbox paths use a leading "//" for absolute filesystem paths.
+function claudeSandboxPath(path: string): string {
+  return `//${realpathSync(path).replaceAll('\\', '/').replace(/^\/+/, '')}`;
+}
+
+function claudeSettings(role: Role, repository: string, runDirectory: string): object {
+  // Stages use only supplied handoffs and repository evidence, never saved memories.
+  if (role.escalation !== 'never') return { autoMemoryEnabled: false };
+  return { autoMemoryEnabled: false, sandbox: {
+    enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, autoAllowBashIfSandboxed: true,
+    filesystem: role.sandbox === 'read-only'
+      ? { denyWrite: [claudeSandboxPath(repository), claudeSandboxPath(runDirectory)] }
+      : { allowWrite: [claudeSandboxPath(runDirectory)] },
+  } };
+}
+
+// The JSON result is the only report channel; stderr and tool output never select a state.
+function claudeReport(stdout: string): string | undefined {
+  try {
+    const output = JSON.parse(stdout);
+    return output?.type === 'result' && output.subtype === 'success' && output.is_error === false
+      && typeof output.result === 'string' ? output.result : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function createClaudeRunner(options: RunnerOptions): (request: Request) => Promise<string> {
+  return createStageRunner('claude', options, ({ command, role, prompt, repository, runDirectory, stageDirectory, log, timeoutMs }) => {
+    const tools = 'Bash,Read,Grep,Glob';
+    const result = spawnSync(command[0], [
+      ...command.slice(1), '--print', '--output-format', 'json',
+      '--model', role.model, '--effort', role.effort,
+      '--no-session-persistence', '--permission-prompts', 'none',
+      '--disable-slash-commands', '--disallowedTools', 'Agent',
+      ...(role.escalation === 'never'
+        ? ['--permission-mode', 'dontAsk', '--tools', tools, '--allowedTools', tools, '--strict-mcp-config']
+        : ['--permission-mode', 'auto']),
+      '--settings', JSON.stringify(claudeSettings(role, repository, runDirectory)),
+    ], { cwd: repository, input: prompt, encoding: 'utf8', stdio: ['pipe', 'pipe', log], timeout: timeoutMs,
+      killSignal: 'SIGKILL', shell: false, maxBuffer: 64 * 1024 * 1024 });
+    if (result.stdout) writeFileSync(join(stageDirectory, 'output.json'), result.stdout, { mode: 0o600 });
+    const report = result.error || result.status !== 0 ? undefined : claudeReport(result.stdout);
+    if (report === undefined) {
+      writeFileSync(join(stageDirectory, 'error.txt'), result.error?.message
+        ?? (result.status !== 0 ? `Executor exited with ${result.status ?? result.signal}` : 'Executor returned no successful JSON result'), { mode: 0o600 });
+      throw new Error('Claude Code execution did not complete successfully');
+    }
+    writeFileSync(join(stageDirectory, 'report.md'), report, { mode: 0o600 });
+    return report;
+  });
 }
 
 type SavedRun = {
@@ -429,6 +525,7 @@ type SavedRun = {
   verificationRequired: boolean;
   maxRepairRounds: number;
   checkpoint: Checkpoint | null;
+  executor?: Executor; // Absent in states written before executor selection: Codex.
 };
 
 function writeState(runDirectory: string, state: SavedRun): void {
@@ -450,7 +547,9 @@ Execution authorizes standard commit, push and PR publication; never merge or cl
   --stage-timeout-seconds <n>     Executor timeout per stage (default: 1800)
   --repo <directory>             Repository root (default: this script's repository)
   --base <remote-tracking-ref>   Intended PR base (default: origin/main; local branches rejected)
+  --executor <codex|claude>      Stage executor: Codex CLI or Claude Code (default: codex)
   --codex <executable>           Codex CLI executable (default: codex on PATH)
+  --claude <executable>          Claude Code CLI executable (default: claude on PATH)
   --help                         Show this help
 `;
 
@@ -459,20 +558,24 @@ export async function main(args: string[]): Promise<number> {
     resume: { type: 'string' }, 'human-evidence': { type: 'string' },
     task: { type: 'string' }, 'dry-run': { type: 'boolean' }, 'skip-verification': { type: 'boolean' },
     'max-repair-rounds': { type: 'string', default: '3' }, 'stage-timeout-seconds': { type: 'string', default: '1800' },
-    repo: { type: 'string' }, base: { type: 'string', default: 'origin/main' }, codex: { type: 'string', default: 'codex' }, help: { type: 'boolean' },
+    repo: { type: 'string' }, base: { type: 'string', default: 'origin/main' }, executor: { type: 'string' },
+    codex: { type: 'string', default: 'codex' }, claude: { type: 'string', default: 'claude' }, help: { type: 'boolean' },
   } });
   if (values.help) { console.log(HELP); return 0; }
-  if (values.resume && (values.task !== undefined || values.repo !== undefined || values['skip-verification']
+  if (values.resume && (values.task !== undefined || values.repo !== undefined || values['skip-verification'] || values.executor !== undefined
       || args.some(arg => /^(--base|--max-repair-rounds)(=|$)/.test(arg)))) {
-    throw new Error('Resume preserves task, repository, base and verification/repair policy; do not override them');
+    throw new Error('Resume preserves task, repository, base, executor and verification/repair policy; do not override them');
   }
+  if (values.executor !== undefined && !isExecutor(values.executor)) throw new Error('--executor must be codex or claude');
   if (values['human-evidence'] && !values.resume) throw new Error('--human-evidence requires --resume');
   const saved = values.resume ? JSON.parse(readFileSync(join(resolve(values.resume), 'state.json'), 'utf8')) as SavedRun : undefined;
   if (saved && (saved.version !== 1 || typeof saved.repository !== 'string' || typeof saved.branch !== 'string'
       || typeof saved.task !== 'string' || typeof saved.baseRef !== 'string' || typeof saved.prBase !== 'string'
-      || typeof saved.baseRevision !== 'string' || saved.verificationRequired !== true || !saved.checkpoint)) {
+      || typeof saved.baseRevision !== 'string' || saved.verificationRequired !== true || !saved.checkpoint
+      || (saved.executor !== undefined && !isExecutor(saved.executor)))) {
     throw new Error('Run has no resumable verification checkpoint');
   }
+  const executor: Executor = saved ? saved.executor ?? 'codex' : (values.executor as Executor | undefined) ?? 'codex';
   const task = saved?.task ?? values.task;
   if (!task?.trim()) throw new Error('--task is required');
   const maxRepairRounds = saved?.maxRepairRounds ?? Number(values['max-repair-rounds']);
@@ -491,8 +594,8 @@ export async function main(args: string[]): Promise<number> {
   const humanEvidence = values['human-evidence'] ? readFileSync(resolve(values['human-evidence']), 'utf8') : undefined;
   if (humanEvidence !== undefined && (!humanEvidence.trim() || humanEvidence.length > 65536)) throw new Error('Human evidence must contain 1 to 65536 characters');
   if (values['dry-run']) {
-    console.log(JSON.stringify({ task, verificationRequired, maxRepairRounds, base: baseRef,
-      stages: (saved ? ['VERIFY', 'DELIVER'] : ['IMPLEMENT', 'REVIEW', ...(verificationRequired ? ['VERIFY'] : []), 'DELIVER']).map(stage => ({ stage, ...ROLES[stage as Stage] })),
+    console.log(JSON.stringify({ task, executor, verificationRequired, maxRepairRounds, base: baseRef,
+      stages: (saved ? ['VERIFY', 'DELIVER'] : ['IMPLEMENT', 'REVIEW', ...(verificationRequired ? ['VERIFY'] : []), 'DELIVER']).map(stage => ({ stage, ...roleFor(executor, stage as Stage) })),
       repair: 'REVIEW FINDINGS or VERIFY FAIL -> IMPLEMENT_FIXES -> REVIEW', stop: 'After DELIVER; human merge only',
     }, null, 2));
     return 0;
@@ -518,14 +621,16 @@ export async function main(args: string[]): Promise<number> {
     // Consume the checkpoint before invoking a model. A crash or unknown result
     // cannot replay verification/delivery from a stale successful gate.
     const state: SavedRun = { version: 1, repository, branch: branch(), task, baseRef: base.baseRef,
-      prBase: base.prBase, baseRevision: base.baseRevision, verificationRequired, maxRepairRounds, checkpoint: null };
+      prBase: base.prBase, baseRevision: base.baseRevision, verificationRequired, maxRepairRounds, checkpoint: null, executor };
     writeState(runDirectory, state);
     console.log(`Private run directory: ${runDirectory}`);
     result = await runWorkflow({ task, baseRef: base.baseRef, prBase: base.prBase, baseRevision: base.baseRevision,
       beforeDelivery: base.assertFresh, verificationRequired, maxRepairRounds,
       checkpoint: saved?.checkpoint ?? undefined, humanEvidence,
       computeCandidate: () => computeCandidateIdentity(repository, base.baseRevision),
-      runStage: createCodexRunner({ repository, runDirectory, command: [values.codex!], timeoutMs: timeoutSeconds * 1000 }),
+      runStage: executor === 'claude'
+        ? createClaudeRunner({ repository, runDirectory, command: [values.claude!], timeoutMs: timeoutSeconds * 1000 })
+        : createCodexRunner({ repository, runDirectory, command: [values.codex!], timeoutMs: timeoutSeconds * 1000 }),
     });
     writeFileSync(join(runDirectory, 'result.json'), JSON.stringify(result, null, 2), { mode: 0o600 });
     writeState(runDirectory, { ...state, branch: branch(), checkpoint: result.checkpoint ?? null });

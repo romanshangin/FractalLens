@@ -2,14 +2,24 @@
 
 The local TypeScript runner selects workflow stages with a deterministic state
 machine. It uses no manager model, runtime dependencies, parallel agents, automatic
-merge, or automatic recovery from unknown results.
+merge, or automatic recovery from unknown results. Stages run through the Codex
+CLI (default) or Claude Code (`--executor claude`).
 
 ## Requirements and launch
 
-Use Node.js 24 or later (native TypeScript type stripping), Git, and an
-authenticated Codex CLI that supports `exec`, `--approve-for-me`, `--ephemeral`,
-and `--output-last-message`. GitHub access is needed by the delivery executor.
-The application build and Maven dependencies are unchanged.
+Use Node.js 24 or later (native TypeScript type stripping), Git, and one
+authenticated stage executor:
+
+- Codex CLI (default, `--executor codex`) that supports `exec`,
+  `--approve-for-me`, `--ephemeral`, and `--output-last-message`;
+- Claude Code CLI (`--executor claude`) that supports `--print`,
+  `--output-format json`, `--effort`, `--permission-mode auto|dontAsk`,
+  `--permission-prompts none`, `--no-session-persistence`, `--tools`,
+  `--strict-mcp-config`, `--disable-slash-commands` and `--settings`. Auto mode
+  must be available to the configured account.
+
+GitHub access is needed by the delivery executor. The application build and
+Maven dependencies are unchanged.
 
 For TypeScript checking and IntelliJ IDEA editor support, install the locked
 development-only Node.js type definitions:
@@ -43,11 +53,22 @@ Implementation establishes or reuses the task branch according to `AGENTS.md`;
 delivery does not create or reorganize branches. Run only one workflow at a time
 in a checkout and preserve unrelated user-owned work.
 
-Use `--repo` for another FractalLens checkout and `--codex` for an explicit CLI
-executable. Arguments are passed without a shell. On Windows, use the native
-Codex executable rather than a `.cmd` wrapper. Model IDs are passed exactly as
-listed below; availability depends on the configured Codex account. There is
-no silent model substitution.
+Execute the same workflow with Claude Code stage executors:
+
+```sh
+node scripts/orchestration/task-orchestrator.ts --executor claude --task "P2.3 - Task description"
+```
+
+The state machine, handoffs, repair budget, candidate identity, check harness,
+resume and delivery gates are shared; only the stage executor, role models and
+the skill binding line of the prompt differ. One run uses one executor for all
+stages.
+
+Use `--repo` for another FractalLens checkout, and `--codex` or `--claude` for
+an explicit CLI executable. Arguments are passed without a shell. On Windows,
+use the native executable rather than a `.cmd` wrapper. Model IDs are passed
+exactly as listed below; availability depends on the configured account. There
+is no silent model substitution.
 Use `--base` to select the intended remote-tracking PR-base ref (default: `origin/main`).
 Remote-tracking refs such as `origin/release-2` or
 `refs/remotes/origin/release-2` are refreshed from their configured remote before
@@ -68,12 +89,20 @@ branch; it can still advance after the check.
 
 ## Roles and transitions
 
-| Stage | Skill | Model | Reasoning effort | Sandbox | Escalation |
-| --- | --- | --- | --- | --- | --- |
-| IMPLEMENT / IMPLEMENT_FIXES | `implement-task` | `gpt-6.1-sol` | medium | workspace-write | allowed |
-| REVIEW | `review-task` | `gpt-6.1-sol` | medium | read-only | never |
-| VERIFY | `verify-task` | `gpt-6-luna` | medium | workspace-write | never |
-| DELIVER | `deliver-task` | `gpt-6-luna` | low | workspace-write | allowed |
+| Stage | Skill | Codex model | Claude Code model | Reasoning effort | Sandbox | Escalation |
+| --- | --- | --- | --- | --- | --- | --- |
+| IMPLEMENT / IMPLEMENT_FIXES | `implement-task` | `gpt-6.1-sol` | `claude-opus-5-5` | medium | workspace-write | allowed |
+| REVIEW | `review-task` | `gpt-6.1-sol` | `claude-opus-5-5` | medium | read-only | never |
+| VERIFY | `verify-task` | `gpt-6-luna` | `claude-sonnet-5-5` | medium | workspace-write | never |
+| DELIVER | `deliver-task` | `gpt-6-luna` | `claude-sonnet-5-5` | low | workspace-write | allowed |
+
+Every executor is bound to the shared skill file
+`.agents/skills/<skill>/SKILL.md`. Codex prompts use its `$skill` mention;
+Claude Code prompts tell the model to read that file in full, because the
+`.claude/skills` wrappers for `verify-task` and `deliver-task` disable model
+invocation and Claude Code stages run with skills and slash commands disabled.
+
+### Codex permissions
 
 REVIEW and VERIFY receive their explicit `--sandbox` setting and
 `approval_policy="never"`, without `--approve-for-me`. IMPLEMENT,
@@ -87,10 +116,45 @@ Checks needing unavailable network, desktop or other access remain `INCOMPLETE`;
 VERIFY cannot escalate. Sandbox policies govern local commands; external MCP
 servers and connectors have separate controls.
 
+### Claude Code permissions
+
+Every Claude Code stage runs `claude --print --output-format json` with the
+role's `--model` and `--effort`, `--no-session-persistence`,
+`--permission-prompts none` (anything that would prompt is denied),
+`--disable-slash-commands`, `--disallowedTools Agent` (no subagents) and
+`--settings` with `autoMemoryEnabled=false`, so stages neither read nor write
+saved Claude Code memories.
+
+- IMPLEMENT, IMPLEMENT_FIXES and DELIVER use `--permission-mode auto`: the
+  auto-mode classifier reviews tool calls instead of a person, the equivalent
+  of Codex `--approve-for-me`. The user's own sandbox, permission and MCP
+  settings apply.
+- REVIEW and VERIFY use `--permission-mode dontAsk` with only the `Bash`,
+  `Read`, `Grep` and `Glob` tools (no `Edit`, `Write`, `NotebookEdit`, `Agent`
+  or web tools) and `--strict-mcp-config`, which loads no MCP servers. Bash runs
+  in the Claude Code sandbox with `failIfUnavailable=true` and
+  `allowUnsandboxedCommands=false`: a missing sandbox stops the stage instead
+  of running unsandboxed, and commands cannot request an unsandboxed retry.
+  REVIEW denies sandboxed writes to the repository and the private run
+  directory; VERIFY keeps the default write scope (the repository) and may
+  also write the private run directory, which holds the check registry and
+  logs. Sandboxed network access is limited to configured domains, so checks
+  needing other network access remain `INCOMPLETE`, as with Codex.
+
+The Claude Code sandbox is available on macOS, Linux and WSL; on other
+platforms REVIEW and VERIFY stop as `INCOMPLETE`. Flag settings combine with
+user and managed settings: sandbox `excludedCommands`, allowed domains or
+managed policies from those files still apply and are trusted local
+configuration. Like the Codex sandbox, this governs local commands, not an
+attestation that a stage behaved as instructed.
+
 Each invocation starts a fresh ephemeral CLI session with the task and only the
-latest relevant handoffs. The runner reads the final message file; CLI progress
-and diagnostic output cannot select a state. Its first nonempty line must be a
-bare role status, such as `CLEAN`, without Markdown decoration or other text.
+latest relevant handoffs. The Codex runner reads the final message file; the
+Claude Code runner reads only the `result` field of the JSON object on stdout
+and requires `type=result`, `subtype=success` and `is_error=false`. CLI
+progress, stderr and diagnostic output cannot select a state. The first
+nonempty line of the report must be a bare role status, such as `CLEAN`,
+without Markdown decoration or other text.
 
 Handoffs contain only the evidence needed by the next role:
 
@@ -218,7 +282,7 @@ version/path, Java and Maven version-probe output, command executable bytes and
 selected tool/runtime variables are hashed. The variable set covers PATH/PATHEXT,
 JAVA/JDK/MAVEN/MVN settings, CLASSPATH, NODE settings, LD/DYLD settings, locale,
 timezone and display identifiers. Values and raw version-probe output remain
-inside a private digest. Unrelated per-role Codex identifiers do not invalidate
+inside a private digest. Unrelated per-role Codex or Claude Code identifiers do not invalidate
 reuse. Environment mismatches cause fresh execution, even for portable checks.
 
 This v1 is a local automated-test cache, not an attestation service. It cannot
@@ -351,8 +415,11 @@ not create one; inspect private artifacts before deciding how to proceed.
 Each live run creates a private `fractallens-task-*` directory under the system
 temporary directory. Each invocation has a separate numbered directory with
 `prompt.txt`, `execution.log`, `report.md`, and an error file when applicable.
+Claude Code stages also keep the JSON result object, including usage and cost
+fields, in `output.json`; their `execution.log` holds stderr only.
 The run root contains `result.json` and atomically replaced `state.json`. No artifact directory is granted through
-`--add-dir`; the CLI host writes its own final-message file. Prompts prohibit
+`--add-dir`; the Codex CLI host writes its own final-message file and the
+Claude Code runner writes `report.md` from stdout. Prompts prohibit
 inspection of other roles' private prompts/logs. This limits supplied context,
 but is not a hard read-isolation boundary for processes under the same user.
 These files may contain private
@@ -367,8 +434,8 @@ the runner does not poll CI, repair CI failures, or make the human merge decisio
 ## Resume and human verification
 
 After VERIFY reports `INCOMPLETE`, the run's private `state.json` retains the
-task, repository and branch, frozen remote base, verification policy, shared
-repair budget, complete stage history, candidate identity and `nextStage=VERIFY`.
+task, repository and branch, frozen remote base, executor, verification policy,
+shared repair budget, complete stage history, candidate identity and `nextStage=VERIFY`.
 For example, a review repair followed by missing UI acceptance retains:
 
 ```text
@@ -402,8 +469,9 @@ failure requiring fixes.
 
 Resume refreshes the remote base and requires the same base SHA, named branch,
 and candidate fingerprint before invoking any model. Changes require fresh
-review and verification. Task, repository, base, verification policy and repair
-limit cannot be overridden on resume; CLI executable and timeout may be changed.
+review and verification. Task, repository, base, executor, verification policy
+and repair limit cannot be overridden on resume; CLI executable and timeout may
+be changed. States written before executor selection resume with Codex.
 `--dry-run` displays the resumed plan without fetching, consuming the checkpoint
 or invoking models. It does not establish current candidate/base freshness.
 
@@ -425,7 +493,8 @@ node --test scripts/orchestration/test_validation_evidence.ts
 Tests use synthetic handoffs and fake CLI processes. They check routing, shared
 repair limits, historical finding preservation, compact handoffs, candidate
 code-owned identity, per-invocation artifact directories, role/model/effort and
-sandbox/approval arguments, strict status parsing (trailing whitespace on the
+sandbox/approval arguments for both executors, Claude Code JSON result parsing,
+strict status parsing (trailing whitespace on the
 status line is accepted; decorations are not), exception messages, timeout, and dry-run
 behavior. Temporary Git fixtures check hashing, ignored outputs, staging/commit
 invariance, file modes, symlinks, unrelated work preservation, remote base refresh,
@@ -440,8 +509,11 @@ perform no Git delivery. They do not establish live model availability,
 authentication, real role behavior, PR creation, CI results, or desktop access.
 This test command is separate from Maven and is not currently wired into CI.
 
-The CLI adapter follows the official
+The Codex adapter follows the official
 [non-interactive Codex documentation](https://developers.openai.com/codex/noninteractive)
-for execution and final-message output, with flags checked against the local
-CLI help. Sandbox approvals still apply; v1 does not bypass them to obtain a
+for execution and final-message output. The Claude Code adapter follows the
+[headless mode](https://code.claude.com/docs/en/headless) and
+[sandboxing](https://code.claude.com/docs/en/sandboxing) documentation. Flags
+were checked against the local CLI help (Claude Code 2.1.311). Sandbox and
+permission approvals still apply; v1 does not bypass them to obtain a
 successful stage result.
