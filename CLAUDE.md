@@ -180,3 +180,5 @@ Benchmarks are opt-in Maven profiles; never wire them into the default build.
   that point to the shared files. `verify-task` and `deliver-task` run only when
   invoked explicitly (`/verify-task`, `/deliver-task`). Change workflow rules in
   `.agents/skills/`, and keep wrapper descriptions in sync.
+  `scripts/orchestration/task-orchestrator.ts --executor claude` runs the whole
+  workflow through Claude Code stages; the default executor is Codex.

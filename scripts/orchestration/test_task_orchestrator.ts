@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test, { type TestContext } from 'node:test';
-import { computeCandidateIdentity, createCodexRunner, main, parseStatus, prepareBase, ROLES, runWorkflow, stagePrompt } from './task-orchestrator.ts';
+import { CLAUDE_MODELS, computeCandidateIdentity, createClaudeRunner, createCodexRunner, main, parseStatus, prepareBase, ROLES, runWorkflow, stagePrompt } from './task-orchestrator.ts';
 import type { Request, Stage } from './task-orchestrator.ts';
 
 const BASE = { baseRef: 'origin/main', prBase: 'main', baseRevision: 'synthetic-base', beforeDelivery: () => {} };
@@ -329,6 +329,16 @@ test('stage prompts explicitly bind skills, skip policy and role boundaries', ()
   }
 });
 
+test('Claude prompts bind the shared skill file and otherwise match Codex prompts', () => {
+  for (const stage of Object.keys(ROLES) as Stage[]) {
+    const request = { ...BASE, stage, task: 'Synthetic task', verificationRequired: true, repairRound: 0, maxRepairRounds: 3, handoffs: [] };
+    const [binding, ...rest] = stagePrompt(request, '/project', 'claude').split('\n\n');
+    assert.equal(binding, `Read ${join('/project', '.agents/skills', ROLES[stage].skill, 'SKILL.md')} in full and follow it as the ${ROLES[stage].skill} workflow skill. Resolve relative links in it against its directory.`);
+    assert.ok(!rest.join('\n\n').includes(`$${ROLES[stage].skill}`));
+    assert.deepEqual(rest, stagePrompt(request, '/project').split('\n\n').slice(1));
+  }
+});
+
 test('implementation prompts separate developer validation from independent acceptance for both policies', () => {
   for (const stage of Object.keys(ROLES) as Stage[]) {
     for (const verificationRequired of [false, true]) {
@@ -444,6 +454,80 @@ test('nonzero exit, missing report, missing executable and timeout stop the work
   assert.equal((await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner })).status, 'INCOMPLETE');
 });
 
+test('Claude adapter selects requested models/efforts and permission boundaries and consumes only the JSON result', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'fractallens-claude-adapter-test-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repository = join(root, 'repository');
+  const runDirectory = join(root, 'run');
+  mkdirSync(repository);
+  mkdirSync(runDirectory);
+  const fake = join(root, 'fake executor.cjs');
+  writeFileSync(fake, `const fs = require('node:fs');
+const input = fs.readFileSync(0, 'utf8');
+const stage = input.match(/Execute only stage ([A-Z_]+)/)[1];
+fs.writeFileSync(require('node:path').join(${JSON.stringify(root)}, stage + '.json'), JSON.stringify({ args: process.argv.slice(2), input, cwd: process.cwd() }));
+console.error('FAIL - stderr must never be parsed as the report');
+console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'CLEAN\\nSynthetic final report' }));
+`);
+  const runner = createClaudeRunner({ repository, runDirectory, command: [process.execPath, fake] });
+  for (const stage of Object.keys(ROLES) as Stage[]) {
+    assert.equal(await runner({ ...BASE, stage, task: 'Task with `literal` $symbols', verificationRequired: true, repairRound: 0, maxRepairRounds: 3, handoffs: [] }), 'CLEAN\nSynthetic final report');
+    const { args, input, cwd } = JSON.parse(readFileSync(join(root, `${stage}.json`), 'utf8'));
+    const value = (flag: string) => args[args.indexOf(flag) + 1];
+    assert.equal(realpathSync(cwd), repository);
+    assert.equal(value('--model'), CLAUDE_MODELS[stage].model);
+    assert.equal(value('--effort'), CLAUDE_MODELS[stage].effort);
+    assert.equal(value('--output-format'), 'json');
+    assert.equal(value('--permission-prompts'), 'none');
+    assert.equal(value('--disallowedTools'), 'Agent');
+    for (const flag of ['--print', '--no-session-persistence', '--disable-slash-commands']) assert.ok(args.includes(flag), flag);
+    const settings = JSON.parse(value('--settings'));
+    assert.equal(settings.autoMemoryEnabled, false);
+    if (ROLES[stage].escalation === 'never') {
+      assert.equal(value('--permission-mode'), 'dontAsk');
+      assert.equal(value('--tools'), 'Bash,Read,Grep,Glob');
+      assert.equal(value('--allowedTools'), 'Bash,Read,Grep,Glob');
+      assert.ok(args.includes('--strict-mcp-config'));
+      const { filesystem, ...sandbox } = settings.sandbox;
+      assert.deepEqual(sandbox, { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, autoAllowBashIfSandboxed: true });
+      assert.deepEqual(filesystem, stage === 'REVIEW'
+        ? { denyWrite: [`/${repository}`, `/${runDirectory}`] } : { allowWrite: [`/${runDirectory}`] });
+    } else {
+      assert.equal(value('--permission-mode'), 'auto');
+      assert.ok(!args.includes('--tools'));
+      assert.ok(!args.includes('--strict-mcp-config'));
+      assert.equal(settings.sandbox, undefined);
+    }
+    assert.ok(!args.some((arg: string) => /^--(dangerously|allow-dangerously|add-dir)/.test(arg) || arg === 'bypassPermissions'));
+    assert.ok(input.startsWith(`Read ${join(repository, '.agents/skills', ROLES[stage].skill, 'SKILL.md')} in full`));
+    assert.match(input, /Task with `literal` \$symbols/);
+    const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(name => name.includes(`-${stage}-`))!);
+    assert.equal(readFileSync(join(stageDirectory, 'report.md'), 'utf8'), 'CLEAN\nSynthetic final report');
+    assert.match(readFileSync(join(stageDirectory, 'execution.log'), 'utf8'), /stderr must never be parsed/);
+  }
+});
+
+test('Claude error results, malformed output, nonzero exit, missing executable and timeout stop the workflow', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'fractallens-claude-executor-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const fake = join(root, 'failure.cjs');
+  const output = (fields: object) => `console.log(${JSON.stringify(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'READY_FOR_REVIEW', ...fields }))});`;
+  for (const body of [output({ is_error: true }), output({ subtype: 'error_max_turns' }), output({ result: undefined }),
+    output({ type: 'assistant' }), 'console.log("READY_FOR_REVIEW")', `${output({})} process.exit(7);`, '', 'setInterval(() => {}, 1000)']) {
+    writeFileSync(fake, body);
+    const runDirectory = mkdtempSync(join(root, 'run-'));
+    const runner = createClaudeRunner({ repository: root, runDirectory, command: [process.execPath, fake], timeoutMs: 500 });
+    const result = await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner });
+    assert.equal(result.status, 'INCOMPLETE', body);
+    assert.equal(result.history.length, 0, body);
+    const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(name => name.includes('-IMPLEMENT-'))!);
+    assert.ok(readdirSync(stageDirectory).includes('error.txt'), body);
+    assert.ok(!readdirSync(stageDirectory).includes('report.md'), body);
+  }
+  const runner = createClaudeRunner({ repository: root, runDirectory: root, command: [join(root, 'missing-claude')] });
+  assert.equal((await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner })).status, 'INCOMPLETE');
+});
+
 test('CLI dry-run plans roles without executing Codex; invalid flags exit nonzero', async () => {
   const script = join(dirname(fileURLToPath(import.meta.url)), 'task-orchestrator.ts');
   for (const skip of [false, true]) {
@@ -455,7 +539,17 @@ test('CLI dry-run plans roles without executing Codex; invalid flags exit nonzer
     assert.equal(plan.stages[1].model, 'gpt-6.1-sol');
     assert.equal(plan.stages.at(-1).model, 'gpt-6-luna');
     assert.deepEqual(plan.stages.map((item: { stage: string }) => item.stage), skip ? ['IMPLEMENT', 'REVIEW', 'DELIVER'] : ['IMPLEMENT', 'REVIEW', 'VERIFY', 'DELIVER']);
+    assert.equal(plan.executor, 'codex');
   }
+  const claude = spawnSync(process.execPath, [script, '--task', 'Synthetic', '--dry-run', '--executor', 'claude', '--claude', 'must-not-be-invoked'], { encoding: 'utf8' });
+  assert.equal(claude.status, 0, claude.stderr);
+  const plan = JSON.parse(claude.stdout);
+  assert.equal(plan.executor, 'claude');
+  for (const item of plan.stages as { stage: Stage; model: string; effort: string; sandbox: string; escalation: string }[]) {
+    assert.deepEqual([item.model, item.effort, item.sandbox, item.escalation],
+      [CLAUDE_MODELS[item.stage].model, CLAUDE_MODELS[item.stage].effort, ROLES[item.stage].sandbox, ROLES[item.stage].escalation]);
+  }
+  await assert.rejects(main(['--task', 'Synthetic', '--dry-run', '--executor', 'gemini']), /--executor must be codex or claude/);
   await assert.rejects(main(['--task', 'Synthetic', '--max-repair-rounds', '4']));
   await assert.rejects(main(['--task', 'Synthetic', '--stage-timeout-seconds', '0']));
   await assert.rejects(main(['--unknown']));
@@ -657,7 +751,7 @@ test('invalid checkpoint histories and stale candidates never invoke a resumed e
   assert.equal(stale.checkpoint, undefined);
 });
 
-function pausedCli(t: TestContext) {
+function pausedCli(t: TestContext, executor?: 'codex' | 'claude') {
   const fixture = remoteFixture(t);
   const { repository } = fixture;
   const root = dirname(repository);
@@ -674,19 +768,20 @@ const input = fs.readFileSync(0, 'utf8');
 const stage = input.match(/Execute only stage ([A-Z_]+)/)[1];
 const log = ${JSON.stringify(log)};
 const previous = fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '';
-fs.appendFileSync(log, JSON.stringify({stage, input}) + '\\n');
 const args = process.argv.slice(2);
+fs.appendFileSync(log, JSON.stringify({stage, input, executor: args.includes('--print') ? 'claude' : 'codex'}) + '\\n');
 let status = stage === 'REVIEW' ? (previous.includes('"stage":"REVIEW"') ? 'CLEAN' : 'FINDINGS')
   : stage === 'VERIFY' ? (input.includes('Manual acceptance passed') ? 'PASS' : 'INCOMPLETE')
   : stage === 'DELIVER' ? 'DELIVERED' : 'READY_FOR_REVIEW';
 const fence = String.fromCharCode(96).repeat(3);
 if (['CLEAN', 'PASS'].includes(status)) status += '\\n' + fence + 'delivery-handoff\\n' + JSON.stringify({checks:['Synthetic checks passed'], limitations:[]}) + '\\n' + fence;
-fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], status);
+if (args.includes('--print')) console.log(JSON.stringify({type: 'result', subtype: 'success', is_error: false, result: status}));
+else fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], status);
 `);
   chmodSync(fake, 0o755);
   const script = join(dirname(fileURLToPath(import.meta.url)), 'task-orchestrator.ts');
-  const cli = (...args: string[]) => spawnSync(process.execPath, [script, ...args, '--codex', fake], { encoding: 'utf8' });
-  const initial = cli('--repo', repository, '--task', 'Synthetic resume');
+  const cli = (...args: string[]) => spawnSync(process.execPath, [script, ...args, '--codex', fake, '--claude', fake], { encoding: 'utf8' });
+  const initial = cli('--repo', repository, '--task', 'Synthetic resume', ...(executor ? ['--executor', executor] : []));
   assert.equal(initial.status, 1, initial.stderr);
   const runDirectory = initial.stdout.match(/Private run directory: (.+)/)![1];
   t.after(() => rmSync(runDirectory, { recursive: true, force: true }));
@@ -699,9 +794,13 @@ fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], status);
 test('CLI resumes a private checkpoint from VERIFY and consumes it after delivery', t => {
   if (process.platform === 'win32') { t.skip('Executable fixture uses a POSIX shebang'); return; }
   const fixture = pausedCli(t);
-  const { cli, runDirectory, state, calls, root } = fixture;
+  const { cli, runDirectory, state, stateFile, calls, root } = fixture;
   assert.equal(state().checkpoint.repairRounds, 1);
   assert.equal(state().checkpoint.nextStage, 'VERIFY');
+  assert.equal(state().executor, 'codex');
+  // States written before executor selection have no executor field and resume with Codex.
+  const { executor: _executor, ...legacy } = state();
+  writeFileSync(stateFile, JSON.stringify(legacy, null, 2));
   const snapshot = readFileSync(join(runDirectory, 'state.json'), 'utf8');
   const dryRun = cli('--resume', runDirectory, '--dry-run');
   assert.equal(dryRun.status, 0, dryRun.stderr);
@@ -717,16 +816,41 @@ test('CLI resumes a private checkpoint from VERIFY and consumes it after deliver
   assert.equal(resumed.status, 0, resumed.stderr);
   assert.deepEqual(calls().map(call => call.stage), ['IMPLEMENT', 'REVIEW', 'IMPLEMENT_FIXES', 'REVIEW', 'VERIFY', 'VERIFY', 'VERIFY', 'DELIVER']);
   assert.equal(state().checkpoint, null);
+  assert.ok(calls().every(call => call.executor === 'codex'));
   const before = calls().length;
   assert.equal(cli('--resume', runDirectory).status, 1);
   assert.equal(calls().length, before, 'Completed delivery must never replay');
+});
+
+test('CLI runs and resumes a Claude Code workflow with the executor saved in its checkpoint', t => {
+  if (process.platform === 'win32') { t.skip('Executable fixture uses a POSIX shebang'); return; }
+  const { cli, runDirectory, state, calls, root } = pausedCli(t, 'claude');
+  assert.equal(state().executor, 'claude');
+  assert.equal(state().checkpoint.nextStage, 'VERIFY');
+  assert.ok(readdirSync(runDirectory).some(name => /^\d+-REVIEW-/.test(name)
+    && readFileSync(join(runDirectory, name, 'output.json'), 'utf8').includes('"type":"result"')));
+  const dryRun = cli('--resume', runDirectory, '--dry-run');
+  assert.equal(dryRun.status, 0, dryRun.stderr);
+  const plan = JSON.parse(dryRun.stdout);
+  assert.equal(plan.executor, 'claude');
+  assert.equal(plan.stages[0].model, CLAUDE_MODELS.VERIFY.model);
+  assert.equal(cli('--resume', runDirectory, '--executor', 'codex').status, 1);
+  const evidence = join(root, 'manual-evidence.md');
+  writeFileSync(evidence, 'Manual acceptance passed: macOS; focus, Apply, Cancel and Escape checked.');
+  const resumed = cli('--resume', runDirectory, '--human-evidence', evidence);
+  assert.equal(resumed.status, 0, resumed.stderr);
+  assert.deepEqual(calls().map(call => call.stage), ['IMPLEMENT', 'REVIEW', 'IMPLEMENT_FIXES', 'REVIEW', 'VERIFY', 'VERIFY', 'DELIVER']);
+  assert.ok(calls().every(call => call.executor === 'claude'));
+  assert.ok(calls().every(call => call.input.startsWith('Read ')));
+  assert.equal(state().executor, 'claude');
+  assert.equal(state().checkpoint, null);
 });
 
 test('CLI rejects changed source, branch, remote base, locked runs and policy overrides before execution', t => {
   if (process.platform === 'win32') { t.skip('Executable fixture uses a POSIX shebang'); return; }
   const { cli, runDirectory, calls, repository, git, root } = pausedCli(t);
   const before = calls().length;
-  for (const args of [['--skip-verification'], ['--task', 'Other'], ['--max-repair-rounds=3'], ['--base', 'origin/main'], ['--repo', repository]]) {
+  for (const args of [['--skip-verification'], ['--task', 'Other'], ['--max-repair-rounds=3'], ['--base', 'origin/main'], ['--repo', repository], ['--executor', 'codex']]) {
     assert.equal(cli('--resume', runDirectory, ...args).status, 1);
   }
   mkdirSync(join(runDirectory, 'active.lock'));
