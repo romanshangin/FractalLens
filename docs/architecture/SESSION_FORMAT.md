@@ -32,7 +32,8 @@ location while both applications are closed. The scene schema is unchanged.
   when absent from older version 2 sessions);
 - palette identity, editable ARGB stops, color scale, offset, histogram mode
   and orbit trap;
-- interactive antialiasing render mode.
+- interactive antialiasing render modes for standard zoom (`renderMode`) and
+  deep zoom (`deepZoomRenderMode`): `BASE_ONLY`, `FAST` or `REFINED`.
 
 Interactive antialiasing always samples a regular subpixel grid. The
 `antialiasing.samplingPattern` field is still written as `REGULAR` because
@@ -40,6 +41,17 @@ version 2 readers released before the deterministic-jitter pattern was removed
 require it. On read the field is optional; the removed `DETERMINISTIC_JITTER`
 value is accepted and renders with the regular grid, and any other value is
 rejected.
+
+`BASE_ONLY` was added to version 2 without a schema change. Existing `FAST` and
+`REFINED` scenes keep their identifiers and behavior. Readers released before
+`BASE_ONLY` reject a scene that uses it as `renderMode` instead of applying it
+partially; scenes with the earlier values remain readable by those releases.
+
+`antialiasing.deepZoomRenderMode` was also added to version 2 without a schema
+change. It is optional on read; a scene without it uses `BASE_ONLY`, which keeps
+the earlier default of no deep zoom antialiasing. An unknown value is rejected.
+Readers released before this field ignore it, so they open such a scene with
+deep zoom antialiasing off.
 
 Decimal viewport values are strings so parsing never passes through binary
 floating point. Enum values use stable Java enum identifiers rather than

@@ -49,6 +49,21 @@ public final class ValidityMask {
         }
     }
 
+    /** Marks a region ready and returns how many of its pixels were not ready before. */
+    public synchronized int markReadyCountingNew(RenderRegion region) {
+        validateRegion(region);
+        int added = 0;
+        for (int y = region.y(); y < region.y() + region.height(); y++) {
+            int from = y * width + region.x();
+            int to = from + region.width();
+            for (int index = ready.nextClearBit(from); index < to; index = ready.nextClearBit(index + 1)) {
+                added++;
+            }
+            ready.set(from, to);
+        }
+        return added;
+    }
+
     public synchronized boolean isReady(
             int x,
             int y
@@ -144,6 +159,18 @@ public final class ValidityMask {
 
     public synchronized void clear() {
         ready.clear();
+    }
+
+    /** Replaces this mask with an equally sized source mask. */
+    public void copyFrom(ValidityMask source) {
+        if (source.width != width || source.height != height) {
+            throw new IllegalArgumentException("Validity mask dimensions do not match");
+        }
+        BitSet sourceReady = source.readyBitsCopy();
+        synchronized (this) {
+            ready.clear();
+            ready.or(sourceReady);
+        }
     }
 
     public synchronized ValidityMask copy() {

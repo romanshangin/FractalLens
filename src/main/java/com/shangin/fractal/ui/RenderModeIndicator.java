@@ -1,6 +1,8 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.controller.RenderStatus;
+import com.shangin.fractal.scene.AntialiasSettings;
+import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.geometry.Insets;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
@@ -25,7 +27,7 @@ final class RenderModeIndicator extends Label {
     private final Tooltip details = new Tooltip();
     private String exportStatus = "";
     private boolean deepZoom;
-    private boolean deepAntialiasing;
+    private AntialiasSettings antialiasing = new AntialiasSettings();
     private RenderStatus status = new RenderStatus(RenderStatus.State.IDLE, 0);
     private double progress;
     private BigDecimal zoom = BigDecimal.ONE;
@@ -63,12 +65,11 @@ final class RenderModeIndicator extends Label {
 
     void setDeepZoom(boolean active) {
         deepZoom = active;
-        if (!active) deepAntialiasing = false;
         update();
     }
 
-    void setDeepAntialiasing(boolean enabled) {
-        deepAntialiasing = deepZoom && enabled;
+    void setAntialiasSettings(AntialiasSettings antialiasing) {
+        this.antialiasing = Objects.requireNonNull(antialiasing);
         update();
     }
 
@@ -103,8 +104,8 @@ final class RenderModeIndicator extends Label {
         String mode = deepZoom ? "Deep Zoom" : "Standard";
         String state = switch (status.state()) {
             case IDLE -> "Waiting";
-            case RENDERING -> progress >= 1.0 ? "Refining…"
-                    : "Rendering " + (int) (progress * 100) + "%";
+            // Progress covers the whole frame, including any antialiasing pass.
+            case RENDERING -> "Rendering " + (int) (progress * 100) + "%";
             case COMPLETE -> "Complete " + formatElapsed(status.elapsedNanos());
             case CANCELLED -> "Interrupted";
             case FAILED -> "Failed";
@@ -119,15 +120,19 @@ final class RenderModeIndicator extends Label {
         String description = deepZoom
                 ? "High-precision rendering for deep magnification."
                 : "Standard-precision rendering.";
-        String antialiasing = deepZoom
-                ? (deepAntialiasing
-                    ? "Deep Zoom Antialiasing is on: an additional smoothing pass follows the base render."
-                    : "Deep Zoom Antialiasing is off: only the fast base render is calculated.")
-                : "Antialiasing is included in the render.";
+        String antialiasingText = switch (activeMode()) {
+            case BASE_ONLY -> "Antialiasing is off: only the base render is calculated.";
+            case FAST -> "An antialiasing pass follows the visible base render.";
+            case REFINED -> "Only antialiased tiles are displayed.";
+        };
         String values = "Zoom: " + RenderValueFormat.zoom(zoom)
                 + "\nIterations: " + RenderValueFormat.iterations(iterations);
-        details.setText(description + "\n" + antialiasing + "\n\n" + values);
-        setAccessibleText(getText() + ". " + antialiasing + " " + values.replace('\n', ' '));
+        details.setText(description + "\n" + antialiasingText + "\n\n" + values);
+        setAccessibleText(getText() + ". " + antialiasingText + " " + values.replace('\n', ' '));
+    }
+
+    private InteractiveRenderMode activeMode() {
+        return deepZoom ? antialiasing.deepZoomRenderMode() : antialiasing.renderMode();
     }
 
     static String formatElapsed(long nanos) {

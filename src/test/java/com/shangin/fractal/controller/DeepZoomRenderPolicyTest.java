@@ -4,9 +4,12 @@ import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.RenderTarget;
+import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,26 +26,24 @@ class DeepZoomRenderPolicyTest {
         assertTrue(DeepZoomRenderPolicy.isDeepZoom(scene, new RenderTarget(2600, 1675)));
     }
 
-    @Test
-    void deepMandelbrotUsesFastBasePresentationBeforeOptionalPreciseRefinement() {
-        FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+    @ParameterizedTest
+    @EnumSource(FractalPreset.class)
+    void deepZoomUsesTheSceneDeepZoomModeAndKeepsBaseOnlyByDefault(FractalPreset preset) {
+        FractalScene scene = FractalScene.create(preset, PalettePreset.ICE)
                 .withViewport(new Viewport("-0.8267486182939549503119853330756",
                         "0.2150828768422976562284460839629", "1e-16"));
+        if (!preset.supportsDeepZoom()) {
+            assertFalse(DeepZoomRenderPolicy.isDeepZoom(scene, TARGET));
+            return;
+        }
 
         assertTrue(DeepZoomRenderPolicy.isDeepZoom(scene, TARGET));
-        assertEquals(InteractiveRenderMode.FAST,
-                DeepZoomRenderPolicy.presentationMode(scene, TARGET));
-    }
-
-    @Test
-    void deepJuliaUsesFastBasePresentationBeforeOptionalPreciseRefinement() {
-        FractalScene scene = FractalScene.create(FractalPreset.JULIA, PalettePreset.ICE)
-                .withViewport(new Viewport("-0.8267486182939549503119853330756",
-                        "0.2150828768422976562284460839629", "1e-16"));
-
-        assertTrue(DeepZoomRenderPolicy.isDeepZoom(scene, TARGET));
-        assertEquals(InteractiveRenderMode.FAST,
-                DeepZoomRenderPolicy.presentationMode(scene, TARGET));
+        assertEquals(InteractiveRenderMode.BASE_ONLY, DeepZoomRenderPolicy.presentationMode(scene, TARGET));
+        for (InteractiveRenderMode mode : InteractiveRenderMode.values()) {
+            FractalScene selected = scene.withAntialiasing(
+                    new AntialiasSettings(InteractiveRenderMode.REFINED, mode));
+            assertEquals(mode, DeepZoomRenderPolicy.presentationMode(selected, TARGET), mode.name());
+        }
     }
 
     @Test
@@ -50,7 +51,9 @@ class DeepZoomRenderPolicyTest {
         FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE);
 
         assertFalse(DeepZoomRenderPolicy.isDeepZoom(scene, TARGET));
-        assertEquals(scene.antialiasing().renderMode(),
-                DeepZoomRenderPolicy.presentationMode(scene, TARGET));
+        for (InteractiveRenderMode mode : InteractiveRenderMode.values()) {
+            FractalScene selected = scene.withAntialiasing(new AntialiasSettings(mode, InteractiveRenderMode.REFINED));
+            assertEquals(mode, DeepZoomRenderPolicy.presentationMode(selected, TARGET), mode.name());
+        }
     }
 }

@@ -4,7 +4,7 @@ import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 
-/** Selects the progressive presentation used while deep zoom renders. */
+/** Selects the scene's standard or deep zoom presentation for a render target. */
 final class DeepZoomRenderPolicy {
 
     private DeepZoomRenderPolicy() {
@@ -20,7 +20,7 @@ final class DeepZoomRenderPolicy {
             RenderTarget target
     ) {
         return isDeepZoom(scene, target)
-                ? InteractiveRenderMode.FAST
+                ? scene.antialiasing().deepZoomRenderMode()
                 : scene.antialiasing().renderMode();
     }
 }

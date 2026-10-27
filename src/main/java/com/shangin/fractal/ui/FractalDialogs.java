@@ -7,6 +7,7 @@ import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import javafx.event.ActionEvent;
@@ -15,6 +16,8 @@ import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Button;
 import javafx.scene.control.Alert;
+import javafx.collections.FXCollections;
+import javafx.scene.control.ComboBox;
 import javafx.css.PseudoClass;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -27,6 +30,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -287,6 +291,69 @@ final class FractalDialogs {
         return dialog;
     }
 
+    static Optional<AntialiasSettings> settings(Window owner, AntialiasSettings current) {
+        return settingsDialog(owner, current).showAndWait();
+    }
+
+    static Dialog<AntialiasSettings> settingsDialog(Window owner, AntialiasSettings current) {
+        Dialog<AntialiasSettings> dialog = new Dialog<>();
+        dialog.setTitle(SettingsWindow.TITLE);
+        Label hint = new Label(SettingsWindow.HINT);
+        hint.setWrapText(true);
+        hint.getStyleClass().add("dialog-hint");
+        VBox content = new VBox(10, hint);
+        List<ComboBox<String>> choices = new ArrayList<>();
+        GridPane section = null;
+        String sectionTitle = null;
+        for (SettingsWindow.ChoiceField field : SettingsWindow.fields(current)) {
+            if (!field.section().equals(sectionTitle)) {
+                sectionTitle = field.section();
+                section = new GridPane(12, 4);
+                Label title = new Label(sectionTitle);
+                title.getStyleClass().add("dialog-section");
+                VBox.setMargin(title, new javafx.geometry.Insets(8, 0, 0, 0));
+                content.getChildren().addAll(title, section);
+            }
+            ComboBox<String> choice = new ComboBox<>(FXCollections.observableArrayList(field.choices()));
+            choice.setId(field.id());
+            choice.getSelectionModel().select(field.selected());
+            choice.setMaxWidth(Double.MAX_VALUE);
+            GridPane.setHgrow(choice, Priority.ALWAYS);
+            Label fieldHint = new Label(field.hint());
+            fieldHint.setWrapText(true);
+            fieldHint.getStyleClass().add("dialog-hint");
+            Label fieldLabel = label(field.label(), choice);
+            // The wrapping hint shares the grid; keep the label column from collapsing.
+            fieldLabel.setMinWidth(Region.USE_PREF_SIZE);
+            int row = section.getRowCount();
+            section.addRow(row, fieldLabel, choice);
+            section.add(fieldHint, 1, row + 1);
+            GridPane.setMargin(fieldHint, new javafx.geometry.Insets(0, 0, 8, 0));
+            choices.add(choice);
+        }
+        content.getStyleClass().add("dialog-body");
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().setPrefWidth(520);
+        ButtonType reset = new ButtonType(SettingsWindow.RESET_TITLE, ButtonData.OTHER);
+        ButtonType apply = new ButtonType("Apply", ButtonData.OK_DONE);
+        DialogAppearance.install(dialog, owner, choices::getFirst);
+        DialogAppearance.buttons(dialog, apply, reset, ButtonType.CANCEL);
+        dialog.getDialogPane().lookupButton(reset).addEventFilter(ActionEvent.ACTION, event -> {
+            // Reset only changes the draft; Apply still decides whether the scene changes.
+            event.consume();
+            int[] defaults = SettingsWindow.defaultSelection();
+            for (int index = 0; index < choices.size(); index++) {
+                choices.get(index).getSelectionModel().select(defaults[index]);
+            }
+            choices.getFirst().requestFocus();
+        });
+        dialog.setResultConverter(button -> button == apply
+                ? SettingsWindow.selection(choices.stream()
+                        .mapToInt(choice -> choice.getSelectionModel().getSelectedIndex()).toArray())
+                : null);
+        return dialog;
+    }
+
     static Dialog<JuliaParameters> juliaParametersDialog(Window owner, JuliaParameters current) {
         Dialog<JuliaParameters> dialog = new Dialog<>();
         dialog.setTitle("Julia Parameters");
@@ -396,9 +463,11 @@ final class FractalDialogs {
                 + "On a trackpad, pinch to zoom and scroll with two fingers to pan.\n\n"
                 + "Use View to zoom, reset the view, enter coordinates, or go full screen.\n"
                 + "Choose a formula in Fractal, then use Go to for interesting places in that fractal.\n"
-                + "Choose a palette in Color and antialiasing in Render.\n"
+                + "Choose a palette in Color.\n"
                 + "Edit iteration settings in Render. For Julia, edit both constant components there; Reset to Defaults restores -0.8 and 0.156 before Apply.\n"
-                + "Deep Zoom Antialiasing becomes available when zooming deeply into Mandelbrot.\n"
+                + "Use File → Settings… to choose antialiasing separately for standard and deep zoom: "
+                + "Base only, Base, then antialiasing, or Antialiased display. "
+                + "Deep zoom applies when zooming deeply into Mandelbrot or Julia.\n"
                 + "Animate Palette is available when Histogram Coloring and Orbit Trap are off.\n\n"
                 + "Use File → Export PNG… to save the rendered image.";
 

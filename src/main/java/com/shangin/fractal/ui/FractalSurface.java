@@ -370,32 +370,51 @@ public final class FractalSurface extends Region {
                 && stagingRefinementValidity.isComplete();
     }
 
-    /** Applies one refined tile only when it belongs to the visible frame. */
-    public void applyAntialiasing(
+    /**
+     * Applies one refined tile only when it belongs to the visible frame.
+     * Returns the number of newly refined pixels, or zero when the tile is stale.
+     */
+    public int applyAntialiasing(
             RenderFrame frame,
             RenderRegion region,
             int[] colors
     ) {
         if (displayedRenderFrame != frame || displayedFrame == null) {
-            return;
+            return 0;
         }
         applyTile(displayedFrame, region, colors);
-        displayedRefinementValidity.markReady(region);
+        int refined = displayedRefinementValidity.markReadyCountingNew(region);
         latency.mark("aa_publish");
+        return refined;
     }
 
-    /** Publishes one quality-mode AA tile into the current staging frame. */
-    public void displayRefinedTile(
+    /**
+     * Publishes one quality-mode AA tile into the current staging frame.
+     * Returns the number of newly refined pixels, or zero when the tile is stale.
+     */
+    public int displayRefinedTile(
             RenderFrame frame,
             RenderRegion region,
             int[] colors
     ) {
         if (stagingRenderFrame != frame || stagingFrame == null) {
-            return;
+            return 0;
         }
         applyTile(stagingFrame, region, colors);
-        stagingRefinementValidity.markReady(region);
+        int refined = stagingRefinementValidity.markReadyCountingNew(region);
         latency.mark("aa_publish");
+        return refined;
+    }
+
+    /** Number of {@code frame}'s pixels that already show AA colors, without copying them. */
+    public int refinedPixelCount(RenderFrame frame) {
+        if (stagingRenderFrame == frame && stagingFrame != null && stagingRefinementValidity != null) {
+            return stagingRefinementValidity.readyPixelCount();
+        }
+        if (displayedRenderFrame == frame && displayedFrame != null && displayedRefinementValidity != null) {
+            return displayedRefinementValidity.readyPixelCount();
+        }
+        return 0;
     }
 
     /** Copies current refined colors and their validity for background AA reuse. */
@@ -628,6 +647,43 @@ public final class FractalSurface extends Region {
         displayedFrame.update();
     }
 
+    /** Replaces the visible frame's colors with its base colors and drops its AA pixels. */
+    public void showBaseColors(RenderFrame frame, ColoringStrategy coloring, FractalScene scene) {
+        if (displayedRenderFrame != frame || displayedFrame == null) {
+            return;
+        }
+        colorizer.color(frame.samplePlane(), displayedFrame.intBuffer(), coloring);
+        invalidateRefinement();
+        displayedScene = Objects.requireNonNull(scene);
+        displayedFrame.update();
+    }
+
+    /** Puts AA pixels hidden by Base only back on the visible frame, with their validity. */
+    public void restoreRefinement(RenderFrame frame, RefinedPixelSnapshot refined) {
+        if (displayedRenderFrame != frame || displayedFrame == null || displayedRefinementValidity == null
+                || refined.width() != displayedFrame.width() || refined.height() != displayedFrame.height()) {
+            return;
+        }
+        int[] pixels = displayedFrame.intBuffer().array();
+        int width = refined.width();
+        for (int y = 0; y < refined.height(); y++) {
+            for (int x = 0; x < width; x++) {
+                if (refined.isRefined(x, y)) {
+                    pixels[y * width + x] = refined.color(x, y);
+                }
+            }
+        }
+        displayedRefinementValidity.copyFrom(refined.validity());
+        displayedFrame.update();
+    }
+
+    /** Records that the visible frame now presents {@code scene}, which differs only in antialiasing. */
+    public void completePresentationChange(RenderFrame frame, FractalScene scene) {
+        if (displayedRenderFrame == frame) {
+            displayedScene = Objects.requireNonNull(scene);
+        }
+    }
+
     /** Atomically publishes a background-computed palette frame. */
     public void applyRecolor(
             RenderFrame frame,
@@ -650,6 +706,10 @@ public final class FractalSurface extends Region {
         }
         if (stagingRefinementValidity != null) {
             stagingRefinementValidity.clear();
+        }
+        // A retained preview can be reused later, so its AA pixels must not stay protected.
+        if (retainedProgressRefinementValidity != null) {
+            retainedProgressRefinementValidity.clear();
         }
     }
 

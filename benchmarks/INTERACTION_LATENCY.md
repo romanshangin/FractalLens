@@ -82,8 +82,10 @@ pipeline; the CSV's `requestedPipeline` is only the requested property value.
 Settings: `fractal.latency.samples` (10), `warmup` (2), logical `width` (1200),
 logical `height` (760), and comma-separated `gestures`
 (`wheel,wheel-burst,pinch,trackpad,drag`), all with the `fractal.latency.` prefix.
-Use a distinct output filename for each run. Modes run Refined then Fast. This is
-a diagnostic sequence, not a randomized paired optimization speedup comparison.
+Use a distinct output filename for each run. Modes run Refined then Fast; since
+P2.6 a Base only pass follows them (declaration order of `InteractiveRenderMode`).
+Runs recorded before P2.6 contain only Refined and Fast. This is a diagnostic
+sequence, not a randomized paired optimization speedup comparison.
 
 Each trial resets the normal Mandelbrot/ICE view and waits for rendering to settle.
 Pan/drag trials first zoom in twice, because the home view cannot pan beyond preset

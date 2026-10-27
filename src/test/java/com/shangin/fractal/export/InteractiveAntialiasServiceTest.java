@@ -473,6 +473,50 @@ class InteractiveAntialiasServiceTest {
     }
 
     @Test
+    void hiddenCachedSamplesAreExcludedFromRecolorAndReusedByTheNextRefinement() throws Exception {
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator(FractalPreset.MANDELBROT.createFormula()),
+                FractalPreset.MANDELBROT.defaultViewport(), 80, 60, 100));
+        SmoothPaletteColoring coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+
+        try (ParallelFractalCalculator calculator = new ParallelFractalCalculator(2);
+             InteractiveAntialiasService service = new InteractiveAntialiasService(
+                     new AntialiasSampleCache(), true)) {
+            calculator.calculate(frame, () -> false, ignored -> {});
+            refineWholeFrame(service, frame, coloring);
+            long firstPassSamples = service.lastProfile().samples();
+            assertTrue(firstPassSamples > 0, "The fixture must contain AA candidates");
+            int[] antialiased = service.recolorCached(frame, coloring);
+            int[] base;
+            try (InteractiveAntialiasService withoutSamples = new InteractiveAntialiasService()) {
+                base = withoutSamples.recolorCached(frame, coloring);
+            }
+            assertFalse(Arrays.equals(base, antialiased));
+
+            // Base only hides the finished samples from recoloring but keeps them.
+            service.showCachedSamples(false);
+            assertArrayEquals(base, service.recolorCached(frame, coloring));
+
+            // A later antialiasing mode publishes the same AA colors without new samples.
+            service.showCachedSamples(true);
+            refineWholeFrame(service, frame, coloring);
+            assertEquals(0, service.lastProfile().samples(), "Finished AA samples must not be recalculated");
+            assertArrayEquals(antialiased, service.recolorCached(frame, coloring));
+        }
+    }
+
+    private static void refineWholeFrame(InteractiveAntialiasService service, RenderFrame frame,
+                                         SmoothPaletteColoring coloring) throws InterruptedException {
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        service.refine(frame, coloring,
+                RefinedPixelSnapshot.empty(frame.samplePlane().width(), frame.samplePlane().height()),
+                Runnable::run, (region, colors) -> {}, completed::countDown, failure::set);
+        assertTrue(completed.await(15, TimeUnit.SECONDS));
+        assertNull(failure.get());
+    }
+
+    @Test
     void refinementShouldSkipAlreadyRefinedOverlap() throws Exception {
         AtomicInteger sampleCalculations = new AtomicInteger();
         int width = 40;

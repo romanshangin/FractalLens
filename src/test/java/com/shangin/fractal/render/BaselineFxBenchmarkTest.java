@@ -24,7 +24,7 @@ class BaselineFxBenchmarkTest {
     }
     @AfterAll static void stopFx() { Platform.exit(); }
 
-    @ParameterizedTest @EnumSource(InteractiveRenderMode.class)
+    @ParameterizedTest @EnumSource(value = InteractiveRenderMode.class, names = {"REFINED", "FAST"})
     void visibleMilestonesDistinguishHiddenRefinedBaseFromFastBase(InteractiveRenderMode mode) throws Exception {
         var backend = new TimedBackend();
         try (var ui = fx(Ui::new); var service = new FractalRenderService(backend); var aa = new InteractiveAntialiasService()) {

@@ -2,6 +2,8 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.scene.AntialiasSettings;
+import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import javafx.application.ColorScheme;
@@ -304,6 +306,101 @@ class FractalDialogsFxTest {
                 return null;
             });
         } finally { fx(() -> { cancelled.close(); return null; }); }
+    }
+
+    @Test void settingsShowRenderSectionWithStandardAndDeepZoomDropdowns() throws Exception {
+        var current = new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.BASE_ONLY);
+        var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
+        try {
+            fx(() -> { dialog.show(); return null; });
+            fx(() -> {
+                var pane = dialog.getDialogPane();
+                assertEquals("Settings", ((Stage) pane.getScene().getWindow()).getTitle());
+                assertTrue(pane.lookupAll(".dialog-section").stream()
+                        .anyMatch(node -> "Render Settings".equals(((Label) node).getText())));
+                var standard = settingsChoice(pane, SettingsWindow.STANDARD_ID);
+                var deep = settingsChoice(pane, SettingsWindow.DEEP_ID);
+                assertSame(standard, pane.getScene().getFocusOwner());
+                var titles = List.of("Base only", "Base, then antialiasing", "Antialiased display");
+                assertEquals(titles, standard.getItems());
+                assertEquals(titles, deep.getItems());
+                assertEquals("Antialiased display", standard.getValue());
+                assertEquals("Base only", deep.getValue());
+                assertFalse(deep.isDisabled(), "The deep zoom mode is editable at any zoom");
+                pane.getScene().getPreferences().setColorScheme(ColorScheme.LIGHT);
+                snapshot(dialog, "settings-light");
+                pane.getScene().getPreferences().setColorScheme(ColorScheme.DARK);
+                pane.applyCss();
+                assertEquals(Color.web("#292929"), pane.getBackground().getFills().getFirst().getFill());
+                snapshot(dialog, "settings-dark");
+                for (var node : pane.lookupAll(".label")) {
+                    if (node instanceof Label label && label.getLabelFor() instanceof ComboBox<?>) {
+                        assertEquals(label.prefWidth(-1), label.getWidth(), 0.5,
+                                "Field labels must not be truncated: " + label.getText());
+                    }
+                }
+                standard.getSelectionModel().select("Base only");
+                deep.getSelectionModel().select("Antialiased display");
+                primary(dialog).fire();
+                assertFalse(dialog.isShowing());
+                assertEquals(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED),
+                        dialog.getResult());
+                return null;
+            });
+        } finally { fx(() -> { dialog.close(); return null; }); }
+    }
+
+    @Test void settingsEnterAppliesAndEscapeOrCancelDiscardDraft() throws Exception {
+        var current = new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.BASE_ONLY);
+        for (String dismissal : List.of("escape", "cancel", "enter")) {
+            var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
+            try {
+                fx(() -> { dialog.show(); return null; });
+                fx(() -> {
+                    var pane = dialog.getDialogPane();
+                    settingsChoice(pane, SettingsWindow.STANDARD_ID).getSelectionModel().select("Antialiased display");
+                    settingsChoice(pane, SettingsWindow.DEEP_ID).getSelectionModel().select("Base, then antialiasing");
+                    switch (dismissal) {
+                        case "escape" -> escape(dialog);
+                        case "cancel" -> ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+                        default -> pane.getScene().getFocusOwner().fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,
+                                "\r", "", KeyCode.ENTER, false, false, false, false));
+                    }
+                    assertFalse(dialog.isShowing(), dismissal);
+                    assertEquals(dismissal.equals("enter")
+                            ? new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.FAST) : null,
+                            dialog.getResult(), dismissal);
+                    return null;
+                });
+            } finally { fx(() -> { dialog.close(); return null; }); }
+        }
+    }
+
+    @Test void settingsResetToDefaultsChangesOnlyTheDraft() throws Exception {
+        var current = new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED);
+        var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
+        try {
+            fx(() -> { dialog.show(); return null; });
+            fx(() -> {
+                var pane = dialog.getDialogPane();
+                var reset = pane.getButtonTypes().stream()
+                        .filter(type -> SettingsWindow.RESET_TITLE.equals(type.getText())).findFirst().orElseThrow();
+                ((Button) pane.lookupButton(reset)).fire();
+                assertTrue(dialog.isShowing(), "Reset must not close the window");
+                var standard = settingsChoice(pane, SettingsWindow.STANDARD_ID);
+                assertEquals("Antialiased display", standard.getValue());
+                assertEquals("Base only", settingsChoice(pane, SettingsWindow.DEEP_ID).getValue());
+                assertSame(standard, pane.getScene().getFocusOwner());
+                primary(dialog).fire();
+                assertEquals(new AntialiasSettings(), dialog.getResult());
+                return null;
+            });
+        } finally { fx(() -> { dialog.close(); return null; }); }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ComboBox<String> settingsChoice(DialogPane pane, String id) {
+        return (ComboBox<String>) pane.lookup("#" + id);
     }
 
     @Test void iterationEditorResetsBothFieldsAndAppliesOnlyValidValues() throws Exception {

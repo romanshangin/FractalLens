@@ -104,7 +104,8 @@ public final class RenderFrameCache {
         }
     }
 
-    private static boolean sameCalculatedFrame(RenderJob cached, RenderJob requested) {
+    /** True when both requests calculate identical samples, whatever their priority or preview coverage. */
+    public static boolean sameCalculatedFrame(RenderJob cached, RenderJob requested) {
         return cached.formula().equals(requested.formula())
                 && cached.sampleAccuracy() == requested.sampleAccuracy()
                 && cached.viewport().equals(requested.viewport())

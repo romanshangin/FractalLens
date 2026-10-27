@@ -218,25 +218,37 @@ delivery foundation should be completed first.
 - [ ] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
   exact fallback is a material user-visible cost.
 - [ ] **P2.6.** Add separate render settings and a user-selected antialiasing mode
-  for standard (non-deep) zoom. Gather Display Quality and
-  Deep Zoom Antialiasing into one render settings window instead of separate
-  Render menu items; on macOS it follows the P2.4 native-window rules with the
-  JavaFX fallback. Offer three standard-zoom modes, analogous to the current
-  deep zoom toggle: **Base only** (no antialiasing; new), **Base, then
-  antialiasing** (today's `FAST`), and **Antialiased display** (today's
-  `REFINED`, showing refined tiles only). Extend the existing
-  `InteractiveRenderMode`/`AntialiasSettings` rather than adding a parallel
-  setting, so the mode persists through the versioned scene format, session
-  restore, bookmarks and shared presets, with older scenes keeping their current
-  behavior. Deep zoom keeps its current choices unless a separate measurement
-  justifies more. This does not change the export quality policy.
+  for standard and deep zoom. Gather Display Quality and Deep Zoom Antialiasing
+  into the Render Settings section of one application Settings window instead of
+  separate Render menu items; the window is the place for future application
+  settings. On macOS it follows the P2.4 native-window rules with the JavaFX
+  fallback. Each setting is a drop-down list with three modes: **Base only** (no
+  antialiasing; new), **Base, then antialiasing** (today's `FAST`), and
+  **Antialiased display** (today's `REFINED`, showing refined tiles only). The
+  deep zoom setting offers the same three modes, replaces the transient Deep Zoom
+  Antialiasing switch, and is editable at any zoom; its default stays Base only.
+  Extend the existing `InteractiveRenderMode`/`AntialiasSettings` rather than
+  adding a parallel setting, so both modes persist through the versioned scene
+  format, session restore, bookmarks and shared presets, with older scenes
+  keeping their current behavior. This does not change the export quality policy.
   - Acceptance: base-only frames reach `RenderStatus.COMPLETE` without starting
-    refinement, and the badge and loading screen report that correctly.
+    refinement, and the badge and loading screen report that correctly. In every
+    mode the badge shows one `Rendering N%` status for the whole frame, including
+    the AA pass, and no separate `Refining…` status.
     Switching modes during and after a render never shows stale or mixed pixels
     and reuses compatible samples. Portable and JavaFX regressions cover each
-    mode, persistence and old-scene compatibility. Manual macOS checks cover the
-    settings window (focus, Enter, Escape, Cancel, Apply) in light and dark
-    appearance.
+    standard and deep zoom mode, persistence and old-scene compatibility. A mode
+    change on a completed visible frame changes its presentation in place: it
+    never recalculates base samples and never recalculates or republishes
+    finished AA tiles. The Settings window has Reset to Defaults (Antialiased
+    display for standard zoom, Base only for deep zoom). Manual macOS checks
+    cover the Settings window (focus, Enter, Escape, Cancel, Apply, Reset to
+    Defaults) in light and dark appearance.
+  - Status: the Settings window with its Render Settings section, both mode
+    settings and developer regressions are implemented; see
+    [render settings](docs/platform/MACOS_UI.md#render-settings-p26).
+    Independent review, verification and the manual macOS acceptance remain
+    pending.
 
 ### P3. Conditional CPU research
 

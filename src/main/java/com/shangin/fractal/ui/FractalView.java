@@ -570,17 +570,17 @@ public class FractalView extends StackPane {
     }
 
     public void setInteractiveRenderMode(InteractiveRenderMode renderMode) {
-        stopColorCyclingForSceneChange();
-        changeScene(scene.withAntialiasing(new AntialiasSettings(renderMode)));
-        renderController.cancelCurrent();
-        recalculate();
+        setAntialiasSettings(new AntialiasSettings(renderMode, scene.antialiasing().deepZoomRenderMode()));
     }
 
-    /** Enables precise AA for the current and subsequent Mandelbrot deep frames. */
-    public void setDeepAntialiasing(boolean enabled) {
+    /** Applies the standard and deep zoom presentations as one undoable scene change. */
+    public void setAntialiasSettings(AntialiasSettings antialiasing) {
+        java.util.Objects.requireNonNull(antialiasing);
+        if (antialiasing.equals(scene.antialiasing())) return;
         stopColorCyclingForSceneChange();
-        modeIndicator.setDeepAntialiasing(enabled);
-        renderController.setDeepAntialiasingEnabled(enabled);
+        changeScene(scene.withAntialiasing(antialiasing));
+        renderController.cancelCurrent();
+        recalculate();
     }
 
     public void setOnRenderingChanged(Consumer<Boolean> handler) {
@@ -931,6 +931,7 @@ public class FractalView extends StackPane {
                 renderPriority
         );
 
+        modeIndicator.setAntialiasSettings(scene.antialiasing());
         renderController.render(
                 scene,
                 target,
@@ -994,7 +995,11 @@ public class FractalView extends StackPane {
         stopColorCyclingForSceneChange();
         cancelSceneInteraction();
         renderController.cancelCurrent();
-        fractalSurface.invalidateRefinement();
+        // AA pixels stay valid when only the antialiasing modes differ, so the controller
+        // can change the presentation in place and keep finished AA work.
+        if (!replacement.withAntialiasing(scene.antialiasing()).equals(sceneSnapshot())) {
+            fractalSurface.invalidateRefinement();
+        }
         // Restored snapshots own their scale; an earlier resize must not rescale them.
         resizeRender.stop();
         resizePending = false;

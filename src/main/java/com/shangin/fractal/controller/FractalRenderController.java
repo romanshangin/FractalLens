@@ -14,7 +14,10 @@ import javafx.application.Platform;
 
 import java.util.Objects;
 import java.math.BigDecimal;
+import java.util.function.BiConsumer;
+import java.util.function.ToIntBiFunction;
 import java.util.function.Consumer;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -45,16 +48,17 @@ public final class FractalRenderController implements AutoCloseable {
                 throws InterruptedException;
     }
 
+    /** AA colors that Base only took off the visible frame, valid for the same frame and coloring. */
+    private record HiddenRefinement(RenderFrame frame, ColoringSettings coloring, RefinedPixelSnapshot pixels) {}
+
     private FormulaDefinition formulaDefinition;
+    private HiddenRefinement hiddenRefinement;
     private RenderFrame activeFrame;
     private RenderFrame retainedFrame;
     private boolean initialFramePending = true;
     private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
     private final RenderFrameCache frameCache = new RenderFrameCache();
     private final RenderActivityTracker renderActivity = new RenderActivityTracker();
-    private final DeepZoomAntialiasState deepAntialiasState =
-            new DeepZoomAntialiasState();
-    private RenderFrame deepAntialiasedFrame;
     private final ExecutorService recolorExecutor = new ThreadPoolExecutor(
             1, 1, 0L, TimeUnit.MILLISECONDS,
             new LinkedBlockingDeque<>(1),
@@ -221,12 +225,14 @@ public final class FractalRenderController implements AutoCloseable {
         Viewport viewport = scene.viewport();
 
         boolean deepZoom = DeepZoomRenderPolicy.isDeepZoom(scene, target);
-        deepAntialiasState.setDeepZoomActive(deepZoom);
         deepZoomChangedHandler.accept(deepZoom);
         InteractiveRenderMode presentationMode =
                 DeepZoomRenderPolicy.presentationMode(scene, target);
         ColoringStrategy coloring = scene.coloring().createStrategy();
         boolean refinedDisplay = presentationMode == InteractiveRenderMode.REFINED;
+        boolean baseOnly = !presentationMode.antialiases();
+        FrameProgress frameProgress = new FrameProgress(renderGeneration, presentationMode,
+                (long) target.width() * target.height());
 
         BigDecimal zoomFactor = defaultViewport.scaleExact()
                 .divide(viewport.scaleExact(), viewport.mathContext());
@@ -258,6 +264,13 @@ public final class FractalRenderController implements AutoCloseable {
                                 && scene.coloring().orbitTrap() == com.shangin.fractal.coloring.OrbitTrap.NONE
                                 ? SampleAccuracy.CERTIFIED_FP32 : SampleAccuracy.CPU_REFERENCE
                 );
+
+        if (changesOnlyPresentation(scene, renderRequest)) {
+            changePresentation(activeFrame, scene, presentationMode, deepZoom, renderGeneration, frameProgress);
+            return;
+        }
+        // Hidden AA pixels belong to the visible frame only.
+        hiddenRefinement = null;
 
         RenderFrame previousActiveFrame = activeFrame;
 
@@ -292,9 +305,6 @@ public final class FractalRenderController implements AutoCloseable {
         RenderFrame targetFrame =
                 reuseResult.frame();
 
-        if (deepAntialiasedFrame != targetFrame) {
-            deepAntialiasedFrame = null;
-        }
         activeFrame =
                 targetFrame;
 
@@ -303,6 +313,12 @@ public final class FractalRenderController implements AutoCloseable {
                     sourceFrame,
                     targetFrame,
                     reuseResult.shift().orElseThrow());
+        }
+        // Base-only frames show and recolor base samples only, never reused AA pixels.
+        // Cached AA samples are kept, hidden, so a later antialiasing mode reuses them.
+        antialiasService.showCachedSamples(!baseOnly);
+        if (baseOnly) {
+            surface.invalidateRefinement();
         }
 
         surface.latency().mark("aa_reuse_prepared");
@@ -365,6 +381,8 @@ public final class FractalRenderController implements AutoCloseable {
         }
 
         surface.latency().mark("surface_prepared");
+        frameProgress.reused(activeFrame.validity().readyPixelCount(),
+                baseOnly ? 0 : surface.refinedPixelCount(activeFrame));
 
         // A crop of a completed image is ready synchronously, including its AA.
         if (preserveIterationLimit && imageReused && targetFrame.isComplete()
@@ -395,15 +413,12 @@ public final class FractalRenderController implements AutoCloseable {
                             coloring,
                             presentationMode
                     );
-                    if (renderActivity.isCurrent(renderGeneration)) {
-                        progressHandler.accept((double) progress.frame().validity().readyPixelCount()
-                                / ((long) target.width() * target.height()));
-                    }
+                    frameProgress.base(progress.frame().validity().readyPixelCount());
                 },
 
                 completedFrame -> {
                     surface.latency().mark("base_complete");
-                    if (renderActivity.isCurrent(renderGeneration)) progressHandler.accept(1.0);
+                    frameProgress.baseComplete();
 
                     frameCache.put(completedFrame);
 
@@ -412,10 +427,12 @@ public final class FractalRenderController implements AutoCloseable {
 
                     if (refinedDisplay) {
                         surface.beginRefinedRender(completedFrame);
-                        antialiasService.refine(
+                        refine(
+                                deepZoom,
                                 completedFrame,
                                 completedColoring,
                                 surface.refinedPixelSnapshot(completedFrame),
+                                frameProgress,
                                 surface.latency().callbacks("aa", Platform::runLater),
                                 (region, colors) -> surface.displayRefinedTile(
                                         completedFrame,
@@ -455,22 +472,17 @@ public final class FractalRenderController implements AutoCloseable {
                             scene
                     );
 
-                    if (deepZoom) {
-                        if (deepAntialiasState.shouldRefine()) {
-                            refineDeepFrame(
-                                    completedFrame,
-                                    completedColoring,
-                                    renderGeneration);
-                        } else {
-                            renderActivity.finish(renderGeneration);
-                        }
+                    if (baseOnly) {
+                        renderActivity.finish(renderGeneration);
                         return;
                     }
 
-                    antialiasService.refine(
+                    refine(
+                            deepZoom,
                             completedFrame,
                             completedColoring,
                             surface.refinedPixelSnapshot(completedFrame),
+                            frameProgress,
                             surface.latency().callbacks("aa", Platform::runLater),
                             (region, colors) -> surface.applyAntialiasing(
                                     completedFrame,
@@ -491,55 +503,146 @@ public final class FractalRenderController implements AutoCloseable {
         );
     }
 
-    /** Opts into deep AA and refines an already visible base frame when possible. */
-    public void setDeepAntialiasingEnabled(boolean enabled) {
-        deepAntialiasState.setEnabled(enabled);
-        if (!deepAntialiasState.shouldRefine()) {
-            return;
-        }
-
-        CompletedRender completed = surface.completedRender();
-        if (completed == null
-                || completed.frame() != activeFrame
-                || !activeFrame.isComplete()
-                || deepAntialiasedFrame == activeFrame) {
-            return;
-        }
-
-        long refinementGeneration = renderActivity.beginRefinement();
-        ColoringStrategy coloring = completed.scene().coloring()
-                .createStrategy(activeFrame.samplePlane());
-        refineDeepFrame(
-                activeFrame,
-                coloring,
-                refinementGeneration);
+    /** A completed visible frame whose scene differs only in antialiasing needs no new samples. */
+    private boolean changesOnlyPresentation(FractalScene scene, RenderJob request) {
+        CompletedRender displayed = surface.completedRender();
+        return displayed != null
+                && displayed.frame() == activeFrame
+                && activeFrame.isComplete()
+                && !displayed.scene().antialiasing().equals(scene.antialiasing())
+                && displayed.scene().withAntialiasing(scene.antialiasing()).equals(scene)
+                && RenderFrameCache.sameCalculatedFrame(activeFrame.request(), request);
     }
 
-    private void refineDeepFrame(
-            RenderFrame frame,
-            ColoringStrategy coloring,
-            long renderGeneration
-    ) {
-        antialiasService.refineDeep(
+    /**
+     * Applies a new antialiasing mode to the visible frame in place. Base samples
+     * and finished AA tiles are kept; only missing AA tiles are calculated.
+     */
+    private void changePresentation(RenderFrame frame, FractalScene scene, InteractiveRenderMode mode,
+                                    boolean deepZoom, long renderGeneration, FrameProgress frameProgress) {
+        frameProgress.baseComplete();
+        ColoringStrategy coloring = scene.coloring().createStrategy(frame.samplePlane());
+        antialiasService.showCachedSamples(mode.antialiases());
+        if (!mode.antialiases()) {
+            // Cached samples cover smooth palettes only, so keep the finished AA colors for every coloring.
+            RefinedPixelSnapshot shown = surface.refinedPixelSnapshot(frame);
+            if (shown.validity().readyPixelCount() > 0) {
+                hiddenRefinement = new HiddenRefinement(frame, scene.coloring(), shown);
+            }
+            surface.showBaseColors(frame, coloring, scene);
+            renderActivity.finish(renderGeneration);
+            return;
+        }
+        if (hiddenRefinement != null && hiddenRefinement.frame() == frame
+                && hiddenRefinement.coloring().equals(scene.coloring())) {
+            surface.restoreRefinement(frame, hiddenRefinement.pixels());
+        }
+        hiddenRefinement = null;
+        RefinedPixelSnapshot refined = surface.refinedPixelSnapshot(frame);
+        if (refined.validity().isComplete()) {
+            // The visible image is already fully antialiased, so both AA modes show it as is.
+            frameProgress.refining(refined);
+            surface.completePresentationChange(frame, scene);
+            renderActivity.finish(renderGeneration);
+            return;
+        }
+        // The base is already visible, so both AA modes refine the missing tiles in place.
+        refine(
+                deepZoom,
                 frame,
                 coloring,
-                surface.refinedPixelSnapshot(frame),
+                refined,
+                frameProgress,
                 surface.latency().callbacks("aa", Platform::runLater),
-                (region, colors) -> surface.applyAntialiasing(
-                        frame,
-                        region,
-                        colors
-                ),
+                (region, colors) -> surface.applyAntialiasing(frame, region, colors),
                 () -> {
-                    if (frame == activeFrame) {
-                        deepAntialiasedFrame = frame;
-                    }
+                    surface.completePresentationChange(frame, scene);
                     renderActivity.finish(renderGeneration);
                 },
-                error -> {
-                    reportFailure(renderGeneration, error);
-                }
+                error -> reportFailure(renderGeneration, error)
         );
+    }
+
+    /** Deep frames use candidate-only AA that keeps subpixel coordinates exact. */
+    private void refine(
+            boolean deepZoom,
+            RenderFrame frame,
+            ColoringStrategy coloring,
+            RefinedPixelSnapshot reusedPixels,
+            FrameProgress frameProgress,
+            Executor callbackExecutor,
+            ToIntBiFunction<RenderRegion, int[]> publishTile,
+            Runnable onSuccess,
+            Consumer<Throwable> onError
+    ) {
+        frameProgress.refining(reusedPixels);
+        BiConsumer<RenderRegion, int[]> onTileReady =
+                (region, colors) -> frameProgress.refined(publishTile.applyAsInt(region, colors));
+        if (deepZoom) {
+            antialiasService.refineDeep(frame, coloring, reusedPixels, callbackExecutor,
+                    onTileReady, onSuccess, onError);
+        } else {
+            antialiasService.refine(frame, coloring, reusedPixels, callbackExecutor,
+                    onTileReady, onSuccess, onError);
+        }
+    }
+
+    /**
+     * Whole-frame progress for one render generation, published on the FX thread.
+     * Without antialiasing the base render is the whole frame; otherwise the base
+     * samples and the AA pixels each account for half. Reused samples and reused
+     * AA pixels count as done from the start, so a pan reports what it kept.
+     */
+    private final class FrameProgress {
+        private final long renderGeneration;
+        private final double baseShare;
+        private final long pixels;
+        private long basePixels;
+        private long refinedPixels;
+        private double published;
+
+        FrameProgress(long renderGeneration, InteractiveRenderMode mode, long pixels) {
+            this.renderGeneration = renderGeneration;
+            baseShare = mode.antialiases() ? 0.5 : 1.0;
+            this.pixels = pixels;
+        }
+
+        /** Records samples and AA pixels already reused when the render starts. */
+        void reused(long readyPixels, long refinedReadyPixels) {
+            basePixels = readyPixels;
+            refinedPixels = refinedReadyPixels;
+            publish();
+        }
+
+        void base(long readyPixels) {
+            basePixels = readyPixels;
+            publish();
+        }
+
+        void baseComplete() {
+            basePixels = pixels;
+            publish();
+        }
+
+        void refining(RefinedPixelSnapshot reusedPixels) {
+            basePixels = pixels;
+            refinedPixels = reusedPixels.validity().readyPixelCount();
+            publish();
+        }
+
+        void refined(int newPixels) {
+            refinedPixels += newPixels;
+            publish();
+        }
+
+        private void publish() {
+            double refinedShare = baseShare < 1.0 ? (1.0 - baseShare) * refinedPixels / pixels : 0.0;
+            // A newer count may only be lower when stale AA pixels were dropped; never move backwards.
+            published = Math.max(published, Math.min(1.0, baseShare * basePixels / pixels + refinedShare));
+            if (renderActivity.isCurrent(renderGeneration)) {
+                progressHandler.accept(published);
+            }
+        }
     }
 
     public void setOnRenderStatusChanged(Consumer<RenderStatus> handler) {
