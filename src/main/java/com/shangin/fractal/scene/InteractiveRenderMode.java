@@ -1,16 +1,18 @@
 package com.shangin.fractal.scene;
 
 /**
- * Standard-zoom antialiasing presentation. Enum names are the stable scene
- * format identifiers; display labels may change.
+ * Interactive antialiasing presentation for standard or deep zoom. Enum names
+ * are the stable scene format identifiers; display labels may change. The
+ * declaration order is the interaction latency benchmark order (Refined, then
+ * Fast, as established); the Settings window defines its own display order.
  */
 public enum InteractiveRenderMode {
-    /** Shows progressive base samples and completes without an antialiasing pass. */
-    BASE_ONLY("Base only"),
+    /** Shows only refined antialiased tiles. */
+    REFINED("Antialiased display"),
     /** Shows progressive base samples, then antialiases them in place. */
     FAST("Base, then antialiasing"),
-    /** Shows only refined antialiased tiles. */
-    REFINED("Antialiased display");
+    /** Shows progressive base samples and completes without an antialiasing pass. */
+    BASE_ONLY("Base only");
 
     private final String displayName;
 

@@ -769,11 +769,11 @@ class MainMenuBarFxTest {
                 assertNotNull(sheet);
                 var standard = AppKitParameterProbe.choice(sheet, 0);
                 var deep = AppKitParameterProbe.choice(sheet, 1);
-                assertEquals(InteractiveRenderMode.REFINED.ordinal(), AppKitParameterProbe.selectedIndex(standard));
-                assertEquals(InteractiveRenderMode.BASE_ONLY.ordinal(), AppKitParameterProbe.selectedIndex(deep));
+                assertEquals(SettingsWindow.index(InteractiveRenderMode.REFINED), AppKitParameterProbe.selectedIndex(standard));
+                assertEquals(SettingsWindow.index(InteractiveRenderMode.BASE_ONLY), AppKitParameterProbe.selectedIndex(deep));
                 assertTrue(AppKitParameterProbe.enabled(deep), "The deep zoom mode is editable outside deep zoom");
-                AppKitParameterProbe.select(standard, InteractiveRenderMode.BASE_ONLY.ordinal());
-                AppKitParameterProbe.select(deep, InteractiveRenderMode.REFINED.ordinal());
+                AppKitParameterProbe.select(standard, SettingsWindow.index(InteractiveRenderMode.BASE_ONLY));
+                AppKitParameterProbe.select(deep, SettingsWindow.index(InteractiveRenderMode.REFINED));
                 assertEquals(initial, view.sceneSnapshot());
                 AppKitParameterProbe.action(sheet, "apply");
                 return null;
@@ -786,8 +786,8 @@ class MainMenuBarFxTest {
                 @SuppressWarnings("unchecked")
                 var deep = (javafx.scene.control.ComboBox<String>) pane.lookup("#" + SettingsWindow.DEEP_ID);
                 assertFalse(deep.isDisabled(), "The deep zoom mode is editable outside deep zoom");
-                standard.getSelectionModel().select(InteractiveRenderMode.BASE_ONLY.ordinal());
-                deep.getSelectionModel().select(InteractiveRenderMode.REFINED.ordinal());
+                standard.getSelectionModel().select(SettingsWindow.index(InteractiveRenderMode.BASE_ONLY));
+                deep.getSelectionModel().select(SettingsWindow.index(InteractiveRenderMode.REFINED));
                 assertEquals(initial, view.sceneSnapshot());
                 confirm(pane);
                 return null;

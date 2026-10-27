@@ -3,7 +3,6 @@ package com.shangin.fractal.ui;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -21,8 +20,10 @@ final class SettingsWindow {
     static final String RENDER_SECTION = "Render Settings";
     static final String STANDARD_ID = "standard-zoom-mode";
     static final String DEEP_ID = "deep-zoom-mode";
-    private static final InteractiveRenderMode[] MODES = InteractiveRenderMode.values();
-    private static final List<String> MODE_TITLES = Arrays.stream(MODES).map(InteractiveRenderMode::toString).toList();
+    /** Display order, from the least to the most antialiased presentation. */
+    private static final List<InteractiveRenderMode> MODES = List.of(
+            InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED);
+    private static final List<String> MODE_TITLES = MODES.stream().map(InteractiveRenderMode::toString).toList();
 
     /** One exclusive choice; {@code selected} indexes {@code choices}. */
     record ChoiceField(String section, String id, String label, String hint, List<String> choices, int selected) {
@@ -43,11 +44,11 @@ final class SettingsWindow {
                 new ChoiceField(RENDER_SECTION, STANDARD_ID, "Standard zoom",
                         "Base only skips antialiasing. Base, then antialiasing smooths the visible frame "
                                 + "afterwards. Antialiased display shows only finished antialiased tiles.",
-                        MODE_TITLES, current.renderMode().ordinal()),
+                        MODE_TITLES, index(current.renderMode())),
                 new ChoiceField(RENDER_SECTION, DEEP_ID, "Deep zoom",
                         "Used while Mandelbrot or Julia renders in deep zoom. Deep zoom antialiasing is "
                                 + "precise and can take much longer than the base render.",
-                        MODE_TITLES, current.deepZoomRenderMode().ordinal()));
+                        MODE_TITLES, index(current.deepZoomRenderMode())));
     }
 
     /** Selected index of every field, in {@link #fields} order, for the default settings. */
@@ -60,7 +61,11 @@ final class SettingsWindow {
         if (selected.length != 2) {
             throw new IllegalArgumentException("Expected 2 settings, got " + selected.length);
         }
-        return new AntialiasSettings(MODES[Objects.checkIndex(selected[0], MODES.length)],
-                MODES[Objects.checkIndex(selected[1], MODES.length)]);
+        return new AntialiasSettings(MODES.get(selected[0]), MODES.get(selected[1]));
+    }
+
+    /** Position of {@code mode} in the mode drop-down lists. */
+    static int index(InteractiveRenderMode mode) {
+        return MODES.indexOf(Objects.requireNonNull(mode));
     }
 }

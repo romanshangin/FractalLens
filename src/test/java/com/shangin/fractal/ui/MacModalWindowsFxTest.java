@@ -155,14 +155,14 @@ class MacModalWindowsFxTest {
             assertTrue(MacParameterSheet.hasOpenSheet(owner));
             var standard = AppKitParameterProbe.choice(sheet, 0);
             var deep = AppKitParameterProbe.choice(sheet, 1);
-            assertEquals(InteractiveRenderMode.REFINED.ordinal(), AppKitParameterProbe.selectedIndex(standard));
-            assertEquals(InteractiveRenderMode.BASE_ONLY.ordinal(), AppKitParameterProbe.selectedIndex(deep));
+            assertEquals(SettingsWindow.index(InteractiveRenderMode.REFINED), AppKitParameterProbe.selectedIndex(standard));
+            assertEquals(SettingsWindow.index(InteractiveRenderMode.BASE_ONLY), AppKitParameterProbe.selectedIndex(deep));
             assertTrue(AppKitParameterProbe.enabled(deep), "The deep zoom mode is editable at any zoom");
             for (String appearance : List.of("NSAppearanceNameAqua", "NSAppearanceNameDarkAqua")) {
                 AppKitParameterProbe.appearance(sheet, appearance);
             }
-            AppKitParameterProbe.select(standard, InteractiveRenderMode.BASE_ONLY.ordinal());
-            AppKitParameterProbe.select(deep, InteractiveRenderMode.REFINED.ordinal());
+            AppKitParameterProbe.select(standard, SettingsWindow.index(InteractiveRenderMode.BASE_ONLY));
+            AppKitParameterProbe.select(deep, SettingsWindow.index(InteractiveRenderMode.REFINED));
             AppKitParameterProbe.alertKey(sheet, "\r", (short) 36);
             return null;
         });
@@ -179,9 +179,9 @@ class MacModalWindowsFxTest {
             AppKitParameterProbe.action(sheet, "resetChoices");
             assertTrue(sheet.isOpen(), "Reset must not close the sheet");
             assertFalse(result.isDone());
-            assertEquals(InteractiveRenderMode.REFINED.ordinal(),
+            assertEquals(SettingsWindow.index(InteractiveRenderMode.REFINED),
                     AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 0)));
-            assertEquals(InteractiveRenderMode.BASE_ONLY.ordinal(),
+            assertEquals(SettingsWindow.index(InteractiveRenderMode.BASE_ONLY),
                     AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 1)));
             AppKitParameterProbe.action(sheet, "apply");
             return null;
@@ -195,8 +195,8 @@ class MacModalWindowsFxTest {
         for (boolean escape : List.of(true, false)) {
             var sheet = fx(() -> MacSettingsSheet.show(owner, current, ignored -> applied.incrementAndGet()));
             fx(() -> {
-                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 0), InteractiveRenderMode.REFINED.ordinal());
-                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 1), InteractiveRenderMode.FAST.ordinal());
+                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 0), SettingsWindow.index(InteractiveRenderMode.REFINED));
+                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 1), SettingsWindow.index(InteractiveRenderMode.FAST));
                 if (escape) AppKitParameterProbe.alertKey(sheet, "\u001b", (short) 53);
                 else AppKitParameterProbe.action(sheet, "cancel");
                 return null;
@@ -212,7 +212,7 @@ class MacModalWindowsFxTest {
         var result = new CompletableFuture<AntialiasSettings>();
         var sheet = fx(() -> MacSettingsSheet.show(owner, current, result::complete));
         fx(() -> {
-            AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 1), InteractiveRenderMode.FAST.ordinal());
+            AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 1), SettingsWindow.index(InteractiveRenderMode.FAST));
             AppKitParameterProbe.action(sheet, "apply");
             return null;
         });
