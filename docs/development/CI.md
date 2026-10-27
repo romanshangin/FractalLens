@@ -70,8 +70,13 @@ no project ignore list, inline allow comments disabled, archive/decode depth 5
 and no size limit. The wrapper independently classifies only structured
 benchmark JSON file-checksum matches. An arbitrary credential field is not a
 checksum exception. Unresolved findings or scanner errors fail without printing
-matched values. A full scan should also be run before a local commit; use
-`--tree` to include current uncommitted files. Never publish the scanner report
+matched values; it lists their paths, rule IDs, lines and commits grouped by
+top-level path and file, and withholds any path the public-data guard would
+reject. A full scan should also be run before a local commit; use `--tree` to
+scan current uncommitted files. `--tree` scans the same file set as the
+public-data guard (tracked files plus non-ignored new files) from a temporary
+copy, so ignored build output and nested worktrees such as
+`.claude/worktrees/` do not affect the result. Never publish the scanner report
 without review.
 
 Raw benchmark output remains private. The paired-run driver records OS,

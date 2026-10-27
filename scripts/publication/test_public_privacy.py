@@ -1,3 +1,4 @@
+import io
 import json
 import os
 from pathlib import Path
@@ -9,10 +10,35 @@ import unittest
 from unittest.mock import patch
 
 from check_public_data import issues
-from check_secrets import file_hash_finding
+import check_secrets
+from check_secrets import candidate_files, file_hash_finding, report_unresolved
 from privacy import PUBLIC_EMAIL, redact, sanitized
 
 ROOT=Path(__file__).resolve().parents[2]
+SECRET_MARKER='FIXTURE-'+'SCANNER-MATCH'
+# Reports every file under the scanned directory that contains the marker, like `gitleaks dir`.
+FAKE_GITLEAKS='''import json,os,sys
+args=sys.argv[1:];target=args[1];report=args[args.index('--report-path')+1];findings=[]
+for base,_,names in os.walk(target):
+    for name in names:
+        path=os.path.join(base,name);text=open(path,errors='replace').read()
+        if %r in text:findings.append({'File':path,'RuleID':'generic-api-key','StartLine':text[:text.index(%r)].count('\\n')+1})
+json.dump(findings,open(report,'w'));sys.exit(1 if findings else 0)
+'''%(SECRET_MARKER,SECRET_MARKER)
+
+
+def git(cwd,*args):subprocess.run(['git',*args],cwd=cwd,check=True,capture_output=True)
+
+
+def secret_fixture_repository(root):
+    """Repository with the marker in tracked, untracked, ignored, excluded and nested-repository files."""
+    git(root,'init','-q')
+    for name in ['tracked.txt','new/untracked.txt','target/ignored.txt','.claude/worktrees/copy/excluded.txt','nested/inner.txt']:
+        (root/name).parent.mkdir(parents=True,exist_ok=True);(root/name).write_text('line\n'+SECRET_MARKER+'\n')
+    (root/'.gitignore').write_text('target/\n')
+    (root/'.git/info/exclude').write_text('.claude/worktrees/\n')
+    git(root/'nested','init','-q')
+    git(root,'add','tracked.txt','.gitignore')
 
 
 class PrivacyTest(unittest.TestCase):
@@ -67,6 +93,38 @@ class PrivacyTest(unittest.TestCase):
         invalid=json.dumps({'api_key':digest},indent=2)
         self.assertFalse(file_hash_finding(invalid,2,'benchmarks/final/build-A.json'))
         self.assertFalse(file_hash_finding(valid,3,'src/credentials.json'))
+
+    def test_tree_candidates_exclude_ignored_files_and_nested_repositories(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);secret_fixture_repository(root)
+            self.assertEqual(['.gitignore','new/untracked.txt','tracked.txt'],candidate_files(root))
+
+    def test_tree_scan_reports_only_commit_candidates_grouped_by_file(self):
+        if os.name=='nt':self.skipTest('Fake scanner is a POSIX executable script')
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/'repo';root.mkdir();secret_fixture_repository(root)
+            scanner=Path(d)/'fake-gitleaks';scanner.write_text('#!'+sys.executable+'\n'+FAKE_GITLEAKS);scanner.chmod(0o755)
+            stdout,stderr=io.StringIO(),io.StringIO()
+            with patch('sys.stdout',stdout),patch('sys.stderr',stderr):
+                status=check_secrets.main(['--tree','--gitleaks',str(scanner)],root=root)
+            self.assertEqual(1,status)
+            self.assertIn('Secret check: 2 unresolved findings; 0 verified file-checksum matches.',stdout.getvalue())
+            self.assertIn('  new/untracked.txt [generic-api-key]: 2',stderr.getvalue())
+            self.assertIn('  tracked.txt [generic-api-key]: 2',stderr.getvalue())
+            for hidden in ['ignored.txt','excluded.txt','inner.txt',SECRET_MARKER]:self.assertNotIn(hidden,stdout.getvalue()+stderr.getvalue())
+
+    def test_unresolved_report_groups_findings_and_withholds_private_paths(self):
+        private='benchmarks/'+'private-fixture'+'.local/a.json'
+        findings=[('benchmarks/run/a.json','generic-api-key',line,None) for line in range(1,13)]
+        findings+=[('src/Main.java','aws-access-token',4,'0123456789abcdef'),(private,'generic-api-key',2,None)]
+        stream=io.StringIO();report_unresolved(findings,stream)
+        output=stream.getvalue()
+        self.assertIn('  benchmarks/: 12',output)
+        self.assertIn('  src/: 1',output)
+        self.assertIn('  benchmarks/run/a.json [generic-api-key]: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ... 2 more',output)
+        self.assertIn('  src/Main.java [aws-access-token]: 4@0123456789ab',output)
+        self.assertIn('  ${PRIVATE_PATH} [generic-api-key]: 2',output)
+        self.assertNotIn('private-fixture',output)
 
     def test_bash_wrapper_redacts_both_console_and_saved_output_and_keeps_exit(self):
         if os.name=='nt':self.skipTest('Bash wrapper is covered separately in the hosted shell lane')
