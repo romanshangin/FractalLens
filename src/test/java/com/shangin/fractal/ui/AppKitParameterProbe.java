@@ -102,6 +102,15 @@ final class AppKitParameterProbe {
                 new java.lang.foreign.MemoryLayout[]{JAVA_LONG}, (long) index);
     }
 
+    static boolean canBecomeKeyView(MemorySegment view) {
+        return (byte) AppKitMenuProbe.message(view, "canBecomeKeyView", JAVA_BYTE) != 0;
+    }
+
+    static boolean isFirstResponder(MacParameterSheet<?> sheet, MemorySegment view) throws Exception {
+        return ((MemorySegment) AppKitMenuProbe.message(field(sheet, "panel"), "firstResponder", ADDRESS)).address()
+                == view.address();
+    }
+
     static boolean enabled(MemorySegment control) {
         return (byte) AppKitMenuProbe.message(control, "isEnabled", JAVA_BYTE) != 0;
     }
@@ -149,6 +158,30 @@ final class AppKitParameterProbe {
     static void action(MacParameterSheet<?> sheet, String action) throws Exception {
         AppKitMenuProbe.message(session(sheet), action + ":", null,
                 new java.lang.foreign.MemoryLayout[]{ADDRESS}, MemorySegment.NULL);
+    }
+
+    /** Text of every selectable text field in the sheet; a click focuses such a label and Tab then stops on it. */
+    static java.util.List<String> selectableTexts(MacParameterSheet<?> sheet) throws Exception {
+        try (Arena arena = Arena.ofConfined()) {
+            var found = new java.util.ArrayList<String>();
+            collectSelectableTexts((MemorySegment) AppKitMenuProbe.message(field(sheet, "panel"), "contentView", ADDRESS),
+                    objcClass("NSTextField", arena), found);
+            return found;
+        }
+    }
+
+    private static void collectSelectableTexts(MemorySegment view, MemorySegment textField, java.util.List<String> found) {
+        if ((byte) AppKitMenuProbe.message(view, "isKindOfClass:", JAVA_BYTE,
+                new java.lang.foreign.MemoryLayout[]{ADDRESS}, textField) != 0
+                && (byte) AppKitMenuProbe.message(view, "isSelectable", JAVA_BYTE) != 0) {
+            found.add(nativeString((MemorySegment) AppKitMenuProbe.message(view, "stringValue", ADDRESS)));
+        }
+        var subviews = (MemorySegment) AppKitMenuProbe.message(view, "subviews", ADDRESS);
+        long count = (long) AppKitMenuProbe.message(subviews, "count", JAVA_LONG);
+        for (long index = 0; index < count; index++) {
+            collectSelectableTexts((MemorySegment) AppKitMenuProbe.message(subviews, "objectAtIndex:", ADDRESS,
+                    new java.lang.foreign.MemoryLayout[]{JAVA_LONG}, index), textField, found);
+        }
     }
 
     static boolean showing(MacParameterSheet<?> sheet) throws Exception {

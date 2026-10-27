@@ -3,6 +3,7 @@
 
 @interface FractalParameterSession : NSObject <NSWindowDelegate, NSTextFieldDelegate>
 - (void)cancel:(id)sender;
+- (void)focusFirstChoice;
 @property NSWindow *panel;
 @property NSAlert *alert;
 @property id escapeMonitor;
@@ -243,7 +244,13 @@ static jint invalidField(FractalParameterSession *session) {
     // Reset only changes the draft; Apply still decides whether the scene changes.
     for (NSUInteger i = 0; i < self.choices.count; i++)
         [self.choices[i] selectItemAtIndex:self.choiceDefaults[i].integerValue];
-    [self.panel makeFirstResponder:self.choices.firstObject];
+    [self focusFirstChoice];
+}
+- (void)focusFirstChoice {
+    // With macOS Keyboard navigation off, pop-up buttons are not key views; forcing focus
+    // onto one would leave its focus ring in place while clicks select other controls.
+    NSPopUpButton *first = self.choices.firstObject;
+    [self.panel makeFirstResponder:first.canBecomeKeyView ? first : nil];
 }
 - (void)appendPosition:(NSString *)position color:(int32_t)argb {
     NSTextField *field = [NSTextField textFieldWithString:position];
@@ -620,8 +627,16 @@ static NSArray<NSString *> *nativeStrings(JNIEnv *env, jobjectArray values) {
     return result;
 }
 
-static NSTextField *sectionLabel(NSString *text) {
+// Settings text is not selectable: a clicked selectable label keeps keyboard focus,
+// so Tab would select its text instead of moving between the controls.
+static NSTextField *staticLabel(NSString *text) {
     NSTextField *view = label(text);
+    view.selectable = NO;
+    return view;
+}
+
+static NSTextField *sectionLabel(NSString *text) {
+    NSTextField *view = staticLabel(text);
     view.font = [NSFont boldSystemFontOfSize:NSFont.systemFontSize];
     return view;
 }
@@ -687,11 +702,10 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
     session.panel.releasedWhenClosed = NO;
     session.panel.delegate = session;
     session.panel.backgroundColor = NSColor.windowBackgroundColor;
-    NSTextField *heading = label(session.panel.title);
+    NSTextField *heading = staticLabel(session.panel.title);
     heading.font = [NSFont boldSystemFontOfSize:15];
-    NSTextField *hint = label(nativeString(env, hintText));
+    NSTextField *hint = staticLabel(nativeString(env, hintText));
     hint.textColor = NSColor.secondaryLabelColor;
-    hint.selectable = YES;
     NSMutableArray<NSView *> *rows = [NSMutableArray arrayWithObjects:heading, hint, nil];
     NSMutableArray<NSView *> *wide = [NSMutableArray arrayWithObject:hint];
     NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray new];
@@ -716,7 +730,7 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
         row.orientation = NSUserInterfaceLayoutOrientationHorizontal;
         row.alignment = NSLayoutAttributeFirstBaseline;
         row.spacing = 8;
-        NSTextField *fieldHint = label(hints[i]);
+        NSTextField *fieldHint = staticLabel(hints[i]);
         fieldHint.textColor = NSColor.secondaryLabelColor;
         fieldHint.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
         NSStackView *field = [NSStackView stackViewWithViews:@[row, fieldHint]];
@@ -757,10 +771,10 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
         [body.bottomAnchor constraintEqualToAnchor:session.panel.contentView.bottomAnchor constant:-20]]];
     [NSLayoutConstraint activateConstraints:constraints];
     [session.panel recalculateKeyViewLoop];
-    session.panel.initialFirstResponder = popups[0];
+    if (popups[0].canBecomeKeyView) session.panel.initialFirstResponder = popups[0];
     [owner beginSheet:session.panel completionHandler:^(NSModalResponse response) {
         complete(session, response == NSModalResponseOK && invalidField(session) == 0);
     }];
-    [session.panel makeFirstResponder:popups[0]];
+    [session focusFirstChoice];
     return (jlong)(intptr_t)(__bridge_retained void *)session;
 }
