@@ -466,6 +466,7 @@ test('Claude adapter selects requested models/efforts and permission boundaries 
 const input = fs.readFileSync(0, 'utf8');
 const stage = input.match(/Execute only stage ([A-Z_]+)/)[1];
 fs.writeFileSync(require('node:path').join(${JSON.stringify(root)}, stage + '.json'), JSON.stringify({ args: process.argv.slice(2), input, cwd: process.cwd() }));
+console.log(JSON.stringify({ type: 'system', subtype: 'init' }));
 console.error('FAIL - stderr must never be parsed as the report');
 console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'CLEAN\\nSynthetic final report' }));
 `);
@@ -477,10 +478,10 @@ console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false
     assert.equal(realpathSync(cwd), repository);
     assert.equal(value('--model'), CLAUDE_MODELS[stage].model);
     assert.equal(value('--effort'), CLAUDE_MODELS[stage].effort);
-    assert.equal(value('--output-format'), 'json');
+    assert.equal(value('--output-format'), 'stream-json');
     assert.equal(value('--permission-prompts'), 'none');
     assert.equal(value('--disallowedTools'), 'Agent');
-    for (const flag of ['--print', '--no-session-persistence', '--disable-slash-commands']) assert.ok(args.includes(flag), flag);
+    for (const flag of ['--print', '--verbose', '--no-session-persistence', '--disable-slash-commands']) assert.ok(args.includes(flag), flag);
     const settings = JSON.parse(value('--settings'));
     assert.equal(settings.autoMemoryEnabled, false);
     if (ROLES[stage].escalation === 'never') {
@@ -503,7 +504,10 @@ console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false
     assert.match(input, /Task with `literal` \$symbols/);
     const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(name => name.includes(`-${stage}-`))!);
     assert.equal(readFileSync(join(stageDirectory, 'report.md'), 'utf8'), 'CLEAN\nSynthetic final report');
-    assert.match(readFileSync(join(stageDirectory, 'execution.log'), 'utf8'), /stderr must never be parsed/);
+    const stream = readFileSync(join(stageDirectory, 'execution.log'), 'utf8').trimEnd().split('\n').map(line => JSON.parse(line));
+    assert.deepEqual(stream.map(event => event.type), ['system', 'result']);
+    assert.deepEqual(JSON.parse(readFileSync(join(stageDirectory, 'output.json'), 'utf8')), stream[1]);
+    assert.match(readFileSync(join(stageDirectory, 'stderr.log'), 'utf8'), /stderr must never be parsed/);
   }
 });
 
@@ -513,7 +517,9 @@ test('Claude error results, malformed output, nonzero exit, missing executable a
   const fake = join(root, 'failure.cjs');
   const output = (fields: object) => `console.log(${JSON.stringify(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'READY_FOR_REVIEW', ...fields }))});`;
   for (const body of [output({ is_error: true }), output({ subtype: 'error_max_turns' }), output({ result: undefined }),
-    output({ type: 'assistant' }), 'console.log("READY_FOR_REVIEW")', `${output({})} process.exit(7);`, '', 'setInterval(() => {}, 1000)']) {
+    output({ type: 'assistant' }), 'console.log("READY_FOR_REVIEW")', `${output({})} process.exit(7);`, '', 'setInterval(() => {}, 1000)',
+    `${output({})} console.log('{"type":"assistant"}');`, output({}).replace('console.log', 'console.error'),
+    `${output({})} setInterval(() => {}, 1000);`]) {
     writeFileSync(fake, body);
     const runDirectory = mkdtempSync(join(root, 'run-'));
     const runner = createClaudeRunner({ repository: root, runDirectory, command: [process.execPath, fake], timeoutMs: 500 });
@@ -523,9 +529,46 @@ test('Claude error results, malformed output, nonzero exit, missing executable a
     const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(name => name.includes('-IMPLEMENT-'))!);
     assert.ok(readdirSync(stageDirectory).includes('error.txt'), body);
     assert.ok(!readdirSync(stageDirectory).includes('report.md'), body);
+    const timedOut = body.includes('setInterval');
+    assert.equal(/Claude Code stage timed out after 0\.5 seconds \(--stage-timeout-minutes\)/.test(result.reason), timedOut, result.reason);
+    assert.equal(readFileSync(join(stageDirectory, 'error.txt'), 'utf8').startsWith('Stage timed out'), timedOut, body);
   }
   const runner = createClaudeRunner({ repository: root, runDirectory: root, command: [join(root, 'missing-claude')] });
   assert.equal((await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner })).status, 'INCOMPLETE');
+});
+
+test('Claude timeout kills tool commands in their own process groups and keeps the partial stream', async t => {
+  if (process.platform === 'win32') { t.skip('Process groups and ps are POSIX-only; Windows uses taskkill /t'); return; }
+  const root = mkdtempSync(join(tmpdir(), 'fractallens-claude-timeout-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const pids = join(root, 'tool-pids.json');
+  // Mirrors a Claude Code Bash tool command: a separate process group with its own child,
+  // both holding the inherited stage stdout.
+  const tool = join(root, 'tool.cjs');
+  writeFileSync(tool, `const nested = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'inherit' });
+require('node:fs').writeFileSync(process.argv[2], JSON.stringify([process.pid, nested.pid]));
+setInterval(() => {}, 1000);
+`);
+  const fake = join(root, 'fake-claude.cjs');
+  writeFileSync(fake, `console.log(JSON.stringify({ type: 'system', subtype: 'init' }));
+require('node:child_process').spawn(process.execPath, [${JSON.stringify(tool)}, ${JSON.stringify(pids)}], { detached: true, stdio: ['ignore', 'inherit', 'inherit'] });
+setInterval(() => {}, 1000);
+`);
+  const runDirectory = mkdtempSync(join(root, 'run-'));
+  const runner = createClaudeRunner({ repository: root, runDirectory, command: [process.execPath, fake], timeoutMs: 3000 });
+  const result = await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner });
+  assert.equal(result.status, 'INCOMPLETE');
+  assert.match(result.reason, /Claude Code stage timed out after 3 seconds \(--stage-timeout-minutes\)/);
+  const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(name => name.includes('-IMPLEMENT-'))!);
+  assert.match(readFileSync(join(stageDirectory, 'error.txt'), 'utf8'), /^Stage timed out after 3 seconds .*process tree, including tool commands, was killed/);
+  assert.equal(JSON.parse(readFileSync(join(stageDirectory, 'execution.log'), 'utf8')).type, 'system');
+  assert.ok(!readdirSync(stageDirectory).includes('output.json'));
+  const live = (pid: number) => !/^(|Z.*)$/.test(spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim());
+  const toolPids: number[] = JSON.parse(readFileSync(pids, 'utf8'));
+  t.after(() => toolPids.forEach(pid => { try { process.kill(pid, 'SIGKILL'); } catch { /* Already exited. */ } }));
+  // SIGKILL delivery is asynchronous; wait for the concrete state instead of a fixed delay.
+  for (const deadline = Date.now() + 5000; toolPids.some(live) && Date.now() < deadline;) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(toolPids.filter(live), []);
 });
 
 test('CLI dry-run plans roles without executing Codex; invalid flags exit nonzero', async () => {
@@ -551,7 +594,10 @@ test('CLI dry-run plans roles without executing Codex; invalid flags exit nonzer
   }
   await assert.rejects(main(['--task', 'Synthetic', '--dry-run', '--executor', 'gemini']), /--executor must be codex or claude/);
   await assert.rejects(main(['--task', 'Synthetic', '--max-repair-rounds', '4']));
-  await assert.rejects(main(['--task', 'Synthetic', '--stage-timeout-seconds', '0']));
+  for (const minutes of ['0', '1441', '1.5', 'thirty']) {
+    await assert.rejects(main(['--task', 'Synthetic', '--dry-run', '--stage-timeout-minutes', minutes]), /Stage timeout must be an integer from 1 to 1440 minutes/);
+  }
+  await assert.rejects(main(['--task', 'Synthetic', '--dry-run', '--stage-timeout-seconds', '1800']), /Unknown option '--stage-timeout-seconds'/);
   await assert.rejects(main(['--unknown']));
   const invalid = spawnSync(process.execPath, [script, '--unknown'], { encoding: 'utf8' });
   assert.equal(invalid.status, 1);

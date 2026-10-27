@@ -13,7 +13,7 @@ authenticated stage executor:
 - Codex CLI (default, `--executor codex`) that supports `exec`,
   `--approve-for-me`, `--ephemeral`, and `--output-last-message`;
 - Claude Code CLI (`--executor claude`) that supports `--print`,
-  `--output-format json`, `--effort`, `--permission-mode auto|dontAsk`,
+  `--output-format stream-json` with `--verbose`, `--effort`, `--permission-mode auto|dontAsk`,
   `--permission-prompts none`, `--no-session-persistence`, `--tools`,
   `--strict-mcp-config`, `--disable-slash-commands` and `--settings`. Auto mode
   must be available to the configured account.
@@ -118,7 +118,7 @@ servers and connectors have separate controls.
 
 ### Claude Code permissions
 
-Every Claude Code stage runs `claude --print --output-format json` with the
+Every Claude Code stage runs `claude --print --output-format stream-json --verbose` with the
 role's `--model` and `--effort`, `--no-session-persistence`,
 `--permission-prompts none` (anything that would prompt is denied),
 `--disable-slash-commands`, `--disallowedTools Agent` (no subagents) and
@@ -150,8 +150,8 @@ attestation that a stage behaved as instructed.
 
 Each invocation starts a fresh ephemeral CLI session with the task and only the
 latest relevant handoffs. The Codex runner reads the final message file; the
-Claude Code runner reads only the `result` field of the JSON object on stdout
-and requires `type=result`, `subtype=success` and `is_error=false`. CLI
+Claude Code runner reads only the `result` field of the final stream-json event
+on stdout and requires `type=result`, `subtype=success` and `is_error=false`. CLI
 progress, stderr and diagnostic output cannot select a state. The first
 nonempty line of the report must be a bare role status, such as `CLEAN`,
 without Markdown decoration or other text.
@@ -403,10 +403,16 @@ command; they use the identity supplied and checked by the orchestrator.
 
 ## Stop behavior and private artifacts
 
-The default timeout is 1,800 seconds per executor. Adjust it with
-`--stage-timeout-seconds` (1 through 86,400). A timeout kills the CLI process and
-stops the workflow without retrying. This is a process timeout, not a complete
-supervisor for every tool subprocess; inspect remaining work before restarting.
+The default timeout is 30 minutes per executor. Adjust it with
+`--stage-timeout-minutes` (a whole number of minutes, 1 through 1,440). A
+timeout stops the workflow without retrying. Claude Code stages report
+`Claude Code stage timed out after <n> minutes` in the result reason. For
+Codex the timeout kills only the CLI process. For Claude Code on macOS and
+Linux it stops the whole process tree, including Bash tool commands
+that Claude Code starts in their own process groups, and then kills those
+processes and their groups; on Windows it uses `taskkill /t`. A tool process
+that already detached from the tree before the timeout, or any process after a
+Codex timeout, can still survive; inspect remaining work before restarting.
 A new `--task` run starts at IMPLEMENT. Only a valid, identity-checked
 `VERIFY=INCOMPLETE` result creates a resumable checkpoint. Executor errors,
 timeouts, candidate mutations, incomplete review, and any delivery result do
@@ -415,11 +421,13 @@ not create one; inspect private artifacts before deciding how to proceed.
 Each live run creates a private `fractallens-task-*` directory under the system
 temporary directory. Each invocation has a separate numbered directory with
 `prompt.txt`, `execution.log`, `report.md`, and an error file when applicable.
-Claude Code stages also keep the JSON result object, including usage and cost
-fields, in `output.json`; their `execution.log` holds stderr only.
+For Claude Code stages `execution.log` receives the stdout stream-json events
+as they are produced, so a timed-out or crashed stage still shows its progress
+and tool activity; stderr goes to `stderr.log`. The final `result` event,
+including usage and cost fields, is also copied to `output.json`.
 The run root contains `result.json` and atomically replaced `state.json`. No artifact directory is granted through
 `--add-dir`; the Codex CLI host writes its own final-message file and the
-Claude Code runner writes `report.md` from stdout. Prompts prohibit
+Claude Code runner writes `report.md` from the final stdout event. Prompts prohibit
 inspection of other roles' private prompts/logs. This limits supplied context,
 but is not a hard read-isolation boundary for processes under the same user.
 These files may contain private
@@ -493,9 +501,10 @@ node --test scripts/orchestration/test_validation_evidence.ts
 Tests use synthetic handoffs and fake CLI processes. They check routing, shared
 repair limits, historical finding preservation, compact handoffs, candidate
 code-owned identity, per-invocation artifact directories, role/model/effort and
-sandbox/approval arguments for both executors, Claude Code JSON result parsing,
+sandbox/approval arguments for both executors, Claude Code stream-json result parsing,
 strict status parsing (trailing whitespace on the
-status line is accepted; decorations are not), exception messages, timeout, and dry-run
+status line is accepted; decorations are not), exception messages, timeout (including
+Claude Code tool commands in separate process groups), and dry-run
 behavior. Temporary Git fixtures check hashing, ignored outputs, staging/commit
 invariance, file modes, symlinks, unrelated work preservation, remote base refresh,
 frozen comparisons and stopping before delivery when the base moves or is unavailable.

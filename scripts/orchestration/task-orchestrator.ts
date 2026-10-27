@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -419,7 +419,7 @@ type StageExecution = {
 
 // Executor-independent stage preparation: private artifacts, check context and evidence.
 function createStageRunner(executor: Executor, options: RunnerOptions,
-    execute: (execution: StageExecution) => string): (request: Request) => Promise<string> {
+    execute: (execution: StageExecution) => string | Promise<string>): (request: Request) => Promise<string> {
   const { repository, runDirectory, command = [executor], timeoutMs = 30 * 60 * 1000 } = options;
   let sequence = 0;
   return async request => {
@@ -434,7 +434,7 @@ function createStageRunner(executor: Executor, options: RunnerOptions,
     const log = openSync(join(stageDirectory, 'execution.log'), 'wx', 0o600);
     console.log(`${request.stage} (${role.model}, ${role.effort}; repair round ${request.repairRound})`);
     try {
-      return execute({ command, role, prompt, repository, runDirectory, stageDirectory, log, timeoutMs });
+      return await execute({ command, role, prompt, repository, runDirectory, stageDirectory, log, timeoutMs });
     } finally {
       closeSync(log);
     }
@@ -477,37 +477,117 @@ function claudeSettings(role: Role, repository: string, runDirectory: string): o
   } };
 }
 
-// The JSON result is the only report channel; stderr and tool output never select a state.
-function claudeReport(stdout: string): string | undefined {
+// The final stdout event is the only report channel; stderr and tool output never select a state.
+// Tool output reaches stdout only inside JSON-encoded stream events, never as a line of its own.
+function claudeResultEvent(stream: string): { line: string; output: Record<string, unknown> } | undefined {
+  const line = stream.trimEnd().split('\n').at(-1) ?? '';
   try {
-    const output = JSON.parse(stdout);
-    return output?.type === 'result' && output.subtype === 'success' && output.is_error === false
-      && typeof output.result === 'string' ? output.result : undefined;
+    const output = JSON.parse(line);
+    return output?.type === 'result' ? { line, output } : undefined;
   } catch {
     return undefined;
   }
 }
 
+function processTable(): Map<number, { ppid: number; pgid: number }> {
+  const result = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,pgid='], { encoding: 'utf8', timeout: 10_000 });
+  const table = new Map<number, { ppid: number; pgid: number }>();
+  for (const line of result.status === 0 ? result.stdout.split('\n') : []) {
+    const [pid, ppid, pgid] = line.trim().split(/\s+/).map(Number);
+    if (Number.isSafeInteger(pid) && Number.isSafeInteger(ppid) && Number.isSafeInteger(pgid)) table.set(pid, { ppid, pgid });
+  }
+  return table;
+}
+
+// Claude Code runs each Bash tool command in its own process group, so killing the CLI process
+// or its group leaves tool commands running. Stop the whole tree first so nothing can fork or be
+// reparented away while it is collected, then kill every collected process and its group.
+function killProcessTree(rootPid: number): void {
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(rootPid), '/t', '/f'], { stdio: 'ignore', timeout: 10_000 });
+    return;
+  }
+  const signal = (target: number, name: NodeJS.Signals) => {
+    try { process.kill(target, name); } catch { /* Already exited. */ }
+  };
+  const stopped = new Set<number>();
+  const groups = new Set<number>();
+  let table = new Map<number, { ppid: number; pgid: number }>();
+  for (let fresh = [rootPid]; fresh.length > 0;) {
+    for (const pid of fresh) {
+      signal(pid, 'SIGSTOP');
+      stopped.add(pid);
+    }
+    table = processTable();
+    for (const [pid, entry] of table) if (stopped.has(pid)) groups.add(entry.pgid);
+    fresh = [...table].filter(([pid, entry]) => !stopped.has(pid) && stopped.has(entry.ppid)).map(([pid]) => pid);
+  }
+  // Without a separate group the CLI shares the orchestrator's group, which must survive.
+  groups.delete(table.get(process.pid)?.pgid ?? -1);
+  for (const group of groups) if (group > 1) signal(-group, 'SIGKILL');
+  for (const pid of stopped) signal(pid, 'SIGKILL');
+}
+
+// CLI timeouts are whole minutes; runners created directly may use shorter test timeouts.
+function formatTimeout(timeoutMs: number): string {
+  const minutes = timeoutMs / 60_000;
+  return Number.isInteger(minutes) ? `${minutes} minute${minutes === 1 ? '' : 's'}` : `${timeoutMs / 1000} seconds`;
+}
+
+type ClaudeExit = { code: number | null; signal: NodeJS.Signals | null; error?: Error; timedOut: boolean };
+
+function runClaude(command: string[], args: string[], options: { cwd: string; prompt: string; stdout: number; stderr: number; timeoutMs: number }): Promise<ClaudeExit> {
+  return new Promise(resolve => {
+    // File descriptors instead of pipes: stage output survives a timeout or an orchestrator crash,
+    // and surviving descendants that inherited stdout cannot delay the exit notification.
+    const child = spawn(command[0], [...command.slice(1), ...args],
+      { cwd: options.cwd, stdio: ['pipe', options.stdout, options.stderr], shell: false });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (child.pid !== undefined) killProcessTree(child.pid);
+    }, options.timeoutMs);
+    const settle = (exit: Omit<ClaudeExit, 'timedOut'>) => {
+      clearTimeout(timer);
+      resolve({ ...exit, timedOut });
+    };
+    child.once('error', error => settle({ code: null, signal: null, error }));
+    child.once('exit', (code, signal) => settle({ code, signal }));
+    child.stdin.on('error', () => { /* The executor may exit before reading the whole prompt. */ });
+    child.stdin.end(options.prompt);
+  });
+}
+
 export function createClaudeRunner(options: RunnerOptions): (request: Request) => Promise<string> {
-  return createStageRunner('claude', options, ({ command, role, prompt, repository, runDirectory, stageDirectory, log, timeoutMs }) => {
+  return createStageRunner('claude', options, async ({ command, role, prompt, repository, runDirectory, stageDirectory, log, timeoutMs }) => {
     const tools = 'Bash,Read,Grep,Glob';
-    const result = spawnSync(command[0], [
-      ...command.slice(1), '--print', '--output-format', 'json',
-      '--model', role.model, '--effort', role.effort,
-      '--no-session-persistence', '--permission-prompts', 'none',
-      '--disable-slash-commands', '--disallowedTools', 'Agent',
-      ...(role.escalation === 'never'
-        ? ['--permission-mode', 'dontAsk', '--tools', tools, '--allowedTools', tools, '--strict-mcp-config']
-        : ['--permission-mode', 'auto']),
-      '--settings', JSON.stringify(claudeSettings(role, repository, runDirectory)),
-    ], { cwd: repository, input: prompt, encoding: 'utf8', stdio: ['pipe', 'pipe', log], timeout: timeoutMs,
-      killSignal: 'SIGKILL', shell: false, maxBuffer: 64 * 1024 * 1024 });
-    if (result.stdout) writeFileSync(join(stageDirectory, 'output.json'), result.stdout, { mode: 0o600 });
-    const report = result.error || result.status !== 0 ? undefined : claudeReport(result.stdout);
+    const stderr = openSync(join(stageDirectory, 'stderr.log'), 'wx', 0o600);
+    let exit: ClaudeExit;
+    try {
+      exit = await runClaude(command, [
+        '--print', '--output-format', 'stream-json', '--verbose',
+        '--model', role.model, '--effort', role.effort,
+        '--no-session-persistence', '--permission-prompts', 'none',
+        '--disable-slash-commands', '--disallowedTools', 'Agent',
+        ...(role.escalation === 'never'
+          ? ['--permission-mode', 'dontAsk', '--tools', tools, '--allowedTools', tools, '--strict-mcp-config']
+          : ['--permission-mode', 'auto']),
+        '--settings', JSON.stringify(claudeSettings(role, repository, runDirectory)),
+      ], { cwd: repository, prompt, stdout: log, stderr, timeoutMs });
+    } finally {
+      closeSync(stderr);
+    }
+    const result = claudeResultEvent(readFileSync(join(stageDirectory, 'execution.log'), 'utf8'));
+    if (result) writeFileSync(join(stageDirectory, 'output.json'), result.line, { mode: 0o600 });
+    const report = exit.timedOut || exit.error || exit.code !== 0 || result?.output.subtype !== 'success'
+      || result.output.is_error !== false || typeof result.output.result !== 'string' ? undefined : result.output.result;
     if (report === undefined) {
-      writeFileSync(join(stageDirectory, 'error.txt'), result.error?.message
-        ?? (result.status !== 0 ? `Executor exited with ${result.status ?? result.signal}` : 'Executor returned no successful JSON result'), { mode: 0o600 });
-      throw new Error('Claude Code execution did not complete successfully');
+      const timeout = `${formatTimeout(timeoutMs)} (--stage-timeout-minutes)`;
+      writeFileSync(join(stageDirectory, 'error.txt'), exit.timedOut
+        ? `Stage timed out after ${timeout}; the Claude Code process tree, including tool commands, was killed`
+        : exit.error?.message ?? (exit.code !== 0 ? `Executor exited with ${exit.code ?? exit.signal}` : 'Executor returned no successful JSON result'),
+      { mode: 0o600 });
+      throw new Error(exit.timedOut ? `Claude Code stage timed out after ${timeout}` : 'Claude Code execution did not complete successfully');
     }
     writeFileSync(join(stageDirectory, 'report.md'), report, { mode: 0o600 });
     return report;
@@ -544,7 +624,7 @@ Execution authorizes standard commit, push and PR publication; never merge or cl
   --dry-run                      Show the plan without running models or publishing
   --skip-verification            Explicitly skip independent VER (default: required)
   --max-repair-rounds <0..3>      Shared REV/VER repair limit (default: 3)
-  --stage-timeout-seconds <n>     Executor timeout per stage (default: 1800)
+  --stage-timeout-minutes <n>     Executor timeout per stage, 1..1440 (default: 30)
   --repo <directory>             Repository root (default: this script's repository)
   --base <remote-tracking-ref>   Intended PR base (default: origin/main; local branches rejected)
   --executor <codex|claude>      Stage executor: Codex CLI or Claude Code (default: codex)
@@ -557,7 +637,7 @@ export async function main(args: string[]): Promise<number> {
   const { values } = parseArgs({ args, options: {
     resume: { type: 'string' }, 'human-evidence': { type: 'string' },
     task: { type: 'string' }, 'dry-run': { type: 'boolean' }, 'skip-verification': { type: 'boolean' },
-    'max-repair-rounds': { type: 'string', default: '3' }, 'stage-timeout-seconds': { type: 'string', default: '1800' },
+    'max-repair-rounds': { type: 'string', default: '3' }, 'stage-timeout-minutes': { type: 'string', default: '30' },
     repo: { type: 'string' }, base: { type: 'string', default: 'origin/main' }, executor: { type: 'string' },
     codex: { type: 'string', default: 'codex' }, claude: { type: 'string', default: 'claude' }, help: { type: 'boolean' },
   } });
@@ -579,9 +659,9 @@ export async function main(args: string[]): Promise<number> {
   const task = saved?.task ?? values.task;
   if (!task?.trim()) throw new Error('--task is required');
   const maxRepairRounds = saved?.maxRepairRounds ?? Number(values['max-repair-rounds']);
-  const timeoutSeconds = Number(values['stage-timeout-seconds']);
+  const timeoutMinutes = Number(values['stage-timeout-minutes']);
   if (!Number.isInteger(maxRepairRounds) || maxRepairRounds < 0 || maxRepairRounds > 3) throw new Error('Repair limit must be an integer from 0 to 3');
-  if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds > 86400) throw new Error('Stage timeout must be an integer from 1 to 86400 seconds');
+  if (!Number.isSafeInteger(timeoutMinutes) || timeoutMinutes <= 0 || timeoutMinutes > 1440) throw new Error('Stage timeout must be an integer from 1 to 1440 minutes');
   const repository = realpathSync(resolve(saved?.repository ?? values.repo ?? join(dirname(fileURLToPath(import.meta.url)), '../..')));
   const git = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: repository, encoding: 'utf8' });
   if (git.status !== 0 || realpathSync(git.stdout.trim()) !== repository) throw new Error('--repo must be a Git repository root');
@@ -629,8 +709,8 @@ export async function main(args: string[]): Promise<number> {
       checkpoint: saved?.checkpoint ?? undefined, humanEvidence,
       computeCandidate: () => computeCandidateIdentity(repository, base.baseRevision),
       runStage: executor === 'claude'
-        ? createClaudeRunner({ repository, runDirectory, command: [values.claude!], timeoutMs: timeoutSeconds * 1000 })
-        : createCodexRunner({ repository, runDirectory, command: [values.codex!], timeoutMs: timeoutSeconds * 1000 }),
+        ? createClaudeRunner({ repository, runDirectory, command: [values.claude!], timeoutMs: timeoutMinutes * 60_000 })
+        : createCodexRunner({ repository, runDirectory, command: [values.codex!], timeoutMs: timeoutMinutes * 60_000 }),
     });
     writeFileSync(join(runDirectory, 'result.json'), JSON.stringify(result, null, 2), { mode: 0o600 });
     writeState(runDirectory, { ...state, branch: branch(), checkpoint: result.checkpoint ?? null });
