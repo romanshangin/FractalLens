@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test, { type TestContext } from 'node:test';
-import { CLAUDE_MODELS, computeCandidateIdentity, createClaudeRunner, createCodexRunner, main, parseStatus, prepareBase, ROLES, runWorkflow, stagePrompt } from './task-orchestrator.ts';
+import { CLAUDE_MODELS, computeCandidateIdentity, createClaudeRunner, createCodexRunner, main, parseStatus, prepareBase, ROLES, runWorkflow, stagePrompt, stageSummary } from './task-orchestrator.ts';
 import type { Request, Stage } from './task-orchestrator.ts';
 
 const BASE = { baseRef: 'origin/main', prBase: 'main', baseRevision: 'synthetic-base', beforeDelivery: () => {} };
@@ -329,6 +329,68 @@ test('stage prompts explicitly bind skills, skip policy and role boundaries', ()
   }
 });
 
+function withSummary(report: string, summary: object): string {
+  return [report, '```stage-summary', JSON.stringify(summary), '```'].join('\n');
+}
+
+test('stage prompts request a stage-specific console summary block', () => {
+  const expected: Record<Stage, RegExp> = {
+    IMPLEMENT: /"implemented":\["<what was implemented and how>"\]/,
+    IMPLEMENT_FIXES: /"implemented":\["<what was fixed and how>"\]/,
+    REVIEW: /"kind":"Critical\|Major\|Minor"/,
+    VERIFY: /"kind":"failure\|unverified\|environment"/,
+    DELIVER: /"pr":"<PR URL or null>"/,
+  };
+  for (const stage of Object.keys(ROLES) as Stage[]) {
+    const prompt = stagePrompt({ ...BASE, stage, task: 'Synthetic task', verificationRequired: true, repairRound: 0, maxRepairRounds: 3, handoffs: [] }, '/project');
+    assert.match(prompt, /include exactly one fenced stage-summary block for the operator console/);
+    assert.match(prompt, expected[stage]);
+  }
+});
+
+test('stage summaries report implementation, problem counts and the PR link', () => {
+  assert.deepEqual(stageSummary('IMPLEMENT', withSummary('READY_FOR_REVIEW\nDetails', {
+    implemented: ['Added stage summaries by parsing a fenced JSON block'], problems: [{ kind: 'gap', summary: 'Manual UI check not run' }],
+  })), [
+    'IMPLEMENT: READY_FOR_REVIEW; 1 problem (1 gap)',
+    '  Implemented:', '  - Added stage summaries by parsing a fenced JSON block',
+    '  Problems:', '  - [gap] Manual UI check not run',
+  ]);
+  assert.deepEqual(stageSummary('IMPLEMENT_FIXES', withSummary('READY_FOR_REVIEW', { implemented: ['Fixed the finding'], problems: [] })),
+    ['IMPLEMENT_FIXES: READY_FOR_REVIEW', '  Implemented:', '  - Fixed the finding']);
+  assert.deepEqual(stageSummary('REVIEW', withSummary('FINDINGS\nDetails', { problems: [
+    { kind: 'Major', summary: 'Race in A.java:10' }, { kind: 'Minor', summary: 'Missing test' }, { kind: 'Major', summary: 'Leak in B.java:5' },
+  ] })), [
+    'REVIEW: FINDINGS; 3 problems (2 Major, 1 Minor)', '  Problems:',
+    '  - [Major] Race in A.java:10', '  - [Minor] Missing test', '  - [Major] Leak in B.java:5',
+  ]);
+  assert.deepEqual(stageSummary('REVIEW', withEvidence(withSummary('CLEAN', { problems: [] }))), ['REVIEW: CLEAN; no problems found']);
+  assert.deepEqual(stageSummary('VERIFY', withSummary('PASS', { problems: [] })), ['VERIFY: PASS; no problems found']);
+  assert.deepEqual(stageSummary('DELIVER', withSummary('DELIVERED', { pr: 'https://github.com/owner/repo/pull/7', problems: [] })),
+    ['DELIVER: DELIVERED; no problems found; PR: https://github.com/owner/repo/pull/7']);
+  assert.deepEqual(stageSummary('DELIVER', withSummary('BLOCKED', { pr: null, problems: [{ kind: 'blocker', summary: 'Push rejected' }] })),
+    ['DELIVER: BLOCKED; 1 problem (1 blocker)', '  Problems:', '  - [blocker] Push rejected']);
+});
+
+test('missing, malformed or duplicate stage summaries fall back without changing the status', () => {
+  const fallback = (stage: Stage, status: string) => [`${stage}: ${status} (no valid stage-summary block; see report.md)`];
+  assert.deepEqual(stageSummary('REVIEW', 'FINDINGS\nFree-form findings'), fallback('REVIEW', 'FINDINGS'));
+  assert.deepEqual(stageSummary('VERIFY', 'FAIL\n```stage-summary\n{not json\n```'), fallback('VERIFY', 'FAIL'));
+  const duplicate = withSummary(withSummary('PASS', { problems: [] }), { problems: [] });
+  assert.deepEqual(stageSummary('VERIFY', duplicate), fallback('VERIFY', 'PASS'));
+  assert.deepEqual(stageSummary('REVIEW', withSummary('FINDINGS', { problems: [{ kind: '', summary: 'Unnamed kind' }] })), fallback('REVIEW', 'FINDINGS'));
+  assert.deepEqual(stageSummary('REVIEW', withSummary('FINDINGS', { problems: [{ kind: 'Major', summary: 'x'.repeat(513) }] })), fallback('REVIEW', 'FINDINGS'));
+  assert.deepEqual(stageSummary('DELIVER', 'DELIVERED\nPR https://github.com/owner/repo/pull/12 is open; CI pending'),
+    ['DELIVER: DELIVERED (no valid stage-summary block; see report.md); PR: https://github.com/owner/repo/pull/12']);
+  assert.deepEqual(stageSummary('REVIEW', '**CLEAN**'), ['REVIEW: no valid first-line status']);
+});
+
+test('stage summaries strip terminal control characters from model text', () => {
+  const lines = stageSummary('REVIEW', withSummary('FINDINGS', { problems: [{ kind: 'Major\u001b[31m', summary: 'Line one\nline two\u0007' }] }));
+  assert.deepEqual(lines, ['REVIEW: FINDINGS; 1 problem (1 Major [31m)', '  Problems:', '  - [Major [31m] Line one line two']);
+  assert.ok(lines.every(line => !/[\u0000-\u001f\u007f-\u009f]/.test(line)));
+});
+
 test('Claude prompts bind the shared skill file and otherwise match Codex prompts', () => {
   for (const stage of Object.keys(ROLES) as Stage[]) {
     const request = { ...BASE, stage, task: 'Synthetic task', verificationRequired: true, repairRound: 0, maxRepairRounds: 3, handoffs: [] };
@@ -425,6 +487,30 @@ fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], report);
   assert.deepEqual(result.history.map(h => h.stage), ['IMPLEMENT', 'REVIEW', 'VERIFY', 'DELIVER']);
   assert.match(result.history.at(-1)!.report, /CI=PENDING/);
   assert.equal(readdirSync(root).filter(name => /^\d+-[A-Z]+-/.test(name)).length, 4);
+});
+
+test('stage runners print each stage summary and execution failures to the console', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'fractallens-summary-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const fake = join(root, 'summary.cjs');
+  writeFileSync(fake, `const fs = require('node:fs');
+const input = fs.readFileSync(0, 'utf8');
+const stage = input.match(/Execute only stage ([A-Z_]+)/)[1];
+if (stage === 'VERIFY') process.exit(3);
+const fence = String.fromCharCode(96).repeat(3);
+const args = process.argv.slice(2);
+fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], 'FINDINGS\\n' + fence + 'stage-summary\\n' + JSON.stringify({ problems: [{ kind: 'Minor', summary: 'Synthetic finding' }] }) + '\\n' + fence);
+`);
+  const lines: string[] = [];
+  t.mock.method(console, 'log', (line: string) => { lines.push(line); });
+  const runner = createCodexRunner({ repository: root, runDirectory: root, command: [process.execPath, fake] });
+  const request = { ...BASE, task: 'Synthetic', verificationRequired: true, repairRound: 0, maxRepairRounds: 3, handoffs: [] };
+  await runner({ ...request, stage: 'REVIEW' });
+  await assert.rejects(runner({ ...request, stage: 'VERIFY' }));
+  assert.deepEqual(lines.filter(line => !/^[A-Z_]+ \(/.test(line)), [
+    'REVIEW: FINDINGS; 1 problem (1 Minor)', '  Problems:', '  - [Minor] Synthetic finding',
+    'VERIFY: execution failed: Codex execution did not complete successfully',
+  ]);
 });
 
 test('delivery preserves unrelated dirty work without requiring a clean checkout', async t => {

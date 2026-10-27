@@ -187,6 +187,24 @@ inside this block. Missing, malformed, duplicate, oversized, or inconsistent
 evidence stops the runner as `INCOMPLETE` before DELIVER. With VER skipped,
 only REV evidence is required. Full reports remain in private run artifacts.
 
+Every stage report also ends with one fenced `stage-summary` JSON block, which
+the runner prints to the console after the stage finishes:
+
+| Stage | Block | Console summary |
+| --- | --- | --- |
+| IMPLEMENT, IMPLEMENT_FIXES | `{"implemented":["..."],"problems":[{"kind":"blocker\|gap","summary":"..."}]}` | Status, what was implemented and how, blockers and gaps |
+| REVIEW | `{"problems":[{"kind":"Critical\|Major\|Minor","summary":"..."}]}` | Status, finding count per severity and each finding, or `no problems found` |
+| VERIFY | `{"problems":[{"kind":"failure\|unverified\|environment","summary":"..."}]}` | Status, problem count per kind and each problem, or `no problems found` |
+| DELIVER | `{"pr":"<URL or null>","problems":[{"kind":"blocker\|incomplete\|ci","summary":"..."}]}` | Status, problems, PR link |
+
+The block uses the same size limits as `delivery-handoff`, with kinds of at
+most 32 characters. It is informational only: a missing, duplicate or malformed
+block prints the status with a pointer to `report.md` and never changes the
+stage result or the workflow. When DELIVER omits `pr`, the first GitHub pull
+request URL in its report is shown instead. Control characters in model text
+are replaced before printing. A stage whose execution fails prints the failure
+message instead.
+
 | Stage result | Next step |
 | --- | --- |
 | IMPLEMENT `READY_FOR_REVIEW` | REVIEW |
