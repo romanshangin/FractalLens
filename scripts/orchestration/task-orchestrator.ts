@@ -528,6 +528,12 @@ function killProcessTree(rootPid: number): void {
   for (const pid of stopped) signal(pid, 'SIGKILL');
 }
 
+// CLI timeouts are whole minutes; runners created directly may use shorter test timeouts.
+function formatTimeout(timeoutMs: number): string {
+  const minutes = timeoutMs / 60_000;
+  return Number.isInteger(minutes) ? `${minutes} minute${minutes === 1 ? '' : 's'}` : `${timeoutMs / 1000} seconds`;
+}
+
 type ClaudeExit = { code: number | null; signal: NodeJS.Signals | null; error?: Error; timedOut: boolean };
 
 function runClaude(command: string[], args: string[], options: { cwd: string; prompt: string; stdout: number; stderr: number; timeoutMs: number }): Promise<ClaudeExit> {
@@ -576,7 +582,7 @@ export function createClaudeRunner(options: RunnerOptions): (request: Request) =
     const report = exit.timedOut || exit.error || exit.code !== 0 || result?.output.subtype !== 'success'
       || result.output.is_error !== false || typeof result.output.result !== 'string' ? undefined : result.output.result;
     if (report === undefined) {
-      const timeout = `${timeoutMs / 1000} seconds (--stage-timeout-seconds)`;
+      const timeout = `${formatTimeout(timeoutMs)} (--stage-timeout-minutes)`;
       writeFileSync(join(stageDirectory, 'error.txt'), exit.timedOut
         ? `Stage timed out after ${timeout}; the Claude Code process tree, including tool commands, was killed`
         : exit.error?.message ?? (exit.code !== 0 ? `Executor exited with ${exit.code ?? exit.signal}` : 'Executor returned no successful JSON result'),
@@ -618,7 +624,7 @@ Execution authorizes standard commit, push and PR publication; never merge or cl
   --dry-run                      Show the plan without running models or publishing
   --skip-verification            Explicitly skip independent VER (default: required)
   --max-repair-rounds <0..3>      Shared REV/VER repair limit (default: 3)
-  --stage-timeout-seconds <n>     Executor timeout per stage (default: 1800)
+  --stage-timeout-minutes <n>     Executor timeout per stage, 1..1440 (default: 30)
   --repo <directory>             Repository root (default: this script's repository)
   --base <remote-tracking-ref>   Intended PR base (default: origin/main; local branches rejected)
   --executor <codex|claude>      Stage executor: Codex CLI or Claude Code (default: codex)
@@ -631,7 +637,7 @@ export async function main(args: string[]): Promise<number> {
   const { values } = parseArgs({ args, options: {
     resume: { type: 'string' }, 'human-evidence': { type: 'string' },
     task: { type: 'string' }, 'dry-run': { type: 'boolean' }, 'skip-verification': { type: 'boolean' },
-    'max-repair-rounds': { type: 'string', default: '3' }, 'stage-timeout-seconds': { type: 'string', default: '1800' },
+    'max-repair-rounds': { type: 'string', default: '3' }, 'stage-timeout-minutes': { type: 'string', default: '30' },
     repo: { type: 'string' }, base: { type: 'string', default: 'origin/main' }, executor: { type: 'string' },
     codex: { type: 'string', default: 'codex' }, claude: { type: 'string', default: 'claude' }, help: { type: 'boolean' },
   } });
@@ -653,9 +659,9 @@ export async function main(args: string[]): Promise<number> {
   const task = saved?.task ?? values.task;
   if (!task?.trim()) throw new Error('--task is required');
   const maxRepairRounds = saved?.maxRepairRounds ?? Number(values['max-repair-rounds']);
-  const timeoutSeconds = Number(values['stage-timeout-seconds']);
+  const timeoutMinutes = Number(values['stage-timeout-minutes']);
   if (!Number.isInteger(maxRepairRounds) || maxRepairRounds < 0 || maxRepairRounds > 3) throw new Error('Repair limit must be an integer from 0 to 3');
-  if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds > 86400) throw new Error('Stage timeout must be an integer from 1 to 86400 seconds');
+  if (!Number.isSafeInteger(timeoutMinutes) || timeoutMinutes <= 0 || timeoutMinutes > 1440) throw new Error('Stage timeout must be an integer from 1 to 1440 minutes');
   const repository = realpathSync(resolve(saved?.repository ?? values.repo ?? join(dirname(fileURLToPath(import.meta.url)), '../..')));
   const git = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: repository, encoding: 'utf8' });
   if (git.status !== 0 || realpathSync(git.stdout.trim()) !== repository) throw new Error('--repo must be a Git repository root');
@@ -703,8 +709,8 @@ export async function main(args: string[]): Promise<number> {
       checkpoint: saved?.checkpoint ?? undefined, humanEvidence,
       computeCandidate: () => computeCandidateIdentity(repository, base.baseRevision),
       runStage: executor === 'claude'
-        ? createClaudeRunner({ repository, runDirectory, command: [values.claude!], timeoutMs: timeoutSeconds * 1000 })
-        : createCodexRunner({ repository, runDirectory, command: [values.codex!], timeoutMs: timeoutSeconds * 1000 }),
+        ? createClaudeRunner({ repository, runDirectory, command: [values.claude!], timeoutMs: timeoutMinutes * 60_000 })
+        : createCodexRunner({ repository, runDirectory, command: [values.codex!], timeoutMs: timeoutMinutes * 60_000 }),
     });
     writeFileSync(join(runDirectory, 'result.json'), JSON.stringify(result, null, 2), { mode: 0o600 });
     writeState(runDirectory, { ...state, branch: branch(), checkpoint: result.checkpoint ?? null });

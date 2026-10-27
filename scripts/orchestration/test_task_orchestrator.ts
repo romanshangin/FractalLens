@@ -530,7 +530,7 @@ test('Claude error results, malformed output, nonzero exit, missing executable a
     assert.ok(readdirSync(stageDirectory).includes('error.txt'), body);
     assert.ok(!readdirSync(stageDirectory).includes('report.md'), body);
     const timedOut = body.includes('setInterval');
-    assert.equal(/Claude Code stage timed out after 0\.5 seconds \(--stage-timeout-seconds\)/.test(result.reason), timedOut, result.reason);
+    assert.equal(/Claude Code stage timed out after 0\.5 seconds \(--stage-timeout-minutes\)/.test(result.reason), timedOut, result.reason);
     assert.equal(readFileSync(join(stageDirectory, 'error.txt'), 'utf8').startsWith('Stage timed out'), timedOut, body);
   }
   const runner = createClaudeRunner({ repository: root, runDirectory: root, command: [join(root, 'missing-claude')] });
@@ -558,7 +558,7 @@ setInterval(() => {}, 1000);
   const runner = createClaudeRunner({ repository: root, runDirectory, command: [process.execPath, fake], timeoutMs: 3000 });
   const result = await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner });
   assert.equal(result.status, 'INCOMPLETE');
-  assert.match(result.reason, /Claude Code stage timed out after 3 seconds \(--stage-timeout-seconds\)/);
+  assert.match(result.reason, /Claude Code stage timed out after 3 seconds \(--stage-timeout-minutes\)/);
   const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(name => name.includes('-IMPLEMENT-'))!);
   assert.match(readFileSync(join(stageDirectory, 'error.txt'), 'utf8'), /^Stage timed out after 3 seconds .*process tree, including tool commands, was killed/);
   assert.equal(JSON.parse(readFileSync(join(stageDirectory, 'execution.log'), 'utf8')).type, 'system');
@@ -594,7 +594,10 @@ test('CLI dry-run plans roles without executing Codex; invalid flags exit nonzer
   }
   await assert.rejects(main(['--task', 'Synthetic', '--dry-run', '--executor', 'gemini']), /--executor must be codex or claude/);
   await assert.rejects(main(['--task', 'Synthetic', '--max-repair-rounds', '4']));
-  await assert.rejects(main(['--task', 'Synthetic', '--stage-timeout-seconds', '0']));
+  for (const minutes of ['0', '1441', '1.5', 'thirty']) {
+    await assert.rejects(main(['--task', 'Synthetic', '--dry-run', '--stage-timeout-minutes', minutes]), /Stage timeout must be an integer from 1 to 1440 minutes/);
+  }
+  await assert.rejects(main(['--task', 'Synthetic', '--dry-run', '--stage-timeout-seconds', '1800']), /Unknown option '--stage-timeout-seconds'/);
   await assert.rejects(main(['--unknown']));
   const invalid = spawnSync(process.execPath, [script, '--unknown'], { encoding: 'utf8' });
   assert.equal(invalid.status, 1);

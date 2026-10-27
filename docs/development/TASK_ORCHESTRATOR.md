@@ -403,11 +403,12 @@ command; they use the identity supplied and checked by the orchestrator.
 
 ## Stop behavior and private artifacts
 
-The default timeout is 1,800 seconds per executor. Adjust it with
-`--stage-timeout-seconds` (1 through 86,400). A timeout stops the workflow
-without retrying and reports `<executor> stage timed out after <n> seconds` in
-the result reason. For Codex it kills only the CLI process. For Claude Code on
-macOS and Linux it stops the whole process tree, including Bash tool commands
+The default timeout is 30 minutes per executor. Adjust it with
+`--stage-timeout-minutes` (a whole number of minutes, 1 through 1,440). A
+timeout stops the workflow without retrying. Claude Code stages report
+`Claude Code stage timed out after <n> minutes` in the result reason. For
+Codex the timeout kills only the CLI process. For Claude Code on macOS and
+Linux it stops the whole process tree, including Bash tool commands
 that Claude Code starts in their own process groups, and then kills those
 processes and their groups; on Windows it uses `taskkill /t`. A tool process
 that already detached from the tree before the timeout, or any process after a
