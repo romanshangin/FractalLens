@@ -144,8 +144,9 @@ python3 scripts/publication/check_public_data.py
 python3 scripts/publication/check_secrets.py --tree
 ```
 
-Both are read-only and keep their reports outside the repository. A finding is
-a required-check failure. If Gitleaks is unavailable, classify the secret scan
+Both are read-only and keep their reports outside the repository. Both scan
+tracked files plus untracked files Git does not ignore, so ignored output and
+nested worktrees do not affect them. A finding is a required-check failure. If Gitleaks is unavailable, classify the secret scan
 as unverified because of an environment limitation.
 
 ## Report the result

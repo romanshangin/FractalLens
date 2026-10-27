@@ -491,9 +491,13 @@ Manually verify Dock identity and any affected system behavior.
   python3 scripts/publication/check_secrets.py --tree
   ```
 
-  The first secret scan covers the complete Git history; `--tree` covers the
-  working directory, including uncommitted files. `--tree` replaces the history
-  scan rather than extending it, so one run does not cover both. The scans need
+  The first secret scan covers the complete Git history; `--tree` covers every
+  file a commit can include: tracked files plus untracked files that Git does
+  not ignore, uncommitted changes included. Ignored output and nested
+  worktrees such as `.claude/worktrees/` are not part of the candidate.
+  `--tree` replaces the history scan rather than extending it, so one run does
+  not cover both. Unresolved findings are listed by path, rule and line without
+  matched values. The scans need
   Gitleaks; CI uses version 8.30.1. Put a local `gitleaks` on `PATH` or pass
   `--gitleaks <path>`. `scripts/publication/install-gitleaks` is a Linux x64 CI
   installer only. If Gitleaks is unavailable, report the secret scan as not

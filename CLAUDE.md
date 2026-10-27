@@ -159,7 +159,8 @@ Benchmarks are opt-in Maven profiles; never wire them into the default build.
 - Publication/privacy checks before committing evidence:
   `python3 scripts/publication/check_public_data.py`, then both
   `python3 scripts/publication/check_secrets.py` (Git history) and
-  `python3 scripts/publication/check_secrets.py --tree` (working directory).
+  `python3 scripts/publication/check_secrets.py --tree` (tracked and
+  non-ignored untracked files).
   Both need Gitleaks 8.30.1 on `PATH` or `--gitleaks <path>`;
   `scripts/publication/install-gitleaks` is the Linux x64 CI installer only.
 - Qodana baseline and acceptance: `.qodana/`, `scripts/quality/`.
