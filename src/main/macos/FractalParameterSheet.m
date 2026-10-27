@@ -13,6 +13,8 @@
 @property NSMutableArray<NSColorWell *> *colors;
 @property NSStackView *paletteRows;
 @property NSMutableArray<NSButton *> *removeButtons;
+@property NSMutableArray<NSPopUpButton *> *choices;
+@property NSArray<NSNumber *> *choiceDefaults;
 @property NSWindow *owner;
 @property NSTextField *first;
 @property NSTextField *second;
@@ -75,6 +77,12 @@ static NSString *nativeString(JNIEnv *env, jstring text) {
 }
 
 static NSString *firstDraft(FractalParameterSession *session) {
+    if (session.choices) {
+        NSMutableArray *drafts = [NSMutableArray new];
+        for (NSPopUpButton *choice in session.choices)
+            [drafts addObject:[NSString stringWithFormat:@"%ld", (long)choice.indexOfSelectedItem]];
+        return [drafts componentsJoinedByString:@","];
+    }
     if (!session.positions) return session.first ? session.first.stringValue : @"";
     NSMutableArray *drafts = [NSMutableArray new];
     for (NSTextField *field in session.positions) [drafts addObject:field.stringValue];
@@ -229,6 +237,13 @@ static jint invalidField(FractalParameterSession *session) {
     self.error.stringValue = @"";
     [self.panel makeFirstResponder:self.first];
     [self.first selectText:nil];
+}
+- (void)resetChoices:(id)sender {
+    (void)sender;
+    // Reset only changes the draft; Apply still decides whether the scene changes.
+    for (NSUInteger i = 0; i < self.choices.count; i++)
+        [self.choices[i] selectItemAtIndex:self.choiceDefaults[i].integerValue];
+    [self.panel makeFirstResponder:self.choices.firstObject];
 }
 - (void)appendPosition:(NSString *)position color:(int32_t)argb {
     NSTextField *field = [NSTextField textFieldWithString:position];
@@ -588,5 +603,164 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openNotice
             }];
         }
     }
+    return (jlong)(intptr_t)(__bridge_retained void *)session;
+}
+
+static NSArray<NSString *> *nativeStrings(JNIEnv *env, jobjectArray values) {
+    if (!values) return nil;
+    jsize count = (*env)->GetArrayLength(env, values);
+    NSMutableArray<NSString *> *result = [NSMutableArray arrayWithCapacity:(NSUInteger)count];
+    for (jsize i = 0; i < count; i++) {
+        jstring value = (jstring)(*env)->GetObjectArrayElement(env, values, i);
+        NSString *text = value ? nativeString(env, value) : nil;
+        if (value) (*env)->DeleteLocalRef(env, value);
+        if (!text) return nil;
+        [result addObject:text];
+    }
+    return result;
+}
+
+static NSTextField *sectionLabel(NSString *text) {
+    NSTextField *view = label(text);
+    view.font = [NSFont boldSystemFontOfSize:NSFont.systemFontSize];
+    return view;
+}
+
+// Sections of labelled pop-up buttons; Java parses the comma-separated selected indices.
+JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoices
+(JNIEnv *env, jobject callback, jlong windowHandle, jstring title, jstring hintText,
+ jobjectArray sectionTitles, jobjectArray fieldLabels, jobjectArray fieldIds, jobjectArray fieldHints,
+ jobjectArray fieldChoices, jintArray selectedIndices, jintArray defaultIndices, jstring resetTitle,
+ jstring confirmTitle) {
+    if (!sheetMainThread(env)) return 0;
+    NSWindow *owner = (__bridge NSWindow *)(void *)(intptr_t)windowHandle;
+    if (!owner.isVisible || owner.attachedSheet) return 0;
+    NSArray<NSString *> *sections = nativeStrings(env, sectionTitles);
+    NSArray<NSString *> *labels = nativeStrings(env, fieldLabels);
+    NSArray<NSString *> *ids = nativeStrings(env, fieldIds);
+    NSArray<NSString *> *hints = nativeStrings(env, fieldHints);
+    NSUInteger count = sections.count;
+    if (count == 0 || labels.count != count || ids.count != count || hints.count != count
+            || (NSUInteger)(*env)->GetArrayLength(env, fieldChoices) != count
+            || (NSUInteger)(*env)->GetArrayLength(env, selectedIndices) != count
+            || (NSUInteger)(*env)->GetArrayLength(env, defaultIndices) != count) return 0;
+    jint selected[count];
+    jint defaults[count];
+    (*env)->GetIntArrayRegion(env, selectedIndices, 0, (jsize)count, selected);
+    (*env)->GetIntArrayRegion(env, defaultIndices, 0, (jsize)count, defaults);
+    if ((*env)->ExceptionCheck(env)) return 0;
+    NSMutableArray<NSNumber *> *choiceDefaults = [NSMutableArray arrayWithCapacity:count];
+    NSMutableArray<NSPopUpButton *> *popups = [NSMutableArray arrayWithCapacity:count];
+    for (NSUInteger i = 0; i < count; i++) {
+        jobjectArray titles = (jobjectArray)(*env)->GetObjectArrayElement(env, fieldChoices, (jsize)i);
+        NSArray<NSString *> *choices = nativeStrings(env, titles);
+        if (titles) (*env)->DeleteLocalRef(env, titles);
+        if (!choices || selected[i] < 0 || (NSUInteger)selected[i] >= choices.count
+                || defaults[i] < 0 || (NSUInteger)defaults[i] >= choices.count) return 0;
+        [choiceDefaults addObject:@(defaults[i])];
+        NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+        [popup addItemsWithTitles:choices];
+        [popup selectItemAtIndex:selected[i]];
+        popup.identifier = ids[i];
+        popup.accessibilityLabel = labels[i];
+        [popups addObject:popup];
+    }
+    FractalParameterSession *session = [FractalParameterSession new];
+    JavaVM *vm = NULL;
+    (*env)->GetJavaVM(env, &vm);
+    session.vm = vm;
+    jclass type = (*env)->GetObjectClass(env, callback);
+    session.completion = (*env)->GetMethodID(env, type, "completed", "(ZLjava/lang/String;Ljava/lang/String;)V");
+    session.validation = (*env)->GetMethodID(env, type, "invalidField", "(Ljava/lang/String;Ljava/lang/String;)I");
+    (*env)->DeleteLocalRef(env, type);
+    if (!session.completion || !session.validation) return 0;
+    session.callback = (*env)->NewGlobalRef(env, callback);
+    if (!session.callback) return 0;
+    session.owner = owner;
+    session.validationError = @"";
+    session.choices = popups;
+    session.choiceDefaults = choiceDefaults;
+    session.panel = [[FractalPanel alloc] initWithContentRect:NSMakeRect(0, 0, 520, 300)
+            styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
+            backing:NSBackingStoreBuffered defer:NO];
+    session.panel.title = nativeString(env, title);
+    session.panel.releasedWhenClosed = NO;
+    session.panel.delegate = session;
+    session.panel.backgroundColor = NSColor.windowBackgroundColor;
+    NSTextField *heading = label(session.panel.title);
+    heading.font = [NSFont boldSystemFontOfSize:15];
+    NSTextField *hint = label(nativeString(env, hintText));
+    hint.textColor = NSColor.secondaryLabelColor;
+    hint.selectable = YES;
+    NSMutableArray<NSView *> *rows = [NSMutableArray arrayWithObjects:heading, hint, nil];
+    NSMutableArray<NSView *> *wide = [NSMutableArray arrayWithObject:hint];
+    NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray new];
+    NSLayoutDimension *labelWidth = nil;
+    NSString *currentSection = nil;
+    for (NSUInteger i = 0; i < count; i++) {
+        if (![sections[i] isEqualToString:currentSection]) {
+            currentSection = sections[i];
+            [rows addObject:sectionLabel(currentSection)];
+        }
+        NSTextField *fieldLabel = [NSTextField labelWithString:[labels[i] stringByAppendingString:@":"]];
+        fieldLabel.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
+        fieldLabel.alignment = NSTextAlignmentRight;
+        [fieldLabel setContentHuggingPriority:NSLayoutPriorityRequired
+                               forOrientation:NSLayoutConstraintOrientationHorizontal];
+        // Labels share the widest width so the pop-up buttons line up as in System Settings.
+        if (labelWidth) [constraints addObject:[fieldLabel.widthAnchor constraintEqualToAnchor:labelWidth]];
+        else labelWidth = fieldLabel.widthAnchor;
+        [constraints addObject:[fieldLabel.widthAnchor constraintGreaterThanOrEqualToConstant:
+                fieldLabel.intrinsicContentSize.width]];
+        NSStackView *row = [NSStackView stackViewWithViews:@[fieldLabel, popups[i]]];
+        row.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+        row.alignment = NSLayoutAttributeFirstBaseline;
+        row.spacing = 8;
+        NSTextField *fieldHint = label(hints[i]);
+        fieldHint.textColor = NSColor.secondaryLabelColor;
+        fieldHint.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+        NSStackView *field = [NSStackView stackViewWithViews:@[row, fieldHint]];
+        field.orientation = NSUserInterfaceLayoutOrientationVertical;
+        field.alignment = NSLayoutAttributeLeading;
+        field.spacing = 4;
+        [constraints addObject:[fieldHint.leadingAnchor constraintEqualToAnchor:popups[i].leadingAnchor]];
+        [constraints addObject:[fieldHint.trailingAnchor constraintEqualToAnchor:field.trailingAnchor]];
+        [rows addObject:field];
+        [wide addObject:field];
+    }
+    session.error = label(@"");
+    NSButton *reset = button(nativeString(env, resetTitle), session, @selector(resetChoices:));
+    NSButton *cancel = button(@"Cancel", session, @selector(cancel:));
+    NSButton *apply = button(nativeString(env, confirmTitle), session, @selector(apply:));
+    cancel.keyEquivalent = @"\033";
+    apply.keyEquivalent = @"\r";
+    NSView *spacer = [NSView new];
+    [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+    NSStackView *actions = [NSStackView stackViewWithViews:@[reset, spacer, cancel, apply]];
+    actions.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+    actions.spacing = 8;
+    [rows addObject:actions];
+    [wide addObject:actions];
+    NSStackView *body = [NSStackView stackViewWithViews:rows];
+    body.orientation = NSUserInterfaceLayoutOrientationVertical;
+    body.alignment = NSLayoutAttributeLeading;
+    body.spacing = 12;
+    [body setCustomSpacing:20 afterView:hint];
+    [body setCustomSpacing:20 afterView:rows[rows.count - 2]];
+    body.translatesAutoresizingMaskIntoConstraints = NO;
+    [session.panel.contentView addSubview:body];
+    for (NSView *view in wide) [constraints addObject:[view.widthAnchor constraintEqualToAnchor:body.widthAnchor]];
+    [constraints addObjectsFromArray:@[
+        [body.leadingAnchor constraintEqualToAnchor:session.panel.contentView.leadingAnchor constant:20],
+        [body.trailingAnchor constraintEqualToAnchor:session.panel.contentView.trailingAnchor constant:-20],
+        [body.topAnchor constraintEqualToAnchor:session.panel.contentView.topAnchor constant:20],
+        [body.bottomAnchor constraintEqualToAnchor:session.panel.contentView.bottomAnchor constant:-20]]];
+    [NSLayoutConstraint activateConstraints:constraints];
+    [session.panel recalculateKeyViewLoop];
+    session.panel.initialFirstResponder = popups[0];
+    [owner beginSheet:session.panel completionHandler:^(NSModalResponse response) {
+        complete(session, response == NSModalResponseOK && invalidField(session) == 0);
+    }];
+    [session.panel makeFirstResponder:popups[0]];
     return (jlong)(intptr_t)(__bridge_retained void *)session;
 }

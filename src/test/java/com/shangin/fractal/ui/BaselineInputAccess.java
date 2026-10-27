@@ -21,11 +21,15 @@ public final class BaselineInputAccess {
     public static FractalSurface surface(FractalView view) throws Exception { return field(view, "fractalSurface"); }
     public static Viewport viewport(FractalView view) throws Exception { return ((FractalCamera) field(view, "camera")).viewport(); }
 
+    /** Mirrors the controller's deep zoom policy for the visible completed frame. */
     public static boolean deepZoom(FractalView view) throws Exception {
-        return field(field(field(view, "renderController"), "deepAntialiasState"), "deepZoomActive");
+        var completed = surface(view).completedRender();
+        var fractal = completed.scene().fractal();
+        return fractal.supportsDeepZoom() && !fractal.hasSufficientDirectPrecision(
+                completed.scene().viewport(), completed.frame().job().width(), completed.frame().job().height());
     }
     public static boolean deepAa(FractalView view) throws Exception {
-        return field(field(field(view, "renderController"), "deepAntialiasState"), "enabled");
+        return surface(view).completedRender().scene().antialiasing().deepZoomRenderMode().antialiases();
     }
 
     @SuppressWarnings("unchecked")

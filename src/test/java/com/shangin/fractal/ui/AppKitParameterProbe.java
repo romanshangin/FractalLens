@@ -81,6 +81,31 @@ final class AppKitParameterProbe {
         return (MacJuliaSheet) field.get(menu);
     }
 
+    static MacSettingsSheet settingsSheet(MainMenuBar menu) throws Exception {
+        var field = MainMenuBar.class.getDeclaredField("settingsSheet");
+        field.setAccessible(true);
+        return (MacSettingsSheet) field.get(menu);
+    }
+
+    /** Returns the pop-up button of the settings field at {@code index}. */
+    static MemorySegment choice(MacParameterSheet<?> sheet, int index) throws Exception {
+        return (MemorySegment) AppKitMenuProbe.message(field(sheet, "choices"), "objectAtIndex:", ADDRESS,
+                new java.lang.foreign.MemoryLayout[]{JAVA_LONG}, (long) index);
+    }
+
+    static int selectedIndex(MemorySegment popup) {
+        return (int) (long) AppKitMenuProbe.message(popup, "indexOfSelectedItem", JAVA_LONG);
+    }
+
+    static void select(MemorySegment popup, int index) {
+        AppKitMenuProbe.message(popup, "selectItemAtIndex:", null,
+                new java.lang.foreign.MemoryLayout[]{JAVA_LONG}, (long) index);
+    }
+
+    static boolean enabled(MemorySegment control) {
+        return (byte) AppKitMenuProbe.message(control, "isEnabled", JAVA_BYTE) != 0;
+    }
+
     static MemorySegment session(MacParameterSheet<?> sheet) throws Exception {
         var field = MacParameterSheet.class.getDeclaredField("handle");
         field.setAccessible(true);

@@ -120,6 +120,8 @@ class MacSystemMenuFxTest {
             assertAppearanceCommands(bar, true);
             assertFalse(fx(() -> AppKitMenuProbe.enabled("File/Export PNG…")));
             assertTrue(fx(() -> AppKitMenuProbe.enabled("File/Close Window")));
+            assertTrue(fx(() -> AppKitMenuProbe.enabled("File/" + SettingsWindow.MENU_TITLE)),
+                    "Settings stay available while rendering");
             assertTrue(fx(() -> AppKitMenuProbe.enabled("Help/FractalLens Help")));
             gate.get().countDown();
             await(() -> canvas.hasCompletedFrame() && !item(bar, "Color", "Edit Palette…").isDisable());
@@ -161,8 +163,7 @@ class MacSystemMenuFxTest {
         for (MenuItem item : menu.getItems()) {
             if (item instanceof SeparatorMenuItem) continue;
             String itemPath = path + "/" + item.getText();
-            boolean unavailable = busy || "Deep Zoom Antialiasing".equals(item.getText())
-                    || "Edit Julia Parameters…".equals(item.getText());
+            boolean unavailable = busy || "Edit Julia Parameters…".equals(item.getText());
             assertEquals(item instanceof Menu ? false : unavailable, item.isDisable(), itemPath);
             assertEquals(item instanceof Menu || !unavailable, AppKitMenuProbe.enabled(itemPath),
                     "Native state must match without hovering or reopening: " + itemPath);

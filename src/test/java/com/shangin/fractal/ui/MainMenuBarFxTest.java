@@ -3,9 +3,11 @@ package com.shangin.fractal.ui;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.coloring.OrbitTrap;
+import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import com.shangin.fractal.formula.JuliaFormula;
@@ -100,8 +102,21 @@ class MainMenuBarFxTest {
                 .map(item -> item instanceof javafx.scene.control.SeparatorMenuItem ? "-" : item.getText())
                 .toList());
 
-        assertEquals(List.of("Display Quality", "-", "Edit Iteration Settings…", "Edit Julia Parameters…",
-                "-", "Deep Zoom Antialiasing"), titles);
+        assertEquals(List.of("Edit Iteration Settings…", "Edit Julia Parameters…"), titles);
+    }
+
+    @Test
+    void fileMenuOpensApplicationSettingsWithStandardShortcut() throws Exception {
+        List<String> titles = fx(() -> menuBar.getMenus().stream()
+                .filter(menu -> "File".equals(menu.getText()))
+                .findFirst().orElseThrow().getItems().stream()
+                .map(item -> item instanceof javafx.scene.control.SeparatorMenuItem ? "-" : item.getText())
+                .toList());
+
+        assertEquals(List.of("Export PNG…", "-", "Settings…", "-", "Close Window"), titles.subList(0, 5));
+        assertEquals(new javafx.scene.input.KeyCodeCombination(javafx.scene.input.KeyCode.COMMA,
+                javafx.scene.input.KeyCombination.SHORTCUT_DOWN),
+                fx(() -> command("File", SettingsWindow.MENU_TITLE).getAccelerator()));
     }
 
     @Test
@@ -742,6 +757,61 @@ class MainMenuBarFxTest {
     }
 
     @Test
+    void settingsApplyStandardAndDeepZoomModesThroughUndoableSceneHistory() throws Exception {
+        FractalScene initial = fx(view::sceneSnapshot);
+        assertEquals(new AntialiasSettings(), initial.antialiasing());
+        var selected = new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED);
+        CompletableFuture<Void> action = fireLater(fx(() -> command("File", SettingsWindow.MENU_TITLE)));
+        if (MacSettingsSheet.isAvailable()) {
+            action.get(10, TimeUnit.SECONDS);
+            fx(() -> {
+                var sheet = AppKitParameterProbe.settingsSheet(menuBar);
+                assertNotNull(sheet);
+                var standard = AppKitParameterProbe.choice(sheet, 0);
+                var deep = AppKitParameterProbe.choice(sheet, 1);
+                assertEquals(InteractiveRenderMode.REFINED.ordinal(), AppKitParameterProbe.selectedIndex(standard));
+                assertEquals(InteractiveRenderMode.BASE_ONLY.ordinal(), AppKitParameterProbe.selectedIndex(deep));
+                assertTrue(AppKitParameterProbe.enabled(deep), "The deep zoom mode is editable outside deep zoom");
+                AppKitParameterProbe.select(standard, InteractiveRenderMode.BASE_ONLY.ordinal());
+                AppKitParameterProbe.select(deep, InteractiveRenderMode.REFINED.ordinal());
+                assertEquals(initial, view.sceneSnapshot());
+                AppKitParameterProbe.action(sheet, "apply");
+                return null;
+            });
+        } else {
+            DialogPane pane = awaitDialog(SettingsWindow.TITLE);
+            fx(() -> {
+                @SuppressWarnings("unchecked")
+                var standard = (javafx.scene.control.ComboBox<String>) pane.lookup("#" + SettingsWindow.STANDARD_ID);
+                @SuppressWarnings("unchecked")
+                var deep = (javafx.scene.control.ComboBox<String>) pane.lookup("#" + SettingsWindow.DEEP_ID);
+                assertFalse(deep.isDisabled(), "The deep zoom mode is editable outside deep zoom");
+                standard.getSelectionModel().select(InteractiveRenderMode.BASE_ONLY.ordinal());
+                deep.getSelectionModel().select(InteractiveRenderMode.REFINED.ordinal());
+                assertEquals(initial, view.sceneSnapshot());
+                confirm(pane);
+                return null;
+            });
+            action.get(10, TimeUnit.SECONDS);
+        }
+        await(() -> surface().completedRender() != null
+                && surface().completedRender().scene().antialiasing().equals(selected)
+                && !command("Render", "Edit Iteration Settings…").isDisable());
+        fx(() -> {
+            assertEquals(selected, view.sceneSnapshot().antialiasing());
+            RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
+            assertTrue(badge.getText().contains("Complete"), badge.getText());
+            assertTrue(badge.getTooltip().getText().contains("Antialiasing is off"));
+            view.undoScene();
+            assertEquals(initial.antialiasing(), view.sceneSnapshot().antialiasing());
+            return null;
+        });
+        await(() -> surface().completedRender() != null
+                && surface().completedRender().scene().antialiasing().equals(initial.antialiasing())
+                && !command("Render", "Edit Iteration Settings…").isDisable());
+    }
+
+    @Test
     void iterationMenuAppliesBothValuesFromOneThemedDialog() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
         CompletableFuture<Void> action = openEditor("Edit Iteration Settings…");
@@ -985,7 +1055,7 @@ class MainMenuBarFxTest {
     @Test
     void availabilityKeepsSceneSpecificRestrictionsAfterRendering() throws Exception {
         fx(() -> {
-            assertTrue(command("Render", "Deep Zoom Antialiasing").isDisable());
+            assertFalse(command("File", SettingsWindow.MENU_TITLE).isDisable());
             assertTrue(command("Render", "Edit Julia Parameters…").isDisable());
             command("Fractal", "Julia").fire();
             return null;

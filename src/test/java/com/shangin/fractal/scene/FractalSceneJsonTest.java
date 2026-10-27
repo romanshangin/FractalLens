@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -53,6 +54,60 @@ class FractalSceneJsonTest {
         assertTrue(json.contains("\"juliaParameters\": {\"real\": 0.285, \"imaginary\": 0.01}"));
         assertTrue(json.contains("\"samplingPattern\": \"REGULAR\""),
                 "Earlier version 2 readers require the sampling pattern field");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(InteractiveRenderMode.class)
+    void roundTripsEveryStandardZoomModeByStableName(InteractiveRenderMode mode) {
+        FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                .withAntialiasing(new AntialiasSettings(mode));
+        String json = FractalSceneJson.write(scene);
+
+        assertTrue(json.contains("\"schemaVersion\": 2"));
+        assertTrue(json.contains("\"renderMode\": \"" + mode.name() + "\""));
+        assertEquals(scene, FractalSceneJson.read(json));
+    }
+
+    @Test
+    void keepsEarlierRenderModeIdentifiersAndDefault() {
+        // Scenes written before Base only existed must keep their presentation.
+        assertEquals(InteractiveRenderMode.REFINED, new AntialiasSettings().renderMode());
+        String fast = FractalSceneJson.write(FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.FAST)));
+        assertTrue(fast.contains("\"renderMode\": \"FAST\""));
+        assertEquals(InteractiveRenderMode.REFINED, FractalSceneJson.read(fast.replace(
+                "\"renderMode\": \"FAST\"", "\"renderMode\": \"REFINED\"")).antialiasing().renderMode());
+        assertThrows(IllegalArgumentException.class, () -> FractalSceneJson.read(fast.replace(
+                "\"renderMode\": \"FAST\"", "\"renderMode\": \"Base only\"")));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(InteractiveRenderMode.class)
+    void roundTripsEveryDeepZoomModeIndependentlyOfTheStandardMode(InteractiveRenderMode mode) {
+        FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.FAST, mode));
+        String json = FractalSceneJson.write(scene);
+
+        assertTrue(json.contains("\"renderMode\": \"FAST\""));
+        assertTrue(json.contains("\"deepZoomRenderMode\": \"" + mode.name() + "\""));
+        assertEquals(scene, FractalSceneJson.read(json));
+    }
+
+    @Test
+    void scenesWithoutDeepZoomModeKeepDeepZoomAntialiasingOff() {
+        String json = FractalSceneJson.write(FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED)));
+        String older = json.replace(",\n    \"deepZoomRenderMode\": \"REFINED\"", "");
+        assertFalse(older.contains("deepZoomRenderMode"), "The fixture must remove the field");
+
+        AntialiasSettings restored = FractalSceneJson.read(older).antialiasing();
+        assertEquals(InteractiveRenderMode.FAST, restored.renderMode());
+        assertEquals(InteractiveRenderMode.BASE_ONLY, restored.deepZoomRenderMode());
+        assertEquals(InteractiveRenderMode.BASE_ONLY, new AntialiasSettings().deepZoomRenderMode());
+        assertThrows(IllegalArgumentException.class, () -> FractalSceneJson.read(json.replace(
+                "\"deepZoomRenderMode\": \"REFINED\"", "\"deepZoomRenderMode\": \"Antialiased display\"")));
+        assertThrows(IllegalArgumentException.class, () -> FractalSceneJson.read(json.replace(
+                "\"deepZoomRenderMode\": \"REFINED\"", "\"deepZoomRenderMode\": true")));
     }
 
     @Test

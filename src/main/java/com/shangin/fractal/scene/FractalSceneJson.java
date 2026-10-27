@@ -72,7 +72,9 @@ public final class FractalSceneJson {
                 .append("    \"samplingPattern\": ")
                 .append(quoted(REGULAR_SAMPLING_PATTERN)).append(",\n")
                 .append("    \"renderMode\": ")
-                .append(quoted(scene.antialiasing().renderMode().name())).append("\n")
+                .append(quoted(scene.antialiasing().renderMode().name())).append(",\n")
+                .append("    \"deepZoomRenderMode\": ")
+                .append(quoted(scene.antialiasing().deepZoomRenderMode().name())).append("\n")
                 .append("  }\n")
                 .append("}\n");
         return json.toString();
@@ -161,9 +163,16 @@ public final class FractalSceneJson {
                 throw new IllegalArgumentException("Unknown samplingPattern: " + pattern);
             }
         }
+        // Scenes written before the deep zoom choice keep deep zoom antialiasing off.
+        InteractiveRenderMode deepZoomRenderMode = antialiasingObject.containsKey("deepZoomRenderMode")
+                ? enumValue(InteractiveRenderMode.class,
+                        string(antialiasingObject.get("deepZoomRenderMode"), "deepZoomRenderMode"),
+                        "deepZoomRenderMode")
+                : AntialiasSettings.DEFAULT_DEEP_ZOOM_RENDER_MODE;
         AntialiasSettings antialiasing = new AntialiasSettings(
                 enumValue(InteractiveRenderMode.class,
-                        string(required(antialiasingObject, "renderMode"), "renderMode"), "renderMode"));
+                        string(required(antialiasingObject, "renderMode"), "renderMode"), "renderMode"),
+                deepZoomRenderMode);
         JuliaParameters julia = root.containsKey("juliaParameters")
                 ? juliaParameters(root) : new JuliaParameters();
         return new FractalScene(fractal, viewport, iterations, coloring, antialiasing, julia);

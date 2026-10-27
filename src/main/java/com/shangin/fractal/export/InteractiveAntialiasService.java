@@ -53,6 +53,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private final AntialiasSampleCache sampleCache;
     private final boolean profiling;
     private RenderFrame cachedFrame;
+    private volatile boolean cachedSamplesShown = true;
     private RenderFrame basePhaseFrame;
     private BaseColorPhaseCache basePhaseCache;
     private final ThreadLocal<SmoothColorLookup> recolorLookup =
@@ -206,10 +207,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             int[] cachedColors = retained.size() == 0 ? null : new int[data.size()];
             if (cachedColors != null) retained.recolorInto(cachedColors, lookup);
             if (profiling) profile.cachePreparationNanos = System.nanoTime() - cacheStarted;
-            PreciseFractalSampler preciseSampler = deepZoom
-                    ? PreciseFractalSampler.create(
-                    frame.job(), () -> shouldCancel(refinementId)).orElseThrow(
-                    () -> new CancellationException("Deep AA reference orbit was cancelled"))
+            // Built on first use: a pass served entirely from cached samples needs no reference orbit.
+            LazyPreciseSampler preciseSampler = deepZoom
+                    ? new LazyPreciseSampler(frame, () -> shouldCancel(refinementId))
                     : null;
             List<Future<?>> tasks = new ArrayList<>();
 
@@ -268,7 +268,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             RenderRegion tile,
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
-            PreciseFractalSampler preciseSampler,
+            LazyPreciseSampler preciseSampler,
             MutableProfile profile
     ) {
         SamplePlane data = frame.samplePlane();
@@ -340,7 +340,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         calculator, grid, frame.request().maxIterations(),
                         x, y, scratch)
                         : sampleDeepGrid(
-                        preciseSampler, grid.preciseGrid(), data,
+                        preciseSampler.get(), grid.preciseGrid(), data,
                         x, y,
                         () -> shouldCancel(refinementId), scratch);
                 if (samples == null) {
@@ -462,7 +462,28 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
     private synchronized AntialiasSampleCache.Snapshot aaSnapshot(
             RenderFrame frame, SmoothPaletteColoring coloring) {
-        return cachedFrame == frame ? sampleCache.snapshotFor(coloring) : AntialiasSampleCache.Snapshot.EMPTY;
+        return cachedSamplesShown && cachedFrame == frame
+                ? sampleCache.snapshotFor(coloring) : AntialiasSampleCache.Snapshot.EMPTY;
+    }
+
+    /** Creates the deep reference orbit once, when the first candidate needs new samples. */
+    private static final class LazyPreciseSampler {
+        private final RenderFrame frame;
+        private final java.util.function.BooleanSupplier cancelled;
+        private PreciseFractalSampler sampler;
+
+        LazyPreciseSampler(RenderFrame frame, java.util.function.BooleanSupplier cancelled) {
+            this.frame = frame;
+            this.cancelled = cancelled;
+        }
+
+        synchronized PreciseFractalSampler get() {
+            if (sampler == null) {
+                sampler = PreciseFractalSampler.create(frame.job(), cancelled).orElseThrow(
+                        () -> new CancellationException("Deep AA reference orbit was cancelled"));
+            }
+            return sampler;
+        }
     }
 
     private BaseColorPhaseCache basePhases(
@@ -482,6 +503,14 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             basePhaseCache = created;
         }
         return created;
+    }
+
+    /**
+     * Shows or hides cached AA samples in palette recoloring. Base only hides them
+     * but keeps them, so a later antialiasing mode reuses the finished samples.
+     */
+    public void showCachedSamples(boolean shown) {
+        cachedSamplesShown = shown;
     }
 
     /** Transfers cached AA samples along the exact pixel shift used for frame reuse. */

@@ -136,17 +136,19 @@ The native JavaFX regression checks can be run with
 
 | Menu | Commands |
 | --- | --- |
-| File | Export PNG… (⌘⇧E), Close Window (⌘W) |
+| File | Export PNG… (⌘⇧E), Settings… (⌘,), Close Window (⌘W) |
 | Edit | Standard text editing commands for focused text fields |
 | View | Zoom In (⌘+, also ⌘=), Zoom Out (⌘−), Reset View (⌘0), Go to Coordinates… (⌘L), Enter/Exit Full Screen (⌃⌘F) |
 | Fractal | Mandelbrot, Julia, Multibrot, Burning Ship, Tricorn |
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette, Reset Colors to Defaults |
-| Render | Display Quality, Edit Iteration Settings…, Edit Julia Parameters…, Deep Zoom Antialiasing |
+| Render | Edit Iteration Settings…, Edit Julia Parameters… |
 | Window | Minimize (⌘M), Zoom |
 | Help | FractalLens Help, including pointer and keyboard navigation |
 
-Edit Iteration Settings is available for every fractal when rendering is idle.
-Edit Julia Parameters is enabled only for Julia.
+Settings… is available at any time, including while a frame renders; applying it
+restarts the render. Edit Iteration Settings is available for every fractal when
+rendering is idle. Edit Julia Parameters is enabled only for Julia. See
+[Render settings (P2.6)](#render-settings-p26).
 
 On other platforms the platform shortcut modifier replaces Command.
 Arrow keys pan the focused canvas after zooming in. Page Up and Page Down zoom
@@ -375,6 +377,92 @@ deep Mandelbrot scene visibly advanced through 0%, 30%, and 68% before showing
 injects a recolor failure on the worker path, and checks the error dialog's
 message in the application window. This is functional evidence, not a render
 performance measurement.
+
+### Render settings (P2.6)
+
+File → Settings… (⌘,) opens the application Settings window. It replaces the
+former Display Quality submenu and Deep Zoom Antialiasing menu item, and it is
+the place for future application settings. Its only section so far is
+**Render Settings**. On macOS the window is an owner-associated AppKit sheet built
+by the existing parameter-sheet bridge: each setting is an `NSPopUpButton` with a
+right-aligned label and a hint. The shared JavaFX form, with one combo box per
+setting, remains the fallback on bridge failure and on Windows/Linux. Return
+applies, Escape and Cancel discard the draft, and only Apply changes the scene.
+Reset to Defaults selects Antialiased display for standard zoom and Base only for
+deep zoom in the draft; like the other edits it takes effect only on Apply.
+Both forms focus the Standard zoom setting first. The menu item stays enabled
+while rendering because applying the settings cancels the current render and
+starts a new one. The command lives in File rather than the macOS application
+menu because JavaFX has no public API for adding items to that system-owned
+menu.
+
+Render Settings offers the same three presentations for standard zoom and for
+deep zoom. Both are stored in the scene's `AntialiasSettings` as
+`InteractiveRenderMode` values (`renderMode` and `deepZoomRenderMode`):
+
+| Mode | Scene value | Presentation |
+| --- | --- | --- |
+| Base only | `BASE_ONLY` | Progressive base samples; the frame completes without antialiasing |
+| Base, then antialiasing | `FAST` | Progressive base samples, then antialiased tiles in place |
+| Antialiased display | `REFINED` | Only refined antialiased tiles are shown |
+
+The defaults are Antialiased display for standard zoom and Base only for deep
+zoom, which keeps the earlier behavior. The renderer uses the deep zoom mode
+whenever a Mandelbrot or Julia frame needs deep zoom precision and the standard
+mode otherwise, so both settings can be changed at any zoom. Deep zoom
+antialiasing uses the existing precise candidate-only pass (`refineDeep`). In
+Antialiased display, deep zoom shows only those refined tiles, which can take
+much longer than the base render.
+
+Base only reaches `RenderStatus.COMPLETE` when the base render finishes; no
+refinement starts. While a frame renders, the badge always shows
+`Rendering N%`, where N is the progress toward the fully finished frame in the
+mode that applies to the current zoom; there is no separate `Refining…` state.
+In Base only the percentage is the share of ready base samples. In Base, then
+antialiasing and Antialiased display the base render and the AA pass each
+account for half: the base render reaches 50%, and the AA pass adds the share of
+pixels whose AA colors are published. Samples and AA pixels reused by a pan or
+zoom count as done from the start of the render, so panning a finished frame by
+half the width starts at about 50% in every mode. The percentage never moves
+backwards, and 100% is reported only when the last AA tile is published. The badge
+tooltip describes the mode that applies to the current zoom. Switching to Base only
+drops reused antialiased pixels from the display, including pixels reused from a
+retained preview of an interrupted render, and hides cached antialiasing samples
+from palette recoloring, so the frame and later recoloring show base colors only.
+The cached samples themselves are kept and follow frame reuse; they exist for
+smooth palettes only. For every coloring, including Histogram Coloring and Orbit
+Trap, a switch to Base only on a completed frame also keeps the AA colors it took
+off the screen, with their mask. Switching that same frame back to an
+antialiasing mode with an unchanged coloring restores them without any AA work;
+a palette or coloring change in between discards them, and the smooth-palette
+cache still avoids recalculating subsamples. In deep zoom the AA reference orbit
+is built only when a pixel actually needs new subsamples.
+
+When the visible frame is complete and the new scene differs only in its
+antialiasing modes, the controller changes the presentation of that frame in
+place instead of starting a render; no samples are recalculated. This also holds
+for Undo and Redo of the settings, because restoring such a scene keeps the AA
+mask of the visible frame:
+
+| Change | Result |
+| --- | --- |
+| To Base only | The visible frame is recolored from its base samples; its AA colors and cached AA samples are kept |
+| Between Base, then antialiasing and Antialiased display on a fully antialiased frame | Nothing is recalculated or republished; the render completes at once |
+| From Base only (or a partly antialiased frame) to either antialiasing mode | Kept AA colors are restored when the coloring is unchanged; any remaining AA tiles are applied in place over the visible base, reusing cached AA samples, so only pixels never antialiased need new subsamples |
+
+Antialiased display normally hides base samples until their AA tile is ready;
+on a mode switch the base is already visible, so hiding it again would only blank
+the image. Otherwise, for example after a pan, zoom or resize, base samples are
+reused through the existing frame reuse and the selected mode applies as
+described above. Both modes are part of the scene, so they follow Undo/Redo,
+bookmarks, shared presets and session restore. The former Deep Zoom
+Antialiasing switch was transient and turned off when the view left deep zoom;
+the deep zoom mode now persists like the standard mode. PNG export keeps its
+own adaptive antialiasing policy.
+
+Developer validation is listed in the P2.6 handoff; manual macOS checks of the
+window in light and dark appearance (focus, Return, Escape, Cancel, Apply)
+remain part of the open P2.6 acceptance.
 
 ### P2.1 acceptance
 
@@ -636,6 +724,7 @@ messages through AppKit when the bridge is available:
 | Entry point | macOS presentation | Fallback |
 | --- | --- | --- |
 | Iteration Settings / Julia Parameters / Add Bookmark | Existing native field sheets | JavaFX owner-modal forms |
+| Settings (P2.6) | Native sheet with labelled pop-up buttons | JavaFX owner-modal form with combo boxes |
 | Go to Coordinates | Native two-field sheet; exact decimal parsing, selectable zoom/deep-zoom hint | JavaFX owner-modal form |
 | Export PNG dimensions | Native two-field sheet with the shared memory-budget validation and live size estimate | JavaFX owner-modal form |
 | Render/export/bookmark/preset errors | Asynchronous `NSAlert` sheet | JavaFX owner-modal alert |

@@ -71,8 +71,8 @@ class FractalResizeFxTest {
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
             badge.setProgress(0.42);
             assertTrue(badge.getText().contains("Rendering 42%"));
-            badge.setProgress(1.0);
-            assertTrue(badge.getText().contains("Refining"));
+            badge.setProgress(0.99);
+            assertTrue(badge.getText().contains("Rendering 99%"), "Progress covers the AA pass; there is no Refining state");
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.FAILED, 0));
             assertTrue(badge.getText().contains("Failed"));
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.COMPLETE, 15_000_000));
@@ -92,6 +92,25 @@ class FractalResizeFxTest {
             badge.setProgress(0.0);
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
             assertTrue(badge.getText().contains("Rendering 0%"));
+            assertTrue(badge.getTooltip().getText().contains("Only antialiased tiles are displayed."));
+            badge.setAntialiasSettings(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY));
+            badge.setProgress(1.0);
+            assertTrue(badge.getText().contains("Rendering 100%"));
+            assertTrue(badge.getTooltip().getText().contains("Antialiasing is off"));
+            badge.setAntialiasSettings(new AntialiasSettings(InteractiveRenderMode.FAST));
+            assertTrue(badge.getText().contains("Rendering 100%"), badge.getText());
+            assertTrue(badge.getTooltip().getText().contains("antialiasing pass follows"));
+            // Deep zoom reports its own mode, which defaults to Base only.
+            badge.setDeepZoom(true);
+            assertTrue(badge.getText().contains("Deep Zoom · Rendering 100%"), badge.getText());
+            assertTrue(badge.getTooltip().getText().contains("Antialiasing is off"));
+            badge.setAntialiasSettings(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY,
+                    InteractiveRenderMode.REFINED));
+            assertTrue(badge.getText().contains("Deep Zoom · Rendering 100%"), badge.getText());
+            assertTrue(badge.getTooltip().getText().contains("Only antialiased tiles are displayed."));
+            badge.setDeepZoom(false);
+            assertTrue(badge.getText().contains("Standard · Rendering 100%"), badge.getText());
+            assertFalse(badge.getText().contains("Refining"), badge.getText());
             return null;
         });
     }
@@ -816,6 +835,450 @@ class FractalResizeFxTest {
         } finally {
             fx(() -> { controller.close(); return null; });
         }
+    }
+
+    @Test
+    void standardModeSwitchesPublishOnlyTheSelectedPresentation() throws Exception {
+        FractalSurface surface = fx(FractalSurface::new);
+        FractalRenderController controller = fx(() -> new FractalRenderController(surface));
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        var statuses = new CopyOnWriteArrayList<RenderStatus.State>();
+        try {
+            fx(() -> {
+                controller.setOnRenderStatusChanged(status -> statuses.add(status.state()));
+                return null;
+            });
+            render(surface, controller, camera, 80, 60, false, InteractiveRenderMode.BASE_ONLY);
+            int[] base = basePixels(surface);
+            assertArrayEquals(base, pixels(surface), "Base only must publish uncorrected base colors");
+            assertEquals(RenderStatus.State.COMPLETE, statuses.getLast());
+            RenderFrame frame = fx(() -> surface.completedRender().frame());
+
+            render(surface, controller, camera, 80, 60, false, InteractiveRenderMode.FAST);
+            int[] antialiased = pixels(surface);
+            assertFalse(java.util.Arrays.equals(base, antialiased), "The fixture must contain refined edges");
+            assertSame(frame, fx(() -> surface.completedRender().frame()),
+                    "Antialiasing must refine the visible base frame without recalculating it");
+
+            int cachedSamples = cachedAntialiasSamples(controller);
+            assertTrue(cachedSamples > 0);
+
+            statuses.clear();
+            render(surface, controller, camera, 80, 60, false, InteractiveRenderMode.BASE_ONLY);
+            assertArrayEquals(base, pixels(surface), "Base only must not keep reused antialiased pixels");
+            assertEquals(java.util.List.of(RenderStatus.State.RENDERING, RenderStatus.State.COMPLETE), statuses);
+            assertSame(frame, fx(() -> surface.completedRender().frame()));
+            assertEquals(cachedSamples, cachedAntialiasSamples(controller),
+                    "Base only must keep finished AA samples for a later antialiasing mode");
+
+            CountDownLatch recolored = new CountDownLatch(1);
+            fx(() -> {
+                controller.recolor(surface.completedRender().scene().coloring(), recolored::countDown);
+                return null;
+            });
+            assertTrue(recolored.await(15, TimeUnit.SECONDS));
+            int[] baseRecolor = fx(() -> {
+                var completed = surface.completedRender();
+                try (var withoutAntialiasing = new com.shangin.fractal.export.InteractiveAntialiasService()) {
+                    return withoutAntialiasing.recolorCached(completed.frame(),
+                            completed.scene().coloring().createStrategy(completed.frame().samplePlane()));
+                }
+            });
+            assertArrayEquals(baseRecolor, pixels(surface), "Recoloring must not restore cached antialiased samples");
+
+            render(surface, controller, camera, 80, 60, false, InteractiveRenderMode.REFINED);
+            assertArrayEquals(antialiased, pixels(surface), "Antialiased display must refine the reused base");
+            assertSame(frame, fx(() -> surface.completedRender().frame()));
+            assertEquals(cachedSamples, cachedAntialiasSamples(controller), "No AA sample may be recalculated");
+            render(surface, controller, camera, 80, 60, false, InteractiveRenderMode.FAST);
+            assertArrayEquals(antialiased, pixels(surface));
+            assertSame(frame, fx(() -> surface.completedRender().frame()));
+            assertEquals(InteractiveRenderMode.FAST,
+                    fx(() -> surface.completedRender().scene().antialiasing().renderMode()));
+        } finally {
+            fx(() -> { controller.close(); return null; });
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(InteractiveRenderMode.class)
+    void renderProgressCoversTheWholeFrameIncludingAntialiasing(InteractiveRenderMode mode) throws Exception {
+        FractalSurface surface = fx(FractalSurface::new);
+        FractalRenderController controller = fx(() -> new FractalRenderController(surface));
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        // Progress and status callbacks both run on the FX thread, so one list keeps their order.
+        var events = new CopyOnWriteArrayList<Object>();
+        try {
+            fx(() -> {
+                controller.setOnRenderProgressChanged(events::add);
+                controller.setOnRenderStatusChanged(status -> events.add(status.state()));
+                return null;
+            });
+            render(surface, controller, camera, 80, 60, false, mode);
+            int complete = events.indexOf(RenderStatus.State.COMPLETE);
+            assertTrue(complete > 0, events.toString());
+            java.util.List<Double> progress = events.subList(0, complete).stream()
+                    .filter(Double.class::isInstance).map(Double.class::cast).toList();
+            for (int index = 1; index < progress.size(); index++) {
+                assertTrue(progress.get(index) >= progress.get(index - 1), "Progress must not go back: " + progress);
+            }
+            assertEquals(1.0, progress.getLast(), "The frame is complete only at 100%: " + progress);
+            if (mode.antialiases()) {
+                // The base render ends at half; the AA pass reports the rest.
+                assertTrue(progress.contains(0.5), progress.toString());
+                assertTrue(progress.stream().anyMatch(value -> value > 0.5 && value < 1.0), progress.toString());
+                assertEquals(progress.size() - 1, progress.indexOf(1.0),
+                        "100% must wait for the last AA tile: " + progress);
+            }
+        } finally {
+            fx(() -> { controller.close(); return null; });
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = InteractiveRenderMode.class, names = {"FAST", "REFINED"})
+    void deepPanProgressStartsWithReusedSamplesAndAntialiasedPixels(InteractiveRenderMode mode) throws Exception {
+        FractalSurface surface = fx(FractalSurface::new);
+        FractalRenderController controller = fx(() -> new FractalRenderController(surface));
+        FractalScene deep = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                .withViewport(new Viewport("-0.8267486182939549503119853330756",
+                        "0.2150828768422976562284460839629", "1e-16"));
+        var progress = new CopyOnWriteArrayList<Double>();
+        try {
+            fx(() -> {
+                controller.setOnRenderProgressChanged(progress::add);
+                surface.resize(80, 60);
+                surface.resizeBuffer(80, 60);
+                return null;
+            });
+            render(surface, controller, deep, mode);
+            assertTrue(fx(() -> surface.refinedPixelCount(surface.completedRender().frame())) == 80 * 60,
+                    "The source frame must be fully antialiased");
+
+            // Pan by half the width: half of the samples and half of the AA pixels are reused.
+            var unit = deep.viewport().imaginaryUnitsPerPixelExact(60);
+            FractalScene panned = deep.withViewport(deep.viewport().pan(
+                    unit.multiply(java.math.BigDecimal.valueOf(40)), java.math.BigDecimal.ZERO));
+            progress.clear();
+            render(surface, controller, panned, mode);
+            double first = progress.stream().filter(value -> value > 0.0).findFirst().orElseThrow();
+            assertEquals(0.5, first, 0.05, "Reused work must be reported before new work: " + progress);
+            assertEquals(1.0, progress.getLast());
+        } finally {
+            fx(() -> { controller.close(); return null; });
+        }
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"smooth", "histogram", "orbit-trap"})
+    void baseOnlyKeepsFinishedAntialiasingForEveryColoring(String coloringName) throws Exception {
+        FractalSurface surface = fx(FractalSurface::new);
+        FractalRenderController controller = fx(() -> new FractalRenderController(surface));
+        var palette = new com.shangin.fractal.scene.ColoringSettings(PalettePreset.ICE);
+        var coloring = new com.shangin.fractal.scene.ColoringSettings(palette.palette(), palette.paletteStops(),
+                palette.colorScale(), palette.offset(), coloringName.equals("histogram"),
+                coloringName.equals("orbit-trap") ? com.shangin.fractal.coloring.OrbitTrap.CROSS
+                        : com.shangin.fractal.coloring.OrbitTrap.NONE);
+        FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE).withColoring(coloring);
+        try {
+            fx(() -> {
+                surface.resize(80, 60);
+                surface.resizeBuffer(80, 60);
+                return null;
+            });
+            renderStandard(surface, controller, scene, InteractiveRenderMode.FAST);
+            RenderFrame frame = fx(() -> surface.completedRender().frame());
+            int[] antialiased = pixels(surface);
+            int[] base = basePixels(surface);
+            assertFalse(java.util.Arrays.equals(base, antialiased), "The fixture must contain refined edges");
+
+            renderStandard(surface, controller, scene, InteractiveRenderMode.BASE_ONLY);
+            assertArrayEquals(base, pixels(surface));
+
+            fx(() -> { surface.latency().arm(ignored -> {}); return null; });
+            renderStandard(surface, controller, scene, InteractiveRenderMode.REFINED);
+            var published = fx(() -> surface.latency().stop()).stream().map(InteractionLatency.Event::stage).toList();
+            assertSame(frame, fx(() -> surface.completedRender().frame()));
+            assertArrayEquals(antialiased, pixels(surface), "The finished AA colors must return");
+            assertFalse(published.contains("aa_publish"),
+                    "Finished AA must be restored, not recalculated: " + published);
+        } finally {
+            fx(() -> { controller.close(); return null; });
+        }
+    }
+
+    @Test
+    void paletteChangeInBaseOnlyNeverRestoresAntialiasingInTheOldPalette() throws Exception {
+        var ice = new com.shangin.fractal.scene.ColoringSettings(PalettePreset.ICE);
+        var histogram = new com.shangin.fractal.scene.ColoringSettings(ice.palette(), ice.paletteStops(),
+                ice.colorScale(), ice.offset(), true, com.shangin.fractal.coloring.OrbitTrap.NONE);
+        var other = new com.shangin.fractal.scene.ColoringSettings(PalettePreset.values()[1]);
+        var recolored = new com.shangin.fractal.scene.ColoringSettings(other.palette(), other.paletteStops(),
+                other.colorScale(), other.offset(), true, com.shangin.fractal.coloring.OrbitTrap.NONE);
+        FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE).withColoring(histogram);
+
+        FractalSurface reference = fx(FractalSurface::new);
+        FractalRenderController referenceController = fx(() -> new FractalRenderController(reference));
+        FractalSurface surface = fx(FractalSurface::new);
+        FractalRenderController controller = fx(() -> new FractalRenderController(surface));
+        try {
+            fx(() -> {
+                for (FractalSurface target : java.util.List.of(reference, surface)) {
+                    target.resize(80, 60);
+                    target.resizeBuffer(80, 60);
+                }
+                return null;
+            });
+            renderStandard(reference, referenceController, scene.withColoring(recolored), InteractiveRenderMode.REFINED);
+            int[] expected = pixels(reference);
+
+            renderStandard(surface, controller, scene, InteractiveRenderMode.FAST);
+            renderStandard(surface, controller, scene, InteractiveRenderMode.BASE_ONLY);
+            CountDownLatch applied = new CountDownLatch(1);
+            fx(() -> { controller.recolor(recolored, applied::countDown); return null; });
+            assertTrue(applied.await(15, TimeUnit.SECONDS));
+            renderStandard(surface, controller, scene.withColoring(recolored), InteractiveRenderMode.REFINED);
+
+            assertArrayEquals(expected, pixels(surface), "AA colors from the old palette must not return");
+        } finally {
+            fx(() -> { controller.close(); referenceController.close(); return null; });
+        }
+    }
+
+    @Test
+    void undoAndRedoOfAntialiasingModesKeepFinishedAntialiasing() throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE, false));
+        Stage stage = fx(Stage::new);
+        try {
+            fx(() -> {
+                stage.setScene(new Scene(view, 160, 120));
+                stage.show();
+                return null;
+            });
+            FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+            awaitSurfaceComplete(surface);
+            // Histogram Coloring has no sample cache, so only kept AA colors avoid a new AA pass.
+            settle(view, surface, () -> view.setHistogramColoring(true),
+                    scene -> scene.coloring().histogramColoring());
+            var fast = new AntialiasSettings(InteractiveRenderMode.FAST);
+            var baseOnly = new AntialiasSettings(InteractiveRenderMode.BASE_ONLY);
+            var refined = new AntialiasSettings(InteractiveRenderMode.REFINED);
+            settle(view, surface, () -> view.setAntialiasSettings(fast), scene -> scene.antialiasing().equals(fast));
+            RenderFrame frame = fx(() -> surface.completedRender().frame());
+            int[] antialiased = pixels(surface);
+            settle(view, surface, () -> view.setAntialiasSettings(baseOnly),
+                    scene -> scene.antialiasing().equals(baseOnly));
+            settle(view, surface, () -> view.setAntialiasSettings(refined),
+                    scene -> scene.antialiasing().equals(refined));
+
+            settle(view, surface, view::undoScene, scene -> scene.antialiasing().equals(baseOnly));
+            assertSame(frame, fx(() -> surface.completedRender().frame()));
+            assertFalse(java.util.Arrays.equals(antialiased, pixels(surface)), "Undo must show Base only");
+
+            fx(() -> { surface.latency().arm(ignored -> {}); return null; });
+            settle(view, surface, view::redoScene, scene -> scene.antialiasing().equals(refined));
+            var published = fx(() -> surface.latency().stop()).stream().map(InteractionLatency.Event::stage).toList();
+            assertSame(frame, fx(() -> surface.completedRender().frame()));
+            assertArrayEquals(antialiased, pixels(surface), "Redo must restore the finished AA colors");
+            assertFalse(published.contains("aa_publish"), "Redo must not recalculate AA: " + published);
+        } finally {
+            fx(() -> { view.close(); stage.close(); return null; });
+        }
+    }
+
+    /** Runs a scene action and waits until the view is idle with a completed scene matching {@code done}. */
+    private static void settle(FractalView view, FractalSurface surface, Runnable action,
+                               java.util.function.Predicate<FractalScene> done) throws Exception {
+        CountDownLatch completed = new CountDownLatch(1);
+        fx(() -> {
+            view.setOnRenderingChanged(active -> {
+                var render = surface.completedRender();
+                if (!active && render != null && done.test(render.scene())) completed.countDown();
+            });
+            action.run();
+            return null;
+        });
+        assertTrue(completed.await(15, TimeUnit.SECONDS), "View must settle after the scene change");
+        fx(() -> null);
+    }
+
+    private static void renderStandard(FractalSurface surface, FractalRenderController controller,
+                                       FractalScene scene, InteractiveRenderMode mode) throws Exception {
+        CountDownLatch completed = new CountDownLatch(1);
+        fx(() -> {
+            controller.cancelCurrent();
+            boolean[] started = {false};
+            controller.setOnRenderingChanged(active -> {
+                if (active) started[0] = true;
+                else if (started[0]) completed.countDown();
+            });
+            controller.render(scene.withAntialiasing(new AntialiasSettings(mode)),
+                    new RenderTarget(surface.renderWidth(), surface.renderHeight(), RenderPriority.center()),
+                    scene.fractal().defaultViewport());
+            return null;
+        });
+        assertTrue(completed.await(15, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void switchingBetweenAntialiasingModesKeepsAFullyAntialiasedFrameWithoutRepublishing() throws Exception {
+        FractalSurface surface = fx(FractalSurface::new);
+        FractalRenderController controller = fx(() -> new FractalRenderController(surface));
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        var statuses = new CopyOnWriteArrayList<RenderStatus.State>();
+        try {
+            fx(() -> {
+                controller.setOnRenderStatusChanged(status -> statuses.add(status.state()));
+                return null;
+            });
+            render(surface, controller, camera, 80, 60, false, InteractiveRenderMode.FAST);
+            RenderFrame frame = fx(() -> surface.completedRender().frame());
+            int[] antialiased = pixels(surface);
+            fx(() -> { surface.latency().arm(ignored -> {}); return null; });
+
+            statuses.clear();
+            render(surface, controller, camera, 80, 60, false, InteractiveRenderMode.REFINED);
+            var published = fx(() -> surface.latency().stop()).stream().map(InteractionLatency.Event::stage).toList();
+            assertSame(frame, fx(() -> surface.completedRender().frame()), "The visible frame must be kept");
+            assertArrayEquals(antialiased, pixels(surface));
+            assertEquals(java.util.List.of(RenderStatus.State.RENDERING, RenderStatus.State.COMPLETE), statuses);
+            assertTrue(published.stream().noneMatch(java.util.Set.of(
+                    "base_publish", "aa_publish", "frame_promoted")::contains), published.toString());
+            assertEquals(InteractiveRenderMode.REFINED,
+                    fx(() -> surface.completedRender().scene().antialiasing().renderMode()));
+        } finally {
+            fx(() -> { controller.close(); return null; });
+        }
+    }
+
+    @Test
+    void deepZoomModeSwitchesPublishOnlyTheSelectedPresentation() throws Exception {
+        FractalSurface surface = fx(FractalSurface::new);
+        FractalRenderController controller = fx(() -> new FractalRenderController(surface));
+        FractalScene deep = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                .withViewport(new Viewport("-0.8267486182939549503119853330756",
+                        "0.2150828768422976562284460839629", "1e-16"));
+        var statuses = new CopyOnWriteArrayList<RenderStatus.State>();
+        var deepZoom = new CopyOnWriteArrayList<Boolean>();
+        try {
+            fx(() -> {
+                controller.setOnRenderStatusChanged(status -> statuses.add(status.state()));
+                controller.setOnDeepZoomChanged(deepZoom::add);
+                surface.resize(80, 60);
+                surface.resizeBuffer(80, 60);
+                return null;
+            });
+            render(surface, controller, deep, InteractiveRenderMode.BASE_ONLY);
+            assertEquals(java.util.List.of(true), deepZoom.stream().distinct().toList());
+            int[] base = basePixels(surface);
+            assertArrayEquals(base, pixels(surface), "Deep base only must publish uncorrected base colors");
+            assertEquals(RenderStatus.State.COMPLETE, statuses.getLast());
+            RenderFrame frame = fx(() -> surface.completedRender().frame());
+
+            render(surface, controller, deep, InteractiveRenderMode.FAST);
+            int[] antialiased = pixels(surface);
+            assertFalse(java.util.Arrays.equals(base, antialiased), "The deep fixture must contain refined edges");
+            assertSame(frame, fx(() -> surface.completedRender().frame()),
+                    "Deep antialiasing must refine the visible base frame without recalculating it");
+
+            statuses.clear();
+            render(surface, controller, deep, InteractiveRenderMode.BASE_ONLY);
+            assertArrayEquals(base, pixels(surface), "Deep base only must not keep reused antialiased pixels");
+            assertEquals(java.util.List.of(RenderStatus.State.RENDERING, RenderStatus.State.COMPLETE), statuses);
+
+            render(surface, controller, deep, InteractiveRenderMode.REFINED);
+            assertArrayEquals(antialiased, pixels(surface), "Deep antialiased display must refine the reused base");
+        } finally {
+            fx(() -> { controller.close(); return null; });
+        }
+    }
+
+    /** Renders a fixed viewport with the supplied deep zoom mode and the default standard mode. */
+    private static void render(FractalSurface surface, FractalRenderController controller, FractalScene scene,
+                               InteractiveRenderMode deepMode) throws Exception {
+        CountDownLatch completed = new CountDownLatch(1);
+        fx(() -> {
+            controller.cancelCurrent();
+            boolean[] started = {false};
+            controller.setOnRenderingChanged(active -> {
+                if (active) started[0] = true;
+                else if (started[0]) completed.countDown();
+            });
+            controller.render(scene.withAntialiasing(new AntialiasSettings(InteractiveRenderMode.REFINED, deepMode)),
+                    new RenderTarget(surface.renderWidth(), surface.renderHeight(), RenderPriority.center()),
+                    scene.fractal().defaultViewport());
+            return null;
+        });
+        assertTrue(completed.await(60, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void baseOnlyReuseOfRetainedRefinedPreviewPublishesOnlyBaseColors() throws Exception {
+        FractalSurface surface = fx(FractalSurface::new);
+        int[] expected = fx(() -> {
+            var calculator = new com.shangin.fractal.render.FractalCalculator(
+                    FractalPreset.MANDELBROT.createFormula());
+            Viewport viewport = FractalPreset.MANDELBROT.defaultViewport();
+            var refined = RenderFrame.create(new com.shangin.fractal.render.RenderRequest(
+                    calculator, viewport, 8, 8, 20));
+            var other = RenderFrame.create(new com.shangin.fractal.render.RenderRequest(
+                    calculator, viewport.zoom(0.5), 8, 8, 20));
+            var target = RenderFrame.create(refined.request());
+            var wholeFrame = new RenderRegion(0, 0, 8, 8);
+            var coloring = new com.shangin.fractal.coloring.SmoothPaletteColoring(PalettePreset.ICE.palette());
+            refined.validity().markReady(wholeFrame);
+            target.validity().markReady(wholeFrame);
+            surface.resize(8, 8);
+            surface.resizeBuffer(8, 8);
+
+            // A refined render has published one AA tile when the user zooms away.
+            surface.beginProgressiveRender(refined, null, InteractiveRenderMode.REFINED);
+            surface.displayProgress(new com.shangin.fractal.render.RenderProgressBatch(
+                    refined, java.util.List.of(wholeFrame)), coloring, InteractiveRenderMode.REFINED);
+            surface.beginRefinedRender(refined);
+            int[] marker = new int[4 * 4];
+            java.util.Arrays.fill(marker, 0xFF123456);
+            surface.displayRefinedTile(refined, new RenderRegion(0, 0, 4, 4), marker);
+            surface.beginProgressiveRender(other, null, InteractiveRenderMode.REFINED);
+
+            // Base only returns to the retained viewport before the other render completes.
+            var zeroShift = new com.shangin.fractal.render.PixelShift(0, 0);
+            surface.invalidateRefinement();
+            assertFalse(surface.reuseProgressivePixels(refined, target, zeroShift, coloring, true));
+            surface.beginProgressiveRender(target, refined, InteractiveRenderMode.BASE_ONLY);
+            assertTrue(surface.reuseDisplayedPixels(refined, zeroShift),
+                    "The fixture must reuse the retained refined preview");
+            surface.displayReadyPixelsPreservingRefinement(target, coloring);
+            surface.completeProgressiveRender(target, FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                    .withViewport(viewport)
+                    .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY)));
+
+            int[] colors = new int[8 * 8];
+            new com.shangin.fractal.render.FractalColorizer().color(target.samplePlane(),
+                    java.nio.IntBuffer.wrap(colors), coloring);
+            return colors;
+        });
+        assertArrayEquals(expected, pixels(surface), "Base only must not keep retained antialiased pixels");
+    }
+
+    private static int cachedAntialiasSamples(FractalRenderController controller) throws Exception {
+        var serviceField = FractalRenderController.class.getDeclaredField("antialiasService");
+        serviceField.setAccessible(true);
+        var service = serviceField.get(controller);
+        var cacheField = service.getClass().getDeclaredField("sampleCache");
+        cacheField.setAccessible(true);
+        return ((com.shangin.fractal.render.AntialiasSampleCache) cacheField.get(service)).size();
+    }
+
+    private static int[] basePixels(FractalSurface surface) throws Exception {
+        return fx(() -> {
+            var completed = surface.completedRender();
+            var samples = completed.frame().samplePlane();
+            int[] colors = new int[samples.size()];
+            new com.shangin.fractal.render.FractalColorizer().color(samples, java.nio.IntBuffer.wrap(colors),
+                    completed.scene().coloring().createStrategy(samples));
+            return colors;
+        });
     }
 
     @Test

@@ -1,14 +1,25 @@
 package com.shangin.fractal.scene;
 
-/** Controls whether raw interactive samples may be displayed before refinement. */
+/**
+ * Standard-zoom antialiasing presentation. Enum names are the stable scene
+ * format identifiers; display labels may change.
+ */
 public enum InteractiveRenderMode {
-    REFINED("Refined tiles"),
-    FAST("Fast preview");
+    /** Shows progressive base samples and completes without an antialiasing pass. */
+    BASE_ONLY("Base only"),
+    /** Shows progressive base samples, then antialiases them in place. */
+    FAST("Base, then antialiasing"),
+    /** Shows only refined antialiased tiles. */
+    REFINED("Antialiased display");
 
     private final String displayName;
 
     InteractiveRenderMode(String displayName) {
         this.displayName = displayName;
+    }
+
+    public boolean antialiases() {
+        return this != BASE_ONLY;
     }
 
     @Override

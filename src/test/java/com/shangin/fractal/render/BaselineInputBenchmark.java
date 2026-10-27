@@ -164,14 +164,18 @@ public final class BaselineInputBenchmark {
                         step.colors() == BaselineFixtures.Colors.HISTOGRAM, step.job().formula().orbitTrap());
                 var iterations = step.iterationPolicy().equals("fixed")
                         ? new IterationSettings(step.job().maxIterations(), 0) : new IterationSettings();
+                // Keep the former transient switch's protocol: only a deep seed with AA enables deep AA.
+                var preset = step.job().formula().preset();
+                boolean deepSeed = preset.supportsDeepZoom() && !preset.hasSufficientDirectPrecision(
+                        step.job().viewport(), step.job().width(), step.job().height());
+                var deepMode = deepSeed && step.aa() != BaselineFixtures.Aa.NONE
+                        ? InteractiveRenderMode.FAST : InteractiveRenderMode.BASE_ONLY;
                 var scene = new FractalScene(step.job().formula().preset(), step.job().viewport(), iterations, colors,
-                        new AntialiasSettings(mode));
+                        new AntialiasSettings(mode, deepMode));
                 BaselineInputAccess.surface(view).invalidateRefinement();
                 BaselineInputAccess.seed(view, scene);
                 return null;
             });
-            awaitIdle(this);
-            fx(() -> { view.setDeepAntialiasing(step.aa() != BaselineFixtures.Aa.NONE); return null; });
             awaitIdle(this);
             fx(() -> {
                 var job = BaselineInputAccess.surface(view).completedRender().frame().job();
@@ -289,7 +293,7 @@ public final class BaselineInputBenchmark {
     static BaselineFixtures.Step actualStep(Ui ui, BaselineFixtures.Step template, String name) throws Exception {
         var frame = BaselineInputAccess.surface(ui.view).completedRender().frame();
         boolean deep = BaselineInputAccess.deepZoom(ui.view);
-        // The deep toggle is transient: entering deep from a direct seed leaves it disabled.
+        // Deep frames antialias only when the scene's deep zoom mode does.
         var aa = !deep || BaselineInputAccess.deepAa(ui.view) ? BaselineFixtures.Aa.EMPTY : BaselineFixtures.Aa.NONE;
         return new BaselineFixtures.Step(name, BaselineFixtures.Action.REUSE, frame.job(), "fixed", aa, template.colors());
     }

@@ -8,6 +8,7 @@ import javafx.scene.Node;
 import java.util.function.Consumer;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** An asynchronous AppKit sheet; its owner and callback live only for the session. */
@@ -53,6 +54,21 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
         handle = open(MacContextMenu.windowHandle(owner), title, hint, firstLabel, secondLabel,
                 firstId, secondId, first, second, "", "", error, palette ? 3 : 2, confirm);
         if (palette) finishModelessOpening(); else finishOpening();
+    }
+
+    final void showChoicesNative(String title, String hint, List<SettingsWindow.ChoiceField> fields,
+                                 int[] defaults, String resetTitle, String confirmTitle) {
+        requireFxThread();
+        if (!owner.isShowing()) throw new IllegalStateException("Sheet owner must be showing");
+        handle = openChoices(MacContextMenu.windowHandle(owner), title, hint,
+                fields.stream().map(SettingsWindow.ChoiceField::section).toArray(String[]::new),
+                fields.stream().map(SettingsWindow.ChoiceField::label).toArray(String[]::new),
+                fields.stream().map(SettingsWindow.ChoiceField::id).toArray(String[]::new),
+                fields.stream().map(SettingsWindow.ChoiceField::hint).toArray(String[]::new),
+                fields.stream().map(field -> field.choices().toArray(String[]::new)).toArray(String[][]::new),
+                fields.stream().mapToInt(SettingsWindow.ChoiceField::selected).toArray(),
+                defaults, resetTitle, confirmTitle);
+        finishOpening();
     }
 
     private void finishModelessOpening() {
@@ -147,6 +163,10 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
                              String firstId, String secondId, String first, String second,
                              String defaultFirst, String defaultSecond, String error,
                              int kind, String confirmTitle);
+    private native long openChoices(long window, String title, String hint, String[] sections,
+                                    String[] labels, String[] ids, String[] hints, String[][] choices,
+                                    int[] selected, int[] defaults, String resetTitle,
+                                    String confirmTitle);
     private native long openNotice(long window, String title, String message,
                                    boolean confirmation, boolean modeless);
     private static native void dispose(long handle);

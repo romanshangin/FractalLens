@@ -62,3 +62,24 @@
     -fx-background-color: -dialog-input;
     -fx-border-color: -dialog-border;
 }
+.fractal-dialog .dialog-section { -fx-font-weight: bold; }
+.fractal-dialog .combo-box {
+    -fx-background-color: -dialog-input;
+    -fx-background-radius: 6;
+    -fx-border-color: -dialog-border;
+    -fx-border-radius: 6;
+}
+.fractal-dialog .combo-box:focused { -fx-border-color: -fx-accent; }
+.fractal-dialog .combo-box > .list-cell { -fx-text-fill: -dialog-text; -fx-background-color: transparent; }
+.fractal-dialog .combo-box > .arrow-button { -fx-background-color: transparent; }
+.fractal-dialog .combo-box > .arrow-button > .arrow { -fx-background-color: -dialog-muted; }
+.fractal-dialog .combo-box-popup > .list-view { -fx-background-color: -dialog-border, -dialog-input; }
+.fractal-dialog .combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell {
+    -fx-background-color: -dialog-input;
+    -fx-text-fill: -dialog-text;
+}
+.fractal-dialog .combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:hover,
+.fractal-dialog .combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected {
+    -fx-background-color: -fx-accent;
+    -fx-text-fill: -dialog-accent-text;
+}

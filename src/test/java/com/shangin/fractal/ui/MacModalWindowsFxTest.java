@@ -3,6 +3,8 @@ package com.shangin.fractal.ui;
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.render.RenderTarget;
+import com.shangin.fractal.scene.AntialiasSettings;
+import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.layout.StackPane;
@@ -142,6 +144,80 @@ class MacModalWindowsFxTest {
             return null;
         });
         assertTrue(result.get(10, TimeUnit.SECONDS));
+    }
+
+    @Test void settingsSelectStandardAndDeepZoomModesFromPopUpButtons() throws Exception {
+        var result = new CompletableFuture<AntialiasSettings>();
+        var current = new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.BASE_ONLY);
+        var sheet = fx(() -> MacSettingsSheet.show(owner, current,
+                value -> { assertTrue(Platform.isFxApplicationThread()); result.complete(value); }));
+        fx(() -> {
+            assertTrue(MacParameterSheet.hasOpenSheet(owner));
+            var standard = AppKitParameterProbe.choice(sheet, 0);
+            var deep = AppKitParameterProbe.choice(sheet, 1);
+            assertEquals(InteractiveRenderMode.REFINED.ordinal(), AppKitParameterProbe.selectedIndex(standard));
+            assertEquals(InteractiveRenderMode.BASE_ONLY.ordinal(), AppKitParameterProbe.selectedIndex(deep));
+            assertTrue(AppKitParameterProbe.enabled(deep), "The deep zoom mode is editable at any zoom");
+            for (String appearance : List.of("NSAppearanceNameAqua", "NSAppearanceNameDarkAqua")) {
+                AppKitParameterProbe.appearance(sheet, appearance);
+            }
+            AppKitParameterProbe.select(standard, InteractiveRenderMode.BASE_ONLY.ordinal());
+            AppKitParameterProbe.select(deep, InteractiveRenderMode.REFINED.ordinal());
+            AppKitParameterProbe.alertKey(sheet, "\r", (short) 36);
+            return null;
+        });
+        assertEquals(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED),
+                result.get(10, TimeUnit.SECONDS));
+        fx(() -> { assertFalse(sheet.isOpen()); return null; });
+    }
+
+    @Test void settingsResetToDefaultsChangesOnlyTheDraft() throws Exception {
+        var result = new CompletableFuture<AntialiasSettings>();
+        var sheet = fx(() -> MacSettingsSheet.show(owner,
+                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED), result::complete));
+        fx(() -> {
+            AppKitParameterProbe.action(sheet, "resetChoices");
+            assertTrue(sheet.isOpen(), "Reset must not close the sheet");
+            assertFalse(result.isDone());
+            assertEquals(InteractiveRenderMode.REFINED.ordinal(),
+                    AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 0)));
+            assertEquals(InteractiveRenderMode.BASE_ONLY.ordinal(),
+                    AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 1)));
+            AppKitParameterProbe.action(sheet, "apply");
+            return null;
+        });
+        assertEquals(new AntialiasSettings(), result.get(10, TimeUnit.SECONDS));
+    }
+
+    @Test void settingsEscapeAndCancelDiscardDraft() throws Exception {
+        var applied = new AtomicInteger();
+        var current = new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.BASE_ONLY);
+        for (boolean escape : List.of(true, false)) {
+            var sheet = fx(() -> MacSettingsSheet.show(owner, current, ignored -> applied.incrementAndGet()));
+            fx(() -> {
+                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 0), InteractiveRenderMode.REFINED.ordinal());
+                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 1), InteractiveRenderMode.FAST.ordinal());
+                if (escape) AppKitParameterProbe.alertKey(sheet, "\u001b", (short) 53);
+                else AppKitParameterProbe.action(sheet, "cancel");
+                return null;
+            });
+            fx(() -> null);
+            fx(() -> {
+                assertFalse(sheet.isOpen());
+                assertFalse(MacParameterSheet.hasOpenSheet(owner));
+                assertEquals(0, applied.get());
+                return null;
+            });
+        }
+        var result = new CompletableFuture<AntialiasSettings>();
+        var sheet = fx(() -> MacSettingsSheet.show(owner, current, result::complete));
+        fx(() -> {
+            AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 1), InteractiveRenderMode.FAST.ordinal());
+            AppKitParameterProbe.action(sheet, "apply");
+            return null;
+        });
+        assertEquals(new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.FAST),
+                result.get(10, TimeUnit.SECONDS));
     }
 
     @org.junit.jupiter.params.ParameterizedTest

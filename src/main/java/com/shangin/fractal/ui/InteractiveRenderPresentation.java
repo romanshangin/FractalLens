@@ -11,6 +11,6 @@ final class InteractiveRenderPresentation {
 
     static boolean showsBaseProgress(InteractiveRenderMode renderMode) {
         Objects.requireNonNull(renderMode);
-        return renderMode == InteractiveRenderMode.FAST;
+        return renderMode != InteractiveRenderMode.REFINED;
     }
 }

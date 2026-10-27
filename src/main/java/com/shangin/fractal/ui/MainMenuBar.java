@@ -7,7 +7,6 @@ import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalDestination;
 import com.shangin.fractal.math.Viewport;
-import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.FractalScene;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
@@ -39,7 +38,6 @@ final class MainMenuBar extends MenuBar {
     private final SceneActions sceneActions;
     private final javafx.event.EventHandler<javafx.stage.WindowEvent> hiddenHandler = event -> close();
     private final ToggleGroup fractals = new ToggleGroup();
-    private final ToggleGroup quality = new ToggleGroup();
     private MenuItem undo;
     private MenuItem redo;
     private Scene observedScene;
@@ -64,7 +62,6 @@ final class MainMenuBar extends MenuBar {
     private final Menu render = new Menu("Render");
     private final CheckMenuItem animation = new CheckMenuItem("Animate Palette");
     private final CheckMenuItem histogram = new CheckMenuItem("Histogram Coloring");
-    private final CheckMenuItem deepAntialiasing = new CheckMenuItem("Deep Zoom Antialiasing");
     private final ToggleGroup palettes = new ToggleGroup();
     private final ToggleGroup orbitTraps = new ToggleGroup();
     private List<ColorStop> paletteStops;
@@ -77,6 +74,7 @@ final class MainMenuBar extends MenuBar {
     private FractalPreset currentFractal;
     private MacIterationSheet iterationSheet;
     private MacJuliaSheet juliaSheet;
+    private MacSettingsSheet settingsSheet;
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalPreset initialFractal,
                 PalettePreset initialPalette, Runnable onExport) {
@@ -103,7 +101,10 @@ final class MainMenuBar extends MenuBar {
         setUseSystemMenuBar(true);
         export = command("Export PNG…", shortcut(KeyCode.E, KeyCombination.SHIFT_DOWN), onExport);
         export.setDisable(true);
+        // Settings stay available while rendering; applying them restarts the render.
         Menu file = new Menu("File", null, export, new SeparatorMenuItem(),
+                command(SettingsWindow.MENU_TITLE, shortcut(KeyCode.COMMA), this::showSettings),
+                new SeparatorMenuItem(),
                 command("Close Window", shortcut(KeyCode.W), this::requestWindowClose));
         if (!System.getProperty("os.name", "").startsWith("Mac")) {
             file.getItems().addAll(new SeparatorMenuItem(), command("Quit", shortcut(KeyCode.Q), this::requestWindowClose));
@@ -149,16 +150,9 @@ final class MainMenuBar extends MenuBar {
                 command("Edit Palette…", shortcut(KeyCode.P, KeyCombination.SHIFT_DOWN), this::showPalette),
                 new SeparatorMenuItem(), trap, histogram, animation,
                 new SeparatorMenuItem(), command("Reset Colors to Defaults", null, this::resetColors));
-        deepAntialiasing.setDisable(true);
-        deepAntialiasing.setOnAction(event -> fractalView.setDeepAntialiasing(deepAntialiasing.isSelected()));
         render.getItems().setAll(
-                choices("Display Quality", InteractiveRenderMode.values(),
-                        initialScene.antialiasing().renderMode(),
-                        quality, fractalView::setInteractiveRenderMode),
-                new SeparatorMenuItem(),
                 command("Edit Iteration Settings…", null, this::showIterations),
-                command("Edit Julia Parameters…", null, this::showJuliaParameters),
-                new SeparatorMenuItem(), deepAntialiasing);
+                command("Edit Julia Parameters…", null, this::showJuliaParameters));
         Menu window = new Menu("Window", null,
                 command("Minimize", shortcut(KeyCode.M), () -> stage.setIconified(true)),
                 command("Zoom", null, () -> stage.setMaximized(!stage.isMaximized())));
@@ -187,9 +181,6 @@ final class MainMenuBar extends MenuBar {
         fractalView.setOnViewportChanged(value -> viewport = value);
         fractalView.setOnDeepZoomChanged(active -> {
             deepZoom = active;
-            if (!active) {
-                deepAntialiasing.setSelected(false);
-            }
             updateAvailability();
         });
         fractalView.setOnRenderingChanged(active -> {
@@ -227,7 +218,6 @@ final class MainMenuBar extends MenuBar {
         setCommandsDisabled(color, rendering);
         setCommandsDisabled(render, rendering);
         export.setDisable(!exporting && !fractalView.hasCompletedFrame());
-        deepAntialiasing.setDisable(rendering || !deepZoom);
         animation.setDisable(rendering || histogram.isSelected() || orbitTrap != OrbitTrap.NONE);
         render.getItems().stream()
                 .filter(item -> "Edit Julia Parameters…".equals(item.getText()))
@@ -260,6 +250,21 @@ final class MainMenuBar extends MenuBar {
                 .ifPresent(fractalView::setIterations);
     }
 
+    private void showSettings() {
+        if (parameterSheetOpen()) return;
+        var current = fractalView.sceneSnapshot().antialiasing();
+        if (MacSettingsSheet.isAvailable()) {
+            try {
+                settingsSheet = MacSettingsSheet.show(stage, current, fractalView::setAntialiasSettings);
+                return;
+            } catch (LinkageError | RuntimeException error) {
+                System.getLogger(MainMenuBar.class.getName()).log(System.Logger.Level.WARNING,
+                        "Native settings sheet unavailable; using JavaFX dialog", error);
+            }
+        }
+        FractalDialogs.settings(stage, current).ifPresent(fractalView::setAntialiasSettings);
+    }
+
     private void showJuliaParameters() {
         if (currentFractal != FractalPreset.JULIA) return;
         if (parameterSheetOpen()) return;
@@ -281,6 +286,7 @@ final class MainMenuBar extends MenuBar {
         return MacParameterSheet.hasOpenSheet(stage)
                 || iterationSheet != null && iterationSheet.isOpen()
                 || juliaSheet != null && juliaSheet.isOpen()
+                || settingsSheet != null && settingsSheet.isOpen()
                 || sceneActions.hasOpenSheet();
     }
 
@@ -370,6 +376,7 @@ final class MainMenuBar extends MenuBar {
         sceneActions.close();
         if (iterationSheet != null) iterationSheet.close();
         if (juliaSheet != null) juliaSheet.close();
+        if (settingsSheet != null) settingsSheet.close();
     }
 
     private void syncScene(FractalScene scene) {
@@ -381,7 +388,6 @@ final class MainMenuBar extends MenuBar {
         palettes.selectToggle(paletteStops.equals(scene.coloring().palette().stops())
                 ? palettes.getToggles().get(scene.coloring().palette().ordinal()) : null);
         orbitTraps.selectToggle(orbitTraps.getToggles().get(orbitTrap.ordinal()));
-        quality.selectToggle(quality.getToggles().get(scene.antialiasing().renderMode().ordinal()));
         histogram.setSelected(scene.coloring().histogramColoring());
         updateHistoryAvailability();
         stage.setTitle(scene.fractal() + " — FractalLens");

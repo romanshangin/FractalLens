@@ -12,6 +12,34 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ValidityMaskTest {
 
     @Test
+    void copyFromReplacesTheMaskWithAnEquallySizedSource() {
+        ValidityMask source = new ValidityMask(8, 6);
+        source.markReady(new RenderRegion(1, 1, 2, 3));
+        ValidityMask target = new ValidityMask(8, 6);
+        target.markReady(new RenderRegion(5, 0, 3, 6));
+
+        target.copyFrom(source);
+
+        assertEquals(6, target.readyPixelCount());
+        assertTrue(target.isRegionReady(new RenderRegion(1, 1, 2, 3)));
+        assertFalse(target.isReady(5, 0));
+        assertThrows(IllegalArgumentException.class, () -> target.copyFrom(new ValidityMask(4, 6)));
+    }
+
+    @Test
+    void markReadyCountingNewCountsOnlyPreviouslyMissingPixels() {
+        ValidityMask mask = new ValidityMask(8, 6);
+        mask.markReady(new RenderRegion(2, 1, 3, 2));
+
+        assertEquals(4 * 4 - 3 * 2, mask.markReadyCountingNew(new RenderRegion(1, 0, 4, 4)));
+        assertEquals(0, mask.markReadyCountingNew(new RenderRegion(1, 0, 4, 4)));
+        assertEquals(16, mask.readyPixelCount());
+        assertTrue(mask.isRegionReady(new RenderRegion(1, 0, 4, 4)));
+        assertThrows(IllegalArgumentException.class,
+                () -> mask.markReadyCountingNew(new RenderRegion(6, 0, 4, 1)));
+    }
+
+    @Test
     void overflowingRegionExtentsAreRejected() {
         ValidityMask mask = new ValidityMask(8, 8);
         RenderRegion outside = new RenderRegion(Integer.MAX_VALUE, 0, 2, 1);

@@ -15,6 +15,12 @@ class InteractiveRenderPresentationTest {
     }
 
     @Test
+    void baseOnlyModeShouldExposeBasePassProgress() {
+        assertTrue(InteractiveRenderPresentation.showsBaseProgress(
+                InteractiveRenderMode.BASE_ONLY));
+    }
+
+    @Test
     void refinedModeShouldKeepBasePassProgressHidden() {
         assertFalse(InteractiveRenderPresentation.showsBaseProgress(
                 InteractiveRenderMode.REFINED));

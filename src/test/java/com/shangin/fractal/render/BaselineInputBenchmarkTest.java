@@ -48,7 +48,7 @@ class BaselineInputBenchmarkTest {
         }
     }
 
-    @ParameterizedTest @EnumSource(InteractiveRenderMode.class)
+    @ParameterizedTest @EnumSource(value = InteractiveRenderMode.class, names = {"REFINED", "FAST"})
     void refinedPublicationAndActualAaPolicyAreExplicit(InteractiveRenderMode mode) throws Exception {
         var fixture = fixture("julia-aa-regular");
         try (var ui = fx(Ui::new)) {
@@ -157,7 +157,7 @@ class BaselineInputBenchmarkTest {
         }
     }
 
-    @Test void directToDeepTransitionRecordsTheActualTransientAaToggle() throws Exception {
+    @Test void directToDeepTransitionRecordsTheSeededDeepZoomMode() throws Exception {
         var fixture = fixture("deep-glitch-aa");
         try (var ui = fx(Ui::new)) {
             ui.seed(fixture.steps().getFirst(), InteractiveRenderMode.FAST);
