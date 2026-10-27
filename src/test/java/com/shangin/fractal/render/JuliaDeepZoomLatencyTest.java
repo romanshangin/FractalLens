@@ -15,10 +15,11 @@ class JuliaDeepZoomLatencyTest {
         int width = Integer.getInteger("fractal.julia.width", 96);
         int height = Integer.getInteger("fractal.julia.height", 64);
         RenderJob job = Boolean.getBoolean("fractal.julia.reported") ? ReportedJuliaFixture.job(width, height) : new RenderJob(FormulaDefinition.forPreset(FractalPreset.JULIA, OrbitTrap.NONE),
-                new Viewport("-0.035", "-0.493", "1e-16"), width, height, 3000);
+                new Viewport("-0.035", "-0.493", System.getProperty("fractal.julia.scale", "1e-16")),
+                width, height, Integer.getInteger("fractal.julia.iterations", 3000));
         AtomicLong first = new AtomicLong();
         long started = System.nanoTime();
-        try (var backend = new JuliaDeepZoomRenderBackend(4)) {
+        try (var backend = new JuliaDeepZoomRenderBackend(Integer.getInteger("fractal.julia.workers", 4))) {
             var frame = backend.render(RenderFrame.create(job), () -> false,
                     ignored -> first.compareAndSet(0, System.nanoTime()), null);
             assertTrue(frame.isComplete());
