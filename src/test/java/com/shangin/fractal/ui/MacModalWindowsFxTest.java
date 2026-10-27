@@ -171,6 +171,32 @@ class MacModalWindowsFxTest {
         fx(() -> { assertFalse(sheet.isOpen()); return null; });
     }
 
+    @Test void settingsTabStopsAreOnlyControls() throws Exception {
+        var sheet = fx(() -> MacSettingsSheet.show(owner, new AntialiasSettings(), ignored -> {}));
+        fx(() -> {
+            // A clicked selectable label keeps keyboard focus, so Tab would select its text instead of moving
+            // between the pop-up buttons and buttons.
+            assertEquals(List.of(), AppKitParameterProbe.selectableTexts(sheet));
+            AppKitParameterProbe.action(sheet, "cancel");
+            return null;
+        });
+    }
+
+    @Test void settingsFocusOnlyAKeyboardNavigablePopUpButton() throws Exception {
+        var sheet = fx(() -> MacSettingsSheet.show(owner, new AntialiasSettings(), ignored -> {}));
+        fx(() -> {
+            // Checks the macOS Keyboard navigation setting of this desktop session: when it is off,
+            // a focused pop-up button keeps a stale focus ring while clicks select other controls.
+            var first = AppKitParameterProbe.choice(sheet, 0);
+            boolean navigable = AppKitParameterProbe.canBecomeKeyView(first);
+            assertEquals(navigable, AppKitParameterProbe.isFirstResponder(sheet, first));
+            AppKitParameterProbe.action(sheet, "resetChoices");
+            assertEquals(navigable, AppKitParameterProbe.isFirstResponder(sheet, first));
+            AppKitParameterProbe.action(sheet, "cancel");
+            return null;
+        });
+    }
+
     @Test void settingsResetToDefaultsChangesOnlyTheDraft() throws Exception {
         var result = new CompletableFuture<AntialiasSettings>();
         var sheet = fx(() -> MacSettingsSheet.show(owner,

@@ -390,11 +390,17 @@ setting, remains the fallback on bridge failure and on Windows/Linux. Return
 applies, Escape and Cancel discard the draft, and only Apply changes the scene.
 Reset to Defaults selects Antialiased display for standard zoom and Base only for
 deep zoom in the draft; like the other edits it takes effect only on Apply.
-Both forms focus the Standard zoom setting first. The menu item stays enabled
-while rendering because applying the settings cancels the current render and
-starts a new one. The command lives in File rather than the macOS application
-menu because JavaFX has no public API for adding items to that system-owned
-menu.
+Both forms focus the Standard zoom setting first; the native sheet does so only
+while macOS Keyboard navigation is on. With it off, AppKit keeps Tab off pop-up
+buttons and buttons, as in System Settings, so no control is focused and no stale
+focus ring stays on a pop-up button; Return and Escape still apply and cancel.
+The native sheet's text is not selectable, so clicking a hint never takes
+keyboard focus, and with Keyboard navigation on Tab moves only between the
+pop-up buttons and the buttons.
+The menu item stays enabled while rendering because applying the settings
+cancels the current render and starts a new one. The command lives in File
+rather than the macOS application menu because JavaFX has no public API for
+adding items to that system-owned menu.
 
 Render Settings offers the same three presentations for standard zoom and for
 deep zoom. Both are stored in the scene's `AntialiasSettings` as
