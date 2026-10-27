@@ -130,6 +130,29 @@ class JuliaDeepZoomRenderBackendTest {
     }
 
     @Test
+    void subnormalPixelDeltasKeepTheSharedReferenceWithoutExactFallback() {
+        // 1e-306 mixes normal and subnormal offsets; the deeper scales have only subnormal offsets.
+        for (String scale : new String[]{"1e-306", "1e-310", "1e-400"}) {
+            RenderJob job = new RenderJob(FormulaDefinition.forPreset(FractalPreset.JULIA, OrbitTrap.NONE),
+                    new Viewport("-0.035", "-0.493", scale), 96, 64, 3000);
+            var grid = job.preciseGrid();
+            var sampler = JuliaReferenceSampler.create(job, grid, () -> false);
+            assertNotNull(sampler);
+            for (int y = 0; y < job.height(); y++) for (int x = 0; x < job.width(); x++) {
+                var actual = sampler.sample(grid.realAt(x), grid.imaginaryAt(y), () -> false);
+                assertNotNull(actual);
+                if (x % 19 == 0 && y % 13 == 0) {
+                    var expected = oracle(grid.realAt(x), grid.imaginaryAt(y), job, OrbitTrap.NONE);
+                    assertEquals(expected.iterations(), actual.iterations(), scale + " at " + x + "," + y);
+                    assertEquals(expected.smoothIterations(), actual.smoothIterations(), 1e-10);
+                }
+            }
+            assertEquals(1, sampler.referenceBuildCount(), scale + " must share one exact orbit");
+            assertEquals(0, sampler.fallbackPixelCount(), scale + " must not iterate pixels in BigDecimal");
+        }
+    }
+
+    @Test
     void perturbationMatchesOracleAcrossRepellingFixedPointAndTraps() {
         for (String scale : new String[]{"1e-15", "1e-30", "1e-80"}) {
             for (OrbitTrap trap : OrbitTrap.values()) {
@@ -150,6 +173,38 @@ class JuliaDeepZoomRenderBackendTest {
                     assertEquals(expected.smoothIterations(), actual.smoothIterations(), 1e-10);
                     assertEquals(expected.orbitTrapDistance(), actual.orbitTrapDistance(), 1e-12);
                 }
+            }
+        }
+    }
+
+    @Test
+    void subnormalOffsetsNearRepellingFixedPointMatchOracle() {
+        // A 100-digit center would dominate subnormal offsets, so compute the fixed point more precisely.
+        BigDecimal[] fixedPoint = repellingFixedPoint(new MathContext(500));
+        for (String scale : new String[]{"1e-310", "1e-400"}) {
+            for (OrbitTrap trap : new OrbitTrap[]{OrbitTrap.NONE, OrbitTrap.CROSS}) {
+                var job = new RenderJob(FormulaDefinition.forPreset(FractalPreset.JULIA, trap),
+                        new Viewport(fixedPoint[0].toPlainString(), fixedPoint[1].toPlainString(), scale),
+                        12, 8, 1000);
+                var grid = job.preciseGrid();
+                var sampler = JuliaReferenceSampler.create(job, grid, () -> false);
+                assertNotNull(sampler);
+                java.util.Set<Integer> outcomes = new java.util.HashSet<>();
+                for (int y = 0; y < 8; y++) for (int x = 0; x < 12; x++) {
+                    var actual = sampler.sample(grid.realAt(x), grid.imaginaryAt(y), () -> false);
+                    assertNotNull(actual);
+                    outcomes.add(actual.iterations());
+                    // The BigDecimal oracle is slow at these precisions; check a spread subset.
+                    if ((x + y) % 3 != 0) continue;
+                    var expected = oracle(grid.realAt(x), grid.imaginaryAt(y), job, trap);
+                    assertEquals(expected.iterations(), actual.iterations(), scale + " at " + x + "," + y);
+                    assertEquals(expected.escaped(), actual.escaped());
+                    assertEquals(expected.smoothIterations(), actual.smoothIterations(), 1e-10);
+                    assertEquals(expected.orbitTrapDistance(), actual.orbitTrapDistance(), 1e-12);
+                }
+                // The repelling point amplifies subnormal offsets into distinct escape times.
+                assertTrue(outcomes.size() > 1, scale + " must resolve neighboring orbits");
+                assertEquals(0, sampler.fallbackPixelCount(), scale + " must stay on perturbation");
             }
         }
     }
@@ -178,6 +233,18 @@ class JuliaDeepZoomRenderBackendTest {
         }
         assertEquals(1, sampler.referenceBuildCount(), "The reported scene must share its reference orbit");
         assertEquals(0, sampler.fallbackPixelCount(), "Avoid per-pixel BigDecimal recovery in the reported view");
+    }
+
+    /** The repelling fixed point (1 + sqrt(1 - 4c)) / 2 of the default binary Julia constant. */
+    private static BigDecimal[] repellingFixedPoint(MathContext mc) {
+        BigDecimal a = BigDecimal.ONE.subtract(new BigDecimal(-0.8).multiply(BigDecimal.valueOf(4)));
+        BigDecimal b = new BigDecimal(0.156).multiply(BigDecimal.valueOf(-4));
+        BigDecimal modulus = a.pow(2).add(b.pow(2)).sqrt(mc);
+        BigDecimal two = BigDecimal.valueOf(2);
+        BigDecimal rootReal = modulus.add(a).divide(two, mc).sqrt(mc);
+        BigDecimal rootImaginary = modulus.subtract(a).divide(two, mc).sqrt(mc);
+        if (b.signum() < 0) rootImaginary = rootImaginary.negate();
+        return new BigDecimal[]{BigDecimal.ONE.add(rootReal).divide(two, mc), rootImaginary.divide(two, mc)};
     }
 
     private static FractalSample oracle(BigDecimal r, BigDecimal i, RenderJob job, OrbitTrap trap) {

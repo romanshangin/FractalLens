@@ -169,7 +169,7 @@ Benchmarks are opt-in Maven profiles; never wire them into the default build.
 
 - What to work on next and acceptance criteria: `ROADMAP.md`, section
   "0. Prioritized backlog" (currently open: P2.3 export acceptance, P2.4 native
-  modal windows acceptance, P2.5, P2.6 render settings, P3, P4).
+  modal windows acceptance, P2.6 render settings, P3, P4).
 - UI behavior and the native/JavaFX boundary: `docs/platform/MACOS_UI.md`.
 - Launch identity and launcher: `docs/platform/MACOS_RUN.md`.
 - Scene file format, history, bookmarks: `docs/architecture/SESSION_FORMAT.md`.

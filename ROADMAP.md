@@ -215,8 +215,17 @@ delivery foundation should be completed first.
   full manual/platform acceptance remains pending. The palette previews the draft
   gradient live; Apply commits it to the canvas. See
   [P2.4 implementation](docs/platform/MACOS_UI.md#native-windows-p24).
-- [ ] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
+- [x] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
   exact fallback is a material user-visible cost.
+  - Status: profiling confirmed the cost (a 640x400 frame at span `1e-310` took
+    113 s on the exact fallback). Scaled subnormal deltas complete it in about
+    1.5 s with no change for normal deltas. Control and candidate PNG output is
+    byte-identical for 96x64 frames at `1e-310` and `1e-400` and for the
+    640x400 frame at `1e-310`. Independent review was clean and verification
+    passed on macOS (Apple Silicon), including manual Deep Zoom, export, deep
+    antialiasing and navigation checks at `1e-310`. Windows and Linux are
+    covered only by the portable CI suite. See
+    [subnormal deltas](docs/development/JULIA_DEEP_ZOOM_PERFORMANCE.md#subnormal-deltas-p25).
 - [ ] **P2.6.** Add separate render settings and a user-selected antialiasing mode
   for standard and deep zoom. Gather Display Quality and Deep Zoom Antialiasing
   into the Render Settings section of one application Settings window instead of
@@ -532,12 +541,13 @@ This phase should remain separate from the current pan-reuse optimization.
   decimal coordinates in `src/test/resources/julia/reported-pixelation.txt`.
 - [x] Stop accumulating guard digits on every navigation operation; bound
   render arithmetic to pixel depth while preserving authoritative input values.
-- [ ] Extend the perturbation fast path to deltas below the normal-double range;
-  these currently retain the exact fallback.
+- [x] Extend the perturbation fast path to deltas below the normal-double range
+  through scaled deltas with an explicit subnormal error bound (P2.5).
 
 Julia uses shared reference perturbation in base rendering, deep AA, and export.
 It does not apply Mandelbrot cardioid tests, critical-point rebasing, or BLA.
-Unreliable and subnormal deltas retain the slower arbitrary-precision fallback.
+Subnormal deltas are carried in scaled units; unreliable orbits retain the slower
+arbitrary-precision fallback.
 See `docs/development/JULIA_DEEP_ZOOM_PERFORMANCE.md` for the latency regression and measurements.
 
 ## 8. Add GPU rendering

@@ -3,6 +3,7 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.formula.FractalSample;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.MathContext;
 import java.util.Arrays;
 import java.util.function.BooleanSupplier;
@@ -14,6 +15,10 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
     private static final BigDecimal TWO = BigDecimal.valueOf(2);
     private static final double ROUNDING = Math.ulp(1.0) * Math.ulp(1.0);
     private static final int MAX_REFERENCE_ITERATIONS = 65_536;
+    private static final double LOG2_10 = Math.log(10) / Math.log(2);
+    // Scaled deltas return to plain doubles once their low components stay far from underflow.
+    private static final int UNSCALED_EXPONENT = -900;
+    private static final int RESCALE_EXPONENT = 128;
     private final RenderJob job;
     private final MathContext context;
     private final PreciseFractalSampler fallback;
@@ -68,22 +73,55 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
         BigDecimal exactI = imaginary.subtract(ref.startImaginary, context);
         if (exactR.signum() == 0 && exactI.signum() == 0) return ref.terminal;
         double dr = exactR.doubleValue(), di = exactI.doubleValue();
-        // Retain the arbitrary-precision path when double cannot safely carry a delta.
-        if (!representable(exactR, dr) || !representable(exactI, di)) return null;
+        if (!Double.isFinite(dr) || !Double.isFinite(di)) return null;
+        // A delta below the normal-double range is carried as delta * 2^exponent while it stays tiny;
+        // the delta and its error bound are then in units of 2^exponent.
+        int exponent = representable(exactR, dr) && representable(exactI, di)
+                ? 0 : Math.min(0, binaryExponent(exactR.abs().max(exactI.abs())));
+        if (exponent != 0) {
+            BigDecimal factor = new BigDecimal(BigInteger.ONE.shiftLeft(-exponent));
+            exactR = exactR.multiply(factor);
+            exactI = exactI.multiply(factor);
+        }
         Wide deltaR = Wide.from(exactR), deltaI = Wide.from(exactI);
+        dr = deltaR.high;
+        di = deltaI.high;
         double error = Math.ulp(deltaR.low) + Math.ulp(deltaI.low);
         double trapDistance = Double.POSITIVE_INFINITY;
         OrbitTrap trap = job.formula().orbitTrap();
         int referenceIndex = 0;
         for (int n = 0; ; n++) {
             if ((n & 31) == 0 && stopped(cancelled)) return null;
+            if (exponent != 0) {
+                double largest = Math.max(Math.abs(dr), Math.abs(di));
+                int shift = largest == 0 ? 0 : Math.getExponent(largest);
+                // Unscale before reference reindexing, which needs the absolute displacement.
+                if (exponent + shift >= UNSCALED_EXPONENT || referenceIndex + 1 == ref.real.length)
+                    shift = -exponent;
+                else if (Math.abs(shift) < RESCALE_EXPONENT) shift = 0;
+                if (shift != 0) {
+                    deltaR = deltaR.scale(-shift);
+                    deltaI = deltaI.scale(-shift);
+                    // Four component scalings and the bound scaling may each round below the subnormal step.
+                    error = Math.scalb(error, -shift) + 5 * Double.MIN_VALUE;
+                    exponent += shift;
+                    dr = deltaR.value();
+                    di = deltaI.value();
+                }
+            }
             Wide referenceR = new Wide(ref.real[referenceIndex], ref.realLow[referenceIndex]);
             Wide referenceI = new Wide(ref.imaginary[referenceIndex], ref.imaginaryLow[referenceIndex]);
-            Wide stateR = referenceR.add(deltaR), stateI = referenceI.add(deltaI);
+            Wide offsetR = exponent == 0 ? deltaR : deltaR.scale(exponent);
+            Wide offsetI = exponent == 0 ? deltaI : deltaI.scale(exponent);
+            Wide stateR = referenceR.add(offsetR), stateI = referenceI.add(offsetI);
             double zr = stateR.value(), zi = stateI.value();
             double magnitude = Math.sqrt(zr * zr + zi * zi);
             double deltaMagnitude = Math.sqrt(dr * dr + di * di);
-            double stateError = error + 4 * ROUNDING * (ref.magnitude[referenceIndex] + deltaMagnitude);
+            // Absolute delta magnitude and error; equal to the scaled values when exponent is zero.
+            // Unscaling may round the four offset components and the bound below the subnormal step.
+            double offsetMagnitude = exponent == 0 ? deltaMagnitude : Math.scalb(deltaMagnitude, exponent);
+            double offsetError = exponent == 0 ? error : Math.scalb(error, exponent) + 3 * Double.MIN_VALUE;
+            double stateError = offsetError + 4 * ROUNDING * (ref.magnitude[referenceIndex] + offsetMagnitude);
             if (!Double.isFinite(magnitude) || !Double.isFinite(stateError)
                     || stateError > 1e-12 * Math.max(1.0, magnitude)) return null;
             if (n > 0 && trap != OrbitTrap.NONE)
@@ -107,13 +145,23 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
                 error = stateError + 4 * ROUNDING * (magnitude + ref.magnitude[0]);
             }
             double referenceMagnitude = ref.magnitude[referenceIndex];
-            Wide nextR = referenceR.multiply(deltaR).subtract(referenceI.multiply(deltaI)).twice()
-                    .add(deltaR.multiply(deltaR)).subtract(deltaI.multiply(deltaI));
-            Wide nextI = referenceR.multiply(deltaI).add(referenceI.multiply(deltaR)).twice()
-                    .add(deltaR.multiply(deltaI).twice());
-            error = (2 * (magnitude + stateError) + error) * error
-                    + 32 * ROUNDING * (2 * referenceMagnitude * deltaMagnitude + deltaMagnitude * deltaMagnitude)
-                    + Double.MIN_VALUE;
+            Wide nextR, nextI;
+            if (exponent == 0) {
+                nextR = referenceR.multiply(deltaR).subtract(referenceI.multiply(deltaI)).twice()
+                        .add(deltaR.multiply(deltaR)).subtract(deltaI.multiply(deltaI));
+                nextI = referenceR.multiply(deltaI).add(referenceI.multiply(deltaR)).twice()
+                        .add(deltaR.multiply(deltaI).twice());
+            } else {
+                // In scaled units the quadratic term carries one extra factor of 2^exponent.
+                nextR = referenceR.multiply(deltaR).subtract(referenceI.multiply(deltaI)).twice()
+                        .add(deltaR.multiply(deltaR).subtract(deltaI.multiply(deltaI)).scale(exponent));
+                nextI = referenceR.multiply(deltaI).add(referenceI.multiply(deltaR)).twice()
+                        .add(deltaR.multiply(deltaI).twice().scale(exponent));
+            }
+            // Scaled quadratic terms may also underflow in each of their two components.
+            error = (2 * (magnitude + stateError) + offsetError) * error
+                    + 32 * ROUNDING * (2 * referenceMagnitude * deltaMagnitude + offsetMagnitude * deltaMagnitude)
+                    + (exponent == 0 ? Double.MIN_VALUE : 5 * Double.MIN_VALUE);
             deltaR = nextR;
             deltaI = nextI;
             dr = nextR.value();
@@ -124,6 +172,12 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
 
     private static boolean representable(BigDecimal exact, double value) {
         return exact.signum() == 0 || Double.isFinite(value) && Math.abs(value) >= Double.MIN_NORMAL;
+    }
+
+    /** Approximate floor(log2(value)) for a positive value; it may be a few units low. */
+    private static int binaryExponent(BigDecimal value) {
+        long decimalExponent = (long) value.precision() - value.scale() - 1;
+        return (int) Math.floor(decimalExponent * LOG2_10);
     }
 
     private static FractalSample sample(int n, boolean escaped, double r, double i, double distance) {
@@ -197,6 +251,7 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
         }
         Wide subtract(Wide other) { return add(new Wide(-other.high, -other.low)); }
         Wide twice() { return new Wide(high * 2, low * 2); }
+        Wide scale(int exponent) { return new Wide(Math.scalb(high, exponent), Math.scalb(low, exponent)); }
         Wide multiply(Wide other) {
             double product = high * other.high;
             double tail = Math.fma(high, other.high, -product)
