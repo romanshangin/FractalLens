@@ -164,9 +164,7 @@ public final class InteractionLatencyBenchmark extends Application {
             rows.add("# " + fx(() -> "logical=" + view.getWidth() + "x" + view.getHeight()
                     + "; outputScale=" + stage.getOutputScaleX() + "x" + stage.getOutputScaleY()));
             rows.add("mode,gesture,phase,iteration,input,render,stage,nanos,duration_nanos");
-            // The established protocol measures the two antialiasing presentations.
-            for (InteractiveRenderMode mode : new InteractiveRenderMode[] {
-                    InteractiveRenderMode.REFINED, InteractiveRenderMode.FAST}) {
+            for (InteractiveRenderMode mode : List.of(InteractiveRenderMode.REFINED, InteractiveRenderMode.FAST)) {
                 fx(() -> { view.setInteractiveRenderMode(mode); return null; });
                 awaitIdle();
                 for (String gesture : System.getProperty("fractal.latency.gestures", "wheel,wheel-burst,pinch,trackpad,drag").split(",")) {
