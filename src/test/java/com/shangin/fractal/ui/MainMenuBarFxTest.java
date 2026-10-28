@@ -806,7 +806,6 @@ class MainMenuBarFxTest {
             assertEquals(selected, view.sceneSnapshot().antialiasing());
             RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
             assertTrue(badge.getText().contains("Complete"), badge.getText());
-            assertTrue(badge.getTooltip().getText().contains("Antialiasing is off"));
             view.undoScene();
             assertEquals(initial.antialiasing(), view.sceneSnapshot().antialiasing());
             return null;

@@ -12,6 +12,7 @@ import javafx.scene.layout.StackPane;
 /** Owns both the theme-aware fallback and the temporary native material. */
 final class LoadingScreen extends StackPane implements AutoCloseable {
     private MacLoadingMaterial material;
+    private final Runnable materialShown;
     private final AnimationTimer attach = new AnimationTimer() {
         @Override public void handle(long now) {
             if (getScene() == null || getScene().getWindow() == null || !getScene().getWindow().isShowing()) return;
@@ -21,11 +22,19 @@ final class LoadingScreen extends StackPane implements AutoCloseable {
                 material = MacLoadingMaterial.show(getScene().getWindow());
             } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
                 System.err.println("Native loading material unavailable; using system theme: " + error);
+                return;
             }
+            materialShown.run();
         }
     };
 
     LoadingScreen() {
+        this(() -> {});
+    }
+
+    /** {@code materialShown} runs on the FX thread after the native material covers the window. */
+    LoadingScreen(Runnable materialShown) {
+        this.materialShown = java.util.Objects.requireNonNull(materialShown);
         var resource = java.util.Objects.requireNonNull(getClass().getResource(
                 "/com/shangin/fractal/app/icons/fractallens.png"));
         ImageView icon = new ImageView(new Image(resource.toExternalForm(), 256, 256, true, true));
