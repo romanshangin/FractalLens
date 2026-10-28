@@ -1,0 +1,43 @@
+{
+  "version": "pipeline-latency-v1",
+  "process_pairs": 6,
+  "samples": 5,
+  "warmups": 2,
+  "gestures": "wheel,wheel-burst,pinch,trackpad,drag",
+  "timeout_seconds": 3600,
+  "jfr_diagnostic_runs": 1,
+  "jvm_options": {
+    "A": [
+      "-Dprism.order=es2"
+    ],
+    "B": [
+      "-Dprism.order=mtl"
+    ]
+  },
+  "expected_pipeline": {
+    "A": "es2",
+    "B": "mtl"
+  },
+  "metrics": [
+    {
+      "metric": "preview_publish_screen_observed_from_first_input_ms",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "complete_screen_observed_from_last_input_ms",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "details_publish_to_screen_ms",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "complete_publish_to_screen_ms",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "complete_from_last_input_ms",
+      "max_ratio": 1.05
+    }
+  ]
+}

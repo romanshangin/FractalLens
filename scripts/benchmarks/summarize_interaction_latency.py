@@ -8,7 +8,8 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def summarize(path):
+def trial_metrics(path):
+    """Returns measured metrics per (mode, gesture, iteration) trial."""
     trials = defaultdict(list)
     lines = path.read_text().splitlines()
     if any(line.startswith("# FAILED") for line in lines):
@@ -21,8 +22,8 @@ def summarize(path):
         for key in ("input", "render", "nanos", "duration_nanos"):
             row[key] = int(row[key])
         trials[row["mode"], row["gesture"], row["iteration"]].append(row)
-    groups = defaultdict(list)
-    for (mode, gesture, _), events in trials.items():
+    result = {}
+    for (mode, gesture, iteration), events in trials.items():
         inputs = [e for e in events if e["stage"].startswith("input_")]
         if not inputs:
             raise ValueError("Trial has no input")
@@ -69,6 +70,13 @@ def summarize(path):
             matches = [e["duration_nanos"] for e in events if e["stage"] == stage]
             if matches:
                 metrics[stage + "_ms"] = max(matches) / 1e6
+        result[mode, gesture, iteration] = metrics
+    return result
+
+
+def summarize(path):
+    groups = defaultdict(list)
+    for (mode, gesture, _), metrics in trial_metrics(path).items():
         groups[mode, gesture].append(metrics)
     result = []
     for (mode, gesture), observations in sorted(groups.items()):

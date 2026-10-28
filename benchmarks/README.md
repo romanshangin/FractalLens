@@ -16,6 +16,9 @@ claim that every historical analysis can be rerun from the published files.
 - [Paired decision gates](BASELINE_PAIRS_BENCHMARK.md) and
   [allocation/sustained memory](BASELINE_MEMORY_BENCHMARK.md).
 - [Formula benchmarks](FORMULA_BENCHMARK.md) and [basic benchmark entry point](BENCHMARK.md).
+- [Prism pipeline comparison (ES2 and Metal)](PRISM_PIPELINE_BENCHMARK.md);
+  [results](PRISM_PIPELINE_RESULTS.md) and
+  [Spaces presentation validation](SPACE_SWITCH_VALIDATION.md).
 
 Use the current drivers under `scripts/benchmarks/` with a fresh output directory.
 See [the scripts index](../scripts/README.md) for functional groups and validation commands.
@@ -54,7 +57,7 @@ platform gates remain documented in the historical reports.
 
 ## Retained file inventory
 
-The following inventory lists the 114 selected evidence/protocol files, excluding
+The following inventory lists the 118 selected evidence/protocol files, excluding
 this index. No raw log file is included.
 
 - [ALLOCATION_PROFILE_9_4.md](ALLOCATION_PROFILE_9_4.md)
@@ -94,9 +97,12 @@ this index. No raw log file is included.
 - [INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv](INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv)
 - [P1_5_PROMOTION_VALIDATION.md](P1_5_PROMOTION_VALIDATION.md)
 - [PALETTE_BENCHMARK_RESULTS.md](PALETTE_BENCHMARK_RESULTS.md)
+- [PRISM_PIPELINE_BENCHMARK.md](PRISM_PIPELINE_BENCHMARK.md)
+- [PRISM_PIPELINE_RESULTS.md](PRISM_PIPELINE_RESULTS.md)
 - [RETAINED_SNAPSHOT_PREPARATION.md](RETAINED_SNAPSHOT_PREPARATION.md)
 - [RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv](RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv)
 - [SERIES_APPROXIMATION_RESULTS.md](SERIES_APPROXIMATION_RESULTS.md)
+- [SPACE_SWITCH_VALIDATION.md](SPACE_SWITCH_VALIDATION.md)
 - [VALIDITY_MASK_OPTIMIZATION.md](VALIDITY_MASK_OPTIMIZATION.md)
 - [baseline-9-1-fx-fixed-20260907/summary.csv](baseline-9-1-fx-fixed-20260907/summary.csv)
 - [baseline-9-1-validation/manifest.csv](baseline-9-1-validation/manifest.csv)
@@ -171,3 +177,5 @@ this index. No raw log file is included.
 - [policies/p1-5-retained-vs-pre-fx-base-confirm.json](policies/p1-5-retained-vs-pre-fx-base-confirm.json)
 - [policies/p1-5-retained-vs-pre-fx.json](policies/p1-5-retained-vs-pre-fx.json)
 - [policies/p1-5-retained-vs-pre-headless.json](policies/p1-5-retained-vs-pre-headless.json)
+- [policies/prism-pipeline-fx.json](policies/prism-pipeline-fx.json)
+- [policies/prism-pipeline-latency.json](policies/prism-pipeline-latency.json)

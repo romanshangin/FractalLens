@@ -1,0 +1,75 @@
+{
+  "version": "9.1-pairs-v1",
+  "purpose": "configuration",
+  "runner": "fx",
+  "sizes": "1512x982,3024x1964",
+  "fixtures": "mandelbrot-overview,mandelbrot-aa-regular,pan-25",
+  "modes": "FAST,REFINED",
+  "process_pairs": 30,
+  "samples": 3,
+  "warmups": 3,
+  "timeout_seconds": 1800,
+  "jvm_options": {
+    "A": [
+      "-Dprism.order=es2"
+    ],
+    "B": [
+      "-Dprism.order=mtl"
+    ]
+  },
+  "expected_pipeline": {
+    "A": "es2",
+    "B": "mtl"
+  },
+  "metrics": [
+    {
+      "fixture": "mandelbrot-overview",
+      "step": "render",
+      "metric": "first_visible_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "mandelbrot-overview",
+      "step": "render",
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "mandelbrot-overview",
+      "step": "render",
+      "metric": "full_post_layout_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "mandelbrot-aa-regular",
+      "step": "render",
+      "metric": "first_aa_tile_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "mandelbrot-aa-regular",
+      "step": "render",
+      "metric": "full_post_layout_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "pan-25",
+      "step": "pan",
+      "metric": "first_post_layout_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "fixture": "pan-25",
+      "step": "pan",
+      "metric": "full_post_layout_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    }
+  ]
+}

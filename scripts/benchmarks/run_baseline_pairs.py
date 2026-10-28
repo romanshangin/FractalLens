@@ -72,6 +72,8 @@ def main():
         raise ValueError("A/A calibration requires identical compiled snapshots")
     if policy["purpose"] == "candidate" and manifests["A"]["identity"] == manifests["B"]["identity"]:
         raise ValueError("An identical snapshot cannot establish a candidate improvement")
+    if policy["purpose"] == "configuration" and manifests["A"]["identity"] != manifests["B"]["identity"]:
+        raise ValueError("A configuration comparison requires identical compiled snapshots")
     java = args.java.resolve()
     for manifest in manifests.values():
         if manifest["java_sha256"] != sha(java):
@@ -144,6 +146,7 @@ def main():
                                 "--patch-module", "com.shangin.fractal=" + str(build / "test-classes"),
                                 "--enable-native-access=javafx.graphics,org.lwjgl", "-Djavafx.cachedir=" + str(output / ("javafx-cache-" + name)),
                                 "-Dprism.verbose=true", "-Dbaseline.fx.modes=" + policy["modes"],
+                                *policy.get("jvm_options", {}).get(label, []),
                                 "-m", "com.shangin.fractal/com.shangin.fractal.render.BaselineFxBenchmark"]
                 record = dict(process_pair=pair, order=order, label=label, directory=name, command=command,
                               policy_sha256=sha(output / "policy.json"),
