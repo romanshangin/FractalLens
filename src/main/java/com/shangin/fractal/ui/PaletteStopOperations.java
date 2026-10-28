@@ -34,10 +34,13 @@ final class PaletteStopOperations {
         return new ColorStop(position, color);
     }
 
+    private static final BigDecimal HALF = new BigDecimal("0.5");
+
     // Halve the decimal sum so 0.35 and 0.7 give 0.525, not the binary 0.5249999999999999.
+    // Multiplying by 0.5 is exact, so no rounding mode is needed.
     private static double midpoint(double left, double right) {
         return BigDecimal.valueOf(left).add(BigDecimal.valueOf(right))
-                .divide(BigDecimal.TWO).doubleValue();
+                .multiply(HALF).doubleValue();
     }
 
     private static int mix(int first, int second) {
