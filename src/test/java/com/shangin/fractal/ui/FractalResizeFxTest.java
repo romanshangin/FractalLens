@@ -219,7 +219,7 @@ class FractalResizeFxTest {
             });
             awaitCondition(() -> fx(() -> alertShowing(stage, "Render failed")), 10);
             fx(() -> {
-                assertError(stage, "The image could not be rendered: Controlled render failure");
+                assertError(stage, "Render failed", "The image could not be rendered: Controlled render failure");
                 FractalView view = fractalView(main);
                 RenderModeIndicator badge = view.getChildrenUnmodifiable().stream()
                         .filter(RenderModeIndicator.class::isInstance)
@@ -264,7 +264,7 @@ class FractalResizeFxTest {
             });
             awaitCondition(() -> fx(() -> alertShowing(stage, "Render failed")), 10);
             fx(() -> {
-                assertError(stage, "The image could not be rendered: Controlled recolor failure");
+                assertError(stage, "Render failed", "The image could not be rendered: Controlled recolor failure");
                 assertTrue(surface.hasCompletedFrame(),
                         "A recolor error must leave the completed frame available");
                 return null;
@@ -302,6 +302,49 @@ class FractalResizeFxTest {
             assertTrue(java.nio.file.Files.exists(temporaryDirectory.resolve("completed.png")));
             awaitCondition(() -> fx(() -> !badge.getText().contains("PNG saved")), 6);
         } finally {
+            fx(() -> { main.close(); stage.close(); return null; });
+        }
+    }
+
+    @Test
+    void exportToReadOnlyFolderNamesChosenFileAndKeepsExistingImage() throws Exception {
+        var folder = java.nio.file.Files.createDirectory(temporaryDirectory.resolve("read-only"));
+        var target = folder.resolve("existing.png");
+        byte[] original = {1, 2, 3};
+        java.nio.file.Files.write(target, original);
+        var readOnly = java.nio.file.attribute.PosixFilePermissions.fromString("r-xr-xr-x");
+        try {
+            java.nio.file.Files.setPosixFilePermissions(folder, readOnly);
+        } catch (UnsupportedOperationException unsupported) {
+            Assumptions.abort("POSIX permissions are required to make the folder read-only");
+        }
+        Stage stage = fx(Stage::new);
+        MainView main = fx(() -> new MainView(stage, new com.shangin.fractal.app.LastSessionStore(
+                temporaryDirectory.resolve("read-only-session.json"))));
+        try {
+            RenderModeIndicator badge = fx(() -> (RenderModeIndicator)
+                    fractalView(main).getChildrenUnmodifiable().get(1));
+            fx(() -> {
+                stage.setScene(new Scene(main, 320, 240));
+                stage.show();
+                main.startExport(fractalView(main).sceneSnapshot(), new RenderTarget(17, 13), target);
+                return null;
+            });
+            awaitCondition(() -> fx(() -> alertShowing(stage, "Export failed")), 10);
+            fx(() -> {
+                assertError(stage, "Export failed", "The PNG image could not be saved as \"existing.png\". "
+                        + "FractalLens does not have permission to write to the folder \"" + folder
+                        + "\". Choose another folder.");
+                assertTrue(badge.getText().contains("PNG export failed."));
+                return null;
+            });
+            assertArrayEquals(original, java.nio.file.Files.readAllBytes(target));
+            try (var entries = java.nio.file.Files.list(folder)) {
+                assertEquals(java.util.List.of(target), entries.toList());
+            }
+        } finally {
+            java.nio.file.Files.setPosixFilePermissions(folder,
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x"));
             fx(() -> { main.close(); stage.close(); return null; });
         }
     }
@@ -387,18 +430,18 @@ class FractalResizeFxTest {
         return fallbackAlert(title) != null;
     }
 
-    private static void assertError(Stage owner, String detail) throws Exception {
+    private static void assertError(Stage owner, String title, String detail) throws Exception {
         if (MacParameterSheet.isAvailable()) {
             var sheet = AppKitParameterProbe.activeSheet(owner);
             assertInstanceOf(MacNoticeSheet.class, sheet);
-            assertEquals("Render failed", AppKitParameterProbe.alertText(sheet, "messageText"));
+            assertEquals(title, AppKitParameterProbe.alertText(sheet, "messageText"));
             assertEquals(detail, AppKitParameterProbe.alertText(sheet, "informativeText"));
             AppKitParameterProbe.clickAlert(sheet, false);
         } else {
-            var alert = fallbackAlert("Render failed");
+            var alert = fallbackAlert(title);
             assertNotNull(alert);
             DialogPane pane = (DialogPane) alert.getScene().getRoot();
-            assertEquals("Render failed", pane.getHeaderText());
+            assertEquals(title, pane.getHeaderText());
             assertEquals(detail, pane.getContentText());
             ((javafx.scene.control.Button) pane.lookupButton(javafx.scene.control.ButtonType.OK)).fire();
         }

@@ -48,6 +48,9 @@ that publication,
 render failure, encoding failure or failed replacement removes staging data and
 preserves the destination. A filesystem without atomic sibling moves reports
 an error rather than using a potentially destructive replacement fallback.
+Failure messages name the chosen file and describe the cause (for example, no
+permission to write to the chosen folder); they never show the hidden staging
+file path.
 UI callbacks also carry a request identity so already queued JavaFX callbacks
 cannot report a cancelled or older export as completed.
 
