@@ -226,7 +226,7 @@ delivery foundation should be completed first.
     antialiasing and navigation checks at `1e-310`. Windows and Linux are
     covered only by the portable CI suite. See
     [subnormal deltas](docs/development/JULIA_DEEP_ZOOM_PERFORMANCE.md#subnormal-deltas-p25).
-- [ ] **P2.6.** Add separate render settings and a user-selected antialiasing mode
+- [x] **P2.6.** Add separate render settings and a user-selected antialiasing mode
   for standard and deep zoom. Gather Display Quality and Deep Zoom Antialiasing
   into the Render Settings section of one application Settings window instead of
   separate Render menu items; the window is the place for future application
@@ -253,11 +253,16 @@ delivery foundation should be completed first.
     display for standard zoom, Base only for deep zoom). Manual macOS checks
     cover the Settings window (focus, Enter, Escape, Cancel, Apply, Reset to
     Defaults) in light and dark appearance.
-  - Status: the Settings window with its Render Settings section, both mode
-    settings and developer regressions are implemented; see
-    [render settings](docs/platform/MACOS_UI.md#render-settings-p26).
-    Independent review, verification and the manual macOS acceptance remain
-    pending.
+  - Status: the owner accepted P2.6 on 2026-10-27 after manual macOS checks of
+    the Settings window and every mode in light and dark appearance, with
+    Keyboard navigation on and off. Manual acceptance found Settings sheet
+    keyboard-focus defects, fixed in PR #31. Independent verification passed on
+    macOS (Apple Silicon) for `main` at `b9af941`. The owner accepted one
+    limitation: with Histogram Coloring or Orbit Trap, finished AA is lost after
+    a pan made in Base only. Windows, Linux and Intel Mac are covered only by
+    the portable CI suite. See
+    [render settings](docs/platform/MACOS_UI.md#render-settings-p26) and
+    [acceptance](docs/platform/MACOS_UI.md#p26-acceptance).
 
 ### P3. Conditional CPU research
 
