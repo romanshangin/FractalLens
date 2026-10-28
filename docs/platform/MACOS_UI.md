@@ -719,7 +719,7 @@ JavaFX remains the fallback on other platforms or if native presentation fails.
 
 At the P2.1 validation point, coordinate/palette editors, Help and application
 alerts still required native conversion or removal of unnecessary modality.
-The later P2.4 implementation is described below; its full acceptance remains open.
+The later P2.4 implementation and its acceptance are described below.
 
 Validation on 2026-10-12 used macOS 27.0.1 on Apple Silicon, JavaFX 26.0.2,
 Maven JDK 26.0.2 (Java release target 25), and desktop launcher JDK 25
@@ -853,7 +853,8 @@ accessibility changes, VoiceOver, all focus/keyboard combinations, native color
 panel interactions, full-screen transitions, and mixed-DPI/negative-origin/display-
 edge context menus on multiple physical displays. Windows/Linux and Intel Mac
 runtime checks remain unverified; the universal native library is compiled for
-both macOS architectures. P2.4 remains unchecked until its acceptance gates pass.
+both macOS architectures. These gaps were closed by the
+[P2.4 acceptance](#p24-acceptance) on 2026-10-27.
 
 The export-close Escape repair preserves Return on the safe default button.
 An `NSButton` has one key equivalent, and setting the default button cell restores
@@ -875,7 +876,7 @@ Julia export continued after Escape dismissed its close confirmation and after
 Return dismissed a freshly reopened confirmation. The PNG finished successfully
 and the application then closed normally. These are developer self-validation
 results; fresh independent review and verification remain required for the changed
-candidate. The broader P2.4 acceptance gaps above remain open; fallback runtime
+candidate. The broader P2.4 acceptance gaps above were open at that time; fallback runtime
 checks were not repeated for this native-only repair.
 
 The JavaFX palette-preview repair on 2026-10-15 routes color, add/remove and
@@ -896,3 +897,50 @@ Color-change preview correctness was checked by the pixel regression; selecting
 a color through the live JavaFX popup was not established during this inspection.
 No Windows/Linux or Intel Mac runtime acceptance was added. Fresh independent
 review and verification remain required for this changed candidate.
+
+### P2.4 acceptance
+
+The owner accepted P2.4 on 2026-10-27. Manual acceptance ran on Apple Silicon
+macOS against `main` at `02a1180` in an isolated application profile, with the
+built-in Retina display and an external 1x display (LG FHD) placed both to the
+right of it and to its left (negative origin). Most steps were driven through
+desktop automation; the owner checked the remaining steps by hand.
+
+Passed:
+
+- Go to Coordinates: initial selection, an invalid draft kept on Return,
+  correction with Tab and Return, Escape.
+- Edit Palette: nonmodal window, system color panel with alpha, add and remove
+  stops, Apply, Undo after Apply, Cancel.
+- Help: a single window on repeated opening, Escape.
+- Native `NSAlert` sheet for an invalid clipboard preset.
+- Full screen with an open sheet or palette window, and its exit.
+- Live switching to light appearance, Increase Contrast, Reduce Transparency
+  and VoiceOver (owner).
+- Go to Coordinates, palette, color panel and Help on the external display
+  with a negative origin (owner).
+- Canvas context menu on both displays, away from the bottom corners described
+  below.
+
+Acceptance found two Minor display defects, both fixed in PR #35: a new palette
+stop showed a rounded midpoint such as `0.5249999999999999`, and the Go to
+Coordinates hint showed the zoom with dozens of digits after wheel zoom.
+
+Accepted platform limitation: when a window fills a display that sits next to
+a taller display with a different bottom edge, a right-click within a few
+points of the window's bottom corner nearest the outer edge makes AppKit place
+the menu off that display. With the external display on the right, the menu is
+clipped at its right edge (within about 5–12 pt of the bottom-left corner);
+with it on the left in full screen, the menu flashes and disappears (within
+about 45 pt of the bottom-right corner). A pure AppKit probe reproduces both
+cases with `popUpMenuPositioningItem:` and `popUpContextMenu:`, and the menu
+opens normally about 40 pt from the corner and in the middle of the edge. The
+Java anchor coordinates were verified to be correct, so FractalLens does not
+work around this AppKit placement.
+
+Observation: a right-click on an inactive window only activates it, as for
+other AppKit windows.
+
+Independent review and verification were not run as separate workflow stages
+for this acceptance. Windows, Linux and Intel Mac are covered only by the
+portable CI suite.
