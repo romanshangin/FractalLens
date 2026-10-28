@@ -17,7 +17,8 @@ claim that every historical analysis can be rerun from the published files.
   [allocation/sustained memory](BASELINE_MEMORY_BENCHMARK.md).
 - [Formula benchmarks](FORMULA_BENCHMARK.md) and [basic benchmark entry point](BENCHMARK.md).
 - [Prism pipeline comparison (ES2 and Metal)](PRISM_PIPELINE_BENCHMARK.md);
-  [results](PRISM_PIPELINE_RESULTS.md).
+  [results](PRISM_PIPELINE_RESULTS.md) and
+  [Spaces presentation validation](SPACE_SWITCH_VALIDATION.md).
 
 Use the current drivers under `scripts/benchmarks/` with a fresh output directory.
 See [the scripts index](../scripts/README.md) for functional groups and validation commands.
@@ -101,6 +102,7 @@ this index. No raw log file is included.
 - [RETAINED_SNAPSHOT_PREPARATION.md](RETAINED_SNAPSHOT_PREPARATION.md)
 - [RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv](RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv)
 - [SERIES_APPROXIMATION_RESULTS.md](SERIES_APPROXIMATION_RESULTS.md)
+- [SPACE_SWITCH_VALIDATION.md](SPACE_SWITCH_VALIDATION.md)
 - [VALIDITY_MASK_OPTIMIZATION.md](VALIDITY_MASK_OPTIMIZATION.md)
 - [baseline-9-1-fx-fixed-20260907/summary.csv](baseline-9-1-fx-fixed-20260907/summary.csv)
 - [baseline-9-1-validation/manifest.csv](baseline-9-1-validation/manifest.csv)

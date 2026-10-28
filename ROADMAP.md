@@ -188,6 +188,28 @@ delivery foundation should be completed first.
     noncritical results. Every high-impact candidate is fixed or evidenced as
     intentional; this does not claim that every inspection warning disappeared.
 
+### P1.7. Evaluate Metal as the default macOS Prism pipeline
+
+- [ ] Switch the default JavaFX Prism pipeline on macOS from ES2 to Metal only
+  after every item of the [Metal migration checklist](docs/platform/METAL_MIGRATION_CHECKLIST.md)
+  passes on the final candidate. Motivation: on ES2 a frame completed while the
+  window is on another Space can stay invisible after returning; a manual check
+  did not reproduce this with `-Dprism.order=mtl`.
+  - [x] Run the first ES2/Metal timing comparison with the
+    [Prism pipeline protocol](benchmarks/PRISM_PIPELINE_BENCHMARK.md). Result:
+    `inconclusive`, 66 of 103 groups pass and none fail; see
+    [the results](benchmarks/PRISM_PIPELINE_RESULTS.md).
+  - [ ] Resolve the 37 inconclusive groups, or record an explicit owner
+    decision to accept the latency trade-off for the reliability fix.
+  - [ ] Pass the [Spaces presentation validation](benchmarks/SPACE_SWITCH_VALIDATION.md)
+    on both pipelines.
+  - [ ] Implement pipeline selection in a startup class that runs before the
+    JavaFX toolkit, with the `mtl,es2,sw` chain, macOS only and the user
+    override preserved; then pass the remaining checklist sections (visible,
+    native, GPU coexistence, packaging, automated checks, documentation).
+  - [ ] Record the verified configurations; one Apple M3 Pro does not validate
+    the switch for other Macs.
+
 ### P2. Product foundation and user workflows
 
 - [x] **P2.1.** Complete iteration/Julia editing and the zoom/iteration presentation in

@@ -95,8 +95,9 @@ Every declared metric is a control: the hierarchical bootstrap 95% interval of
 the median B/A ratio must stay at or below 1.05. `timing_verdict` is `pass` only
 when every group passes, `fail` when any group's interval lies entirely above
 its limit and `inconclusive` otherwise. A timing pass does not by itself switch
-the application to Metal. A switch also needs the visible checks (Space
-switching, resize, fullscreen, light and dark appearance) and the portable
+the application to Metal. A switch also needs the visible checks
+([Space switching](SPACE_SWITCH_VALIDATION.md), resize, fullscreen, light and
+dark appearance) and the portable
 suite, and it applies only to the measured Mac. Windows and Linux do not use
 Metal.
 
