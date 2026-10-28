@@ -202,11 +202,19 @@ delivery foundation should be completed first.
   developer UI checks; platform limits remain recorded in the UI documentation.
   This product acceptance does not replace review or delivery of the current fixes. See
   [scene workflows](docs/architecture/SESSION_FORMAT.md#scene-history-bookmarks-and-shared-presets-p22).
-- [ ] **P2.3.** Accept the unified tiled, cancellable high-resolution/off-screen
+- [x] **P2.3.** Accept the unified tiled, cancellable high-resolution/off-screen
   export pipeline based on `FractalScene` and an independent `RenderTarget`.
-  Implementation and developer regressions are in place; manual UI acceptance
-  and independent verification remain pending. Section 6 owns the consolidated
-  requirements; see [export contract](docs/architecture/PNG_EXPORT.md).
+  Section 6 owns the consolidated requirements; see
+  [export contract](docs/architecture/PNG_EXPORT.md).
+  - Status: the owner accepted P2.3 on 2026-10-27 after manual macOS checks of
+    the size sheet, save panel, progress, cancellation, overwrite and write
+    errors, close confirmation, focus, light and dark appearance, full screen,
+    and exports of every preset including deep Mandelbrot and Julia. Manual
+    acceptance found an export error message that showed the hidden staging
+    path, fixed in PR #33. Independent review and verification were not run as
+    separate stages. Windows, Linux and Intel Mac are covered only by the
+    portable CI suite. See
+    [manual acceptance](docs/architecture/PNG_EXPORT.md#manual-acceptance-2026-10-27).
 - [ ] **P2.4.** Make every modal window on macOS native through AppKit, including
   parameter forms and alerts. Reduce unnecessary modality, retain JavaFX fallback
   when the bridge is unavailable and on other platforms, and finish multi-display
@@ -441,13 +449,13 @@ Remaining items in this section follow the cross-section order in section 0.
   Preserve unchanged pixel spacing, formula, sample accuracy and iteration
   limits; cover partial frames and resize-then-drag regressions. Measure its
   application-level benefit in 9.1 rather than repeating the completed work.
-- [ ] Accept the P2.3 high-resolution/off-screen PNG pipeline: choose independent
+- [x] Accept the P2.3 high-resolution/off-screen PNG pipeline: choose independent
   output dimensions, render an immutable scene on tiled CPU backends, retain
   precise deep zoom, histogram/orbit-trap coloring, adaptive AA and dithering,
   cancel without publishing stale work, and preserve existing files on failure
   or cancellation. Implementation uses full-frame storage with a validated
   memory budget, inline progress with transient outcomes, size guidance, and
-  confirmation before closing during export; manual acceptance remains pending. See
+  confirmation before closing during export; accepted on 2026-10-27 (see P2.3). See
   [contract, limits and validation](docs/architecture/PNG_EXPORT.md).
 
 ## 7. Implement deep zoom
