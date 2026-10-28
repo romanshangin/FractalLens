@@ -22,4 +22,18 @@ class PaletteStopEditorTest {
         assertEquals(0.625, added.position(), 1.0e-12);
         assertEquals(0xFF9F9F9F, added.color());
     }
+
+    @Test
+    void addedStopPositionIsTheDecimalMidpoint() {
+        List<ColorStop> stops = List.of(
+                new ColorStop(0.2, 0xFF000000),
+                new ColorStop(0.35, 0xFF404040),
+                new ColorStop(0.7, 0xFF808080),
+                new ColorStop(0.8, 0xFFFFFFFF)
+        );
+
+        ColorStop added = PaletteStopOperations.createAddedStop(stops);
+
+        assertEquals("0.525", Double.toString(added.position()));
+    }
 }

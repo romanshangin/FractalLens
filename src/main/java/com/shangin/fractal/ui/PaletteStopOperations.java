@@ -2,6 +2,7 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColorStop;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -26,11 +27,17 @@ final class PaletteStopOperations {
             double width = right.position() - left.position();
             if (width > widest) {
                 widest = width;
-                position = (left.position() + right.position()) / 2.0;
+                position = midpoint(left.position(), right.position());
                 color = mix(left.color(), right.color());
             }
         }
         return new ColorStop(position, color);
+    }
+
+    // Halve the decimal sum so 0.35 and 0.7 give 0.525, not the binary 0.5249999999999999.
+    private static double midpoint(double left, double right) {
+        return BigDecimal.valueOf(left).add(BigDecimal.valueOf(right))
+                .divide(BigDecimal.TWO).doubleValue();
     }
 
     private static int mix(int first, int second) {
