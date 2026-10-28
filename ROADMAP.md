@@ -215,14 +215,26 @@ delivery foundation should be completed first.
     separate stages. Windows, Linux and Intel Mac are covered only by the
     portable CI suite. See
     [manual acceptance](docs/architecture/PNG_EXPORT.md#manual-acceptance-2026-10-27).
-- [ ] **P2.4.** Make every modal window on macOS native through AppKit, including
+- [x] **P2.4.** Make every modal window on macOS native through AppKit, including
   parameter forms and alerts. Reduce unnecessary modality, retain JavaFX fallback
   when the bridge is unavailable and on other platforms, and finish multi-display
   context-menu validation when suitable hardware is available. Native coordinate/
-  export forms and alerts, plus nonmodal palette/Help windows, are implemented;
-  full manual/platform acceptance remains pending. The palette previews the draft
-  gradient live; Apply commits it to the canvas. See
+  export forms and alerts, plus nonmodal palette/Help windows, are implemented.
+  The palette previews the draft gradient live; Apply commits it to the canvas. See
   [P2.4 implementation](docs/platform/MACOS_UI.md#native-windows-p24).
+  - Status: the owner accepted P2.4 on 2026-10-27 after manual macOS checks of
+    Go to Coordinates, Edit Palette with the system color panel, Help, native
+    alerts, full screen, light and dark appearance, Increase Contrast, Reduce
+    Transparency, VoiceOver, and native windows and context menus on a second
+    display with mixed DPI and a negative origin. Acceptance found two Minor
+    display defects (an inexact new palette stop position and an overlong zoom
+    in the Go to Coordinates hint), fixed in PR #35. A context menu opened
+    within a few points of a bottom corner of a window that fills a display
+    adjacent to a taller display is placed off that display by AppKit itself;
+    this was accepted as a platform limitation. Independent review and
+    verification were not run as separate stages for this acceptance. Windows,
+    Linux and Intel Mac are covered only by the portable CI suite. See
+    [manual acceptance](docs/platform/MACOS_UI.md#p24-acceptance).
 - [x] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
   exact fallback is a material user-visible cost.
   - Status: profiling confirmed the cost (a 640x400 frame at span `1e-310` took
@@ -383,9 +395,11 @@ Remaining items in this section follow the cross-section order in section 0.
   Native callbacks, accessibility activation, cancellation/replacement, live
   rendering and full-screen entry/exit passed on the built-in Retina display;
   see `docs/platform/MACOS_UI.md` for validation details and reproducible commands.
-- [ ] Complete native context-menu positioning validation across multiple displays,
+- [x] Complete native context-menu positioning validation across multiple displays,
   including mixed DPI, negative screen origins and display edges. Only one
   physical display was available for the initial implementation checks.
+  Accepted with P2.4 on 2026-10-27, including the AppKit bottom-corner
+  limitation; see [P2.4 acceptance](docs/platform/MACOS_UI.md#p24-acceptance).
 - [x] First unify JavaFX dialog appearance with macOS: system fonts, light/dark
   backgrounds, system accent colors, restrained input styling, and consistent
   spacing. Place the primary action on the right; support Enter to confirm,
@@ -393,11 +407,12 @@ Remaining items in this section follow the cross-section order in section 0.
   Shared appearance now covers coordinate/palette editors, Help and alerts;
   GUI regressions cover theme changes, exact input, draft validation and focus.
   See `docs/platform/MACOS_UI.md` for validation details.
-- [ ] Reduce unnecessary modality: use a compact owner-associated sheet for
+- [x] Reduce unnecessary modality: use a compact owner-associated sheet for
   Go to Coordinates, a nonmodal palette editor with live preview, and a nonmodal
   Help window. Show export completion unobtrusively inside the application;
   reserve modal alerts for errors or decisions requiring user action.
-- [ ] Make all modal windows on macOS native: use AppKit `NSAlert` sheets for
+  Accepted with P2.4 on 2026-10-27.
+- [x] Make all modal windows on macOS native: use AppKit `NSAlert` sheets for
   actionable messages and custom sheets with native fields and buttons for
   forms such as Go to Coordinates. Audit every remaining modal entry point,
   including coordinate/palette editors, Help, export messages and confirmations;
@@ -410,8 +425,8 @@ Remaining items in this section follow the cross-section order in section 0.
   PNG use shared AppKit `NSPanel` sheets. Errors and close-during-export decisions
   use `NSAlert`; palette and Help are nonmodal native panels. The palette includes
   a live draft-gradient preview without changing the canvas until Apply. JavaFX
-  fallback remains available. Full manual/platform acceptance is still open; see
-  `docs/platform/MACOS_UI.md#native-windows-p24`.
+  fallback remains available. Accepted with P2.4 on 2026-10-27; see
+  `docs/platform/MACOS_UI.md#p24-acceptance`.
 
 ## 5. Add history and reproducibility
 
