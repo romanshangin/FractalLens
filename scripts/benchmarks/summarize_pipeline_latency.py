@@ -100,7 +100,6 @@ def validate_campaign(directory, require_marker=True):
                     continue
                 pairs.append(dict(process_pair=pair, order="AB" if pair % 2 == 0 else "BA", mode=trial[0], gesture=trial[1],
                                   sample_pair=trial[2], metric=name, max_ratio=metric["max_ratio"], a_ms=av, b_ms=bv, ratio=bv / av))
-    require(pairs, "No declared metrics matched")
     return policy, scales.pop(), diagnostics, pairs, missing
 
 
@@ -150,9 +149,14 @@ def summarize(directory, jfr=None):
     groups = defaultdict(list)
     for row in pairs:
         groups[row["mode"], row["gesture"], row["metric"], row["max_ratio"]].append(row)
+    # Every declared group is reported; a metric absent from every trial must not disappear from the verdict.
+    for mode in MODES:
+        for gesture in policy["gestures"].split(","):
+            for metric in policy["metrics"]:
+                groups.setdefault((mode, gesture, metric["metric"], metric["max_ratio"]), [])
     summaries = []
     for (mode, gesture, metric, limit), rows in sorted(groups.items()):
-        stats = paired_statistics(rows)
+        stats = paired_statistics(rows) if rows else dict(pairs=0, process_pairs=0)
         if stats["pairs"] < 30 or stats["process_pairs"] < 3:
             verdict = "inconclusive"
         else:
@@ -166,7 +170,8 @@ def summarize(directory, jfr=None):
                   confidence_method="Seeded hierarchical percentile bootstrap over process pairs, then matched trials; 5000 resamples. Ratio is B/A.",
                   caveats="Screen observation is a JavaFX Robot compositor-capture proxy, not physical scanout. Trials with an absent marker are counted as missing, never zero.",
                   metrics=summaries)
-    write_csv(directory / "pairs.csv", pairs)
+    if pairs:
+        write_csv(directory / "pairs.csv", pairs)
     if jfr is not None and diagnostics:
         write_csv(directory / "pulse-phases.csv", pulse_phases(directory, diagnostics, jfr))
         result["pulse_phases"] = "pulse-phases.csv: diagnostic JFR runs, excluded from timing verdicts"

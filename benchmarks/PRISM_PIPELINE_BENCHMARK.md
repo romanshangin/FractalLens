@@ -85,7 +85,9 @@ every log and recording header, screen observation in timed runs, one window
 size and output scale for the whole campaign, and every declared trial. It
 pairs trials by process pair, mode, gesture and iteration. A trial whose marker
 is absent on either side is counted in `missing_pairs`, never as zero; a group
-with fewer than 30 pairs is inconclusive.
+with fewer than 30 pairs is inconclusive. Every declared mode, gesture and
+metric is reported, so a metric absent from every trial stays in the result as
+an inconclusive group with zero pairs.
 
 ## Decision rule
 

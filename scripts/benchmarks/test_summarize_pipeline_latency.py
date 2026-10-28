@@ -117,6 +117,18 @@ class PipelineLatencyTest(unittest.TestCase):
         self.assertEqual(29, screen["pairs"])
         self.assertEqual("inconclusive", screen["timing_verdict"])
 
+    def test_metric_absent_from_every_trial_is_reported_inconclusive(self):
+        for pair in range(3):
+            for label in "AB":
+                p = self.root / f"pair-{pair:02d}-{label}.csv"
+                p.write_text("\n".join(line for line in p.read_text().splitlines() if ",complete_screen_observed," not in line) + "\n")
+        result = summarize(self.root)
+        self.assertEqual("inconclusive", result["timing_verdict"])
+        screen = [m for m in result["metrics"] if m["metric"] == "complete_publish_to_screen_ms"]
+        self.assertEqual(len(MODES), len(screen))
+        for m in screen:
+            self.assertEqual((0, 30, "inconclusive"), (m["pairs"], m["missing_pairs"], m["timing_verdict"]))
+
     def test_policy_rejects_relaxed_threshold_and_unknown_metric(self):
         self.policy["metrics"][0]["max_ratio"] = 1.2
         with self.assertRaisesRegex(ValueError, "relaxed"):
