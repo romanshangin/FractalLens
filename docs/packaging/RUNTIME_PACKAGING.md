@@ -20,6 +20,45 @@ legal notices and build provenance travel with the runtime.
 `packaging/THIRD-PARTY-LICENSES.txt` records the source tag or embedded native
 revision for every copied third-party text.
 
+## Startup and macOS deployment floor
+
+The packaged module entry point is `com.shangin.fractal.app.FractalLauncher`,
+the same plain-Java bootstrap used by Maven's `javafx:run` and its macOS
+development launcher. It forwards arguments to
+`Application.launch(FractalApplication.class, args)` without setting Prism
+properties. The application still uses JavaFX's defaults and preserves explicit
+`prism.order` JVM options; automatic Metal selection remains gated by
+[P1.7's checklist](../platform/METAL_MIGRATION_CHECKLIST.md).
+
+The following inspection belongs to the uncommitted bootstrap preparation based
+on revision `2139aa063e22c057b1cd0a7f94433c7fd31de1a7`, on macOS 27.2 ARM64.
+It used Microsoft Build of OpenJDK 25 (update 4, vendor patch 1) and the JavaFX
+version pinned in `pom.xml`. These are observed binary/metadata values, not a new supported-OS
+claim or an update to the historical P0.2 evidence.
+
+| Component inspected | Deployment floor or metadata |
+| --- | --- |
+| JDK `java`, `libjli`, `libjvm` | Mach-O `minos 11.0` |
+| All native libraries in the ARM64 JavaFX graphics JAR, including `libprism_mtl` | Mach-O `minos 11.0` |
+| AppKit bridge, both ARM64 and x86_64 slices | Mach-O `minos 11.0`; build scripts target 11.0 |
+| Development launcher | Build script targets 11.0; source plist has no `LSMinimumSystemVersion` |
+| Generated jpackage launcher and all 35 loose Mach-O binaries in the app image (runtime and LWJGL libraries included) | Mach-O `minos 11.0` |
+| Generated app image `Contents/Info.plist` | `LSMinimumSystemVersion=10.11` |
+
+The generated plist understates the binary deployment floor: it does not prove
+that the app can run on macOS 10.11. macOS 11.0 is only the observed binary
+lower bound for this ARM64 build. A supported minimum for the whole delivery
+also needs the selected JDK vendor's OS requirements and working JavaFX/Metal
+device capabilities on that OS. Minimum-OS acceptance remains open; neither
+macOS 11 nor Intel Mac execution was tested. Reinspect when the JDK, JavaFX,
+architecture, native build settings or packaging tools change.
+
+The current-source app image passed packaged-launcher smoke (JavaFX, AppKit
+bridge, CPU fallback and completed CPU render) and displayed a completed
+restored Mandelbrot scene after a normal launch on this host. This was an
+`--app-image-only` development-host check, not an installed-DMG, clean-machine,
+Dock-tooltip or Metal-migration acceptance check.
+
 ## Reproducible build command
 
 Set `JAVA_HOME` to a full JDK 25 for the target platform and make Maven

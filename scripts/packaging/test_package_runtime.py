@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from unittest import mock
 import zipfile
+import xml.etree.ElementTree as ElementTree
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -40,6 +41,16 @@ class PackageRuntimeContractTest(unittest.TestCase):
         with mock.patch.object(package_runtime.sys, "platform", "win32"):
             self.assertEqual(Path("image/FractalLens.exe"),
                              package_runtime.app_executable(Path("image")))
+
+    def test_maven_and_packaged_launchers_use_the_pre_toolkit_entry_point(self):
+        root = ElementTree.parse(package_runtime.ROOT / "pom.xml").getroot()
+        namespace = {"m": "http://maven.apache.org/POM/4.0.0"}
+        main_class = root.findtext("m:properties/m:fractal.mainClass", namespaces=namespace)
+        expected = "com.shangin.fractal/com.shangin.fractal.app.FractalLauncher"
+        self.assertEqual(expected, main_class)
+        options = package_runtime.jpackage_common(
+            "jpackage", "1.0", "modules", "input", "icon")
+        self.assertEqual(expected, options[options.index("--module") + 1])
 
     def test_recognizes_versioned_and_platform_module_descriptors(self):
         regular = self.jar("regular.jar", {"module-info.class": b"module"})

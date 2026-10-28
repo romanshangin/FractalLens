@@ -7,6 +7,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ApplicationModuleTest {
     @Test
+    void entryPointDoesNotTriggerTheJavafxSubclassLauncher() throws Exception {
+        assertFalse(Application.class.isAssignableFrom(FractalLauncher.class),
+                "The entry point must run before the JavaFX toolkit starts");
+        var main = FractalLauncher.class.getMethod("main", String[].class);
+        assertTrue(java.lang.reflect.Modifier.isStatic(main.getModifiers()));
+        assertEquals(void.class, main.getReturnType());
+    }
+
+    @Test
     void javafxCanLaunchApplicationWithoutExportingInternalApis() {
         Module application = FractalApplication.class.getModule();
         Module graphics = Application.class.getModule();

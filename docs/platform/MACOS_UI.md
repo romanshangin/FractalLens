@@ -5,6 +5,12 @@ The main window contains only the fractal canvas and the standard window frame.
 the menu bar at the top of the display. Other platforms retain an in-window menu
 bar. The rendering pipeline, precision limits, and pointer gestures are unchanged.
 
+Production startup uses the plain `FractalLauncher` entry point before starting
+JavaFX. It currently leaves Prism selection to JavaFX (`es2,mtl,sw` on macOS)
+and preserves explicit JVM overrides. Metal is still an opt-in diagnostic
+configuration pending the [migration checklist](METAL_MIGRATION_CHECKLIST.md);
+see [startup and override commands](MACOS_RUN.md#javafx-startup-and-prism-selection).
+
 The main window also registers its commands as JavaFX's application-default
 system menu. Glass otherwise replaces them with an empty default when the stage
 loses focus, leaving only the application name during a macOS Spaces activation

@@ -1,6 +1,6 @@
 # Running FractalLens on macOS
 
-Run `mvn compile javafx:run` (or `mvn javafx:run` after compilation).
+Run `./mvnw compile javafx:run` (or `./mvnw javafx:run` after compilation).
 The automatically activated `macos-app-name` profile launches through
 `scripts/macos/macos-java`. Dock sees a `FractalLens.app` bundle with its own name,
 identifier and icon, rather than the shared `java` executable.
@@ -37,3 +37,34 @@ does not use this development launcher.
 For a manual check, launch the application and hover over its Dock icon:
 the tooltip must say **FractalLens**. Checking only the running process's
 `localizedName` is insufficient: it can be FractalLens while Dock still says java.
+
+## JavaFX startup and Prism selection
+
+Maven and the packaged application enter through
+`com.shangin.fractal.app.FractalLauncher`. This class does not extend JavaFX
+`Application`; its `main` runs before the toolkit and calls
+`Application.launch(FractalApplication.class, args)`. The native development
+launcher forwards Maven's module/main-class arguments unchanged, so it uses
+the same entry point without a separate native pipeline setting.
+
+This preparation for [P1.7](../../ROADMAP.md#p17-evaluate-metal-as-the-default-macos-prism-pipeline)
+does not change the pipeline default. No application code sets `prism.order`;
+the pinned JavaFX macOS order remains `es2,mtl,sw`. The planned macOS-only
+`mtl,es2,sw` selection remains gated by the
+[Metal migration checklist](METAL_MIGRATION_CHECKLIST.md). Windows and Linux
+continue to use their JavaFX defaults.
+
+For an explicit diagnostic selection, supply JVM options before launch, for example:
+
+```shell
+JAVA_TOOL_OPTIONS="-Dprism.order=mtl -Dprism.verbose=true" ./mvnw compile javafx:run
+JAVA_TOOL_OPTIONS="-Dprism.order=es2 -Dprism.verbose=true" ./mvnw compile javafx:run
+JAVA_TOOL_OPTIONS="-Dprism.order=sw -Dprism.verbose=true" ./mvnw compile javafx:run
+```
+
+These commands replace `JAVA_TOOL_OPTIONS` for that command; preserve any other
+required options when using them. User-supplied pipeline options are forwarded
+unchanged. Tests and benchmark mains that start JavaFX themselves bypass
+`FractalLauncher` and must select the intended pipeline explicitly. A direct
+Java launch of the compatibility `FractalApplication.main` can still initialize
+the toolkit before that method; use `FractalLauncher` for pre-toolkit startup.

@@ -13,6 +13,20 @@ manual check with `-Dprism.order=mtl`. The timing comparison is recorded in
 
 ## 1. Design decisions before implementation
 
+Preparation is staged separately from default activation. `FractalLauncher`
+is the shared plain-Java entry point for Maven (including the native macOS
+development launcher) and jpackage. It forwards application arguments to
+`Application.launch(FractalApplication.class, args)` without selecting Prism.
+The pinned JavaFX default on macOS is `es2,mtl,sw`; user overrides and other
+platform defaults remain unchanged. The first three requirements below remain
+open until automatic selection and its regression tests are implemented and
+the migration gates pass. No extra experimental application switch is added.
+
+The agreed activation design is to set `prism.order=mtl,es2,sw` in that entry
+point before `Application.launch`, only for macOS and only when the property
+is absent. Even an explicitly empty user value must be preserved. Keep the
+focus-repaint decision pending the ES2/Metal trials in section 4.
+
 - [ ] **Single selection point that runs before the toolkit starts.**
   `FractalApplication` extends `Application`; JavaFX's `LauncherImpl` starts the
   toolkit before calling `main` of such a class, so setting `prism.order` there
@@ -37,7 +51,10 @@ manual check with `-Dprism.order=mtl`. The timing comparison is recorded in
 - [ ] **Minimum macOS of the whole delivery.** Determine it for JDK, JavaFX
   Metal pipeline, the AppKit bridge library and the launcher together. The
   source `Info.plist` has no `LSMinimumSystemVersion`; inspect the generated
-  application bundle as well, and document the result.
+  application bundle as well, and document the result. The bootstrap
+  preparation's [binary/metadata inspection](../packaging/RUNTIME_PACKAGING.md#startup-and-macos-deployment-floor)
+  found an 11.0 binary floor but a generated plist claiming 10.11. A supported
+  minimum is still open; neither value alone establishes runtime support.
 - [ ] **Fate of the focus-repaint fix** (`fix/stale-frame-after-space-switch`).
   Decide after section 4: keep it as protection for the ES2/SW fallback, or
   close it with a recorded reason.
@@ -191,6 +208,18 @@ unverified.
 | Intel Mac (integrated or AMD GPU) | not checked |
 | VirtualBuddy macOS guest | known Metal crash on the earlier default; recheck |
 | Windows, Linux | not affected; CI only |
+
+Bootstrap preparation was additionally exercised on macOS 27.2 ARM64 using the
+normal Maven entry point and a JDK 25 app image. The normal Maven run reported
+`ES2Pipeline` with the unchanged `es2,mtl,sw` default. Developer tests cover
+module entry-point structure and Maven/jpackage entry-point agreement. The
+production-entry-point JavaFX smoke passed with the property unset and in
+separate explicit `mtl`, `es2` and `sw` forks; verbose logs confirmed the
+requested pipeline in each explicit fork. The existing application startup
+focus test, packaging script contracts and native launcher contracts also
+passed. These checks validate bootstrap preparation only; they do not close
+the automatic-selection, displayed-image comparison, fallback-initialization,
+Spaces, installed-DMG, VM, minimum-OS or performance requirements above.
 
 - [ ] Update `docs/platform/MACOS_RUN.md` and `docs/platform/MACOS_UI.md`: the
   selected pipeline, how it is selected and how to return to ES2.

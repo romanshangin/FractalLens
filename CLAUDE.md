@@ -21,7 +21,8 @@ optional LWJGL/Vulkan (MoltenVK on macOS) GPU path exists but is off by default.
 
 - Single Maven module, Java module `com.shangin.fractal`
   (`src/main/java/module-info.java`), main class
-  `com.shangin.fractal.app.FractalApplication`.
+  `com.shangin.fractal.app.FractalLauncher`. It starts JavaFX through
+  `FractalApplication`, whose `main` remains for compatibility.
 - Java release, JavaFX, JUnit and LWJGL versions: see `pom.xml` properties
   (currently Java 25, JavaFX 26.x, JUnit 6.x, LWJGL 3.4.x).
 - Maven Wrapper (`./mvnw`, `mvnw.cmd`) pins the Maven distribution; use it
@@ -31,7 +32,7 @@ optional LWJGL/Vulkan (MoltenVK on macOS) GPU path exists but is off by default.
 
 ```
 src/main/java/com/shangin/fractal/
-  app/         startup (FractalApplication), last-session and bookmark stores,
+  app/         startup (FractalLauncher, FractalApplication), last-session and bookmark stores,
                macOS app menu, app icon, runtime-artifact smoke entry
   config/      iteration policies (adaptive iteration limit)
   scene/       immutable FractalScene + settings records, JSON format
@@ -79,7 +80,7 @@ part of the source; do not edit or commit them.
 
 ### Main runtime flow
 
-`FractalApplication` → `MainView` (menus, indicators) → `FractalView`
+`FractalLauncher` → `FractalApplication` → `MainView` (menus, indicators) → `FractalView`
 (input, camera, debounced requests) → `FractalRenderController` →
 `FractalRenderService` → `PrecisionSelectingRenderBackend`, which picks
 `DirectDoubleRenderBackend` when hardware doubles are safe and a deep-zoom
@@ -125,7 +126,8 @@ Notes:
 | Script tests | per changed directory, see "Script tests" in `AGENTS.md` | Python `unittest`, `node --test` for orchestration, Bash/PowerShell CI wrappers |
 
 FX test classes live mostly in `src/test/java/com/shangin/fractal/ui/` plus
-`app/FractalApplicationFxTest`. Native GPU tests are `*NativeTest` under `gpu/`.
+`app/FractalApplicationFxTest` and `app/FractalLauncherFxTest`.
+Native GPU tests are `*NativeTest` under `gpu/`.
 Without the opt-in property these tests are skipped, and a skip is not a pass.
 
 CI runs `./mvnw --batch-mode --no-transfer-progress -Dfractal.gpu.enabled=false clean test`
