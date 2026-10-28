@@ -195,6 +195,8 @@ public class FractalView extends StackPane {
         getChildren().addAll(fractalSurface, modeIndicator);
         StackPane.setAlignment(modeIndicator, javafx.geometry.Pos.BOTTOM_LEFT);
         StackPane.setMargin(modeIndicator, new javafx.geometry.Insets(12));
+        // The status stays visible above the loading screen, which can last long in deep zoom.
+        modeIndicator.setViewOrder(-1);
         showLoadingScreen();
         renderController.setOnRenderStatusChanged(status -> {
             modeIndicator.setRenderStatus(status);
@@ -205,7 +207,6 @@ public class FractalView extends StackPane {
                 getChildren().remove(loadingScreen);
                 loadingScreen = null;
                 fractalSurface.setVisible(true);
-                modeIndicator.setVisible(true);
             }
         });
         renderController.setOnRenderProgressChanged(modeIndicator::setProgress);
@@ -223,10 +224,9 @@ public class FractalView extends StackPane {
 
     private void showLoadingScreen() {
         if (loadingScreenEnabled && loadingScreen == null) {
-            loadingScreen = new LoadingScreen();
+            loadingScreen = new LoadingScreen(modeIndicator::raiseNative);
             // Keep the surface managed so layout and rendering proceed at the real window size.
             fractalSurface.setVisible(false);
-            modeIndicator.setVisible(false);
             getChildren().add(loadingScreen);
         }
     }
@@ -931,7 +931,6 @@ public class FractalView extends StackPane {
                 renderPriority
         );
 
-        modeIndicator.setAntialiasSettings(scene.antialiasing());
         renderController.render(
                 scene,
                 target,
@@ -1022,6 +1021,7 @@ public class FractalView extends StackPane {
 
     public void close() {
         if (loadingScreen != null) loadingScreen.close();
+        modeIndicator.close();
         contextMenu.close();
         interactionRender.cancel();
         resizeRender.stop();

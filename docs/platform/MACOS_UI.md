@@ -358,6 +358,30 @@ of the viewport. A blue dot marks **Standard** rendering; a soft coral dot marks
 **Deep Zoom**, following the controller's actual precision policy. The badge is
 informational, with no click action, and is not included in PNG exports.
 
+On macOS the badge is an AppKit view in the window's content view, built by the
+existing `libfractal-menu` bridge (`FractalStatusBadge.m`, `MacStatusBadge`).
+It uses Liquid Glass (`NSGlassEffectView`) when the bridge is built with SDK 26
+or newer and runs on macOS 26 or later; otherwise, including any build with an
+older SDK, a within-window `NSVisualEffectView` with the popover material. The
+bridge compiles with older SDKs, which only lose the Liquid Glass branch. Text is
+the small system font (11 pt, medium) with tabular digits, the rendering
+indicator is a native mini spinner, and the hover text is a native tooltip. The
+view swallows clicks, scrolling and gestures so they never pan or zoom the
+fractal, and it exposes the badge text and details to accessibility. It is
+created when the window is shown, released when the window hides or the view
+closes, and raised above the loading material when that is attached later.
+`MacStatusBadgeFxTest` reads the native view back through the bridge and checks
+that the badge is the topmost content subview after the loading material
+attaches and stays 12 points from the left and bottom edges after a resize. If
+the bridge is unavailable, and on Windows and Linux, the JavaFX label (11 px
+system font, 12 px tooltip) remains the presentation.
+
+The badge stays visible over the loading screen, so the first render of a
+restored deep-zoom scene shows its mode and progress instead of only the icon.
+Its width reserves every digit and a three-digit percentage, so progress
+changes never resize it; it changes width only when the state or wording does
+(for example `Rendering 42%` → `Complete 7.50 s`).
+
 Help → FractalLens Help has a **Render status** section that explains the
 badge: what Standard and Deep Zoom mean and their dot colors; the states
 `Waiting`, `Rendering N%` (covering the whole frame, including any AA pass),
@@ -370,8 +394,9 @@ from one shared source; the JavaFX window scrolls like the native panel.
 
 The badge shows the base-render percentage, refinement state, and latest viewport
 render duration without requiring hover. The percentage counts exact ready pixels,
-including samples reused from a previous frame. Hovering adds the mode description,
-antialiasing details, current zoom, and the effective iteration limit. Zoom and
+including samples reused from a previous frame. Hovering shows only the current zoom
+and the effective iteration limit, as two short lines (`Zoom: …`, `Iterations: …`);
+descriptions of the Standard and Deep Zoom modes are not repeated there. Zoom and
 iteration values below one million are shown as whole numbers; larger values use
 three significant digits in powers of ten, with an approximation mark when rounded.
 The hover text does not repeat the render duration. Cancelled or failed work
@@ -440,8 +465,7 @@ account for half: the base render reaches 50%, and the AA pass adds the share of
 pixels whose AA colors are published. Samples and AA pixels reused by a pan or
 zoom count as done from the start of the render, so panning a finished frame by
 half the width starts at about 50% in every mode. The percentage never moves
-backwards, and 100% is reported only when the last AA tile is published. The badge
-tooltip describes the mode that applies to the current zoom. Switching to Base only
+backwards, and 100% is reported only when the last AA tile is published. Switching to Base only
 drops reused antialiased pixels from the display, including pixels reused from a
 retained preview of an interrupted render, and hides cached antialiasing samples
 from palette recoloring, so the frame and later recoloring show base colors only.

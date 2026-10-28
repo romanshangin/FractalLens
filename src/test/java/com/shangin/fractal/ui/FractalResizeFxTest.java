@@ -85,32 +85,29 @@ class FractalResizeFxTest {
             assertFalse(badge.getText().contains("Export PNG"));
             badge.setZoom(new java.math.BigDecimal("1234567"));
             badge.setIterations(1_234_567);
-            assertTrue(badge.getTooltip().getText().contains("Zoom: ≈1.23 × 10^6"));
-            assertTrue(badge.getTooltip().getText().contains("Iterations: ≈1.23 × 10^6"));
-            assertFalse(badge.getTooltip().getText().contains("Render time"));
-            assertFalse(badge.getTooltip().getText().contains("15 ms"));
+            // Hover shows only the values; mode descriptions belong in Help.
+            assertEquals("Zoom: ≈1.23 × 10^6\nIterations: ≈1.23 × 10^6", badge.getTooltip().getText());
             badge.setProgress(0.0);
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
             assertTrue(badge.getText().contains("Rendering 0%"));
-            assertTrue(badge.getTooltip().getText().contains("Only antialiased tiles are displayed."));
-            badge.setAntialiasSettings(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY));
             badge.setProgress(1.0);
             assertTrue(badge.getText().contains("Rendering 100%"));
-            assertTrue(badge.getTooltip().getText().contains("Antialiasing is off"));
-            badge.setAntialiasSettings(new AntialiasSettings(InteractiveRenderMode.FAST));
-            assertTrue(badge.getText().contains("Rendering 100%"), badge.getText());
-            assertTrue(badge.getTooltip().getText().contains("antialiasing pass follows"));
-            // Deep zoom reports its own mode, which defaults to Base only.
             badge.setDeepZoom(true);
             assertTrue(badge.getText().contains("Deep Zoom · Rendering 100%"), badge.getText());
-            assertTrue(badge.getTooltip().getText().contains("Antialiasing is off"));
-            badge.setAntialiasSettings(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY,
-                    InteractiveRenderMode.REFINED));
-            assertTrue(badge.getText().contains("Deep Zoom · Rendering 100%"), badge.getText());
-            assertTrue(badge.getTooltip().getText().contains("Only antialiased tiles are displayed."));
+            assertFalse(badge.getTooltip().getText().contains("precision"), badge.getTooltip().getText());
             badge.setDeepZoom(false);
             assertTrue(badge.getText().contains("Standard · Rendering 100%"), badge.getText());
             assertFalse(badge.getText().contains("Refining"), badge.getText());
+            // Progress must not resize the badge; only a different state may.
+            double width = badge.getPrefWidth();
+            for (double progress : new double[] {0.0, 0.05, 0.11, 0.42, 0.88}) {
+                badge.setProgress(progress);
+                assertEquals(width, badge.getPrefWidth(), badge.getText());
+            }
+            badge.setRenderStatus(new RenderStatus(RenderStatus.State.IDLE, 0));
+            assertTrue(badge.getPrefWidth() < width, "Shorter states may shrink the badge");
+            badge.close();
+            badge.close();
             return null;
         });
     }
@@ -557,6 +554,11 @@ class FractalResizeFxTest {
                 assertEquals(!macStartup, surface.isVisible());
                 assertTrue(surface.isManaged(), "Hidden surface must still receive layout");
                 assertEquals(macStartup ? 3 : 2, view.getChildrenUnmodifiable().size());
+                RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
+                assertTrue(badge.isVisible(), "The status must be visible while the loading screen is shown");
+                view.getChildrenUnmodifiable().stream().filter(LoadingScreen.class::isInstance)
+                        .forEach(loading -> assertTrue(badge.getViewOrder() < loading.getViewOrder(),
+                                "The status must be drawn above the loading screen"));
                 return null;
             });
             changeView(view, surface, () -> {

@@ -54,7 +54,7 @@ src/main/java/com/shangin/fractal/
                dialogs, native AppKit sheet wrappers (Mac*Sheet,
                MacContextMenu), indicators; also FX-launched benchmark mains
 src/main/macos/        AppKit bridge (FractalContextMenu.m,
-                       FractalParameterSheet.m), Dock launcher
+                       FractalParameterSheet.m, FractalStatusBadge.m), Dock launcher
                        (FractalLauncher.c), Info.plist
 src/main/resources/    app icons, GLSL compute shaders (gpu/*.comp), JavaFX CSS
 src/test/java/...      JUnit tests mirroring main packages, plus benchmark

@@ -22,4 +22,15 @@ class RenderValueFormatTest {
         assertEquals("1 × 10^1000", RenderValueFormat.zoom(new BigDecimal("1E+1000")));
         assertEquals("1 × 10^100000", RenderValueFormat.zoom(new BigDecimal("1E+100000")));
     }
+
+    @Test
+    void reservesTheWidestTextForProgressAndDurations() {
+        String reserved = "Standard · Rendering 000%";
+        assertEquals(reserved, RenderValueFormat.widestText("Standard · Rendering 0%"));
+        assertEquals(reserved, RenderValueFormat.widestText("Standard · Rendering 42%"));
+        assertEquals(reserved, RenderValueFormat.widestText("Standard · Rendering 100%"));
+        assertEquals("Deep Zoom · Complete 0.00 s · Export PNG 000%",
+                RenderValueFormat.widestText("Deep Zoom · Complete 7.51 s · Export PNG 5%"));
+        assertEquals("Standard · Waiting", RenderValueFormat.widestText("Standard · Waiting"));
+    }
 }
