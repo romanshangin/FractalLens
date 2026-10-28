@@ -466,9 +466,46 @@ Antialiasing switch was transient and turned off when the view left deep zoom;
 the deep zoom mode now persists like the standard mode. PNG export keeps its
 own adaptive antialiasing policy.
 
-Developer validation is listed in the P2.6 handoff; manual macOS checks of the
-window in light and dark appearance (focus, Return, Escape, Cancel, Apply)
-remain part of the open P2.6 acceptance.
+Known limitation: for Histogram Coloring and Orbit Trap there are no cached AA
+samples, so finished AA colors survive only on the visible frame. A pan made
+while Base only is shown drops them; switching back to an antialiasing mode
+calculates AA for the new frame again. Smooth palettes keep their cached samples
+across pans.
+
+### P2.6 acceptance
+
+The owner accepted P2.6 on 2026-10-27. Candidate: `main` at `b9af941`, which
+contains PR #26 (Settings window and modes) and PR #31 (Settings sheet focus
+fix). Environment: Apple Silicon, macOS 27.0.1, Maven JDK 26.0.1, JavaFX 26.0.2;
+graphical checks ran in an active desktop session.
+
+Manual owner checks on the running application, in light and dark appearance:
+
+| Area | Result |
+| --- | --- |
+| Settings window | Opens as a sheet from File → Settings… (⌘,) with the current scene's modes; Return applies and Undo restores; Escape and Cancel discard the draft; Reset to Defaults changes only the draft; opening during a render works and Apply restarts it; a repeated ⌘, opens no second window; text and pop-up buttons are laid out without clipping. |
+| Keyboard focus | With macOS Keyboard navigation on, Standard zoom is focused and Tab moves between the pop-up buttons and buttons. With it off, no control is focused and Tab does nothing. Clicking a hint never takes focus. |
+| Render modes | In every mode the badge shows `Rendering N%`, rising to `Complete …`, with no `Refining…`. Base only completes without an AA pass and removes the loading screen. On a completed frame, switching between all three modes changes the image in place, and finished AA reappears at once. Switching during the base render and during the AA pass shows no stale or mixed pixels. |
+| Deep zoom | The same mode checks passed for Mandelbrot and Julia deeper than about `1e-14`. |
+| Responsiveness and persistence | Switching a large frame to Base only causes no noticeable stall. Relaunch restores both modes; bookmarks and copied presets carry them. |
+
+The first manual pass found two keyboard-focus defects in the native sheet:
+selectable labels became Tab stops, and the first pop-up button kept a focus ring
+while Keyboard navigation was off. PR #31 fixed both with native regressions,
+and the owner rechecked both Keyboard navigation settings.
+
+Review: the PR #26 candidate returned one Minor finding, the Settings sheet
+focus defect, and the PR #31 fix review was clean. The owner accepted this chain
+as review closure for P2.6.
+
+Independent verification on `main` passed: `./mvnw clean test` reported 596 tests
+with zero failures and 128 opt-in skips; the native JavaFX suites passed 99
+tests with two opt-in fullscreen skips; the JavaFX fallback suite without the
+native bridge passed 41 tests with one native-only skip. Publication and
+secret checks (Gitleaks 8.30.1) were clean.
+
+The owner accepted the Histogram Coloring and Orbit Trap limitation described
+above. Not verified: Windows, Linux, Intel Mac and the opt-in fullscreen tests.
 
 ### P2.1 acceptance
 
