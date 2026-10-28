@@ -2,8 +2,8 @@
 
 Section 6 of `ROADMAP.md` owns the consolidated high-resolution and off-screen
 export requirements. Section 5 supplies the immutable scene/target model.
-Implementation is complete; product acceptance remains open pending independent
-review/verification and manual UI checks.
+Implementation is complete. The owner accepted P2.3 on 2026-10-27 after manual
+macOS acceptance; see [manual acceptance](#manual-acceptance-2026-10-27).
 
 ## Contract
 
@@ -150,3 +150,46 @@ system Quit during export, light appearance, fullscreen, Windows/Linux desktop
 and Intel macOS remain unverified for this repair. Automated desktop checks are
 developer self-validation, not independent review or verification. P2.3 acceptance
 remains open.
+
+## Manual acceptance (2026-10-27)
+
+Manual acceptance ran on Apple Silicon macOS against `main` at `c30a095`, in
+light and dark appearance, windowed and full screen. Most steps were driven
+through desktop automation in an isolated application profile; the owner
+checked the remaining steps by hand.
+
+Passed:
+
+- Export PNG… availability, the Command-Shift-E and Command-W shortcuts, the
+  native size sheet with the window size and live size estimate, rejected
+  drafts (`1`, `abc`, an over-limit width) kept for correction, Tab, Return and
+  Escape.
+- System save panel with a palette-free suggested name, replacement prompt,
+  monotonic stage progress, `PNG saved` and its automatic dismissal.
+- Exact output dimensions (1600×1000, 4000×2500, 3456×2168 and others) with no
+  tile seams, antialiasing present and no staging files left behind.
+- Pan during a deep Julia export: the file shows the captured scene. Undo after
+  export removes only the user's own scene changes.
+- Cancel Export PNG during base work (10%) and AA work (46%): no output, no
+  staging files, and an overwritten destination keeps its original bytes.
+- Write into a read-only folder, including a replacement there: native
+  `Export failed` alert, `PNG export failed.` badge, destination unchanged.
+- Close Window, the window close button and system Quit during export: the
+  confirmation defaults to No, Return; Escape and Return keep the export
+  running; Yes, Close exits without output.
+- Keyboard navigation on the canvas after every dialog.
+- Burning Ship, Tricorn with Histogram Coloring, cubic Multibrot with the Cross
+  orbit trap, deep Julia and deep Mandelbrot at span 2.4e-20 exports without
+  blocks or noise.
+
+Desktop automation could not drive canvas keys and drags or JavaFX menu
+shortcuts while a Russian input source was active; the owner confirmed these
+by hand, so they are an automation limit, not a product defect. Changing the
+palette during an export was inconclusive because that export finished first;
+scene capture is covered by the pan check and the automated regressions.
+
+Acceptance found one defect: the failure alert showed the hidden staging file
+path instead of the chosen file and gave no cause. It is fixed in PR #33.
+Independent review and verification were not run as separate workflow stages
+for this acceptance. Windows, Linux and Intel Mac are covered only by the
+portable CI suite.
