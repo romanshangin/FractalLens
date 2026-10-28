@@ -462,7 +462,7 @@ final class FractalDialogs {
         return dialog;
     }
 
-    private static final String HELP_TEXT = "Explore the fractal\n\n"
+    static final String HELP_TEXT = "Explore the fractal\n\n"
                 + "Drag to move. Use arrow keys to pan, Page Up and Page Down to zoom, and Home to reset the view.\n"
                 + "Scroll with a mouse to zoom toward the pointer.\n"
                 + "On a trackpad, pinch to zoom and scroll with two fingers to pan.\n\n"
@@ -470,11 +470,29 @@ final class FractalDialogs {
                 + "Choose a formula in Fractal, then use Go to for interesting places in that fractal.\n"
                 + "Choose a palette in Color.\n"
                 + "Edit iteration settings in Render. For Julia, edit both constant components there; Reset to Defaults restores -0.8 and 0.156 before Apply.\n"
-                + "Use File → Settings… to choose antialiasing separately for standard and deep zoom: "
-                + "Base only, Base, then antialiasing, or Antialiased display. "
-                + "Deep zoom applies when zooming deeply into Mandelbrot or Julia.\n"
                 + "Animate Palette is available when Histogram Coloring and Orbit Trap are off.\n\n"
-                + "Use File → Export PNG… to save the rendered image.";
+                + "Use File → Export PNG… to save the rendered image.\n\n"
+                + "Render status\n\n"
+                + "The badge in the bottom-left corner shows the rendering mode and the state of the current frame. "
+                + "Hover over it to see the zoom and the iteration limit.\n"
+                + "Standard (blue dot): standard-precision rendering.\n"
+                + "Deep Zoom (coral dot): high-precision rendering for deep magnification "
+                + "of Mandelbrot or Julia.\n"
+                + "Waiting: no frame has been rendered yet.\n"
+                + "Rendering N%: the frame is being calculated. "
+                + "The percentage covers the whole frame, including any antialiasing pass.\n"
+                + "Complete and a time: the frame, including antialiasing, finished in the time shown.\n"
+                + "Interrupted: the render was cancelled before it finished.\n"
+                + "Failed: the render stopped with an error.\n"
+                + "During PNG export the badge also shows the export progress and its result.\n\n"
+                + "Render Settings\n\n"
+                + "Use File → Settings… to choose how frames are presented, "
+                + "separately for standard and deep zoom:\n"
+                + "Base only: only the base render is calculated; antialiasing is off.\n"
+                + "Base, then antialiasing: the base render is shown first, "
+                + "then an antialiasing pass smooths it.\n"
+                + "Antialiased display: only finished antialiased tiles are displayed.\n"
+                + "Deep zoom antialiasing is precise and can take much longer than the base render.";
 
     static void close(Window owner) {
         var help = HELP.remove(owner);
@@ -508,7 +526,12 @@ final class FractalDialogs {
         Label content = new Label(HELP_TEXT);
         content.setWrapText(true);
         content.getStyleClass().add("dialog-body");
-        dialog.getDialogPane().setContent(content);
+        // Like the native panel, the text scrolls instead of growing past the screen.
+        ScrollPane scroll = new ScrollPane(content);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setPrefViewportHeight(420);
+        dialog.getDialogPane().setContent(scroll);
         dialog.getDialogPane().setPrefWidth(520);
         DialogAppearance.install(dialog, owner, () -> dialog.getDialogPane().lookupButton(ButtonType.CLOSE));
         DialogAppearance.buttons(dialog, ButtonType.CLOSE);

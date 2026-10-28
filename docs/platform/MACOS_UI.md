@@ -143,7 +143,7 @@ The native JavaFX regression checks can be run with
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette, Reset Colors to Defaults |
 | Render | Edit Iteration Settings…, Edit Julia Parameters… |
 | Window | Minimize (⌘M), Zoom |
-| Help | FractalLens Help, including pointer and keyboard navigation |
+| Help | FractalLens Help, including pointer and keyboard navigation, the render status badge and Render Settings |
 
 Settings… is available at any time, including while a frame renders; applying it
 restarts the render. Edit Iteration Settings is available for every fractal when
@@ -357,6 +357,16 @@ A compact translucent badge sits 12 logical pixels from the bottom-left corner
 of the viewport. A blue dot marks **Standard** rendering; a soft coral dot marks
 **Deep Zoom**, following the controller's actual precision policy. The badge is
 informational, with no click action, and is not included in PNG exports.
+
+Help → FractalLens Help has a **Render status** section that explains the
+badge: what Standard and Deep Zoom mean and their dot colors; the states
+`Waiting`, `Rendering N%` (covering the whole frame, including any AA pass),
+`Complete` with its time, `Interrupted` and `Failed`; and that PNG export
+progress and its result appear in the badge. A following **Render Settings**
+section explains the three presentations chosen in File → Settings… for
+standard and deep zoom: Base only, Base, then antialiasing, and Antialiased
+display. The native Help panel and the JavaFX Help window show the same text
+from one shared source; the JavaFX window scrolls like the native panel.
 
 The badge shows the base-render percentage, refinement state, and latest viewport
 render duration without requiring hover. The percentage counts exact ready pixels,
