@@ -22,6 +22,10 @@ import javafx.stage.Stage;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.FileSystemException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Locale;
 
@@ -159,10 +163,10 @@ public class MainView extends BorderPane {
                         if (request == exportRequest) exportCompleted(completedPath);
                     }),
                     exception -> Platform.runLater(() -> {
-                        if (request == exportRequest) exportFailed(exception);
+                        if (request == exportRequest) exportFailed(target, exception);
                     }));
         } catch (RuntimeException exception) {
-            exportFailed(exception);
+            exportFailed(target, exception);
         }
     }
 
@@ -214,16 +218,41 @@ public class MainView extends BorderPane {
         setExportStatus("PNG saved");
     }
 
-    private void exportFailed(Throwable exception) {
+    private void exportFailed(Path target, Throwable exception) {
         if (closed) {
             return;
         }
         setExporting(false);
         setExportStatus("PNG export failed.");
-        showError(
-                "Export failed",
-                "The PNG image could not be saved: " + exception.getMessage()
-        );
+        showError("Export failed", exportFailureMessage(target, exception));
+    }
+
+    /**
+     * Describes a failed export in terms of the file the user chose. File system exceptions
+     * name the internal staging file, so their path is never shown.
+     */
+    static String exportFailureMessage(Path target, Throwable exception) {
+        Throwable cause = exception instanceof UncheckedIOException unchecked
+                && unchecked.getCause() != null ? unchecked.getCause() : exception;
+        Path folder = target.toAbsolutePath().getParent();
+        String reason = switch (cause) {
+            case AccessDeniedException ignored ->
+                    "FractalLens does not have permission to write to the folder \"" + folder
+                            + "\". Choose another folder.";
+            case NoSuchFileException ignored ->
+                    "The folder \"" + folder + "\" does not exist.";
+            case FileSystemException fileSystem -> sentence(fileSystem.getReason(),
+                    "A file system error occurred.");
+            default -> sentence(cause.getMessage(), "An unexpected error occurred.");
+        };
+        return "The PNG image could not be saved as \"" + target.getFileName() + "\". " + reason;
+    }
+
+    private static String sentence(String text, String fallback) {
+        if (text == null || text.isBlank()) return fallback;
+        String trimmed = text.strip();
+        String capitalized = Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
+        return capitalized.endsWith(".") ? capitalized : capitalized + ".";
     }
 
     private void renderFailed(Throwable exception) {
