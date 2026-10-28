@@ -207,6 +207,8 @@ delivery foundation should be completed first.
     JavaFX toolkit, with the `mtl,es2,sw` chain, macOS only and the user
     override preserved; then pass the remaining checklist sections (visible,
     native, GPU coexistence, packaging, automated checks, documentation).
+    Preparation uses a plain `FractalLauncher` entry point for Maven and
+    jpackage; automatic Metal selection is still deferred until the gates pass.
   - [ ] Record the verified configurations; one Apple M3 Pro does not validate
     the switch for other Macs.
 

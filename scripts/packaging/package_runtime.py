@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGET = ROOT / "target" / "runtime-package"
-APP_MODULE = "com.shangin.fractal/com.shangin.fractal.app.FractalApplication"
+APP_MODULE = "com.shangin.fractal/com.shangin.fractal.app.FractalLauncher"
 NATIVE_SUFFIXES = (".dll", ".dylib", ".jnilib", ".so")
 LICENSE_SHA256 = {
     "LWJGL-LICENSE.txt": "8130c6f15e9f961e74c2b197551e60ef9d00521addc5908255be1cdd43a6c90b",

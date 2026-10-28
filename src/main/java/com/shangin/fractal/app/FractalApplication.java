@@ -14,7 +14,7 @@ public class FractalApplication extends Application {
     private MainView mainView;
 
     public static void main(String[] args) {
-        launch(args);
+        FractalLauncher.main(args);
     }
 
     @Override
