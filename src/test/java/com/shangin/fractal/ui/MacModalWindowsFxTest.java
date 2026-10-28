@@ -13,6 +13,7 @@ import javafx.stage.Modality;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -51,7 +52,8 @@ class MacModalWindowsFxTest {
 
     @Test void coordinatesRetainExactDraftsAndApplyOnFxThread() throws Exception {
         var result = new CompletableFuture<PreciseComplex>();
-        var sheet = fx(() -> MacFormSheet.coordinates(owner, new PreciseComplex("0", "0"), "Zoom × 1E30",
+        var sheet = fx(() -> MacFormSheet.coordinates(owner, new PreciseComplex("0", "0"),
+                FractalDialogs.coordinateHint(new BigDecimal("1E30"), true),
                 value -> { assertTrue(Platform.isFxApplicationThread()); result.complete(value); }));
         fx(() -> {
             AppKitParameterProbe.text(sheet, "first", "NaN");

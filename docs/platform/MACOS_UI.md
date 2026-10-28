@@ -768,7 +768,7 @@ messages through AppKit when the bridge is available:
 | --- | --- | --- |
 | Iteration Settings / Julia Parameters / Add Bookmark | Existing native field sheets | JavaFX owner-modal forms |
 | Settings (P2.6) | Native sheet with labelled pop-up buttons | JavaFX owner-modal form with combo boxes |
-| Go to Coordinates | Native two-field sheet; exact decimal parsing, selectable zoom/deep-zoom hint | JavaFX owner-modal form |
+| Go to Coordinates | Native two-field sheet; exact decimal parsing, selectable hint with the compact badge zoom (`Zoom: ≈1.23 × 10^30`) and deep-zoom state | JavaFX owner-modal form |
 | Export PNG dimensions | Native two-field sheet with the shared memory-budget validation and live size estimate | JavaFX owner-modal form |
 | Render/export/bookmark/preset errors | Asynchronous `NSAlert` sheet | JavaFX owner-modal alert |
 | Close while exporting (including system Quit) | Asynchronous `NSAlert` decision; Return/Escape defaults to returning | JavaFX owner-modal decision |

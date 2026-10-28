@@ -63,9 +63,14 @@ final class FractalDialogs {
                             Consumer<PreciseComplex> apply) {
         if (MacParameterSheet.hasOpenSheet(owner)) return;
         if (!nativeDialog(() -> MacFormSheet.coordinates(owner, viewport.center(),
-                (deepZoom ? "High-precision deep zoom is active. " : "Move the center without changing zoom. ")
-                        + "Zoom × " + zoom.toEngineeringString(), apply)))
+                coordinateHint(zoom, deepZoom), apply)))
             coordinates(owner, viewport, zoom, deepZoom).ifPresent(apply);
+    }
+
+    /** One-line native hint; the zoom uses the same compact form as the render badge tooltip. */
+    static String coordinateHint(BigDecimal zoom, boolean deepZoom) {
+        return (deepZoom ? "High-precision deep zoom is active. " : "Move the center without changing zoom. ")
+                + "Zoom: " + RenderValueFormat.zoom(zoom);
     }
 
     static void palette(Window owner, List<ColorStop> stops, Consumer<List<ColorStop>> apply) {

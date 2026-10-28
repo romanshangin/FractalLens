@@ -1,0 +1,18 @@
+package com.shangin.fractal.ui;
+
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class FractalDialogsTest {
+
+    @Test
+    void coordinateHintShowsCompactZoom() {
+        assertEquals("Move the center without changing zoom. Zoom: 1",
+                FractalDialogs.coordinateHint(new BigDecimal("0.96504383940932216428241608952468830960"), false));
+        assertEquals("High-precision deep zoom is active. Zoom: ≈1.23 × 10^30",
+                FractalDialogs.coordinateHint(new BigDecimal("1234567890123456789012345678901.5"), true));
+    }
+}
