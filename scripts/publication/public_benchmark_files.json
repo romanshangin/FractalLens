@@ -36,6 +36,9 @@
   "benchmarks/INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv",
   "benchmarks/P1_5_PROMOTION_VALIDATION.md",
   "benchmarks/PALETTE_BENCHMARK_RESULTS.md",
+  "benchmarks/PRISM_PIPELINE_BENCHMARK.md",
+  "benchmarks/PRISM_PIPELINE_RESULTS.md",
+  "benchmarks/README.md",
   "benchmarks/RETAINED_SNAPSHOT_PREPARATION.md",
   "benchmarks/RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv",
   "benchmarks/SERIES_APPROXIMATION_RESULTS.md",
@@ -113,5 +116,6 @@
   "benchmarks/policies/p1-5-retained-vs-pre-fx-base-confirm.json",
   "benchmarks/policies/p1-5-retained-vs-pre-fx.json",
   "benchmarks/policies/p1-5-retained-vs-pre-headless.json",
-  "benchmarks/README.md"
+  "benchmarks/policies/prism-pipeline-fx.json",
+  "benchmarks/policies/prism-pipeline-latency.json"
 ]

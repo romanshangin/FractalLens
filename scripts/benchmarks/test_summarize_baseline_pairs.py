@@ -173,6 +173,67 @@ class PairValidationTest(unittest.TestCase):
         self.assertEqual("pass", result["timing_verdict"])
         self.assertEqual("not_evaluated", result["production_promotion"])
 
+    def make_configuration(self, pipelines=("es2", "mtl")):
+        self.policy.update(purpose="configuration", runner="fx", modes="FAST",
+                           jvm_options=dict(A=["-Dprism.order=es2"], B=["-Dprism.order=mtl"]),
+                           expected_pipeline=dict(A="es2", B="mtl"),
+                           metrics=[dict(fixture="case", step="render", metric="full_publish_ms", role="control", max_ratio=1.05)])
+        write_json(self.root / "policy.json", self.policy)
+        digest = hashlib.sha256((self.root / "policy.json").read_bytes()).hexdigest()
+        actual = dict(zip("AB", pipelines))
+        for launch in self.launches:
+            label = launch["label"]
+            launch.update(policy_sha256=digest, command=["java"] + self.policy["jvm_options"][label])
+            prefix = "com.sun.prism." + actual[label] + "." + actual[label].upper()
+            (self.root / (launch["directory"] + ".log")).write_text(
+                "Prism pipeline name = " + prefix + "Pipeline\nInitialized prism pipeline: " + prefix + "Pipeline\n")
+            d = self.root / launch["directory"]
+            (d / "environment.txt").write_text((d / "environment.txt").read_text() + "modes=FAST\njavafx=26\noutput_scale=2.0\n")
+            self.change_rows(launch["directory"], lambda rows: [r.update(requested_mode="FAST", effective_mode="FAST", full_publish_ms="20") for r in rows])
+        write_json(self.root / "launches.json", self.launches)
+
+    @patch("summarize_baseline_pairs.validate_fx")
+    def test_configuration_compares_declared_pipelines_of_one_build(self, _):
+        self.make_configuration()
+        result = summarize(self.root)
+        self.assertEqual("pass", result["timing_verdict"])
+        self.assertEqual(dict(A=["-Dprism.order=es2"], B=["-Dprism.order=mtl"]), result["jvm_options"])
+
+    @patch("summarize_baseline_pairs.validate_fx")
+    def test_configuration_rejects_fallback_to_another_pipeline(self, _):
+        self.make_configuration(pipelines=("es2", "sw"))
+        with self.assertRaisesRegex(ValueError, "Actual Prism pipeline"):
+            validate_campaign(self.root)
+
+    @patch("summarize_baseline_pairs.validate_fx")
+    def test_configuration_rejects_launch_without_declared_option(self, _):
+        self.make_configuration()
+        self.launches[1]["command"] = ["java"]
+        write_json(self.root / "launches.json", self.launches)
+        with self.assertRaisesRegex(ValueError, "declared JVM options"):
+            validate_campaign(self.root)
+
+    @patch("summarize_baseline_pairs.validate_fx")
+    def test_configuration_requires_one_compiled_snapshot(self, _):
+        self.make_configuration()
+        write_json(self.root / "build-B.json", dict(identity="candidate", revision="revision"))
+        with self.assertRaisesRegex(ValueError, "Build identity"):
+            validate_campaign(self.root)
+
+    def test_configuration_policy_rejects_unsupported_or_mismatched_options(self):
+        self.policy.update(purpose="configuration", runner="fx", modes="FAST",
+                           jvm_options=dict(A=["-Dprism.order=es2"], B=["-XX:+UseSerialGC"]), expected_pipeline=dict(A="es2", B="mtl"),
+                           metrics=[dict(fixture="case", step="render", metric="full_publish_ms", role="control", max_ratio=1.05)])
+        with self.assertRaisesRegex(ValueError, "Unsupported configuration option"):
+            validate_policy(self.policy)
+        self.policy["jvm_options"]["B"] = ["-Dprism.order=mtl"]
+        self.policy["expected_pipeline"]["B"] = "es2"
+        with self.assertRaisesRegex(ValueError, "Expected pipelines"):
+            validate_policy(self.policy)
+        self.policy.update(purpose="candidate")
+        with self.assertRaisesRegex(ValueError, "Only configuration"):
+            validate_policy(self.policy)
+
     def test_process_clusters_contribute_to_uncertainty(self):
         rows = [dict(process_pair=p, a_ms=10, b_ms=10 * ratio, ratio=ratio) for p, ratio in enumerate((.5, 1, 2)) for _ in range(10)]
         result = paired_statistics(rows, resamples=1000)

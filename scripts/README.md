@@ -6,7 +6,7 @@ directory. Tools and their tests are grouped by function:
 | Directory | Responsibility | Entry points |
 | --- | --- | --- |
 | `orchestration/` | Task stages, candidate identity and reusable check evidence | `task-orchestrator.ts`, `check.ts` |
-| `benchmarks/` | Frozen builds, measurement drivers, thermal probe, analyzers and plots | `prepare_baseline_build.py`, `run_baseline_pairs.py`, `run_baseline_memory.py`, `summarize_*.py` |
+| `benchmarks/` | Frozen builds, measurement drivers, thermal probe, analyzers and plots | `prepare_baseline_build.py`, `run_baseline_pairs.py`, `run_pipeline_latency.py`, `run_baseline_memory.py`, `summarize_*.py` |
 | `ci/` | Buffered, privacy-filtered test output for Bash and PowerShell | `run-ci-tests`, `run-ci-tests.ps1` |
 | `macos/` | Native menu bridge build and development launcher | `build-macos-menu`, `macos-java` |
 | `packaging/` | Runtime installers, package contracts and application icon generation | `package_runtime.py`, `build_app_icon.py` |

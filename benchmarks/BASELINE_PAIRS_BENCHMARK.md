@@ -33,7 +33,9 @@ run; result directories contain their manifests, not copies of the binaries.
 
 Copy a policy from `benchmarks/policies/` to a new file and review it **before**
 launching. Set `purpose` to `candidate` for different builds or `calibration` for
-the same compiled build on both sides. Declare selected fixtures, render sizes,
+the same compiled build on both sides. `configuration` runs one compiled build
+under two declared JavaFX settings; see the [Prism pipeline comparison](PRISM_PIPELINE_BENCHMARK.md).
+Declare selected fixtures, render sizes,
 modes, warmups, samples, process pairs, timeout and every target/control metric.
 Targets require at least a 10% improvement (B/A <= 0.90); controls allow at most
 5% regression (B/A <= 1.05), following the proposed CPU criteria in

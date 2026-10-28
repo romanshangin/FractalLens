@@ -17,6 +17,9 @@ from summarize_baseline_fx import SCOPES as FX_SCOPES, summarize as validate_fx
 KEY = ("fixture", "step", "width", "height")
 # 9.1-v2 removed the deterministic-jitter AA fixtures; frozen 9.1-v1 builds remain valid inputs.
 MATRICES = {"9.1-v1", "9.1-v2"}
+# A configuration campaign compares one frozen build under two declared JVM settings.
+CONFIGURATION_OPTION = re.compile(r"-Dprism\.order=(es2|mtl|sw)")
+PIPELINE = re.compile(r"Initialized prism pipeline: com\.sun\.prism\.(\w+)\.\w+Pipeline")
 FORBIDDEN = re.compile(r"StartFlightRecording|FlightRecorderOptions|javaagent|agentpath|agentlib|fractal\.(?:aa\.profile|render\.diagnostics)=true|NativeMemoryTracking=(?:summary|detail)")
 
 
@@ -32,7 +35,7 @@ def read(path):
 
 def validate_policy(p):
     require(p["version"] == "9.1-pairs-v1", "Unknown paired policy")
-    require(p["purpose"] in ("calibration", "candidate"), "Unknown purpose")
+    require(p["purpose"] in ("calibration", "candidate", "configuration"), "Unknown purpose")
     require(p["runner"] in ("headless", "fx"), "Unknown runner")
     require(type(p["process_pairs"]) is int and p["process_pairs"] >= 3, "At least three fresh process pairs required")
     require(type(p["samples"]) is int and p["samples"] >= 1 and p["process_pairs"] * p["samples"] >= 30, "At least 30 measured pairs required")
@@ -47,6 +50,15 @@ def validate_policy(p):
     if p["runner"] == "fx":
         modes = p["modes"].split(",")
         require(set(modes) <= {"FAST", "REFINED"} and len(modes) == len(set(modes)) and modes, "Invalid FX modes")
+    if p["purpose"] == "configuration":
+        require(p["runner"] == "fx", "Configuration campaigns compare JavaFX graphics settings")
+        options = p["jvm_options"]
+        require(set(options) == {"A", "B"} and options["A"] != options["B"], "Declare different A/B JVM options")
+        require(all(len(o) == 1 and CONFIGURATION_OPTION.fullmatch(o[0]) for o in options.values()), "Unsupported configuration option")
+        require(p["expected_pipeline"] == {label: CONFIGURATION_OPTION.fullmatch(options[label][0]).group(1) for label in "AB"},
+                "Expected pipelines must match the requested Prism order")
+    else:
+        require("jvm_options" not in p and "expected_pipeline" not in p, "Only configuration campaigns change JVM options")
     require(p["metrics"], "Declare target and control metrics before timing")
     identities = set()
     for m in p["metrics"]:
@@ -58,7 +70,10 @@ def validate_policy(p):
         require(m["role"] in ("target", "control"), "Unknown metric role")
         limit = m["max_ratio"]
         require(isinstance(limit, (int, float)) and math.isfinite(limit) and 0 < limit <= (0.90 if m["role"] == "target" else 1.05), "Invalid or relaxed performance threshold")
-    require({m["role"] for m in p["metrics"]} == {"target", "control"}, "Declare both target and control metrics")
+    # Non-inferiority of a configuration needs no improvement target.
+    roles = {m["role"] for m in p["metrics"]}
+    require(roles == {"target", "control"} or (p["purpose"] == "configuration" and roles == {"control"}),
+            "Declare both target and control metrics")
 
 
 def validate_definition(policy, manifest):
@@ -115,7 +130,7 @@ def validate_campaign(directory, require_marker=True):
     validate_policy(policy)
     builds = {label: json.loads((directory / ("build-" + label + ".json")).read_text()) for label in "AB"}
     identical = builds["A"]["identity"] == builds["B"]["identity"]
-    require(identical == (policy["purpose"] == "calibration"), "Build identity conflicts with purpose")
+    require(identical == (policy["purpose"] != "candidate"), "Build identity conflicts with purpose")
     launches = json.loads((directory / "launches.json").read_text())
     expected = [(pair, "AB" if pair % 2 == 0 else "BA", label)
                 for pair in range(policy["process_pairs"]) for label in ("AB" if pair % 2 == 0 else "BA")]
@@ -127,6 +142,11 @@ def validate_campaign(directory, require_marker=True):
         require(launch["directory"] == f'pair-{launch["process_pair"]:02d}-{launch["label"]}', "Unexpected run directory")
         require(launch["result"]["returncode"] == 0, "Unsuccessful JVM")
         require(not FORBIDDEN.search(" ".join(launch["command"])), "Profiled launch command")
+        if policy["purpose"] == "configuration":
+            declared = policy["jvm_options"][launch["label"]]
+            require([o for o in launch["command"] if CONFIGURATION_OPTION.fullmatch(o)] == declared, "Launch does not use its declared JVM options")
+            pipelines = PIPELINE.findall((directory / (launch["directory"] + ".log")).read_text())
+            require(pipelines == [policy["expected_pipeline"][launch["label"]]], "Actual Prism pipeline differs from the declared one")
         env, manifest, rows = validate_run(directory / launch["directory"], policy)
         require(env["revision"] == builds[launch["label"]]["revision"] and env["label"] == launch["label"], "Wrong build label/revision")
         invariant = tuple(env[k] for k in ("matrix", "java", "vm", "os", "arch", "processors", "workers_per_pool", "max_heap_bytes"))
@@ -199,6 +219,7 @@ def summarize(directory):
                               **stats, timing_verdict="calibration_only" if policy["purpose"] == "calibration" else verdict))
     decision = "calibration_only" if policy["purpose"] == "calibration" else "pass" if all(s["timing_verdict"] == "pass" for s in summaries) else "fail" if any(s["timing_verdict"] == "fail" for s in summaries) else "inconclusive"
     result = dict(purpose=policy["purpose"], timing_verdict=decision, production_promotion="not_evaluated",
+                  **({"jvm_options": policy["jvm_options"]} if policy["purpose"] == "configuration" else {}),
                   policy_sha256=hashlib.sha256((directory / "policy.json").read_bytes()).hexdigest(),
                   confidence_method="Seeded hierarchical percentile bootstrap: resample process pairs, then matched samples within each selected pair; 5000 resamples. Process-pair counts are recorded per metric.",
                   caveats="Fingerprints are not sample-by-sample conformance. Separate numerical/lifecycle checks and JavaFX/input/thermal evidence remain required for promotion. P95 stability depends on the recorded sample and process-pair counts.", metrics=summaries)
