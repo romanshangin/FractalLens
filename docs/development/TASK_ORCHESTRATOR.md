@@ -183,7 +183,10 @@ The model reports only checks and limitations; candidate fields are rejected.
 The block is limited to 6,000 characters and each array to 16 nonempty strings
 of at most 512 characters. `checks` must not
 be empty; `limitations` may be empty. Do not place raw logs or full reasoning
-inside this block. Missing, malformed, duplicate, oversized, or inconsistent
+inside this block. The runner finds the block only by its exact
+`delivery-handoff` fence info string, so a block fenced as `json` counts as
+missing; the stage prompts state the fence name and show a literal example.
+Missing, malformed, duplicate, oversized, or inconsistent
 evidence stops the runner as `INCOMPLETE` before DELIVER. With VER skipped,
 only REV evidence is required. Full reports remain in private run artifacts.
 
@@ -199,7 +202,8 @@ the runner prints to the console after the stage finishes:
 
 The block uses the same size limits as `delivery-handoff`, with kinds of at
 most 32 characters. It is informational only: a missing, duplicate or malformed
-block prints the status with a pointer to `report.md` and never changes the
+block, including one fenced as `json` instead of `stage-summary`, prints the
+status, the expected fence and a pointer to `report.md`, and never changes the
 stage result or the workflow. When DELIVER omits `pr`, the first GitHub pull
 request URL in its report is shown instead. Control characters in model text
 are replaced before printing. A stage whose execution fails prints the failure
