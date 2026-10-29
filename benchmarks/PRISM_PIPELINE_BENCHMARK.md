@@ -157,6 +157,35 @@ The default pipeline is unchanged. Spaces presentation, fixture-specific JFR
 attribution, long-session memory and the remaining migration checklist are
 separate open requirements.
 
+## Predeclared post-change publication campaign (P1.7)
+
+Commit `2a19472` stops allocating the orbit-trap distance plane for built-in
+presets without a trap, which removes the frame-preparation stall diagnosed
+behind the failing confirmation group. This campaign measures that changed
+implementation. It is a new measurement, not an extension of the confirmation
+budget: the confirmation `fail` stays the historical result for `f8895b6`, and
+no historical sample is pooled into this one.
+
+- Policy: [`prism-pipeline-fx-confirm.json`](policies/prism-pipeline-fx-confirm.json),
+  unchanged: 60 AB/BA process pairs, all 28 publication groups, the 1.05
+  limit and the same pipeline checks.
+- Build: freeze revision `2a1947297ec13bb23e9d956ff7f67ff009f299ea` once and use
+  it for both pipelines, with the same JDK and dependencies as the
+  confirmation campaign.
+- Conditions and handling: the same as the confirmation campaign above,
+  including `caffeinate -d -i -u --`, AC power, nominal thermal pressure, no
+  competing work or desktop use, a fresh output directory, one complete
+  campaign, no inspection of intermediate verdicts, and an invalid-evidence
+  restart only for environment failures.
+- Decision: the hierarchical bootstrap rule above. Any failing group rejects
+  default activation under this gate. A publication pass or an inconclusive
+  result does not complete the timing gate: the screen-latency confirmation
+  campaign on the same build, or an explicit owner decision on it, is still
+  required, and an inconclusive group leaves the combined decision
+  `inconclusive`.
+
+Status: declared before any timing run of revision `2a19472`.
+
 ## Limits
 
 - Results apply to the measured Mac model, macOS, JDK and JavaFX version.
