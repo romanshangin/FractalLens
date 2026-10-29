@@ -207,6 +207,11 @@ delivery foundation should be completed first.
     3024x1964 Refined first visible publish fails), which rejects default
     activation under this gate; the screen-latency campaign was not executed.
     See [the confirmation results](benchmarks/PRISM_PIPELINE_RESULTS.md#confirmation-campaign-p17-2026-10-28).
+    After the frame-preparation change in `2a19472`, a
+    [predeclared post-change campaign](benchmarks/PRISM_PIPELINE_RESULTS.md#post-change-publication-campaign-p17-2026-10-28)
+    ended `fail` again (25 of 28 pass, 2 inconclusive, 1512x982 Refined first
+    visible publish fails by about 0.1 ms); the former failing group is now
+    inconclusive.
   - [x] Run the [Spaces presentation validation](benchmarks/SPACE_SWITCH_VALIDATION.md)
     on both pipelines. Result on one Mac with `-Dprism.order`: ES2 reproduced
     the stale mixed frame in all 8 controlled window trials with a verdict and

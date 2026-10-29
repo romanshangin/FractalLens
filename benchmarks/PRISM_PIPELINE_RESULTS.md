@@ -245,6 +245,44 @@ remaining sample arrays are allocated per frame, and Fast first visible
 publish remains slower under Metal in this small run. Whether the timing gate
 now passes needs a new predeclared paired campaign; the `fail` above stands.
 
+### Post-change publication campaign (P1.7, 2026-10-28)
+
+Run with the [predeclared post-change campaign](PRISM_PIPELINE_BENCHMARK.md#predeclared-post-change-publication-campaign-p17)
+on the same Mac, macOS 27.2, Java 26.0.1 and JavaFX 26.0.2. One frozen build of
+revision `2a19472` ran under both pipelines; every A log confirmed
+`ES2Pipeline` and every B log `MTLPipeline`. All 240 before/after observations
+recorded AC power and nominal thermal state. The runner was prefixed with
+`caffeinate -d -i -u --` and ran through the private check registry with a
+10800 s timeout.
+
+Policy [`prism-pipeline-fx-confirm.json`](policies/prism-pipeline-fx-confirm.json),
+60 AB/BA process pairs, 180 matched samples per group, no missing pairs.
+Verdict: `fail`, 25 of 28 groups pass, 2 are inconclusive and 1 fails.
+
+| Window | Fixture | Mode | Metric | ES2 ms | Metal ms | Ratio | 95% CI | Verdict |
+| --- | --- | --- | --- | ---: | ---: | ---: | --- | --- |
+| 1512x982 | overview | Refined | first visible publish | 1.03 | 1.13 | 1.119 | 1.064–1.243 | fail |
+| 3024x1964 | overview | Refined | first visible publish | 2.29 | 2.36 | 1.014 | 0.954–1.107 | inconclusive |
+| 3024x1964 | overview | Fast | first visible publish | 3.10 | 2.94 | 0.988 | 0.863–1.074 | inconclusive |
+| 1512x982 | overview | Fast | first visible publish | 2.08 | 2.25 | 0.894 | 0.834–0.960 | pass |
+| 3024x1964 | aa-regular | Fast | first AA tile | 5.76 | 5.33 | 0.925 | 0.890–0.971 | pass |
+
+The table lists all 3 non-passing groups and the two lowest ratios. The group
+that failed the confirmation campaign is now inconclusive, with both medians
+about 2.3 ms instead of 6.6 and 11.3 ms. Of the eight groups that were
+inconclusive there, six now pass (the 1512x982 first AA tile, both 1512x982
+pan first post-layout steps and all four 3024x1964 overview full-publication
+groups), and 3024x1964 Fast first visible publish stays inconclusive. A different group now fails: 1512x982
+Refined first visible publish, a difference of about 0.1 ms on a sub-1.5 ms
+metric, which passed in the confirmation campaign.
+
+Decision: the campaign has a failing group, so under the predeclared rule it
+again rejects default Metal activation under the performance gate,
+independent of the screen-latency result. The frame-preparation change
+removed the large heap-dependent delay, but the gate, as declared, is not
+passed. Any activation despite it needs an explicit owner decision that keeps
+this result labeled `fail`.
+
 ## Limits
 
 - One Mac model; results do not transfer to Intel Macs or other GPUs, and

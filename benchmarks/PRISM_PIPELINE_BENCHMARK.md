@@ -184,7 +184,10 @@ no historical sample is pooled into this one.
   required, and an inconclusive group leaves the combined decision
   `inconclusive`.
 
-Status: declared before any timing run of revision `2a19472`.
+Status: declared before any timing run of revision `2a19472`; the campaign
+then ran in full on 2026-10-28 and ended `fail` (25 pass, 2 inconclusive,
+1512x982 Refined first visible publish fails). See
+[the post-change results](PRISM_PIPELINE_RESULTS.md#post-change-publication-campaign-p17-2026-10-28).
 
 ## Limits
 

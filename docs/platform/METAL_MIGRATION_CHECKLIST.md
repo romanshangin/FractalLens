@@ -199,6 +199,10 @@ groups with no failure; 37 groups (10 publication, 27 screen latency) remain
   rejects default activation under this gate; the screen-latency confirmation
   campaign was not executed. See
   [the confirmation results](../../benchmarks/PRISM_PIPELINE_RESULTS.md#confirmation-campaign-p17-2026-10-28).
+  A post-change campaign on revision `2a19472`, after the frame-preparation
+  fix, also ended `fail` with a different failing group (1512x982 Refined first
+  visible publish); see
+  [the post-change results](../../benchmarks/PRISM_PIPELINE_RESULTS.md#post-change-publication-campaign-p17-2026-10-28).
 - [ ] Explain the occasional slow Metal first visible publish at 3024x1964 with
   the JFR pulse phases of that fixture.
 - [ ] Compare memory (RSS and GPU memory) during a long session with large
