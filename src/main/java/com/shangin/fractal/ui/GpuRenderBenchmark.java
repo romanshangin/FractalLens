@@ -1,5 +1,6 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.FractalLauncher;
 import com.shangin.fractal.coloring.*;
 import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.formula.FractalPreset;
@@ -24,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.*;
 
 /** Paired production base/AA pipeline benchmark; opt-in and never used by the application. */
-public final class GpuRenderBenchmark extends Application {
+public final class GpuRenderBenchmark {
     private static volatile Throwable failure;
     private Stage stage;
     private FractalSurface surface;
@@ -35,10 +36,10 @@ public final class GpuRenderBenchmark extends Application {
     private static final String HEADER = "scene,width,height,aa,backend,phase,iteration,profile,aa_profile,first_region_ms,first_publish_ms,calculation_ms,base_frame_ms,total_frame_ms,fx_color_publish_ms,next_pulse_ms,certified,recovered,fallback,pack_ms,upload_ms,dispatch_ms,readback_ms,kernel_ms,recover_publish_ms,certification_ms,recovery_ms,publication_ms,batches,native_bytes,staging_bytes,host_workers,region_size,aa_total_ms,aa_base_color_ms,aa_candidate_cpu_ms,aa_candidate_critical_path_ms,aa_sampling_cpu_ms,aa_cache_color_cpu_ms,aa_tested_pixels,aa_candidates,aa_samples,heap_before_bytes,heap_after_bytes,heap_pool_peak_sum_bytes,gc_count,gc_ms,max_smooth_error";
 
     public static void main(String[] args) {
-        launch(args);
+        FractalLauncher.launch(BenchmarkApplication.class, args);
         if (failure != null) throw new IllegalStateException("GPU render benchmark failed", failure);
     }
-    @Override public void start(Stage stage) {
+    private void start(Stage stage) {
         this.stage = stage;
         surface = new FractalSurface();
         stage.setScene(new Scene(new StackPane(surface), 756, 491));
@@ -73,6 +74,7 @@ public final class GpuRenderBenchmark extends Application {
                         + "; " + System.getProperty("os.name") + " " + System.getProperty("os.version")
                         + "; processors=" + Runtime.getRuntime().availableProcessors()
                         + "; maxHeap=" + Runtime.getRuntime().maxMemory()
+                        + "; requestedPipeline=" + System.getProperty("prism.order", "default")
                         + "; outputScale=" + stage.getOutputScaleX() + "; time=" + java.time.Instant.now() + "\n";
                 System.out.print(metadata);
                 for (String size : System.getProperty("fractal.benchmark.sizes", "1512x982,3024x1964").split(",")) {
@@ -274,5 +276,15 @@ public final class GpuRenderBenchmark extends Application {
             return String.join(",", values);
         }
         private static String ms(long n) { return String.format(Locale.ROOT, "%.6f", n / 1e6); }
+    }
+
+    /** JavaFX lifecycle adapter; the outer main class must remain plain Java. */
+    public static final class BenchmarkApplication extends Application {
+        private final GpuRenderBenchmark benchmark = new GpuRenderBenchmark();
+
+        @Override
+        public void start(Stage stage) {
+            benchmark.start(stage);
+        }
     }
 }

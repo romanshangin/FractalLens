@@ -43,16 +43,24 @@ the tooltip must say **FractalLens**. Checking only the running process's
 Maven and the packaged application enter through
 `com.shangin.fractal.app.FractalLauncher`. This class does not extend JavaFX
 `Application`; its `main` runs before the toolkit and calls
-`Application.launch(FractalApplication.class, args)`. The native development
+`Application.launch(FractalFxApplication.class, args)`. The native development
 launcher forwards Maven's module/main-class arguments unchanged, so it uses
 the same entry point without a separate native pipeline setting.
 
-This preparation for [P1.7](../../ROADMAP.md#p17-evaluate-metal-as-the-default-macos-prism-pipeline)
-does not change the pipeline default. No application code sets `prism.order`;
-the pinned JavaFX macOS order remains `es2,mtl,sw`. The planned macOS-only
-`mtl,es2,sw` selection remains gated by the
-[Metal migration checklist](METAL_MIGRATION_CHECKLIST.md). Windows and Linux
-continue to use their JavaFX defaults.
+On macOS, the bootstrap sets `prism.order=mtl,es2,sw` before starting
+JavaFX, only when the property is absent. Any explicit value, including an
+empty value, is preserved. Windows and Linux keep their JavaFX defaults.
+Metal is preferred to address stale presentation after a Space switch. If it
+cannot initialize, Prism tries ES2 and then software rendering. This chain
+does not recover from a native crash or hang after pipeline initialization.
+The known VirtualBuddy Metal crash therefore still requires an explicit
+`-Dprism.order=sw` workaround; ES2 also failed to initialize in that guest.
+
+The owner accepted the measured latency trade-off on 2026-10-29; the historical
+performance gate remains `fail`. This activation candidate does not close
+[P1.7](../../ROADMAP.md#p17-evaluate-metal-as-the-default-macos-prism-pipeline):
+final-candidate Spaces, packaging and platform acceptance remain tracked by the
+[Metal migration checklist](METAL_MIGRATION_CHECKLIST.md).
 
 For an explicit diagnostic selection, supply JVM options before launch, for example:
 
@@ -64,7 +72,17 @@ JAVA_TOOL_OPTIONS="-Dprism.order=sw -Dprism.verbose=true" ./mvnw compile javafx:
 
 These commands replace `JAVA_TOOL_OPTIONS` for that command; preserve any other
 required options when using them. User-supplied pipeline options are forwarded
-unchanged. Tests and benchmark mains that start JavaFX themselves bypass
-`FractalLauncher` and must select the intended pipeline explicitly. A direct
-Java launch of the compatibility `FractalApplication.main` can still initialize
-the toolkit before that method; use `FractalLauncher` for pre-toolkit startup.
+unchanged. Tests and specialized probes that start JavaFX directly bypass
+`FractalLauncher` and must select the intended pipeline explicitly.
+
+The original `com.shangin.fractal.app.FractalApplication` main-class name is a
+plain-Java compatibility entry point delegating to `FractalLauncher`; direct
+Java launches now apply the same policy before starting the toolkit. The
+JavaFX lifecycle belongs to `FractalFxApplication`, which is not a main class.
+The `palette-benchmark`, `interaction-latency` and `gpu-render-benchmark`
+Maven profiles retain their main-class names, but those classes are now plain
+bootstraps calling `FractalLauncher.launch` with public JavaFX lifecycle
+adapters. They therefore use the same default as the application. Cold-startup
+measurement follows that bootstrap as well. User-supplied pipeline values still
+win; comparisons with historical ES2 measurements must select `es2` explicitly.
+Non-graphical benchmarks do not initialize Prism.

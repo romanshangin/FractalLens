@@ -51,6 +51,35 @@ with `executionSuccessful: true` and exit code 0. The current
 and reproduced the exported 51-finding report. This verifies the local
 baseline migration, not execution of the GitHub workflow or other platforms.
 
+## Reviewed Metal bootstrap migration
+
+PR #47's source commit `216a08a13de9973927515bf5eab2b00e92b5749e`
+reported 48 unchanged findings and three new `BusyWait` fingerprints. These
+are the same three bounded polling loops already reviewed in this baseline,
+at lines 192, 207 and 303 of `InteractionLatencyBenchmark.java`. The bootstrap
+refactor removed the outer class's `Application` superclass and introduced a
+nested lifecycle adapter; the containing `run` and `awaitIdle` methods are
+byte-identical to `main` at `ba05a0ce5017c9de888fc1e5e1411fb0b6c95fa2`.
+
+A local analysis with the pinned image reproduced all three new fingerprints.
+Each was matched one-to-one to its prior baseline entry by rule, message,
+source path, column and the one-line location shift. The surrounding source
+snippets also matched the saved successful pre-refactor analysis exactly.
+Only those three locations and fingerprint pairs were updated; the other
+48 entries, accepted contracts, analysis profile and zero-new-finding gate
+are unchanged. No additional polling contract is accepted by this migration.
+The reproduced analysis exited with code 255 and remains invalid execution
+evidence even with the updated baseline.
+
+A fresh local analysis on 2026-10-29 used a disposable clone of that source
+commit with only the migrated baseline substituted, the pinned image and
+the unchanged preparation/configuration scripts. It reported 51 unchanged
+findings, zero new findings, `executionSuccessful: true` and exit code 0.
+`scripts/quality/check_qodana.py` independently accepted all 51 findings;
+its nine report-acceptance tests passed. This is a local baseline validation,
+not a claim that the failed GitHub invocation passed. Raw reports and logs
+remain private.
+
 ## Acceptance and report handling
 
 CI performs a fresh Maven import without developer IDE metadata, compiles

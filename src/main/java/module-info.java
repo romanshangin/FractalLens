@@ -8,5 +8,7 @@ module com.shangin.fractal {
 
     // JavaFX launches the application reflectively; internal model types are not an API.
     opens com.shangin.fractal.app to javafx.graphics;
+    // Plain benchmark launchers delegate construction to JavaFX after bootstrap.
+    opens com.shangin.fractal.ui to javafx.graphics;
 
 }

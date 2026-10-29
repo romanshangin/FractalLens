@@ -22,7 +22,8 @@ optional LWJGL/Vulkan (MoltenVK on macOS) GPU path exists but is off by default.
 - Single Maven module, Java module `com.shangin.fractal`
   (`src/main/java/module-info.java`), main class
   `com.shangin.fractal.app.FractalLauncher`. It starts JavaFX through
-  `FractalApplication`, whose `main` remains for compatibility.
+  `FractalFxApplication`; the original `FractalApplication` main-class name
+  is a plain-Java compatibility entry point using the same bootstrap.
 - Java release, JavaFX, JUnit and LWJGL versions: see `pom.xml` properties
   (currently Java 25, JavaFX 26.x, JUnit 6.x, LWJGL 3.4.x).
 - Maven Wrapper (`./mvnw`, `mvnw.cmd`) pins the Maven distribution; use it
@@ -32,7 +33,7 @@ optional LWJGL/Vulkan (MoltenVK on macOS) GPU path exists but is off by default.
 
 ```
 src/main/java/com/shangin/fractal/
-  app/         startup (FractalLauncher, FractalApplication), last-session and bookmark stores,
+  app/         startup (FractalLauncher, FractalApplication, FractalFxApplication), last-session and bookmark stores,
                macOS app menu, app icon, runtime-artifact smoke entry
   config/      iteration policies (adaptive iteration limit)
   scene/       immutable FractalScene + settings records, JSON format
@@ -80,7 +81,7 @@ part of the source; do not edit or commit them.
 
 ### Main runtime flow
 
-`FractalLauncher` → `FractalApplication` → `MainView` (menus, indicators) → `FractalView`
+`FractalLauncher` → `FractalFxApplication` → `MainView` (menus, indicators) → `FractalView`
 (input, camera, debounced requests) → `FractalRenderController` →
 `FractalRenderService` → `PrecisionSelectingRenderBackend`, which picks
 `DirectDoubleRenderBackend` when hardware doubles are safe and a deep-zoom

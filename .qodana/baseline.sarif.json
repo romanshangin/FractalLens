@@ -899,15 +899,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/InteractionLatencyBenchmark.java"
                 },
                 "region": {
-                  "startLine": 191,
+                  "startLine": 192,
                   "startColumn": 40
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "2ec2c4ef7fb6514c",
-            "equalIndicator/v1": "895f77a72334045b42e330d6e1050755fe39aff9cd484182d18052293e94ee51"
+            "equalIndicator/v2": "972bc8813ed5b2b0",
+            "equalIndicator/v1": "12e187c54e91cdc1414716a99e89b82513f299220bff47aaa925c57939baea25"
           }
         },
         {
@@ -924,15 +924,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/InteractionLatencyBenchmark.java"
                 },
                 "region": {
-                  "startLine": 206,
+                  "startLine": 207,
                   "startColumn": 40
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "58bc316d9f3df386",
-            "equalIndicator/v1": "bf9231fc8d46b3692c74b3f6c8f2f30031f3c4fd8f1391f16e0dd02926f5879f"
+            "equalIndicator/v2": "7c3f5adbfcba0f57",
+            "equalIndicator/v1": "92f415cd530200a2421e04e415958c4d9994734d127cc7ecf6acbe5f136ef1d5"
           }
         },
         {
@@ -949,15 +949,15 @@
                   "uri": "src/main/java/com/shangin/fractal/ui/InteractionLatencyBenchmark.java"
                 },
                 "region": {
-                  "startLine": 302,
+                  "startLine": 303,
                   "startColumn": 20
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "e954569e66c206c3",
-            "equalIndicator/v1": "1ee1bbbba80cddeccfffb4655f214e108b79ac1d9745e8419e8c5d34f1a205d6"
+            "equalIndicator/v2": "347572401c6c5ed0",
+            "equalIndicator/v1": "857e6b47e60768e34de6cf29bd21f04fe2fe7232b00d9b992e5fff45a24328ae"
           }
         },
         {

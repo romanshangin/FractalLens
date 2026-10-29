@@ -190,17 +190,23 @@ delivery foundation should be completed first.
 
 ### P1.7. Evaluate Metal as the default macOS Prism pipeline
 
-- [ ] Switch the default JavaFX Prism pipeline on macOS from ES2 to Metal only
-  after every item of the [Metal migration checklist](docs/platform/METAL_MIGRATION_CHECKLIST.md)
-  passes on the final candidate. Motivation: on ES2 a frame completed while the
+- [ ] Complete acceptance of the Metal-first macOS Prism startup candidate
+  against the [Metal migration checklist](docs/platform/METAL_MIGRATION_CHECKLIST.md).
+  The owner accepted the measured latency trade-off on 2026-10-29 and selected
+  Metal for its Spaces presentation reliability. This waives the performance
+  gate for activation, not the remaining correctness, lifecycle, packaging or
+  platform checks; historical `fail` and `inconclusive` results stand.
+  Motivation: on ES2 a frame completed while the
   window is on another Space can stay invisible after returning; a manual check
   did not reproduce this with `-Dprism.order=mtl`.
   - [x] Run the first ES2/Metal timing comparison with the
     [Prism pipeline protocol](benchmarks/PRISM_PIPELINE_BENCHMARK.md). Result:
     `inconclusive`, 66 of 103 groups pass and none fail; see
     [the results](benchmarks/PRISM_PIPELINE_RESULTS.md).
-  - [ ] Resolve the 37 inconclusive groups, or record an explicit owner
-    decision to accept the latency trade-off for the reliability fix.
+  - [x] Record the owner's 2026-10-29 decision to accept the measured latency
+    trade-off for the reliability fix, including the later failing publication
+    gate. This is a product decision, not a performance PASS. No further
+    performance tuning or confirmation campaign is required for this decision.
     The [predeclared confirmation campaign](benchmarks/PRISM_PIPELINE_BENCHMARK.md#predeclared-confirmation-campaign-p17)
     retains all 103 groups with larger independent process-pair budgets.
     The publication campaign ended `fail` (19 of 28 pass, 8 inconclusive,
@@ -233,10 +239,83 @@ delivery foundation should be completed first.
     JavaFX toolkit, with the `mtl,es2,sw` chain, macOS only and the user
     override preserved; then pass the remaining checklist sections (visible,
     native, GPU coexistence, packaging, automated checks, documentation).
-    Preparation uses a plain `FractalLauncher` entry point for Maven and
-    jpackage; automatic Metal selection is still deferred until the gates pass.
+    The activation candidate uses the shared plain `FractalLauncher` entry
+    point for Maven and jpackage and selects `mtl,es2,sw` before JavaFX startup
+    when the property is absent. Unit tests cover selection and overrides;
+    final-candidate acceptance remains open.
   - [ ] Record the verified configurations; one Apple M3 Pro does not validate
     the switch for other Macs.
+  - [x] Record owner-reported manual acceptance of the activation candidate on
+    2026-10-29: normal startup/shutdown and Dock identity; return from another
+    Space, Mission Control thumbnail and partial swipe; progressive rendering
+    and scene changes; resize/fullscreen; native UI; light/dark appearance;
+    screen lock and sleep/wake; bookmarks, Undo/Redo and session restore.
+    The supplied startup log confirms `MTLPipeline` with the default
+    `mtl,es2,sw` order. These are manual checklist results, not a new controlled
+    trial campaign or a final-candidate ES2/Metal image comparison. The owner
+    declined to repeat the earlier ES2 comparison; its historical scope stands.
+    Two observations remain separate from Metal acceptance: base pixels appear
+    before AA when enlarging a window in Antialiased display, and keyboard exit
+    from fullscreen needs assessment against platform conventions.
+  - [ ] Track specialized acceptance and deferred environment coverage below.
+    On 2026-10-29 the owner requested local checks and deferred unavailable
+    external-display, minimum-OS, Windows/Linux and additional-Mac execution
+    to roadmap follow-up. These gaps do not become passes or close P1.7.
+    Local results and their limits are recorded in the
+    [specialized acceptance record](docs/platform/METAL_MIGRATION_CHECKLIST.md#local-specialized-acceptance-2026-10-29).
+    - [x] Exercise Metal initialization failure with the default fallback chain:
+      isolated dependency copies missing only the Metal native library selected
+      ES2; copies missing Metal and ES2 selected SW. Both final CPU smoke runs
+      passed. This covers library-load initialization failure, not native
+      crashes, hangs or every hardware-specific initialization failure.
+    - [x] Verify Vulkan/MoltenVK and JavaFX Metal in one production application
+      process: a completed 2592x1674 frame dispatched 4,339,008 pixels with
+      `cpuFallback=false`; the completed frame and native badge were inspected.
+      The graphical CPU/GPU comparison smokes and five GPU smoke tests passed.
+      This is one-host compatibility evidence, not GPU default promotion.
+    - [x] Run all three changed graphical benchmark Maven profiles on Metal,
+      checking output and successful exit. Run the current cold-startup probe
+      against a copied compatible snapshot, confirming both milestone markers
+      and shutdown. These are functional checks, not a paired timing campaign.
+    - [ ] Finish standard-location and clean-machine DMG installation acceptance,
+      including the installed app's visible Dock tooltip. A newly built DMG was
+      mounted read-only and its app copied to a temporary installation directory;
+      copied file hashes matched, packaged Metal/AppKit/CPU smoke passed with
+      no development JDK on PATH, and the normal restored frame, native context
+      menu/Escape and shutdown were checked. This development-host check does
+      not establish clean-machine, Gatekeeper or standard-location acceptance.
+    - [ ] Recheck the VirtualBuddy macOS guest, recording the known Metal crash
+      and explicit SW workaround separately from physical-Mac acceptance.
+      Local VirtualBuddy opened with an empty VM library; no guest was available
+      for this run. The historical default Metal crash remains unresolved.
+    - [ ] Establish and document the supported minimum macOS for the JDK,
+      JavaFX Metal, AppKit bridge, launcher and generated bundle together;
+      verify execution on that OS rather than inferring support from metadata.
+      Local inspection found `minos 11.0` in all 35 loose packaged Mach-O files
+      and eight JavaFX graphics natives, while the generated plist claims 10.11.
+      Correct/reconcile that metadata before declaring a supported minimum.
+    - [ ] Check external-display connection/disconnection, mixed Retina scaling
+      and refresh rates, and complete frames above 4096 physical pixels on
+      suitable hardware, including seams and memory use.
+    - [x] Compare decoded PNG pixels and dimensions for identical ES2/Metal
+      scenes: all seven pairs matched exactly, covering five presets at 321x239,
+      decimal Mandelbrot deep zoom at 65x49 and tiled export at 4098x258.
+      This does not establish displayed-image equivalence or all palettes/modes.
+    - [x] Execute the previously skipped fullscreen scenarios on the available
+      desktop display with Metal: native menu tracking, reported trackpad case
+      and both fullscreen-zoom parameter cases passed (four cases, no skips).
+    - [ ] Record supported-platform execution for Windows/Linux and additional
+      Mac configurations; local macOS arm64 results do not establish support
+      on Intel/AMD Macs or other operating systems.
+    - [ ] Resolve the focus-repaint decision for ES2/SW fallback using the Spaces
+      evidence, and reconcile the detailed migration checklist with the final
+      acceptance record without claiming unrecorded controlled-trial counts.
+    - [ ] Complete final CI and record its exact committed candidate after
+      review/delivery authorization. No commit, push or workflow dispatch is
+      authorized by local acceptance checks alone.
+    Screen-latency confirmation and long-session RSS/GPU-memory comparison
+    remain unperformed measurements under the accepted performance trade-off;
+    no new performance campaign is required by the owner's activation decision.
 
 ### P2. Product foundation and user workflows
 
