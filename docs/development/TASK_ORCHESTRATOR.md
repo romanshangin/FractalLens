@@ -150,8 +150,10 @@ attestation that a stage behaved as instructed.
 
 Each invocation starts a fresh ephemeral CLI session with the task and only the
 latest relevant handoffs. The Codex runner reads the final message file; the
-Claude Code runner reads only the `result` field of the final stream-json event
-on stdout and requires `type=result`, `subtype=success` and `is_error=false`. CLI
+Claude Code runner reads only the `result` field of the last `type=result`
+stream-json event on stdout and requires `subtype=success` and `is_error=false`.
+Only trailing `command_lifecycle` events may follow that result; any other
+trailing event, or a non-JSON line, means the stage did not complete. CLI
 progress, stderr and diagnostic output cannot select a state. The first
 nonempty line of the report must be a bare role status, such as `CLEAN`,
 without Markdown decoration or other text.
