@@ -20,7 +20,7 @@ MATRICES = {"9.1-v1", "9.1-v2"}
 # A configuration campaign compares one frozen build under two declared JVM settings.
 CONFIGURATION_OPTION = re.compile(r"-Dprism\.order=(es2|mtl|sw)")
 PIPELINE = re.compile(r"Initialized prism pipeline: com\.sun\.prism\.(\w+)\.\w+Pipeline")
-FORBIDDEN = re.compile(r"StartFlightRecording|FlightRecorderOptions|javaagent|agentpath|agentlib|fractal\.(?:aa\.profile|render\.diagnostics)=true|NativeMemoryTracking=(?:summary|detail)")
+FORBIDDEN = re.compile(r"StartFlightRecording|FlightRecorderOptions|javaagent|agentpath|agentlib|baseline\.fx\.jfr=(?i:true)|fractal\.(?:aa\.profile|render\.diagnostics)=true|NativeMemoryTracking=(?:summary|detail)")
 
 
 def require(condition, message):
@@ -88,7 +88,9 @@ def validate_definition(policy, manifest):
 
 def validate_run(directory, policy):
     env = dict(line.split("=", 1) for line in (directory / "environment.txt").read_text().splitlines())
-    require(env["aa_profile"] == "false" and not FORBIDDEN.search(env["vm_arguments"]), "Instrumented timing run")
+    require(env.get("frame_preparation", "fx") == "fx", "Experimental frame preparation requires its own policy/analyzer")
+    require(env["aa_profile"] == "false" and env.get("interval_jfr", "false") == "false"
+            and not FORBIDDEN.search(env["vm_arguments"]), "Instrumented timing run")
     require(int(env["samples"]) == policy["samples"] and int(env["warmups"]) == policy["warmups"], "Changed repetition counts")
     manifest = read(directory / "manifest.csv")
     validate_definition(policy, manifest)

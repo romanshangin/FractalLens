@@ -25,6 +25,76 @@ class BaselineFxBenchmarkTest {
     @AfterAll static void stopFx() { Platform.exit(); }
 
     @ParameterizedTest @EnumSource(value = InteractiveRenderMode.class, names = {"REFINED", "FAST"})
+    void workerPreparationPreservesExactPixelsAndKeepsReuseOnItsOriginalPath(InteractiveRenderMode mode) throws Exception {
+        var backend = new TimedBackend();
+        try (var ui = fx(Ui::new); var service = new FractalRenderService(backend);
+             var aa = new InteractiveAntialiasService(); var preparer = new FreshFramePreparationExperiment(Platform::runLater)) {
+            for (String id : new String[]{"mandelbrot-aa-regular", "julia-aa-regular", "mandelbrot-trap-aa", "mandelbrot-histogram-aa", "deep-glitch"}) {
+                fx(() -> { ui.reset(); return null; });
+                var result = measure(ui, fixture(id, 96, 66).steps().getFirst(), mode, service, backend, aa, null, null, preparer);
+                verify(result);
+                assertTrue(result.preparationStart >= result.start);
+                assertTrue(result.preparationEnd >= result.preparationStart);
+                assertTrue(result.planned >= result.preparationEnd);
+                assertTrue(result.fxSetupWork >= 0);
+            }
+            fx(() -> { ui.reset(); return null; });
+            RenderFrame active = null, retained = null;
+            for (var step : fixture("pan-25", 96, 66).steps()) {
+                var result = measure(ui, step, mode, service, backend, aa, active, retained, preparer);
+                verify(result);
+                if (step.action() == BaselineFixtures.Action.REUSE) {
+                    assertEquals(-1, result.preparationStart);
+                    assertEquals(-1, result.preparationEnd);
+                    assertTrue(result.reused > 0);
+                }
+                retained = active; active = result.frame;
+            }
+        }
+    }
+
+    @Test void fxQueueRemainsResponsiveWhileFreshStorageIsBeingPrepared() throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var driver = Executors.newSingleThreadExecutor();
+        var backend = new TimedBackend();
+        try (var ui = fx(Ui::new); var service = new FractalRenderService(backend);
+             var aa = new InteractiveAntialiasService();
+             var preparer = new FreshFramePreparationExperiment(Platform::runLater, job -> {
+                 assertFalse(Platform.isFxApplicationThread());
+                 entered.countDown();
+                 try { assertTrue(release.await(5, TimeUnit.SECONDS)); }
+                 catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(error); }
+                 return RenderFrame.create(job);
+             })) {
+            var pending = driver.submit(() -> measure(ui, fixture("mandelbrot-overview", 96, 66).steps().getFirst(),
+                    InteractiveRenderMode.FAST, service, backend, aa, null, null, preparer));
+            try {
+                assertTrue(entered.await(5, TimeUnit.SECONDS));
+                assertTrue(fx(() -> ui.current != null && ui.current.frame == null),
+                        "FX event queue must run before the blocked factory completes");
+                release.countDown();
+                verify(pending.get(10, TimeUnit.SECONDS));
+            } finally { release.countDown(); pending.cancel(true); }
+        } finally { release.countDown(); driver.shutdownNow(); }
+    }
+
+    @Test void workerFactoryFailureCompletesTheRequestExceptionally() throws Exception {
+        var backend = new TimedBackend();
+        var failure = new IllegalStateException("Synthetic factory failure");
+        try (var ui = fx(Ui::new); var service = new FractalRenderService(backend);
+             var aa = new InteractiveAntialiasService();
+             var preparer = new FreshFramePreparationExperiment(Platform::runLater, job -> { throw failure; })) {
+            for (String id : new String[]{"mandelbrot-overview", "cancel-deep"}) {
+                var error = assertThrows(ExecutionException.class,
+                        () -> measure(ui, fixture(id, 96, 66).steps().getFirst(),
+                                InteractiveRenderMode.FAST, service, backend, aa, null, null, preparer));
+                assertSame(failure, error.getCause());
+            }
+        }
+    }
+
+    @ParameterizedTest @EnumSource(value = InteractiveRenderMode.class, names = {"REFINED", "FAST"})
     void visibleMilestonesDistinguishHiddenRefinedBaseFromFastBase(InteractiveRenderMode mode) throws Exception {
         var backend = new TimedBackend();
         try (var ui = fx(Ui::new); var service = new FractalRenderService(backend); var aa = new InteractiveAntialiasService()) {

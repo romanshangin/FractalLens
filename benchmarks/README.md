@@ -17,7 +17,10 @@ claim that every historical analysis can be rerun from the published files.
   [allocation/sustained memory](BASELINE_MEMORY_BENCHMARK.md).
 - [Formula benchmarks](FORMULA_BENCHMARK.md) and [basic benchmark entry point](BENCHMARK.md).
 - [Prism pipeline comparison (ES2 and Metal)](PRISM_PIPELINE_BENCHMARK.md);
-  [results](PRISM_PIPELINE_RESULTS.md) and
+  [results](PRISM_PIPELINE_RESULTS.md),
+  [sample/GC correlation diagnosis](PRISM_PIPELINE_RESULTS.md#desktop-sample-to-gc-correlation-diagnostic-2026-10-29),
+  [fresh-frame decomposition](PRISM_PIPELINE_RESULTS.md#fresh-frame-planning-decomposition-diagnostic-2026-10-29),
+  [rejected worker preparation experiment](PRISM_PIPELINE_RESULTS.md#bounded-worker-preparation-experiment-2026-10-29) and
   [Spaces presentation validation](SPACE_SWITCH_VALIDATION.md).
 
 Use the current drivers under `scripts/benchmarks/` with a fresh output directory.
@@ -57,7 +60,7 @@ platform gates remain documented in the historical reports.
 
 ## Retained file inventory
 
-The following inventory lists the 120 selected evidence/protocol files, excluding
+The following inventory lists the 121 selected evidence/protocol files, excluding
 this index. No raw log file is included.
 
 - [ALLOCATION_PROFILE_9_4.md](ALLOCATION_PROFILE_9_4.md)
@@ -177,6 +180,7 @@ this index. No raw log file is included.
 - [policies/p1-5-retained-vs-pre-fx-base-confirm.json](policies/p1-5-retained-vs-pre-fx-base-confirm.json)
 - [policies/p1-5-retained-vs-pre-fx.json](policies/p1-5-retained-vs-pre-fx.json)
 - [policies/p1-5-retained-vs-pre-headless.json](policies/p1-5-retained-vs-pre-headless.json)
+- [policies/p17-fresh-frame-preparation.json](policies/p17-fresh-frame-preparation.json)
 - [policies/prism-pipeline-fx-confirm.json](policies/prism-pipeline-fx-confirm.json)
 - [policies/prism-pipeline-fx.json](policies/prism-pipeline-fx.json)
 - [policies/prism-pipeline-latency-confirm.json](policies/prism-pipeline-latency-confirm.json)

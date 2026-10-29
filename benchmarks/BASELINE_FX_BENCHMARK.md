@@ -85,6 +85,8 @@ generation cannot be attributed to its successor.
 | `first_post_layout_ms` / `full_post_layout_ms` | Request → next scene post-layout observation after the corresponding software publication |
 | `cancel_request_ms` / `cancel_tail_ms` | Request → first backend-region cancellation trigger / trigger → backend exit |
 | `base_fx_work_ms` / `aa_fx_work_ms` | Summed work inside base/AA publication callbacks; exclude initial surface/reuse preparation |
+| `fx_setup_ms` | Summed FX request/setup work through render submission; excludes worker preparation waits and later publication callbacks |
+| `preparation_ms` | Worker fresh-frame factory wall time in the opt-in experiment; `-1` for the FX control and reuse |
 
 `-1` means absent/unmeasured, never zero. Intervals overlap and are not additive
 frame costs. Post-layout observations are JavaFX software scheduling boundaries,
@@ -97,6 +99,15 @@ untimed final buffer copy and pulse wait. They are used-heap observations, not
 allocated-byte counts, live retained size, process RSS or thermal measurements.
 The benchmark never forces GC; only the isolated detached-surface regression
 uses explicit collection to check ownership while the window stays alive.
+
+For opt-in per-sample JFR boundaries and GC-pause correlation, see
+[the diagnostic protocol](PRISM_PIPELINE_BENCHMARK.md#sample-to-gc-correlation-diagnostics-p17).
+The optional [fresh-frame split](PRISM_PIPELINE_BENCHMARK.md#fresh-frame-planning-decomposition-diagnostic-p17)
+also records grid/storage wall and thread CPU time through the same factory
+overloads, without changing the normal benchmark path. This does not change
+timing verdicts or turn whole-sample GC deltas into phase timings.
+The [bounded worker experiment](PRISM_PIPELINE_BENCHMARK.md#bounded-worker-preparation-experiment-p17)
+uses its own explicit policy/analyzer and is excluded from standard Prism gates.
 
 Cancellation uses the same first-backend-region trigger as the headless matrix.
 The backend cooperatively drains its workers and prevents the intentionally

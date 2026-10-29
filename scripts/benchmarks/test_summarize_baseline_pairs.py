@@ -114,6 +114,18 @@ class PairValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Instrumented"):
             validate_campaign(self.root)
 
+    def test_rejects_interval_diagnostics_enabled_after_jvm_launch(self):
+        p = self.root / "pair-00-A/environment.txt"
+        p.write_text(p.read_text() + "interval_jfr=true\n")
+        with self.assertRaisesRegex(ValueError, "Instrumented"):
+            validate_campaign(self.root)
+
+    def test_rejects_experimental_frame_preparation_in_a_standard_campaign(self):
+        p = self.root / "pair-00-A/environment.txt"
+        p.write_text(p.read_text() + "frame_preparation=worker\n")
+        with self.assertRaisesRegex(ValueError, "own policy"):
+            validate_campaign(self.root)
+
     def test_rejects_changed_heap(self):
         p = self.root / "pair-00-A/environment.txt"
         p.write_text(p.read_text().replace("4294967296", "2147483648"))

@@ -346,6 +346,351 @@ removing the failure would require not allocating full-size frame storage on
 the FX thread for each render, a larger change with its own cancellation,
 generation and memory checks.
 
+### Sample-to-GC diagnostic instrumentation (2026-10-29)
+
+The [diagnostic protocol](PRISM_PIPELINE_BENCHMARK.md#sample-to-gc-correlation-diagnostics-p17)
+now provides per-request JFR boundaries, a bracketed monotonic/JFR clock bridge,
+and an analyzer that joins those events to the matching successful benchmark
+CSV before reporting overlaps with outer stop-the-world GC pauses. Snapshot
+copy intervals are separate from request-to-first-visible intervals.
+
+The initial restricted-shell attempt at the planned three-pair graphical
+diagnostic run did not collect measurements: the first ES2 JVM loaded its native library but `MacGLFactory` failed to
+initialize, ending with `No toolkit found` before any sample. The restricted
+execution environment did not provide a working ES2 context; desktop Terminal
+access was also unavailable through the automation tool. This is invalid
+execution evidence, not a pipeline timing result or a demonstrated defect in
+the new diagnostic instrumentation. Raw startup logs remain private.
+
+That attempt left the allocation/GC explanation `inconclusive`. No production
+optimization or default-pipeline change was introduced and no historical result
+was relabelled. The separate desktop run below subsequently collected real-frame
+correlations; it does not turn the failed shell attempt into valid evidence.
+
+### Desktop sample-to-GC correlation (diagnostic, 2026-10-29)
+
+Executed the predeclared three-pair budget in IntelliJ IDEA's active macOS
+desktop terminal, with `caffeinate -d -i -u --`. ES2 and Metal initialized
+successfully there, establishing an execution-environment boundary for the
+restricted-shell startup failure above. Order: ES2/Metal, Metal/ES2, ES2/Metal.
+The build was frozen for all six JVMs; every compiled-file hash matched before
+and after the run. Measured candidate identity (including the diagnostic source
+changes, not reproducible from the base revision alone):
+
+```yaml
+baseRevision: ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2
+mergeBase: ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2
+contentId: sha256:e86f819dca1ee1af433bae32b4cd764659769f00dc6e1f3dc9184d30682cc2a1
+```
+
+Environment: Apple M3 Pro, 12 physical cores, 18 GiB memory, macOS 27.2 ARM64,
+JDK 26.0.1+8-34, JavaFX 26.0.2+3, output scale 2x, 4 GiB maximum heap. Workload:
+`mandelbrot-overview`, `mandelbrot-aa-regular`, `pan-25`, at 1512x982 and
+3024x1964, FAST then REFINED, three warmups and three measured sequences after
+each cold sequence. All 12 before/after observations reported AC power and
+nominal thermal pressure. No competing build or test was launched during the
+series; unrelated desktop activity was not independently monitored.
+
+Each JVM recorded 112 requests including cold/warmup work and 48 measured
+requests. All six completed the same-grid CPU sample/ARGB conformance checks;
+all paired sample/ARGB fingerprints matched exactly for every request. The
+analyzer matched every JFR request to its CSV identity and timing boundaries;
+no missing requests. It correlated 288 measured requests in total. The maximum
+clock-anchor bracket among measured requests was 2.916 microseconds. There
+were no planning intervals with possible-but-not-definite GC overlap.
+
+The table reports every overview group, nine measured samples per row across
+three JVMs. Times are descriptive pooled medians in milliseconds; no confidence
+interval, timing verdict or new pipeline ranking is inferred from this budget.
+GC counts mean samples with at least one definite outer `GCPhasePause` overlap.
+
+| Size | Requested mode | Pipeline | Planning ms | First visible ms | Planning GC samples | Snapshot GC samples |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| 1512x982 | Fast | ES2 | 0.272 | 1.581 | 1/9 | 2/9 |
+| 1512x982 | Fast | Metal | 0.692 | 2.079 | 0/9 | 2/9 |
+| 1512x982 | Refined | ES2 | 0.255 | 1.057 | 0/9 | 2/9 |
+| 1512x982 | Refined | Metal | 0.230 | 0.980 | 0/9 | 2/9 |
+| 3024x1964 | Fast | ES2 | 0.720 | 2.585 | 1/9 | 0/9 |
+| 3024x1964 | Fast | Metal | 0.664 | 2.117 | 1/9 | 0/9 |
+| 3024x1964 | Refined | ES2 | 0.633 | 1.983 | 1/9 | 0/9 |
+| 3024x1964 | Refined | Metal | 2.340 | 4.166 | 1/9 | 0/9 |
+
+For the historically failing 1512x982 Refined group, no measured request under
+either pipeline had even a possible GC pause overlap before first visible
+publication. Two ES2 planning samples exceeded 0.5 ms (0.959 and 0.701 ms),
+with no GC overlap; no Metal planning sample exceeded 0.5 ms. Each pipeline
+instead had two GC-overlapping snapshots after timing had ended. Thus this run
+does not reproduce the historical failure or confirm its proposed GC cause.
+The untimed snapshot GC pauses must not be attributed to first-visible latency.
+
+The larger frame demonstrates that GC can fall inside planning without
+accounting for the whole delay. For 3024x1964 Refined, the single GC-overlapping
+planning sample was 7.661 ms on ES2 with 1.786 ms of overlapping pause, and
+6.214 ms on Metal with 1.424 ms of overlapping pause. For the eight samples
+without planning GC overlap, median planning was still 0.620 ms (ES2) and
+2.337 ms (Metal). Excluding samples is a diagnostic partition only; it does not
+produce a corrected performance verdict. The remaining time is not attributed
+to a particular allocator, zeroing, scheduling or concurrent-GC mechanism by
+these measurements.
+
+Decision: sample-to-pause correlation is now exercised on real frames, but the
+GC explanation for the historical failing group remains `inconclusive`. A GC
+pause alone does not explain every slow planning sample. Do not start a broad
+frame-storage optimization on the assumption that this cause has been proven.
+A further investigation should distinguish allocation/initialization work from
+other stalls inside planning, using a separately declared diagnostic budget.
+The three-pair budget is complete and is not extended to obtain a different
+outcome. Both historical publication `fail` results and all outstanding timing,
+Spaces, packaging and platform gates remain unchanged. Raw recordings, CSVs,
+launch records, compiled-file hashes and the working analysis remain private;
+only this sanitized summary is selected here, so a public checkout cannot
+replay its raw correlations.
+
+
+### Fresh-frame planning decomposition (diagnostic, 2026-10-29)
+
+Executed the [separately predeclared decomposition budget](PRISM_PIPELINE_BENCHMARK.md#fresh-frame-planning-decomposition-diagnostic-p17):
+three ES2/Metal process pairs in AB/BA order, six JVMs on one frozen build,
+the same two sizes, three fixtures, FAST/REFINED order, three warmups and three
+measured sequences, 4 GiB heap. Environment remained Apple M3 Pro (12 physical
+cores, 18 GiB), macOS 27.2 ARM64, JDK 26.0.1+8-34, JavaFX 26.0.2+3, 2x output
+scale, active desktop terminal with `caffeinate`. All 12 before/after power and
+thermal observations were AC/nominal. No competing build or test was launched;
+unrelated desktop activity was not independently monitored.
+
+Measured candidate (before adding this result summary):
+
+```yaml
+baseRevision: ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2
+mergeBase: ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2
+contentId: sha256:d85cb89a29b9ef816bfb08ad4ada1890e03ac23d64ced2fa9a0f18af1b9252c5
+```
+
+The private JFR configuration was generated from this JDK's `profile.jfc` with
+the protocol's constructor, allocation and safepoint settings. Its SHA-256 is
+`6e3807cb2e317f8737ff1e3c7824a580c0822ad662b2c6aa89b844b2ca4275dc`. Both it and every
+compiled-file hash were unchanged across the six JVMs. This configuration
+instruments constructor execution and changes allocation/timing; the samples
+must not be treated as unprofiled pipeline-performance measurements.
+
+All actual pipelines, 112 request identities per JVM, same-grid CPU conformance
+and paired sample/ARGB fingerprints passed. Of 288 measured requests, 216
+created fresh frames and provided the new subintervals. Every such interval
+matched exactly one `FractalData` and one `ValidityMask` constructor trace on
+the recorded constructing thread. Reuse requests remained on their original
+path and are not represented as zero-cost creations. Thread CPU accounting was
+available. The largest clock-anchor bracket among fresh measured samples was
+2.250 microseconds.
+
+Each recording contained two unmatched safepoint beginnings. The early one
+preceded the first frame and was bounded by the next safepoint beginning,
+also before the first frame; the late one followed the last frame. Their
+possible intervals miss every fresh-frame window, including cold/warmup work.
+Other begin/end events were paired by ID. Safepoint envelopes are not added to
+GC overlap, which can describe the same stop.
+
+All overview groups are shown below. Each row pools nine measured samples
+across three JVMs; columns are independent descriptive medians in milliseconds,
+not additive stage budgets. `Frame` covers storage, mask and factory overhead;
+constructor times include their trace instrumentation. `GC` counts samples
+with a definite GC overlap in frame creation.
+
+| Size | Requested mode | Pipeline | Grid ms | Frame ms | FractalData ms | Mask ms | Frame CPU ms | GC |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1512x982 | Fast | ES2 | 0.090 | 0.952 | 0.938 | 0.005 | 0.942 | 2/9 |
+| 1512x982 | Fast | Metal | 0.085 | 0.866 | 0.836 | 0.006 | 0.863 | 1/9 |
+| 1512x982 | Refined | ES2 | 0.072 | 0.921 | 0.896 | 0.013 | 0.919 | 0/9 |
+| 1512x982 | Refined | Metal | 0.077 | 0.850 | 0.826 | 0.010 | 0.845 | 0/9 |
+| 3024x1964 | Fast | ES2 | 0.052 | 0.748 | 0.637 | 0.008 | 0.631 | 4/9 |
+| 3024x1964 | Fast | Metal | 0.033 | 1.390 | 1.364 | 0.009 | 0.688 | 2/9 |
+| 3024x1964 | Refined | ES2 | 0.042 | 0.638 | 0.585 | 0.008 | 0.584 | 3/9 |
+| 3024x1964 | Refined | Metal | 0.031 | 0.571 | 0.554 | 0.008 | 0.570 | 0/9 |
+
+The 3024x1964 Refined `FractalData` constructor medians by process pair were:
+
+| Pair | ES2 ms | Metal ms |
+| --- | ---: | ---: |
+| 0 | 0.585 | 0.554 |
+| 1 | 0.517 | 0.539 |
+| 2 | 0.641 | 3.480 |
+
+The last Metal process contained two slow creations: frame wall times of
+3.496 and 3.895 ms, with FX-thread CPU times of 3.494 and 3.894 ms. Their
+`FractalData` traces were 3.480 and 3.878 ms; grid creation was 0.026 and
+0.034 ms and the mask was about 0.008 ms. Neither creation had even a possible
+GC or safepoint-envelope overlap. These samples localize the time to CPU work
+inside the sample-storage constructor, rather than a stopped or descheduled
+FX thread, grid mathematics, or validity-mask construction. This is evidence
+for these profiled samples, not proof of the cause of a historical unprofiled
+failure or a claim that all scheduling delay is measurable with these counters.
+
+For every overview frame, outside-TLAB allocation events on the same thread
+identified the three primitive sample arrays at the `FractalData` constructor:
+19,302,240 bytes at 1512x982 and 77,208,816 bytes at 3024x1964, including array
+headers/alignment. No orbit-trap distance plane was allocated for these
+fixtures. The constructor's remaining source work is scalar initialization;
+allocation/initialization is therefore the identified CPU-work path. The
+point events do not split allocator time, implicit array clearing, native
+memory/page-fault work or instrumentation cost. Their timestamps must not be
+reported as individual allocation durations. Mask arrays may fit inside a
+TLAB, so absence of an outside-TLAB mask event is not absence of allocation.
+
+GC still explains some other creation outliers in this run. For example, a
+3024x1964 Refined ES2 sample took 1.487 ms with 0.615 ms of FX CPU time and a
+0.830 ms overlapping GC pause. The CPU-heavy Metal samples above demonstrate
+that this is not the only mechanism. No independent medians were subtracted to
+claim a GC-corrected performance result.
+
+Decision: the profiled slow path is localized to `FractalData` sample-array
+allocation/initialization. This supports designing a bounded, cancellable
+experiment to prepare fresh storage outside the FX thread; no such production
+change is included or promoted here. The exact allocator/clearing/page-fault
+cause and the historical performance-gate failure remain `inconclusive`.
+Do not infer a speedup from constructor tracing, pool these samples with the
+previous series, or extend the completed budget to obtain a preferred result.
+Both historical publication failures, the pending screen-latency confirmation
+and every remaining migration gate stay unchanged. Raw recordings, generated
+configuration, source patch, launch records, hashes and analysis remain private;
+only this sanitized summary is selected for the public tree.
+
+
+### Bounded worker preparation experiment (2026-10-29)
+
+Ran the [predeclared worker policy](policies/p17-fresh-frame-preparation.json)
+through the [benchmark-only preparation experiment](PRISM_PIPELINE_BENCHMARK.md#bounded-worker-preparation-experiment-p17).
+A uses the existing FX factory path; B creates fresh frames on one bounded
+worker and returns to FX for setup. Both use the same frozen compiled build and
+`MTLPipeline`. This compares preparation strategies on Metal, not ES2 versus
+Metal, and does not change the application controller or pipeline default.
+
+Measured candidate source:
+
+```yaml
+baseRevision: ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2
+mergeBase: ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2
+contentId: sha256:c4b6d6c92eacc4add6e3e5318d6a3091564c5314b22ee4d27faad19557a0520e
+```
+
+The policy was retained separately as a frozen input, SHA-256
+`1d32898748d0747daac61a1d5a77f262ec4db25e2770d7dae12a51797684c12d`. The source patch, compiled/dependency/JDK hashes and raw records
+remain private. All before/after build hashes and the policy hash matched.
+The result-summary and selected-policy Git ignore exception were added after
+measurement; they are not represented as measured source changes.
+
+Environment: Apple M3 Pro, 12 physical cores, 18 GiB memory, macOS 27.2 ARM64,
+JDK 26.0.1+8-34, JavaFX 26.0.2+3, output scale 2x, 4 GiB heap. Six AB/BA process
+pairs, five measured sequences after three warmups and a cold sequence per
+fixture/mode; sizes 1512x982 and 3024x1964; overview, regular AA and pan-25;
+FAST then REFINED. JFR, constructor tracing, scheduling profiling and GPU
+calculation were disabled. Execution used the active desktop terminal with
+`caffeinate`; all 24 before/after observations were AC power and nominal thermal
+pressure. No competing task-owned build/test/measurement ran; unrelated desktop
+activity was not independently monitored.
+
+All 12 JVMs exited successfully. Each contained 144 requests including
+cold/warmup work and 80 measured requests, for 960 measured requests overall.
+Every paired request identity and sample/ARGB fingerprint matched; last-sequence
+same-grid CPU conformance passed in every fixture/mode. The dedicated analyzer
+validated every declared timing group with 30 matched observations across six
+process pairs, without profiling, missing samples or fallback pipelines.
+
+**Decision: `reject`.** Timing alone was `inconclusive` (46 of 84 groups pass,
+38 inconclusive, none fail), and the separately predeclared RSS cap failed.
+The complete timing-group breakdown is:
+
+| Metric / role | Groups | Pass | Inconclusive | Fail |
+| --- | ---: | ---: | ---: | ---: |
+| `fx_setup_ms` / target | 12 | 11 | 1 | 0 |
+| `fx_setup_ms` / control | 4 | 1 | 3 | 0 |
+| `first_visible_publish_ms` / control | 16 | 4 | 12 | 0 |
+| `full_publish_ms` / control | 16 | 12 | 4 | 0 |
+| `first_post_layout_ms` / control | 16 | 3 | 13 | 0 |
+| `full_post_layout_ms` / control | 16 | 13 | 3 | 0 |
+| `first_aa_tile_ms` / control | 4 | 2 | 2 | 0 |
+
+Every fresh-frame target requires an upper 95% ratio bound <= 0.90; every
+control requires <= 1.05. The sole inconclusive fresh-frame target was
+3024x1964 overview Refined. The table below shows every overview FX-work target
+and every overview first-visible control. Times are descriptive medians in ms;
+ratios are medians of matched B/A samples, not ratios of these pooled medians.
+Confidence intervals use the predeclared 5,000 seeded hierarchical resamples.
+The full 84-group working analysis remains private; no group is removed from
+the breakdown or decision above.
+
+| Size | Requested mode | Metric | FX ms | Worker ms | B/A | 95% CI | Verdict |
+| --- | --- | --- | ---: | ---: | ---: | --- | --- |
+| 1512x982 | Fast | `first_visible_publish_ms` | 1.447 | 1.728 | 1.032 | 0.924–1.084 | inconclusive |
+| 1512x982 | Fast | `fx_setup_ms` | 0.624 | 0.303 | 0.389 | 0.300–0.573 | pass |
+| 1512x982 | Refined | `first_visible_publish_ms` | 0.947 | 0.986 | 1.075 | 0.933–1.136 | inconclusive |
+| 1512x982 | Refined | `fx_setup_ms` | 0.433 | 0.224 | 0.569 | 0.502–0.599 | pass |
+| 3024x1964 | Fast | `first_visible_publish_ms` | 5.914 | 2.632 | 0.522 | 0.424–0.841 | pass |
+| 3024x1964 | Fast | `fx_setup_ms` | 4.997 | 1.150 | 0.226 | 0.123–0.323 | pass |
+| 3024x1964 | Refined | `first_visible_publish_ms` | 5.107 | 6.396 | 1.114 | 0.466–3.008 | inconclusive |
+| 3024x1964 | Refined | `fx_setup_ms` | 4.681 | 1.543 | 0.443 | 0.098–1.278 | inconclusive |
+
+The memory rule was an observed per-pair cap: every B/A peak RSS ratio <= 1.05.
+Peak RSS comes from `wait4` for the entire child JVM, including setup, cold and
+warmup work, rendering and conformance. It is not live-frame bytes or a memory
+leak measurement. Every pair is shown, including the initially lower worker
+peaks and both cap violations:
+
+| Pair / order | FX peak MiB | Worker peak MiB | B/A | Cap verdict |
+| --- | ---: | ---: | ---: | --- |
+| 0 / AB | 1990.8 | 1533.6 | 0.7703 | pass |
+| 1 / BA | 1865.5 | 1780.6 | 0.9545 | pass |
+| 2 / AB | 1813.6 | 1731.8 | 0.9549 | pass |
+| 3 / BA | 1837.2 | 1932.7 | 1.0520 | fail |
+| 4 / AB | 1818.1 | 1991.8 | 1.0956 | fail |
+| 5 / BA | 1829.2 | 1907.8 | 1.0429 | pass |
+
+Pairs 3 and 4 exceeded the observed RSS budget by showing increases of about
+5.2% and 9.6%. There is no recorded basis here for attributing the higher peak
+to a particular GC/heap-commit or native-memory mechanism, and no claim that
+this is a persistent leak. It nevertheless fails the declared experiment cap;
+the valid run is not reclassified as an environment failure or rerun to obtain
+a preferable ratio. All groups and pairs remain in the result.
+
+Developer correctness checks separately passed eight deterministic preparation
+lifecycle tests, 12 JavaFX driver tests on Metal and the same 12 on ES2, plus
+an all-fixture worker smoke at 96x66 in FAST/REFINED modes. They cover actual
+allocation drain on cancel, latest-request coalescing under blocked allocation,
+ready-slot replacement with delayed delivery, close before publication,
+exception handling, FX queue responsiveness and exact fresh/reused pixel
+output. The small smoke does not establish realistic-size latency; the paired
+campaign above supplies that scoped evidence. Application-level generation,
+resize/scene-transition, cache/AA and platform acceptance are not claimed by a
+benchmark-only implementation.
+
+Keep the FX control as the default. The worker implementation is retained only
+as an explicit test-source experiment for reproducibility and regression tests;
+it is not wired into production and is not an accepted optimization. Lower FX
+setup work in most groups did not satisfy the joint latency/memory contract.
+No benchmark limit is relaxed and no extra process pairs are appended. Any
+future candidate needs a new declared budget and its own correctness, gesture
+latency and memory checks. P1.7's historical pipeline failures, pending screen
+latency campaign and remaining migration gates are unchanged. Raw logs, CSVs,
+launch/resource records, frozen inputs and the full analysis remain private;
+only this sanitized summary and the explicit policy are selected for publication.
+
+
+Post-review tooling correction (no new timing campaign): the analyzer now checks
+the full declared fixture/size/step product against the canonical manifest,
+including step actions. A regression removes one fixture/size from every JVM's
+manifest and samples and requires rejection; an additional check covers a
+missing pan step. Revalidating the preserved original campaign confirms all
+84 groups, 2,520 matched metric observations and six RSS pairs. Its statistics,
+policy/source identities and `reject` decision above remain unchanged.
+
+A public [preparation runner](../scripts/benchmarks/run_frame_preparation.py)
+now produces the analyzer's build-before/build-after snapshots, launch/resource
+records and completion marker. Its complete orchestration is tested against
+the real analyzer using synthetic child outputs; its headless preflight was
+also exercised against the preserved byte-identical experiment binaries. The
+historical campaign used the private working runner, not this later public
+implementation. No new measured campaign was run with the public runner in
+this correction. Fresh-run and preflight commands are in the protocol; the
+historical raw archive remains private.
+
 ## Limits
 
 - One Mac model; results do not transfer to Intel Macs or other GPUs, and
