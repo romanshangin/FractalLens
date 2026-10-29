@@ -1,5 +1,7 @@
 package com.shangin.fractal.render;
 
+import com.shangin.fractal.coloring.OrbitTrap;
+
 import java.util.Objects;
 
 /**
@@ -55,7 +57,8 @@ public final class RenderFrame {
         FractalData fractalData = new FractalData(
                 request.width(),
                 request.height(),
-                request.maxIterations()
+                request.maxIterations(),
+                storesOrbitTrapDistances(request.formula())
         );
 
         ValidityMask validityMask = new ValidityMask(
@@ -69,6 +72,14 @@ public final class RenderFrame {
                 fractalData,
                 validityMask
         );
+    }
+
+    /*
+     * Built-in presets report orbit-trap distances only for an orbit-trap formula.
+     * A custom formula has no such guarantee, so its frames keep the storage.
+     */
+    private static boolean storesOrbitTrapDistances(FormulaDefinition formula) {
+        return formula.orbitTrap() != OrbitTrap.NONE || formula.preset() == null;
     }
 
     /** Creates a frame over backend-provided sample storage. */

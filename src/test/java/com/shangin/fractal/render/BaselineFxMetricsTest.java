@@ -20,7 +20,10 @@ class BaselineFxMetricsTest {
     }
 
     @Test void conformanceChecksSmoothValuesAndTrapDataBeyondIterationHashes() {
-        var job = BaselineFixtures.matrix(96, 66).getFirst().steps().getFirst().job();
+        // Trap distances are stored only for an orbit-trap formula.
+        var job = BaselineFixtures.matrix(96, 66).stream()
+                .filter(fixture -> fixture.id().equals("mandelbrot-trap-aa"))
+                .findFirst().orElseThrow().steps().getFirst().job();
         var a = RenderFrame.create(job); var b = RenderFrame.create(job);
         var whole = new RenderRegion(0, 0, job.width(), job.height());
         a.validity().markReady(whole); b.validity().markReady(whole);

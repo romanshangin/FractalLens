@@ -100,6 +100,13 @@ Use the trial matrix and verdict rules of the
 [Spaces presentation validation](../../benchmarks/SPACE_SWITCH_VALIDATION.md)
 for the first two checks, on both ES2 and Metal.
 
+Prototype result, not a tick for the final candidate: with `-Dprism.order`
+on one Mac, ES2 reproduced the defect in every controlled trial with a
+verdict and Metal showed the complete frame in the window, the Mission Control
+thumbnail and a partial swipe
+([result and limits](../../benchmarks/SPACE_SWITCH_VALIDATION.md#result-2026-10-28)).
+Repeat both checks once startup pipeline selection exists.
+
 - [ ] **Fixed reproduction order, without the focus-repaint fix:** pan, switch
   to another Space before the frame completes, let it complete there, return
   without any further input. The full completed frame must be visible.
@@ -187,7 +194,15 @@ groups with no failure; 37 groups (10 publication, 27 screen latency) remain
   median ratio above 1.00 is not sufficient: a favorable median can still have
   an interval that allows a substantial slowdown.
   The [confirmation policies and stopping rule](../../benchmarks/PRISM_PIPELINE_BENCHMARK.md#predeclared-confirmation-campaign-p17)
-  are prepared; they retain all 103 groups. Preparation is not execution or a pass.
+  retain all 103 groups. The publication confirmation campaign ended `fail`
+  with one failing group (3024x1964 Refined first visible publish), which
+  rejects default activation under this gate; the screen-latency confirmation
+  campaign was not executed. See
+  [the confirmation results](../../benchmarks/PRISM_PIPELINE_RESULTS.md#confirmation-campaign-p17-2026-10-28).
+  A post-change campaign on revision `2a19472`, after the frame-preparation
+  fix, also ended `fail` with a different failing group (1512x982 Refined first
+  visible publish); see
+  [the post-change results](../../benchmarks/PRISM_PIPELINE_RESULTS.md#post-change-publication-campaign-p17-2026-10-28).
 - [ ] Explain the occasional slow Metal first visible publish at 3024x1964 with
   the JFR pulse phases of that fixture.
 - [ ] Compare memory (RSS and GPU memory) during a long session with large
