@@ -283,6 +283,61 @@ removed the large heap-dependent delay, but the gate, as declared, is not
 passed. Any activation despite it needs an explicit owner decision that keeps
 this result labeled `fail`.
 
+### Post-change failing group diagnosis (diagnostic)
+
+These runs explain the failing group; they are not verdicts and do not
+change the `fail` label.
+
+For the overview fixture, which has no antialiasing, requested Refined runs
+with effective mode Fast, so the Fast and Refined overview groups measure the
+same work and differ only in their position within each JVM; Fast runs first.
+Campaign samples (180 per pipeline) for 1512x982 Refined first visible
+publish:
+
+| Interval, median ms | ES2 | Metal |
+| --- | ---: | ---: |
+| Frame planning (`plan_ms`) | 0.229 | 0.258 |
+| Frame planning, p90 | 0.279 | 1.107 |
+| Planned to first backend region | 0.655 | 0.691 |
+| First backend region to first visible publish | 0.111 | 0.142 |
+| First visible publish | 1.031 | 1.130 |
+
+The difference sits mainly in the frame-planning tail. ES2 recorded a GC
+during 113 samples with unchanged planning (median 0.227 ms); Metal recorded
+a GC during 87 samples, and their planning median rose to 0.825 ms. Planning
+exceeded 0.5 ms in 59 Metal and 7 ES2 samples. Without those slow samples,
+first visible publish is 1.027 ms (ES2) and 1.057 ms (Metal). In the Fast
+overview group, which runs first, slow planning occurred in 116 ES2 and 119
+Metal samples.
+
+Six alternating JVMs per pipeline on the frozen `2a19472` build, with the
+campaign launch commands plus GC logging and JFR recording of outside-TLAB
+allocations with stacks, matched each `G1 Humongous Allocation` pause to the
+allocation that completed right after it (213 of 360 ES2 and 164 of 298 Metal
+pauses matched):
+
+| Allocation site (thread) | ES2 pauses | Metal pauses | Median pause, ES2 / Metal |
+| --- | ---: | ---: | --- |
+| `FractalData` in `RenderFrame.create` (FX) | 75 | 49 | 0.84 / 0.91 ms |
+| Benchmark pixel snapshot (FX, outside the timer) | 55 | 42 | 0.83 / 0.90 ms |
+| `SurfaceBuffer` (FX) | 19 | 29 | 0.82 / 0.86 ms |
+| Metal render-target texture (render thread) | — | 4 | — / 0.97 ms |
+
+Humongous-allocation pauses of about 0.85–0.9 ms are therefore triggered by
+the frame's sample arrays allocated on the FX thread under both pipelines,
+which matches the added planning time. Metal also allocates about 30 MB of
+render-target arrays per JVM on the render thread, against about 10.7 GB
+allocated outside TLABs by the FX thread; this may shift when collections
+fall, but that and the link of individual pauses to individual samples of the
+failing group remain inferred, because the benchmark records no timestamps.
+Benchmark verification snapshots also allocate large arrays on the FX thread
+outside the timed interval and shape the heap state for the next sample.
+
+The remaining failure is a GC pause during FX-thread frame allocation rather
+than slower Metal publication. Removing it would require not allocating
+full-size frame storage on the FX thread for each render, which is a larger
+change with its own cancellation, generation and memory checks.
+
 ## Limits
 
 - One Mac model; results do not transfer to Intel Macs or other GPUs, and
