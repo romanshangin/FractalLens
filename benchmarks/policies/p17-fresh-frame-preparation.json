@@ -1,0 +1,57 @@
+{
+  "version": "p17-fresh-frame-preparation-v1",
+  "purpose": "benchmark_experiment",
+  "pipeline": "mtl",
+  "variants": {
+    "A": "fx",
+    "B": "worker"
+  },
+  "sizes": "1512x982,3024x1964",
+  "fixtures": "mandelbrot-overview,mandelbrot-aa-regular,pan-25",
+  "modes": "FAST,REFINED",
+  "process_pairs": 6,
+  "samples": 5,
+  "warmups": 3,
+  "timeout_seconds": 1800,
+  "rss_max_pair_ratio": 1.05,
+  "metrics": [
+    {
+      "metric": "fx_setup_ms",
+      "action": "FRESH",
+      "role": "target",
+      "max_ratio": 0.9
+    },
+    {
+      "metric": "fx_setup_ms",
+      "action": "REUSE",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "first_visible_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "full_publish_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "first_post_layout_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "full_post_layout_ms",
+      "role": "control",
+      "max_ratio": 1.05
+    },
+    {
+      "metric": "first_aa_tile_ms",
+      "fixture": "mandelbrot-aa-regular",
+      "role": "control",
+      "max_ratio": 1.05
+    }
+  ]
+}

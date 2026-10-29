@@ -189,6 +189,284 @@ then ran in full on 2026-10-28 and ended `fail` (25 pass, 2 inconclusive,
 1512x982 Refined first visible publish fails). See
 [the post-change results](PRISM_PIPELINE_RESULTS.md#post-change-publication-campaign-p17-2026-10-28).
 
+
+## Sample-to-GC correlation diagnostics (P1.7)
+
+`-Dbaseline.fx.jfr=true` enables a test-only
+`com.shangin.fractal.BaselineFxSample` event for every cold, warmup and measured
+request in `BaselineFxBenchmark`. It contains fixture, dimensions, requested and
+effective mode, phase, run and request identity, plus raw `System.nanoTime`
+boundaries for request, FX entry, planning completion, first backend region,
+first visible publication, full post-layout and the untimed pixel snapshot.
+Missing boundaries remain `-1`. `samples.csv` and its timing definitions are
+unchanged. The flag is recorded in `environment.txt`; these diagnostic JVMs
+are excluded from paired timing verdicts, including recordings started dynamically.
+
+Events are allocated and committed after each measurement, before CSV hashing.
+The event's JFR `begin()` is bracketed by two monotonic clock readings. This
+maps the stored boundaries onto the recording timeline without a wall-clock
+calibration or millisecond JVM-uptime rounding. The bracket width is retained
+as clock uncertainty; a scheduling pause during calibration widens it instead
+of producing false precision. It is not an independent calibration of JFR's
+hardware-clock resolution or clock drift. No JFR dependency is added to the
+production module: test compilation and diagnostic modular launches grant
+read access to the JDK's `jdk.jfr` module only.
+
+Compile once:
+
+```shell
+./mvnw -DskipTests test-compile dependency:build-classpath \
+  -Dmdep.includeScope=test -Dmdep.outputFile=target/baseline-classpath.txt
+```
+
+Use the modular launch in [the FX protocol](BASELINE_FX_BENCHMARK.md), adding:
+
+```shell
+--add-modules=jdk.jfr --add-reads=com.shangin.fractal=jdk.jfr \
+-Dbaseline.fx.jfr=true \
+-XX:StartFlightRecording=settings=profile,filename=NEW_PRIVATE_RECORDING.jfr,dumponexit=true
+```
+
+The recording must enable `com.shangin.fractal.BaselineFxSample` and outer
+`jdk.GCPhasePause` events with zero threshold (the JDK profile defaults include
+them). Run in an active graphical session, with a fresh output/cache directory
+per JVM. Retain logs confirming the requested Prism pipeline, successful
+same-grid sample/ARGB conformance and the JDK/environment. Keep recordings,
+logs, CSVs and launch commands private.
+
+```shell
+python3 scripts/benchmarks/correlate_fx_gc.py NEW_PRIVATE_RECORDING.jfr \
+  NEW_PRIVATE_CORRELATION.csv --jfr /path/to/measured/jdk/bin/jfr \
+  --samples NEW_PRIVATE_BENCHMARK_OUTPUT/samples.csv
+```
+
+The analyzer accepts one JVM recording at a time. It reports every recorded
+phase and measured interval, including intervals with no overlapping pause.
+Use `phase=sample` and join with `samples.csv` by `request` for the measured
+sample diagnosis. It uses only outer `jdk.GCPhasePause` events, avoiding nested
+phase double counting; concurrent GC is not a stop-the-world pause. Output
+includes the number of definite and possible overlaps, possible GC IDs and
+conservative lower/upper bounds on overlapping pause time in nanoseconds.
+Counts include definite overlaps in the possible set. Half-open intervals
+exclude touching endpoints. Missing milestones are omitted; reused publication
+before new backend work has no backend-to-publication interval. A recording
+with no sample or no GC pause events is rejected: absence alone cannot establish
+recording coverage. Check recording coverage/thresholds before interpreting
+zero overlap as absence of a pause. The analyzer requires the matching `samples.csv` and its successful conformance
+marker. It rejects missing/duplicate requests, differing fixture identities and
+mismatched timing boundaries, so a truncated or unrelated recording cannot
+silently provide partial sample coverage.
+
+Planning, request-to-first-visible, request-to-full-post-layout and snapshot
+intervals can overlap each other; do not add their GC times. The snapshot is
+outside first-visible timing, but can alter heap conditions for later requests.
+Temporal overlap identifies where a stop-the-world pause fell; it does not
+identify its triggering allocation or prove that the pipeline caused it.
+JFR and diagnostic events change allocation/timing, so these runs never pass
+or replace a performance gate, and cannot retrospectively establish individual
+pause attribution in the historical recordings.
+
+Diagnostic budget for this implementation: three fresh AB/BA JVM pairs with
+ES2/Metal, the confirmation publication workload (both sizes, all three
+fixtures, FAST then REFINED, three warmups and three measured runs, 4 GiB heap).
+Freeze the compiled candidate for all six JVMs. This is an exploratory
+correlation run, with no retain/reject timing verdict or extension based on
+results. Record power/thermal conditions and any uncontrolled competing desktop
+work as diagnostic limits. Existing campaign `fail` results remain unchanged.
+
+
+## Fresh-frame planning decomposition (diagnostic, P1.7)
+
+This is a new diagnostic question and budget after the completed sample/GC
+correlation series, not an extension of that series or a performance verdict.
+Determine whether fresh-frame planning time sits in coordinate-grid creation or
+frame storage/mask creation, and whether long wall times also consume FX-thread
+CPU time. Production code and default Prism selection are unchanged.
+
+With `baseline.fx.jfr=true`, the harness splits the existing fresh-frame factory
+sequence into `RenderGrid.from(...)` followed by `RenderFrame.create(job, grid)`.
+It uses the production overloads, preserving exact coordinates, parity, orbit-trap
+storage selection and the ready mask. The normal uninstrumented path still calls
+`RenderFrame.create(job)` directly. Reuse planning remains unchanged and has no
+subinterval measurements; do not interpret its missing fields as zero cost.
+The sample JFR event's `planningVersion=1` adds grid and frame start/end clocks
+and thread CPU durations, plus the constructing FX thread's Java thread ID for
+matching trace/allocation events. Old recordings remain readable without these fields.
+The analyzer emits `grid_creation` and `frame_storage_creation` rows and rejects
+incomplete, reversed or out-of-parent boundaries. `thread_cpu_ns=-1` means absent
+or unsupported; CPU availability is recorded in the environment. CPU accounting
+is not enabled globally by the harness if it was disabled by the runtime.
+
+Wall clocks enclose the thread CPU reads. Their overhead and CPU timer resolution
+are part of this diagnostic; wall minus CPU time is not an exact scheduler-wait
+measurement. Neither CPU time nor GC overlap alone distinguishes allocation,
+zero initialization, page faults, native allocator work or scheduling. Do not
+subtract independent medians or sum overlapping trace/GC intervals.
+
+For the measured JDK 26 diagnostic runtime, generate a private JFR configuration
+from `profile.jfc` with these settings using its `jfr configure` command:
+
+- `method-trace=com.shangin.fractal.render.FractalData::<init>;com.shangin.fractal.render.ValidityMask::<init>`;
+- `jdk.MethodTrace#threshold=0ns`, `jdk.MethodTrace#stackTrace=false`;
+- `jdk.ObjectAllocationOutsideTLAB#enabled=true` and `#stackTrace=true`;
+- `jdk.SafepointBegin#enabled=true`, `#threshold=0ns`, and the same for `jdk.SafepointEnd`.
+
+Pass the generated configuration as `StartFlightRecording=settings=...`, with
+fresh recording, output and cache paths. Retain the configuration and its hash.
+`jdk.MethodTrace` is a runtime-specific diagnostic capability; it is not required
+by the production module or the portable JDK 25 build. Constructor trace durations
+include instrumentation and nested work, not just allocation. Allocation events
+are point observations at allocation completion, not allocation-duration timers.
+Use their thread, timestamp, stack site and size as supporting evidence only.
+Safepoint begin/end events must be paired by safepoint ID; a begin-event duration
+alone does not cover the whole safepoint. Nested safepoints and GC observations
+must not be added together as independent stalls.
+
+Predeclared budget: three fresh AB/BA process pairs, both pipelines on one frozen
+build, the same confirmation workload, 1512x982 and 3024x1964, FAST then REFINED,
+three warmups and three measured sequences after each cold sequence, 4 GiB heap.
+Run sequentially in the active desktop session with `caffeinate`, AC power,
+nominal thermal pressure, and no competing build/test work. Validate actual
+pipelines, every request identity/boundary, and exact samples/ARGB fingerprints.
+Inspect every overview group and retain per-JVM observations. Interpret only
+these diagnostic samples; do not pool them with earlier runs, extend the budget
+after observing timing, promote an optimization or relabel historical failures.
+If an environment failure invalidates the run, retain it privately and restart
+the same budget in a fresh directory after fixing the environment. Small
+non-graphical configuration/schema smoke checks do not belong to this budget.
+Raw traces and working analysis remain private; publish a sanitized summary and
+an explicit `inconclusive` decision if the cause remains unresolved.
+
+
+## Bounded worker preparation experiment (P1.7)
+
+This benchmark-only experiment tests whether moving fresh-frame construction
+from the FX thread to one worker reduces FX work without delaying publication.
+It is not an application feature, a controller integration or a new Metal
+promotion gate. The production `FractalRenderController`, reuse planner,
+render service, AA lifecycle and default pipeline remain unchanged.
+
+`BaselineFxBenchmark` accepts `baseline.fx.preparation=fx|worker` (default `fx`).
+Both sides use the same compiled driver; only this property differs. The worker
+variant invokes the existing `RenderFrame.create(job)` after the request begins,
+then resumes image setup on the FX queue. It does not prefetch before the timed
+request, move surface operations to a worker or reconstruct rounded coordinates.
+Reuse steps follow the existing FX planner on both sides. Source-frame reads
+are therefore not moved across their existing worker/publication boundary.
+
+`FreshFramePreparationExperiment` is in test sources. It owns one executor and
+one drain loop, one latest pending request and one ready result. Pending work
+has not allocated target storage. Replacement discards the old ready slot;
+the single queued callback captures the preparer, not a target frame. It reads
+the current ready slot at delivery. Generations suppress stale successes and
+errors. Cancellation cannot interrupt a JVM array allocation: its drain stage
+completes only after the actual factory exits, including superseded work.
+`close()` is idempotent, clears pending/ready state, shuts down the worker and
+never waits on FX. Publication and cancellation are linearized under the same
+lock; callbacks must not wait for the preparation worker. This is an experiment
+contract, not a validated replacement for the application controller lifecycle.
+
+The CSV appends two fields without redefining the earlier fields:
+
+| Field | Meaning |
+| --- | --- |
+| `fx_setup_ms` | Summed FX work from initial request dispatch and resumed setup through render submission; excludes the worker wait, later progress callbacks and pulse wait |
+| `preparation_ms` | Worker factory wall time for a fresh frame, or `-1` for the FX control and reuse steps |
+
+`plan_ms` remains FX entry to planning completion; in the worker variant this
+wall interval includes queueing, allocation and return to FX. It is not the FX
+busy-time target. Setup wall time is not a direct input-latency measurement:
+global GC during a worker wait can still stop FX even outside the setup chunks.
+First-visible and full-publication clocks still start before
+the first FX dispatch, so the worker hop is included. A failed factory completes
+the request exceptionally, including cancellation fixtures awaiting their first
+backend region. Pixel checks and hashes use the unchanged CPU controls.
+
+The [predeclared policy](policies/p17-fresh-frame-preparation.json) fixes Metal,
+1512x982 and 3024x1964, overview/regular-AA/pan-25, FAST then REFINED, six AB/BA
+process pairs, five samples after three warmups and one cold sequence per case,
+and a 4 GiB heap. That gives 30 matched observations per timing group. A is
+`fx`, B is `worker`; JFR, constructor tracing, scheduling profiling and GPU
+calculation are disabled. Use one frozen compiled build and dependency set,
+record their hashes before/after, the exact policy hash in each launch, actual
+`MTLPipeline`, and AC/nominal power/thermal observations before and after each
+JVM. Run sequentially in the desktop session with `caffeinate`, new output/cache
+paths and no competing builds, tests or desktop work.
+
+Targets require an upper hierarchical 95% ratio bound <= 0.90 for FX setup in
+every fresh-frame group. Controls require <= 1.05 for reuse FX setup, first
+visible publish, full publish, first/full post-layout, and the first AA tile in
+the regular-AA case. This is 84 declared timing groups. Statistics reuse the
+existing 5,000-resample seeded process-pair-then-sample bootstrap. Do not select
+only favorable groups or inspect partial timing verdicts. The observed memory
+budget requires every one of the six B/A process-peak RSS ratios <= 1.05; this
+is a resource cap for the campaign, not a confidence interval, long-session
+memory acceptance or proof that no leak exists. Boundary/concurrency tests
+separately check the bounded slots under burst input and delayed FX delivery.
+
+The dedicated analyzer consumes `policy.json`, `build-before.json`,
+`build-after.json`, launch records, raw driver directories/logs and a completion
+marker from a full run. Every launch carries its policy hash, order, command,
+power/thermal observations and `max_rss_bytes` from `wait4`. It validates the
+full budget, actual runtime/pipeline, unchanged build/manifest, exact paired
+fingerprints, new timing scopes and all declared cases before analysis. The
+expected matrix is the full product of policy fixtures/sizes and their canonical
+steps/actions from `BASELINE_FIXTURES.csv`; it is not inferred from surviving
+run rows. Deleting the same fixture/size or step from every JVM is an error.
+
+The public `run_frame_preparation.py` runner writes these inputs, using the
+existing frozen-build verifier, child-process/RSS collector and power/thermal
+helpers. It preflights the fixture manifest without JavaFX, preserves failed-run
+evidence, and writes `CAMPAIGN_COMPLETE` only after all JVMs, paired coverage and
+frozen inputs validate. Existing output directories are never overwritten.
+
+Freeze a revision containing the worker benchmark sources (after those sources
+have been committed), using the same JDK for build and execution. The revision
+freezer excludes untracked files; its `--working-tree` mode includes tracked
+edits only. Commands below run from the repository root. All output is private
+working evidence, not automatically selected publication material:
+
+```shell
+P17_JAVA=/path/to/jdk/bin/java
+P17_BUILD=/tmp/fractallens-p17-preparation-build
+P17_THERMAL=/tmp/fractallens-p17-preparation-thermal
+python3 scripts/benchmarks/prepare_baseline_build.py REVISION_CONTAINING_WORKER_EXPERIMENT \
+  "$P17_BUILD" --java "$P17_JAVA" --maven "$PWD/mvnw"
+swiftc scripts/benchmarks/baseline_thermal.swift -o "$P17_THERMAL"
+
+caffeinate -d -i -u -- python3 scripts/benchmarks/run_frame_preparation.py \
+  benchmarks/policies/p17-fresh-frame-preparation.json NEW_PRIVATE_OUTPUT \
+  --build "$P17_BUILD" --java "$P17_JAVA" --thermal "$P17_THERMAL"
+python3 scripts/benchmarks/analyze_frame_preparation.py NEW_PRIVATE_OUTPUT
+```
+
+A separate fresh output directory can validate the frozen build and real Java
+fixture matrix without a display or any measurement JVMs:
+
+```shell
+python3 scripts/benchmarks/run_frame_preparation.py \
+  benchmarks/policies/p17-fresh-frame-preparation.json NEW_PRIVATE_PREFLIGHT_OUTPUT \
+  --build "$P17_BUILD" --java "$P17_JAVA" --preflight-only
+```
+
+This writes the planned AB/BA commands and `PREFLIGHT_COMPLETE`, never a campaign
+completion marker. Measured execution remains macOS-specific and requires the
+active graphical session, AC power and a configured nominal-thermal helper.
+The public runner was added after the historical experiment. That original
+campaign used a private working runner; its recorded source/policy identities
+and result are preserved, not represented as a rerun with the public tool.
+
+The normal paired/Prism analyzer rejects `frame_preparation=worker`; experimental
+results cannot silently enter the established pipeline gate. The dedicated
+result is `retain` only if every timing group and the RSS cap pass, `reject` if
+any fails, and `inconclusive` otherwise. It always leaves application promotion
+`not_evaluated`. Stop after this budget; an environment-invalid run is retained
+privately and restarted from scratch in a new directory after correction.
+Even `retain` would justify only a separately reviewed controller experiment
+with current-generation publication, cancellation, reuse and platform checks.
+A rejected/inconclusive variant remains outside the production path. Publish
+only a sanitized summary; preserve the frozen inputs and raw evidence privately.
+
 ## Limits
 
 - Results apply to the measured Mac model, macOS, JDK and JavaFX version.

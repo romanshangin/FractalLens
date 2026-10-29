@@ -23,11 +23,15 @@ import java.util.function.*;
 /** CPU fixture publication through production JavaFX buffers. No input-handler or scanout timer. */
 public final class BaselineFxBenchmark {
     private BaselineFxBenchmark() {}
-    static final String HEADER = "fixture,step,width,height,requested_mode,effective_mode,phase,run,request,backend,cap,reused_pixels,reuse_source,fx_dispatch_ms,plan_ms,first_backend_region_ms,backend_ms,base_complete_ms,first_base_publish_ms,base_full_publish_ms,aa_prepare_ms,aa_ms,first_aa_publish_ms,first_aa_tile_ms,first_visible_publish_ms,full_publish_ms,first_post_layout_ms,full_post_layout_ms,cancel_request_ms,cancel_tail_ms,base_fx_work_ms,aa_fx_work_ms,complete,sample_hash,argb_hash,heap_before_bytes,heap_after_bytes,gc_count_delta,gc_ms_delta";
+    private static final java.lang.management.ThreadMXBean THREAD_CPU = ManagementFactory.getThreadMXBean();
+    static final String HEADER = "fixture,step,width,height,requested_mode,effective_mode,phase,run,request,backend,cap,reused_pixels,reuse_source,fx_dispatch_ms,plan_ms,first_backend_region_ms,backend_ms,base_complete_ms,first_base_publish_ms,base_full_publish_ms,aa_prepare_ms,aa_ms,first_aa_publish_ms,first_aa_tile_ms,first_visible_publish_ms,full_publish_ms,first_post_layout_ms,full_post_layout_ms,cancel_request_ms,cancel_tail_ms,base_fx_work_ms,aa_fx_work_ms,complete,sample_hash,argb_hash,heap_before_bytes,heap_after_bytes,gc_count_delta,gc_ms_delta,fx_setup_ms,preparation_ms";
 
     public static void main(String[] args) throws Exception {
         int warmups = Integer.getInteger("baseline.warmups", 1), runs = Integer.getInteger("baseline.runs", 3);
         if (warmups < 0 || runs < 1) throw new IllegalArgumentException("Invalid sample counts");
+        String preparation = System.getProperty("baseline.fx.preparation", "fx");
+        if (!Set.of("fx", "worker").contains(preparation)) throw new IllegalArgumentException("Unknown frame preparation variant");
+        boolean workerPreparation = preparation.equals("worker");
         var fixtures = BaselineBenchmark.selectedFixtures();
         List<InteractiveRenderMode> modes = Arrays.stream(System.getProperty("baseline.fx.modes", "FAST,REFINED").split(","))
                 .map(InteractiveRenderMode::valueOf).toList();
@@ -60,14 +64,18 @@ public final class BaselineFxBenchmark {
                         List<Result> last = new ArrayList<>();
                         var backend = new TimedBackend(); // Owned and closed by the render service.
                         try (var service = new FractalRenderService(backend);
-                             var aa = new InteractiveAntialiasService()) {
+                             var aa = new InteractiveAntialiasService();
+                             var preparer = workerPreparation ? new FreshFramePreparationExperiment(Platform::runLater) : null) {
                             for (int run = -warmups - 1; run < runs; run++) {
                                 String phase = run == -warmups - 1 ? "cold_fixture" : run < 0 ? "warmup" : "sample";
                                 fx(() -> { ui.reset(); return null; });
                                 RenderFrame active = null, retained = null;
                                 last.clear();
                                 for (var step : fixture.steps()) {
-                                    Result result = measure(ui, step, mode, service, backend, aa, active, retained);
+                                    Result result = measure(ui, step, mode, service, backend, aa, active, retained, preparer);
+                                    if (Boolean.getBoolean("baseline.fx.jfr")) {
+                                        BaselineFxSampleEvent.emit(result, fixture.id(), phase, run);
+                                    }
                                     csv.println(result.csv(fixture.id(), phase, run));
                                     csv.flush();
                                     retained = active; active = result.frame;
@@ -101,6 +109,9 @@ public final class BaselineFxBenchmark {
                 + "\naa_cache_capacity_bytes=" + AntialiasSampleCache.DEFAULT_MAX_BYTES
                 + "\nreference_cache_capacity_bytes=" + MandelbrotPerturbationRenderBackend.DEFAULT_REFERENCE_CACHE_BYTES
                 + "\nvm_arguments=" + ManagementFactory.getRuntimeMXBean().getInputArguments()
+                + "\nframe_preparation=" + System.getProperty("baseline.fx.preparation", "fx")
+                + "\ninterval_jfr=" + Boolean.getBoolean("baseline.fx.jfr")
+                + "\nplanning_thread_cpu_available=" + (THREAD_CPU.isCurrentThreadCpuTimeSupported() && THREAD_CPU.isThreadCpuTimeEnabled())
                 + "\naa_profile=" + Boolean.getBoolean("fractal.aa.profile")
                 + "\nrequested_pipeline=" + System.getProperty("prism.order", "default")
                 + "\noutput_scale=" + fx(() -> ui.stage.getOutputScaleX() + "x" + ui.stage.getOutputScaleY())
@@ -157,7 +168,7 @@ public final class BaselineFxBenchmark {
         final BaselineFixtures.Step step;
         final InteractiveRenderMode requested;
         InteractiveRenderMode effective;
-        RenderFrame frame;
+        RenderFrame frame, preparedFrame;
         int[] pixels;
         String backend, reuseSource;
         int reused;
@@ -165,7 +176,11 @@ public final class BaselineFxBenchmark {
         final AtomicLong firstRegion = new AtomicLong(-1), cancel = new AtomicLong(-1);
         long baseComplete = -1, firstBase = -1, baseFull = -1, aaPrepare = -1, aaStart = -1, aaEnd = -1;
         long firstAa = -1, firstVisible = -1, fullPublish = -1, firstPostLayout = -1, fullPostLayout = -1;
-        long baseFxWork, aaFxWork;
+        long snapshotStart = -1, snapshotEnd = -1;
+        long gridStart = -1, gridEnd = -1, frameStart = -1, frameEnd = -1;
+        long gridCpu = -1, frameCpu = -1, fxThreadId = -1;
+        long baseFxWork, aaFxWork, fxSetupWork;
+        long preparationStart = -1, preparationEnd = -1;
         long heapBefore, heapAfter, gcBefore, gcAfter, gcMsBefore, gcMsAfter;
         final CompletableFuture<Void> complete = new CompletableFuture<>(), exited = new CompletableFuture<>(), pulsed = new CompletableFuture<>();
         Result(BaselineFixtures.Step step, InteractiveRenderMode mode) { this.step = step; requested = mode; }
@@ -190,106 +205,166 @@ public final class BaselineFxBenchmark {
             fields.add("" + (pixels == null ? 0 : Arrays.hashCode(pixels)));
             fields.add("" + heapBefore); fields.add("" + heapAfter);
             fields.add("" + delta(gcAfter, gcBefore)); fields.add("" + delta(gcMsAfter, gcMsBefore));
+            fields.add(String.format(Locale.ROOT, "%.6f", fxSetupWork / 1e6));
+            long preparation = delta(preparationEnd, preparationStart);
+            fields.add(preparation < 0 ? "-1" : String.format(Locale.ROOT, "%.6f", preparation / 1e6));
             return String.join(",", fields);
         }
     }
 
     static long delta(long end, long start) { return end < 0 || start < 0 ? -1 : end - start; }
 
+    /** Splits existing factory calls only for JFR diagnostics; no alternative frame construction. */
+    static RenderFrame createDiagnosticFrame(Result r) {
+        var job = r.step.job();
+        r.fxThreadId = Thread.currentThread().threadId();
+        r.gridStart = System.nanoTime();
+        long gridCpuStart = currentThreadCpuTime();
+        var grid = RenderGrid.from(job.viewport(), job.width(), job.height());
+        long gridCpuEnd = currentThreadCpuTime();
+        r.gridEnd = System.nanoTime();
+        r.gridCpu = delta(gridCpuEnd, gridCpuStart);
+        r.frameStart = System.nanoTime();
+        long frameCpuStart = currentThreadCpuTime();
+        var frame = RenderFrame.create(job, grid);
+        long frameCpuEnd = currentThreadCpuTime();
+        r.frameEnd = System.nanoTime();
+        r.frameCpu = delta(frameCpuEnd, frameCpuStart);
+        return frame;
+    }
+
+    private static long currentThreadCpuTime() {
+        return THREAD_CPU.isCurrentThreadCpuTimeSupported() && THREAD_CPU.isThreadCpuTimeEnabled()
+                ? THREAD_CPU.getCurrentThreadCpuTime() : -1;
+    }
+
     static Result measure(Ui ui, BaselineFixtures.Step step, InteractiveRenderMode mode,
                           FractalRenderService service, TimedBackend backend, InteractiveAntialiasService aa,
                           RenderFrame active, RenderFrame retained) throws Exception {
+        return measure(ui, step, mode, service, backend, aa, active, retained, null);
+    }
+
+    static Result measure(Ui ui, BaselineFixtures.Step step, InteractiveRenderMode mode,
+                          FractalRenderService service, TimedBackend backend, InteractiveAntialiasService aa,
+                          RenderFrame active, RenderFrame retained, FreshFramePreparationExperiment preparer) throws Exception {
         fx(() -> { ui.configure(step.job()); return null; }); // Target/window configuration is outside the request timer.
         Result r = new Result(step, mode);
         r.heapBefore = BaselineBenchmark.usedHeap();
         r.gcBefore = BaselineBenchmark.gcCount(); r.gcMsBefore = BaselineBenchmark.gcMillis();
+        boolean diagnostic = Boolean.getBoolean("baseline.fx.jfr");
         r.start = System.nanoTime();
         fx(() -> {
             r.fxStart = System.nanoTime();
             r.request = ++ui.sequence;
             ui.current = r;
-            FrameReuseSelection selection = step.action() == BaselineFixtures.Action.REUSE
-                    ? new FrameReusePlanner().plan(active, retained, step.job()) : null;
-            FrameReuseResult reuse = selection == null ? FrameReuseResult.fresh(RenderFrame.create(step.job())) : selection.result();
-            r.frame = reuse.frame(); r.reused = reuse.reusedPixels();
-            RenderFrame source = selection == null ? null : selection.sourceFrame();
-            r.reuseSource = source == null ? "none" : source == active ? "active" : "retained";
-            r.planned = System.nanoTime();
-            boolean deep = backend.delegate.select(step.job()) instanceof MandelbrotPerturbationRenderBackend;
-            // Production controller presents deep renders and base-only work through the Fast path.
-            r.effective = step.aa() == BaselineFixtures.Aa.NONE || deep ? InteractiveRenderMode.FAST : mode;
-            backend.current = r;
-            var settings = new ColoringSettings(PalettePreset.ICE, PalettePreset.ICE.stops(), ColoringSettings.DEFAULT_COLOR_SCALE,
-                    0, step.colors() == BaselineFixtures.Colors.HISTOGRAM, step.job().formula().orbitTrap());
-            var scene = new FractalScene(step.job().formula().preset(), step.job().viewport(),
-                    new IterationSettings(step.job().maxIterations(), 0), settings, new AntialiasSettings(r.effective));
-            ColoringStrategy initial = settings.createStrategy();
-            var surface = ui.surface;
-            surface.latency().arm(event -> { if (ui.current == r) r.published(event.stage(), event.nanos()); });
-            surface.latency().input("fixture_request");
-            surface.latency().renderStarted();
-            surface.beginProgressiveRender(r.frame, source, r.effective);
-            if (reuse.reused()) surface.reuseDisplayedPixels(source, reuse.shift().orElseThrow());
-            if (r.effective == InteractiveRenderMode.FAST) surface.displayReadyPixels(r.frame, initial);
-            service.render(r.frame, Platform::runLater, progress -> guard(ui, r, () -> {
-                long start = System.nanoTime();
-                surface.displayProgress(progress, initial, r.effective);
-                r.baseFxWork += System.nanoTime() - start;
-            }), frame -> guard(ui, r, () -> {
-                r.baseComplete = System.nanoTime();
-                long start = System.nanoTime();
-                ColoringStrategy coloring = step.coloring(frame);
-                boolean refined = r.effective == InteractiveRenderMode.REFINED;
-                if (refined) surface.beginRefinedRender(frame);
-                else {
-                    // Finish the frame-dependent histogram mapping or a fully reused frame with no progress callbacks.
-                    if (step.colors() == BaselineFixtures.Colors.HISTOGRAM || reuse.reusedPixels() == frame.samplePlane().size()) {
-                        surface.displayReadyPixels(frame, coloring);
-                    }
-                    surface.completeProgressiveRender(frame, scene);
-                    r.baseFull = System.nanoTime();
-                }
-                r.baseFxWork += System.nanoTime() - start;
-                Runnable finish = () -> guard(ui, r, () -> {
-                    long p = System.nanoTime();
-                    if (refined) {
-                        surface.completeProgressiveRender(frame, scene);
-                        r.aaFxWork += System.nanoTime() - p;
-                    }
-                    r.fullPublish = System.nanoTime();
-                    Platform.requestNextPulse();
-                    r.complete.complete(null);
-                });
-                if (step.aa() == BaselineFixtures.Aa.NONE) finish.run();
-                else {
-                    Runnable measuredAa = () -> {
-                        r.aaStart = System.nanoTime();
-                        refine(aa, step, frame, coloring, deep, (region, colors) -> guard(ui, r, () -> {
+            Runnable setup = () -> {
+                long setupStart = System.nanoTime();
+                try {
+                    FrameReuseSelection selection = step.action() == BaselineFixtures.Action.REUSE
+                            ? new FrameReusePlanner().plan(active, retained, step.job()) : null;
+                    FrameReuseResult reuse = selection == null
+                            ? FrameReuseResult.fresh(r.preparedFrame != null ? r.preparedFrame
+                                    : diagnostic ? createDiagnosticFrame(r) : RenderFrame.create(step.job()))
+                            : selection.result();
+                    r.frame = reuse.frame(); r.reused = reuse.reusedPixels();
+                    RenderFrame source = selection == null ? null : selection.sourceFrame();
+                    r.reuseSource = source == null ? "none" : source == active ? "active" : "retained";
+                    r.planned = System.nanoTime();
+                    boolean deep = backend.delegate.select(step.job()) instanceof MandelbrotPerturbationRenderBackend;
+                    // Production controller presents deep renders and base-only work through the Fast path.
+                    r.effective = step.aa() == BaselineFixtures.Aa.NONE || deep ? InteractiveRenderMode.FAST : mode;
+                    backend.current = r;
+                    var settings = new ColoringSettings(PalettePreset.ICE, PalettePreset.ICE.stops(), ColoringSettings.DEFAULT_COLOR_SCALE,
+                            0, step.colors() == BaselineFixtures.Colors.HISTOGRAM, step.job().formula().orbitTrap());
+                    var scene = new FractalScene(step.job().formula().preset(), step.job().viewport(),
+                            new IterationSettings(step.job().maxIterations(), 0), settings, new AntialiasSettings(r.effective));
+                    ColoringStrategy initial = settings.createStrategy();
+                    var surface = ui.surface;
+                    surface.latency().arm(event -> { if (ui.current == r) r.published(event.stage(), event.nanos()); });
+                    surface.latency().input("fixture_request");
+                    surface.latency().renderStarted();
+                    surface.beginProgressiveRender(r.frame, source, r.effective);
+                    if (reuse.reused()) surface.reuseDisplayedPixels(source, reuse.shift().orElseThrow());
+                    if (r.effective == InteractiveRenderMode.FAST) surface.displayReadyPixels(r.frame, initial);
+                    service.render(r.frame, Platform::runLater, progress -> guard(ui, r, () -> {
+                        long start = System.nanoTime();
+                        surface.displayProgress(progress, initial, r.effective);
+                        r.baseFxWork += System.nanoTime() - start;
+                    }), frame -> guard(ui, r, () -> {
+                        r.baseComplete = System.nanoTime();
+                        long start = System.nanoTime();
+                        ColoringStrategy coloring = step.coloring(frame);
+                        boolean refined = r.effective == InteractiveRenderMode.REFINED;
+                        if (refined) surface.beginRefinedRender(frame);
+                        else {
+                            // Finish the frame-dependent histogram mapping or a fully reused frame with no progress callbacks.
+                            if (step.colors() == BaselineFixtures.Colors.HISTOGRAM || reuse.reusedPixels() == frame.samplePlane().size()) {
+                                surface.displayReadyPixels(frame, coloring);
+                            }
+                            surface.completeProgressiveRender(frame, scene);
+                            r.baseFull = System.nanoTime();
+                        }
+                        r.baseFxWork += System.nanoTime() - start;
+                        Runnable finish = () -> guard(ui, r, () -> {
                             long p = System.nanoTime();
-                            if (refined) surface.displayRefinedTile(frame, region, colors);
-                            else surface.applyAntialiasing(frame, region, colors);
-                            r.aaFxWork += System.nanoTime() - p;
-                        }), () -> { r.aaEnd = System.nanoTime(); finish.run(); }, r.complete::completeExceptionally);
-                    };
-                    if (step.aa() == BaselineFixtures.Aa.SAME_FRAME) {
-                        long preparation = System.nanoTime();
-                        refine(aa, step, frame, coloring, deep, (region, colors) -> {}, () -> {
-                            r.aaPrepare = System.nanoTime() - preparation;
-                            measuredAa.run();
-                        }, r.complete::completeExceptionally);
-                    } else measuredAa.run();
-                }
-            }), r.complete::completeExceptionally);
+                            if (refined) {
+                                surface.completeProgressiveRender(frame, scene);
+                                r.aaFxWork += System.nanoTime() - p;
+                            }
+                            r.fullPublish = System.nanoTime();
+                            Platform.requestNextPulse();
+                            r.complete.complete(null);
+                        });
+                        if (step.aa() == BaselineFixtures.Aa.NONE) finish.run();
+                        else {
+                            Runnable measuredAa = () -> {
+                                r.aaStart = System.nanoTime();
+                                refine(aa, step, frame, coloring, deep, (region, colors) -> guard(ui, r, () -> {
+                                    long p = System.nanoTime();
+                                    if (refined) surface.displayRefinedTile(frame, region, colors);
+                                    else surface.applyAntialiasing(frame, region, colors);
+                                    r.aaFxWork += System.nanoTime() - p;
+                                }), () -> { r.aaEnd = System.nanoTime(); finish.run(); }, r.complete::completeExceptionally);
+                            };
+                            if (step.aa() == BaselineFixtures.Aa.SAME_FRAME) {
+                                long preparation = System.nanoTime();
+                                refine(aa, step, frame, coloring, deep, (region, colors) -> {}, () -> {
+                                    r.aaPrepare = System.nanoTime() - preparation;
+                                    measuredAa.run();
+                                }, r.complete::completeExceptionally);
+                            } else measuredAa.run();
+                        }
+                    }), r.complete::completeExceptionally);
+                } finally { r.fxSetupWork += System.nanoTime() - setupStart; }
+            };
+            if (preparer != null && step.action() != BaselineFixtures.Action.REUSE) {
+                preparer.submit(step.job(), prepared -> guard(ui, r, () -> {
+                    r.preparationStart = prepared.started();
+                    r.preparationEnd = prepared.finished();
+                    r.preparedFrame = prepared.frame();
+                    setup.run();
+                }), r.complete::completeExceptionally).whenComplete((ignored, error) -> {
+                    if (error != null) r.complete.completeExceptionally(error);
+                });
+                r.fxSetupWork += System.nanoTime() - r.fxStart;
+            } else {
+                r.fxSetupWork += System.nanoTime() - r.fxStart;
+                setup.run();
+            }
             return null;
         });
         if (step.action() == BaselineFixtures.Action.CANCEL_FIRST_REGION) {
-            r.exited.get(180, TimeUnit.SECONDS);
+            CompletableFuture.anyOf(r.exited, r.complete).get(180, TimeUnit.SECONDS);
             fx(() -> { service.cancelCurrent(); return null; });
             if (r.cancel.get() < 0) throw new IllegalStateException("Cancellation trigger was not reached");
         } else {
             r.complete.get(180, TimeUnit.SECONDS);
             r.pulsed.get(15, TimeUnit.SECONDS);
-            r.pixels = fx(() -> ui.surface.refinedPixelSnapshot(r.frame).colors());
+            r.pixels = fx(() -> {
+                r.snapshotStart = System.nanoTime();
+                try { return ui.surface.refinedPixelSnapshot(r.frame).colors(); }
+                finally { r.snapshotEnd = System.nanoTime(); }
+            });
         }
         fx(() -> { ui.surface.latency().stop(); ui.current = null; return null; });
         r.heapAfter = BaselineBenchmark.usedHeap();

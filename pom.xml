@@ -65,6 +65,18 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven.compiler.version}</version>
+                <executions>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <!-- JFR diagnostics belong to test harnesses, not the application module. -->
+                            <compilerArgs>
+                                <arg>--add-modules</arg><arg>jdk.jfr</arg>
+                                <arg>--add-reads</arg><arg>com.shangin.fractal=jdk.jfr</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>
@@ -72,7 +84,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.version}</version>
                 <configuration>
-                    <argLine>--enable-native-access=org.lwjgl,com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.stage=com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.tk=com.shangin.fractal --add-modules=ALL-MODULE-PATH --sun-misc-unsafe-memory-access=deny ${fractal.test.platformOptions}</argLine>
+                    <argLine>--enable-native-access=org.lwjgl,com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.stage=com.shangin.fractal --add-exports=javafx.graphics/com.sun.javafx.tk=com.shangin.fractal --add-modules=ALL-MODULE-PATH,jdk.jfr --add-reads=com.shangin.fractal=jdk.jfr --sun-misc-unsafe-memory-access=deny ${fractal.test.platformOptions}</argLine>
                     <systemPropertyVariables>
                         <fractal.gpu.enabled>false</fractal.gpu.enabled>
                     </systemPropertyVariables>

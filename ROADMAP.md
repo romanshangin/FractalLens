@@ -211,7 +211,17 @@ delivery foundation should be completed first.
     [predeclared post-change campaign](benchmarks/PRISM_PIPELINE_RESULTS.md#post-change-publication-campaign-p17-2026-10-28)
     ended `fail` again (25 of 28 pass, 2 inconclusive, 1512x982 Refined first
     visible publish fails by about 0.1 ms); the former failing group is now
-    inconclusive.
+    inconclusive. Opt-in per-request JFR boundaries and a
+    [GC overlap analyzer](benchmarks/PRISM_PIPELINE_BENCHMARK.md#sample-to-gc-correlation-diagnostics-p17)
+    were exercised in a [three-pair desktop diagnostic](benchmarks/PRISM_PIPELINE_RESULTS.md#desktop-sample-to-gc-correlation-diagnostic-2026-10-29).
+    The historical failing group did not reproduce, and slow planning also
+    occurred without a GC pause; its proposed GC cause remains inconclusive.
+    A [fresh-frame decomposition diagnostic](benchmarks/PRISM_PIPELINE_RESULTS.md#fresh-frame-planning-decomposition-diagnostic-2026-10-29)
+    then localized profiled CPU-heavy outliers to sample-array allocation in
+    `FractalData`. A [bounded worker preparation experiment](benchmarks/PRISM_PIPELINE_RESULTS.md#bounded-worker-preparation-experiment-2026-10-29)
+    was rejected: timing remained inconclusive and two process pairs exceeded
+    its peak-RSS budget. It remains benchmark-only; no production optimization
+    or new Prism pipeline timing verdict is recorded.
   - [x] Run the [Spaces presentation validation](benchmarks/SPACE_SWITCH_VALIDATION.md)
     on both pipelines. Result on one Mac with `-Dprism.order`: ES2 reproduced
     the stale mixed frame in all 8 controlled window trials with a verdict and
