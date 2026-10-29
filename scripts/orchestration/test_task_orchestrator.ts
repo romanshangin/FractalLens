@@ -560,6 +560,8 @@ test('nonzero exit, missing report, missing executable and timeout stop the work
     const result = await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner });
     assert.equal(result.status, 'INCOMPLETE');
     assert.equal(result.history.length, 0);
+    const timedOut = body.includes('setInterval');
+    assert.equal(/Codex stage timed out after 0\.5 seconds \(--stage-timeout-minutes\)/.test(result.reason), timedOut, result.reason);
   }
   const runner = createCodexRunner({ repository: root, runDirectory: root, command: [join(root, 'missing-codex')] });
   assert.equal((await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner })).status, 'INCOMPLETE');
@@ -648,39 +650,42 @@ test('Claude error results, malformed output, nonzero exit, missing executable a
   assert.equal((await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner })).status, 'INCOMPLETE');
 });
 
-test('Claude timeout kills tool commands in their own process groups and keeps the partial stream', async t => {
-  if (process.platform === 'win32') { t.skip('Process groups and ps are POSIX-only; Windows uses taskkill /t'); return; }
-  const root = mkdtempSync(join(tmpdir(), 'fractallens-claude-timeout-test-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const pids = join(root, 'tool-pids.json');
-  // Mirrors a Claude Code Bash tool command: a separate process group with its own child,
-  // both holding the inherited stage stdout.
-  const tool = join(root, 'tool.cjs');
-  writeFileSync(tool, `const nested = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'inherit' });
+for (const [name, createRunner] of [['Claude Code', createClaudeRunner], ['Codex', createCodexRunner]] as const) {
+  test(`${name} timeout kills tool commands in their own process groups and keeps the partial stream`, async t => {
+    if (process.platform === 'win32') { t.skip('Process groups and ps are POSIX-only; Windows uses taskkill /t'); return; }
+    const root = mkdtempSync(join(tmpdir(), 'fractallens-executor-timeout-test-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const pids = join(root, 'tool-pids.json');
+    // Mirrors an executor tool command: a separate process group with its own child,
+    // both holding the inherited stage stdout.
+    const tool = join(root, 'tool.cjs');
+    writeFileSync(tool, `const nested = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'inherit' });
 require('node:fs').writeFileSync(process.argv[2], JSON.stringify([process.pid, nested.pid]));
 setInterval(() => {}, 1000);
 `);
-  const fake = join(root, 'fake-claude.cjs');
-  writeFileSync(fake, `console.log(JSON.stringify({ type: 'system', subtype: 'init' }));
+    const fake = join(root, 'fake-executor.cjs');
+    writeFileSync(fake, `console.log(JSON.stringify({ type: 'system', subtype: 'init' }));
 require('node:child_process').spawn(process.execPath, [${JSON.stringify(tool)}, ${JSON.stringify(pids)}], { detached: true, stdio: ['ignore', 'inherit', 'inherit'] });
 setInterval(() => {}, 1000);
 `);
-  const runDirectory = mkdtempSync(join(root, 'run-'));
-  const runner = createClaudeRunner({ repository: root, runDirectory, command: [process.execPath, fake], timeoutMs: 3000 });
-  const result = await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner });
-  assert.equal(result.status, 'INCOMPLETE');
-  assert.match(result.reason, /Claude Code stage timed out after 3 seconds \(--stage-timeout-minutes\)/);
-  const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(name => name.includes('-IMPLEMENT-'))!);
-  assert.match(readFileSync(join(stageDirectory, 'error.txt'), 'utf8'), /^Stage timed out after 3 seconds .*process tree, including tool commands, was killed/);
-  assert.equal(JSON.parse(readFileSync(join(stageDirectory, 'execution.log'), 'utf8')).type, 'system');
-  assert.ok(!readdirSync(stageDirectory).includes('output.json'));
-  const live = (pid: number) => !/^(|Z.*)$/.test(spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim());
-  const toolPids: number[] = JSON.parse(readFileSync(pids, 'utf8'));
-  t.after(() => toolPids.forEach(pid => { try { process.kill(pid, 'SIGKILL'); } catch { /* Already exited. */ } }));
-  // SIGKILL delivery is asynchronous; wait for the concrete state instead of a fixed delay.
-  for (const deadline = Date.now() + 5000; toolPids.some(live) && Date.now() < deadline;) await new Promise(resolve => setTimeout(resolve, 20));
-  assert.deepEqual(toolPids.filter(live), []);
-});
+    const runDirectory = mkdtempSync(join(root, 'run-'));
+    const runner = createRunner({ repository: root, runDirectory, command: [process.execPath, fake], timeoutMs: 3000 });
+    const result = await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', runStage: runner });
+    assert.equal(result.status, 'INCOMPLETE');
+    assert.ok(result.reason.includes(`${name} stage timed out after 3 seconds (--stage-timeout-minutes)`), result.reason);
+    const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(item => item.includes('-IMPLEMENT-'))!);
+    assert.match(readFileSync(join(stageDirectory, 'error.txt'), 'utf8'), /^Stage timed out after 3 seconds .*process tree, including tool commands, was killed/);
+    assert.equal(JSON.parse(readFileSync(join(stageDirectory, 'execution.log'), 'utf8')).type, 'system');
+    assert.ok(!readdirSync(stageDirectory).includes('output.json'));
+    assert.ok(!readdirSync(stageDirectory).includes('report.md'));
+    const live = (pid: number) => !/^(|Z.*)$/.test(spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim());
+    const toolPids: number[] = JSON.parse(readFileSync(pids, 'utf8'));
+    t.after(() => toolPids.forEach(pid => { try { process.kill(pid, 'SIGKILL'); } catch { /* Already exited. */ } }));
+    // SIGKILL delivery is asynchronous; wait for the concrete state instead of a fixed delay.
+    for (const deadline = Date.now() + 5000; toolPids.some(live) && Date.now() < deadline;) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(toolPids.filter(live), []);
+  });
+}
 
 test('CLI dry-run plans roles without executing Codex; invalid flags exit nonzero', async () => {
   const script = join(dirname(fileURLToPath(import.meta.url)), 'task-orchestrator.ts');
