@@ -505,20 +505,23 @@ function createStageRunner(executor: Executor, options: RunnerOptions,
 }
 
 export function createCodexRunner(options: RunnerOptions): (request: Request) => Promise<string> {
-  return createStageRunner('codex', options, ({ command, role, prompt, repository, stageDirectory, log, timeoutMs }) => {
+  return createStageRunner('codex', options, async ({ command, role, prompt, repository, stageDirectory, log, timeoutMs }) => {
     const output = join(stageDirectory, 'report.md');
-    const result = spawnSync(command[0], [
-      ...command.slice(1), 'exec', '--model', role.model,
+    const exit = await runExecutor(command, [
+      'exec', '--model', role.model,
       '--config', `model_reasoning_effort="${role.effort}"`,
       ...(role.escalation === 'never'
         ? ['--sandbox', role.sandbox, '--config', 'approval_policy="never"']
         : ['--approve-for-me']), '--ephemeral',
       '--cd', repository,
       '--output-last-message', output, '-',
-    ], { cwd: repository, input: prompt, stdio: ['pipe', log, log], timeout: timeoutMs, killSignal: 'SIGKILL', shell: false });
-    if (result.error || result.status !== 0) {
-      writeFileSync(join(stageDirectory, 'error.txt'), result.error?.message ?? `Executor exited with ${result.status ?? result.signal}`, { mode: 0o600 });
-      throw new Error('Codex execution did not complete successfully');
+    ], { cwd: repository, prompt, stdout: log, stderr: log, timeoutMs });
+    if (exit.timedOut || exit.error || exit.code !== 0) {
+      const timeout = `${formatTimeout(timeoutMs)} (--stage-timeout-minutes)`;
+      writeFileSync(join(stageDirectory, 'error.txt'), exit.timedOut
+        ? `Stage timed out after ${timeout}; the Codex process tree, including tool commands, was killed`
+        : exit.error?.message ?? `Executor exited with ${exit.code ?? exit.signal}`, { mode: 0o600 });
+      throw new Error(exit.timedOut ? `Codex stage timed out after ${timeout}` : 'Codex execution did not complete successfully');
     }
     return readFileSync(output, 'utf8');
   });
@@ -562,8 +565,8 @@ function processTable(): Map<number, { ppid: number; pgid: number }> {
   return table;
 }
 
-// Claude Code runs each Bash tool command in its own process group, so killing the CLI process
-// or its group leaves tool commands running. Stop the whole tree first so nothing can fork or be
+// Executors run tool commands as descendants, and Claude Code puts each Bash tool command in its
+// own process group, so killing the CLI process or its group leaves tool commands running. Stop the whole tree first so nothing can fork or be
 // reparented away while it is collected, then kill every collected process and its group.
 function killProcessTree(rootPid: number): void {
   if (process.platform === 'win32') {
@@ -597,9 +600,9 @@ function formatTimeout(timeoutMs: number): string {
   return Number.isInteger(minutes) ? `${minutes} minute${minutes === 1 ? '' : 's'}` : `${timeoutMs / 1000} seconds`;
 }
 
-type ClaudeExit = { code: number | null; signal: NodeJS.Signals | null; error?: Error; timedOut: boolean };
+type ExecutorExit = { code: number | null; signal: NodeJS.Signals | null; error?: Error; timedOut: boolean };
 
-function runClaude(command: string[], args: string[], options: { cwd: string; prompt: string; stdout: number; stderr: number; timeoutMs: number }): Promise<ClaudeExit> {
+function runExecutor(command: string[], args: string[], options: { cwd: string; prompt: string; stdout: number; stderr: number; timeoutMs: number }): Promise<ExecutorExit> {
   return new Promise(resolve => {
     // File descriptors instead of pipes: stage output survives a timeout or an orchestrator crash,
     // and surviving descendants that inherited stdout cannot delay the exit notification.
@@ -610,7 +613,7 @@ function runClaude(command: string[], args: string[], options: { cwd: string; pr
       timedOut = true;
       if (child.pid !== undefined) killProcessTree(child.pid);
     }, options.timeoutMs);
-    const settle = (exit: Omit<ClaudeExit, 'timedOut'>) => {
+    const settle = (exit: Omit<ExecutorExit, 'timedOut'>) => {
       clearTimeout(timer);
       resolve({ ...exit, timedOut });
     };
@@ -625,9 +628,9 @@ export function createClaudeRunner(options: RunnerOptions): (request: Request) =
   return createStageRunner('claude', options, async ({ command, role, prompt, repository, runDirectory, stageDirectory, log, timeoutMs }) => {
     const tools = 'Bash,Read,Grep,Glob';
     const stderr = openSync(join(stageDirectory, 'stderr.log'), 'wx', 0o600);
-    let exit: ClaudeExit;
+    let exit: ExecutorExit;
     try {
-      exit = await runClaude(command, [
+      exit = await runExecutor(command, [
         '--print', '--output-format', 'stream-json', '--verbose',
         '--model', role.model, '--effort', role.effort,
         '--no-session-persistence', '--permission-prompts', 'none',

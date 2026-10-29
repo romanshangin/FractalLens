@@ -427,14 +427,17 @@ command; they use the identity supplied and checked by the orchestrator.
 
 The default timeout is 30 minutes per executor. Adjust it with
 `--stage-timeout-minutes` (a whole number of minutes, 1 through 1,440). A
-timeout stops the workflow without retrying. Claude Code stages report
-`Claude Code stage timed out after <n> minutes` in the result reason. For
-Codex the timeout kills only the CLI process. For Claude Code on macOS and
-Linux it stops the whole process tree, including Bash tool commands
-that Claude Code starts in their own process groups, and then kills those
-processes and their groups; on Windows it uses `taskkill /t`. A tool process
-that already detached from the tree before the timeout, or any process after a
-Codex timeout, can still survive; inspect remaining work before restarting.
+timeout stops the workflow without retrying. The result reason reports
+`Codex stage timed out after <n> minutes` or
+`Claude Code stage timed out after <n> minutes`. On macOS and Linux the
+timeout stops the executor's whole process tree, including tool commands that
+run in their own process groups (Claude Code starts each Bash tool command in
+one), and then kills those processes and their groups; on Windows it uses
+`taskkill /t`. A tool process that already detached from the tree before the
+timeout can still survive; inspect remaining work before restarting.
+Commands run through `check.ts` have their own `--timeout-seconds` limit
+(default 1,800); a stage that runs a longer check needs both a larger stage
+timeout and a larger check timeout.
 A new `--task` run starts at IMPLEMENT. Only a valid, identity-checked
 `VERIFY=INCOMPLETE` result creates a resumable checkpoint. Executor errors,
 timeouts, candidate mutations, incomplete review, and any delivery result do
