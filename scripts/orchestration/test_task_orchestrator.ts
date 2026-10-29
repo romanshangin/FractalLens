@@ -624,15 +624,45 @@ console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false
   }
 });
 
+test('Claude runner uses the last result event and ignores trailing lifecycle events', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'fractallens-claude-result-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const fake = join(root, 'result.cjs');
+  const event = (fields: object) => `console.log(${JSON.stringify(JSON.stringify(fields))});`;
+  const result = (index: number, report: string) => event({ type: 'result', subtype: 'success', is_error: false, result_index: index, result: report });
+  const lifecycle = event({ type: 'command_lifecycle', state: 'completed' });
+  // Claude Code wakes an agent that ended its turn while waiting for a background task,
+  // so a stage can emit several results; only the last one is the stage's report.
+  for (const [body, report, index] of [
+    [`${event({ type: 'system', subtype: 'init' })} ${result(0, 'CLEAN\nOnly report')} ${lifecycle}`, 'CLEAN\nOnly report', 0],
+    [`${result(0, 'FAIL\nInterim')} ${event({ type: 'assistant' })} ${result(1, 'FAIL\nInterim again')} ${result(2, 'CLEAN\nFinal report')} ${lifecycle} ${lifecycle}`,
+      'CLEAN\nFinal report', 2],
+  ] as const) {
+    writeFileSync(fake, body);
+    const runDirectory = mkdtempSync(join(root, 'run-'));
+    const runner = createClaudeRunner({ repository: root, runDirectory, command: [process.execPath, fake] });
+    assert.equal(await runner({ ...BASE, stage: 'REVIEW', task: 'Synthetic', verificationRequired: true, repairRound: 0, maxRepairRounds: 3, handoffs: [] }), report, body);
+    const stageDirectory = join(runDirectory, readdirSync(runDirectory).find(name => name.includes('-REVIEW-'))!);
+    assert.equal(readFileSync(join(stageDirectory, 'report.md'), 'utf8'), report, body);
+    assert.equal(JSON.parse(readFileSync(join(stageDirectory, 'output.json'), 'utf8')).result_index, index, body);
+    assert.ok(!readdirSync(stageDirectory).includes('error.txt'), body);
+  }
+});
+
 test('Claude error results, malformed output, nonzero exit, missing executable and timeout stop the workflow', async t => {
   const root = mkdtempSync(join(tmpdir(), 'fractallens-claude-executor-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const fake = join(root, 'failure.cjs');
   const output = (fields: object) => `console.log(${JSON.stringify(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'READY_FOR_REVIEW', ...fields }))});`;
+  const lifecycle = `console.log(${JSON.stringify(JSON.stringify({ type: 'command_lifecycle', state: 'completed' }))});`;
   for (const body of [output({ is_error: true }), output({ subtype: 'error_max_turns' }), output({ result: undefined }),
     output({ type: 'assistant' }), 'console.log("READY_FOR_REVIEW")', `${output({})} process.exit(7);`, '', 'setInterval(() => {}, 1000)',
     `${output({})} console.log('{"type":"assistant"}');`, output({}).replace('console.log', 'console.error'),
-    `${output({})} setInterval(() => {}, 1000);`]) {
+    `${output({})} setInterval(() => {}, 1000);`,
+    // A trailing lifecycle event must not hide a failed final result, a missing result or non-JSON output.
+    `${output({})} ${output({ is_error: true })} ${lifecycle}`, `${output({})} ${output({ subtype: 'error_during_execution' })} ${lifecycle}`,
+    lifecycle, `${output({ type: 'assistant' })} ${lifecycle}`, `${output({})} ${lifecycle} console.log('READY_FOR_REVIEW');`,
+    `${output({})} console.log('READY_FOR_REVIEW'); ${lifecycle}`, `${output({})} console.log('{"type":"assistant"}'); ${lifecycle}`]) {
     writeFileSync(fake, body);
     const runDirectory = mkdtempSync(join(root, 'run-'));
     const runner = createClaudeRunner({ repository: root, runDirectory, command: [process.execPath, fake], timeoutMs: 500 });

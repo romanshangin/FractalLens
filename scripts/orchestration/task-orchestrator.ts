@@ -543,16 +543,28 @@ function claudeSettings(role: Role, repository: string, runDirectory: string): o
   } };
 }
 
-// The final stdout event is the only report channel; stderr and tool output never select a state.
-// Tool output reaches stdout only inside JSON-encoded stream events, never as a line of its own.
+// Events the CLI writes after the final turn's result. Any other event after a result belongs to a
+// later turn (the CLI wakes the agent again, for example for a background task) whose result is
+// missing, so the earlier result is not the stage's report; unknown event types therefore fail closed.
+const CLAUDE_TRAILING_EVENT_TYPES = new Set(['command_lifecycle']);
+
+// The final stdout result event is the only report channel; stderr and tool output never select a state.
+// Tool output reaches stdout only inside JSON-encoded stream events, never as a line of its own, so
+// only whole stdout lines that parse as JSON are considered and a trailing non-JSON line is a failure.
 function claudeResultEvent(stream: string): { line: string; output: Record<string, unknown> } | undefined {
-  const line = stream.trimEnd().split('\n').at(-1) ?? '';
-  try {
-    const output = JSON.parse(line);
-    return output?.type === 'result' ? { line, output } : undefined;
-  } catch {
-    return undefined;
+  const lines = stream.trimEnd().split('\n');
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const line = lines[index];
+    let output;
+    try {
+      output = JSON.parse(line);
+    } catch {
+      return undefined;
+    }
+    if (output?.type === 'result') return { line, output };
+    if (!CLAUDE_TRAILING_EVENT_TYPES.has(output?.type)) return undefined;
   }
+  return undefined;
 }
 
 function processTable(): Map<number, { ppid: number; pgid: number }> {
