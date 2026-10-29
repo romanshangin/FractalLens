@@ -291,9 +291,15 @@ delivery foundation should be completed first.
     - [ ] Establish and document the supported minimum macOS for the JDK,
       JavaFX Metal, AppKit bridge, launcher and generated bundle together;
       verify execution on that OS rather than inferring support from metadata.
-      Local inspection found `minos 11.0` in all 35 loose packaged Mach-O files
-      and eight JavaFX graphics natives, while the generated plist claims 10.11.
-      Correct/reconcile that metadata before declaring a supported minimum.
+      Initial package inspection found `minos 11.0` in all 35 loose packaged
+      Mach-O files and eight JavaFX graphics natives, while its generated plist
+      claimed 10.11.
+      - [x] Correct the generated application metadata to the observed 11.0
+        binary floor before jpackage signing and DMG creation, and reject an
+        unexpected packaged value. The override preserves the selected JDK's
+        other template fields. This does not establish runtime support on 11.0;
+        minimum-OS execution and vendor/platform acceptance remain open. See
+        [the metadata correction](docs/packaging/RUNTIME_PACKAGING.md#deployment-metadata-correction-2026-10-29).
     - [ ] Check external-display connection/disconnection, mixed Retina scaling
       and refresh rates, and complete frames above 4096 physical pixels on
       suitable hardware, including seams and memory use.

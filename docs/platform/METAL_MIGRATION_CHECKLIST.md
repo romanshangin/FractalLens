@@ -48,7 +48,10 @@ focus-repaint decision remains pending final-candidate section 4 trials.
 - [ ] **Minimum macOS of the whole delivery.** Determine it for JDK, JavaFX
   Metal pipeline, the AppKit bridge library and the launcher together. The
   source `Info.plist` has no `LSMinimumSystemVersion`; inspect the generated
-  application bundle as well, and document the result. The bootstrap
+  application bundle as well, and document the result. Packaging now sets the
+  generated application plist to the observed 11.0 binary floor before signing;
+  see the [metadata correction](../packaging/RUNTIME_PACKAGING.md#deployment-metadata-correction-2026-10-29).
+  Minimum-OS execution and vendor support acceptance remain open. The bootstrap
   preparation's [binary/metadata inspection](../packaging/RUNTIME_PACKAGING.md#startup-and-macos-deployment-floor)
   found an 11.0 binary floor but a generated plist claiming 10.11. A supported
   minimum is still open; neither value alone establishes runtime support.

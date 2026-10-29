@@ -14,6 +14,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 import zlib
@@ -23,6 +24,8 @@ import xml.etree.ElementTree as ElementTree
 ROOT = Path(__file__).resolve().parents[2]
 TARGET = ROOT / "target" / "runtime-package"
 APP_MODULE = "com.shangin.fractal/com.shangin.fractal.app.FractalLauncher"
+# Binary deployment floor, not a declaration of minimum-OS runtime acceptance.
+MACOS_DEPLOYMENT_FLOOR = "11.0"
 NATIVE_SUFFIXES = (".dll", ".dylib", ".jnilib", ".so")
 LICENSE_SHA256 = {
     "LWJGL-LICENSE.txt": "8130c6f15e9f961e74c2b197551e60ef9d00521addc5908255be1cdd43a6c90b",
@@ -289,6 +292,30 @@ def app_executable(image):
     return image / "FractalLens.exe"
 
 
+def stage_macos_resources(jpackage, destination):
+    """Override only the deployment floor in the selected JDK's plist template."""
+    jdk = Path(jpackage).resolve().parent.parent
+    resource = "jdk.jpackage/jdk/jpackage/internal/resources/Info-lite.plist.template"
+    with tempfile.TemporaryDirectory(prefix="fractallens-jpackage-") as directory:
+        run([jdk / "bin" / "jimage", "extract", "--include", f"glob:/{resource}",
+             "--dir", directory, jdk / "lib" / "modules"])
+        template = (Path(directory) / resource).read_text(encoding="utf-8")
+    pattern = r"(<key>LSMinimumSystemVersion</key>\s*<string>)([^<]*)(</string>)"
+    matches = list(re.finditer(pattern, template))
+    if len(matches) != 1:
+        raise RuntimeError("Expected exactly one LSMinimumSystemVersion in the JDK template")
+    original = matches[0][2]
+    if (re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", original) is None
+            or tuple(map(int, original.split("."))) > tuple(
+                map(int, (MACOS_DEPLOYMENT_FLOOR + ".0").split(".")))):
+        raise RuntimeError("JDK template deployment floor requires reassessment")
+    template = re.sub(
+        pattern, lambda match: match[1] + MACOS_DEPLOYMENT_FLOOR + match[3], template)
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "Info.plist").write_text(template, encoding="utf-8")
+    return destination
+
+
 def validate_image(image, report):
     executable = app_executable(image)
     if not executable.is_file():
@@ -297,6 +324,8 @@ def validate_image(image, report):
         info = plistlib.loads((image / "Contents" / "Info.plist").read_bytes())
         if info.get("CFBundleIdentifier") != "com.shangin.fractal":
             raise RuntimeError("Unexpected macOS bundle identifier")
+        if info.get("LSMinimumSystemVersion") != MACOS_DEPLOYMENT_FLOOR:
+            raise RuntimeError("Unexpected macOS deployment floor in packaged Info.plist")
     command = [executable, f"--package-smoke-test={report.resolve()}"]
     environment = dict(os.environ)
     smoke_cache = TARGET / "javafx-cache"
@@ -400,6 +429,9 @@ def main():
     image_output = TARGET / "images"
     image_output.mkdir(parents=True)
     common = jpackage_common(jpackage, version, module_path, input_dir, icon)
+    if sys.platform == "darwin":
+        resources = stage_macos_resources(jpackage, staging / "macos-resources")
+        common += ["--resource-dir", str(resources)]
     run([*common, "--type", "app-image", "--dest", image_output], cwd=ROOT)
     image = image_output / ("FractalLens.app" if sys.platform == "darwin" else "FractalLens")
 
