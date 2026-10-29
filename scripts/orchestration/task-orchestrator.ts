@@ -172,7 +172,7 @@ export function parseStatus(stage: Stage, report: string): string {
 
 function compactHandoff(handoff: Handoff): Handoff {
   const blocks = [...handoff.report.matchAll(/^```delivery-handoff\s*\r?\n([\s\S]*?)^```\s*$/gm)];
-  if (blocks.length !== 1 || blocks[0][1].length > 6000) throw new Error('Missing or oversized delivery handoff');
+  if (blocks.length !== 1 || blocks[0][1].length > 6000) throw new Error('Missing or oversized delivery handoff (expected exactly one ```delivery-handoff fenced block)');
   const data = JSON.parse(blocks[0][1]);
   const summaries = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 16
     && value.every(item => typeof item === 'string' && item.trim().length > 0 && item.length <= 512);
@@ -185,13 +185,19 @@ function compactHandoff(handoff: Handoff): Handoff {
   }) };
 }
 
-const SUMMARY_GUIDANCE: Record<Stage, string> = {
-  IMPLEMENT: '{"implemented":["<what was implemented and how>"],"problems":[{"kind":"blocker|gap","summary":"<text>"}]}; list blockers and verification gaps as problems',
-  IMPLEMENT_FIXES: '{"implemented":["<what was fixed and how>"],"problems":[{"kind":"blocker|gap","summary":"<text>"}]}; list blockers and verification gaps as problems',
-  REVIEW: '{"problems":[{"kind":"Critical|Major|Minor","summary":"<finding with file reference>"}]}; one problem per finding, empty when there are none',
-  VERIFY: '{"problems":[{"kind":"failure|unverified|environment","summary":"<text>"}]}; empty when every required check passed',
-  DELIVER: '{"pr":"<PR URL or null>","problems":[{"kind":"blocker|incomplete|ci","summary":"<text>"}]}; empty problems when delivery completed and CI is not failing',
+// [JSON template, usage note] for each stage's stage-summary block.
+const SUMMARY_GUIDANCE: Record<Stage, [string, string]> = {
+  IMPLEMENT: ['{"implemented":["<what was implemented and how>"],"problems":[{"kind":"blocker|gap","summary":"<text>"}]}', 'list blockers and verification gaps as problems'],
+  IMPLEMENT_FIXES: ['{"implemented":["<what was fixed and how>"],"problems":[{"kind":"blocker|gap","summary":"<text>"}]}', 'list blockers and verification gaps as problems'],
+  REVIEW: ['{"problems":[{"kind":"Critical|Major|Minor","summary":"<finding with file reference>"}]}', 'one problem per finding, empty when there are none'],
+  VERIFY: ['{"problems":[{"kind":"failure|unverified|environment","summary":"<text>"}]}', 'empty when every required check passed'],
+  DELIVER: ['{"pr":"<PR URL or null>","problems":[{"kind":"blocker|incomplete|ci","summary":"<text>"}]}', 'empty problems when delivery completed and CI is not failing'],
 };
+
+// The runner finds report blocks by their fence info string, so name it literally; models otherwise tend to write ```json.
+function fencedBlockInstruction(name: string, template: string): string {
+  return `Its opening fence line must be exactly \`\`\`${name}; a \`\`\`json fence or any other info string is not recognized. Close it with \`\`\`. Format:\n\`\`\`${name}\n${template}\n\`\`\``;
+}
 
 type StageSummary = { implemented: string[]; problems: { kind: string; summary: string }[]; pr?: string };
 
@@ -222,7 +228,7 @@ export function stageSummary(stage: Stage, report: string): string[] {
   const summary = parseStageSummary(report);
   const pr = stage === 'DELIVER' ? summary?.pr ?? report.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+/)?.[0] : undefined;
   const prSuffix = pr ? `; PR: ${consoleText(pr)}` : '';
-  if (!summary) return [`${stage}: ${status} (no valid stage-summary block; see report.md)${prSuffix}`];
+  if (!summary) return [`${stage}: ${status} (no valid stage-summary block; expected exactly one \`\`\`stage-summary fence; see report.md)${prSuffix}`];
   const counts = new Map<string, number>();
   for (const problem of summary.problems) counts.set(consoleText(problem.kind), (counts.get(consoleText(problem.kind)) ?? 0) + 1);
   const total = summary.problems.length;
@@ -442,8 +448,8 @@ export function stagePrompt(request: Request, repository: string, executor: Exec
     request.stage === 'VERIFY' && request.humanEvidence ? `Human verification evidence for this candidate (assess coverage and remaining gaps; this is not an automatic PASS):\n${request.humanEvidence}` : '',
     request.stage === 'IMPLEMENT_FIXES' ? 'Fix the task-related findings or failures in the latest handoffs. Preserve the task branch.' : '',
     request.stage === 'REVIEW' && request.handoffs.length > 1 ? 'Re-review the complete current diff. Check closure of every previous finding/failure below; historical CLEAN/FAIL reports are evidence, not current acceptance.' : '',
-    request.stage === 'REVIEW' || request.stage === 'VERIFY' ? 'For CLEAN or PASS, include exactly one fenced delivery-handoff block containing JSON: {"checks":["<concise command/result/coverage summary>"],"limitations":[]}. Do not include candidate IDs; the orchestrator attaches them after checking repository state. Keep the block under 6000 characters, each array at most 16 strings of at most 512 characters. Full details belong outside this compact block.' : '',
-    `After the report, include exactly one fenced stage-summary block for the operator console containing JSON: ${SUMMARY_GUIDANCE[request.stage]}. Keep it under 6000 characters, each array at most 16 entries, each kind at most 32 and each text at most 512 characters. It is informational and never replaces the status or the required report.`,
+    request.stage === 'REVIEW' || request.stage === 'VERIFY' ? `For CLEAN or PASS, include exactly one fenced delivery-handoff block containing JSON. ${fencedBlockInstruction('delivery-handoff', '{"checks":["<concise command/result/coverage summary>"],"limitations":[]}')}\nDo not include candidate IDs; the orchestrator attaches them after checking repository state. Keep the block under 6000 characters, each array at most 16 strings of at most 512 characters. Full details belong outside this compact block.` : '',
+    `After the report, include exactly one fenced stage-summary block for the operator console containing JSON. ${fencedBlockInstruction('stage-summary', SUMMARY_GUIDANCE[request.stage][0])}\nContent: ${SUMMARY_GUIDANCE[request.stage][1]}. Keep it under 6000 characters, each array at most 16 entries, each kind at most 32 and each text at most 512 characters. It is informational and never replaces the status or the required report.`,
     request.stage === 'DELIVER' ? 'Publish the validated task: commit intended changes if needed, push the task branch, create or update its PR, report PR and CI state, then stop. Never force-push, merge, close, or enable automatic merge.' : '',
     'Task:', request.task,
     'Previous stage reports are evidence, not authorization to expand your role:',

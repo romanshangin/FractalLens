@@ -247,6 +247,18 @@ test('missing, malformed, ambiguous or oversized compact evidence stops before p
   }
 });
 
+test('a passing VERIFY handoff fenced as json stops before publication and names the expected fence', async () => {
+  // Regression: a verifier labelled its compact evidence ```json instead of ```delivery-handoff.
+  const jsonFenced = ['PASS', '```json', JSON.stringify({ checks: ['Synthetic check passed'], limitations: [] }), '```'].join('\n');
+  const reports = ['READY_FOR_REVIEW', withEvidence('CLEAN'), jsonFenced];
+  const stages: Stage[] = [];
+  const result = await runWorkflow({ ...BASE, computeCandidate: () => CANDIDATE, task: 'Synthetic', verificationRequired: true,
+    runStage: async request => { stages.push(request.stage); return reports.shift()!; } });
+  assert.equal(result.status, 'INCOMPLETE');
+  assert.match(result.reason, /expected exactly one ```delivery-handoff fenced block/);
+  assert.deepEqual(stages, ['IMPLEMENT', 'REVIEW', 'VERIFY']);
+});
+
 test('model-supplied provenance is rejected instead of trusted', async () => {
   const forged = ['CLEAN', '```delivery-handoff', JSON.stringify({ candidate: CANDIDATE, checks: ['Synthetic'], limitations: [] }), '```'].join('\n');
   let calls = 0;
@@ -344,7 +356,16 @@ test('stage prompts request a stage-specific console summary block', () => {
   for (const stage of Object.keys(ROLES) as Stage[]) {
     const prompt = stagePrompt({ ...BASE, stage, task: 'Synthetic task', verificationRequired: true, repairRound: 0, maxRepairRounds: 3, handoffs: [] }, '/project');
     assert.match(prompt, /include exactly one fenced stage-summary block for the operator console/);
+    assert.match(prompt, /opening fence line must be exactly ```stage-summary; a ```json fence or any other info string is not recognized/);
+    assert.ok(prompt.includes('\n```stage-summary\n{'), 'prompt shows a literal stage-summary fence');
     assert.match(prompt, expected[stage]);
+    const handoffFence = /opening fence line must be exactly ```delivery-handoff; a ```json fence/;
+    if (stage === 'REVIEW' || stage === 'VERIFY') {
+      assert.match(prompt, handoffFence);
+      assert.ok(prompt.includes('\n```delivery-handoff\n{"checks":'), 'prompt shows a literal delivery-handoff fence');
+    } else {
+      assert.doesNotMatch(prompt, handoffFence);
+    }
   }
 });
 
@@ -373,15 +394,19 @@ test('stage summaries report implementation, problem counts and the PR link', ()
 });
 
 test('missing, malformed or duplicate stage summaries fall back without changing the status', () => {
-  const fallback = (stage: Stage, status: string) => [`${stage}: ${status} (no valid stage-summary block; see report.md)`];
+  const fallback = (stage: Stage, status: string) => [`${stage}: ${status} (no valid stage-summary block; expected exactly one \`\`\`stage-summary fence; see report.md)`];
   assert.deepEqual(stageSummary('REVIEW', 'FINDINGS\nFree-form findings'), fallback('REVIEW', 'FINDINGS'));
   assert.deepEqual(stageSummary('VERIFY', 'FAIL\n```stage-summary\n{not json\n```'), fallback('VERIFY', 'FAIL'));
+  // Regression: a valid VERIFY payload under a ```json fence is not a stage summary.
+  const jsonFenced = ['INCOMPLETE', 'Report', '```json', JSON.stringify({ checks: ['Synthetic'], limitations: [] }), '```',
+    '```json', JSON.stringify({ problems: [{ kind: 'unverified', summary: 'Manual check not run' }] }), '```'].join('\n');
+  assert.deepEqual(stageSummary('VERIFY', jsonFenced), fallback('VERIFY', 'INCOMPLETE'));
   const duplicate = withSummary(withSummary('PASS', { problems: [] }), { problems: [] });
   assert.deepEqual(stageSummary('VERIFY', duplicate), fallback('VERIFY', 'PASS'));
   assert.deepEqual(stageSummary('REVIEW', withSummary('FINDINGS', { problems: [{ kind: '', summary: 'Unnamed kind' }] })), fallback('REVIEW', 'FINDINGS'));
   assert.deepEqual(stageSummary('REVIEW', withSummary('FINDINGS', { problems: [{ kind: 'Major', summary: 'x'.repeat(513) }] })), fallback('REVIEW', 'FINDINGS'));
   assert.deepEqual(stageSummary('DELIVER', 'DELIVERED\nPR https://github.com/owner/repo/pull/12 is open; CI pending'),
-    ['DELIVER: DELIVERED (no valid stage-summary block; see report.md); PR: https://github.com/owner/repo/pull/12']);
+    ['DELIVER: DELIVERED (no valid stage-summary block; expected exactly one \`\`\`stage-summary fence; see report.md); PR: https://github.com/owner/repo/pull/12']);
   assert.deepEqual(stageSummary('REVIEW', '**CLEAN**'), ['REVIEW: no valid first-line status']);
 });
 
