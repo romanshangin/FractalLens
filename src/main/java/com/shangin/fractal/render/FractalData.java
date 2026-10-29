@@ -13,12 +13,26 @@ public class FractalData implements SamplePlane {
     private final int[] iterations;
     private final double[] smoothIterations;
     private final boolean[] escaped;
+    /*
+     * Null when the frame's formula has no orbit trap: every distance is then NaN,
+     * and a full-size NaN-filled array would only add allocation and fill time on
+     * the thread that creates the frame.
+     */
     private final double[] orbitTrapDistances;
 
     public FractalData(
             int width,
             int height,
             int maxIterations
+    ) {
+        this(width, height, maxIterations, true);
+    }
+
+    public FractalData(
+            int width,
+            int height,
+            int maxIterations,
+            boolean storesOrbitTrapDistances
     ) {
         this.width = width;
         this.height = height;
@@ -29,8 +43,12 @@ public class FractalData implements SamplePlane {
         this.iterations = new int[size];
         this.smoothIterations = new double[size];
         this.escaped = new boolean[size];
-        this.orbitTrapDistances = new double[size];
-        java.util.Arrays.fill(orbitTrapDistances, Double.NaN);
+        if (storesOrbitTrapDistances) {
+            this.orbitTrapDistances = new double[size];
+            java.util.Arrays.fill(orbitTrapDistances, Double.NaN);
+        } else {
+            this.orbitTrapDistances = null;
+        }
     }
 
     public int width() {
@@ -62,7 +80,27 @@ public class FractalData implements SamplePlane {
     }
 
     public double orbitTrapDistance(int index) {
-        return orbitTrapDistances[index];
+        return orbitTrapDistances == null ? Double.NaN : orbitTrapDistances[index];
+    }
+
+    private void setOrbitTrapDistance(int index, double distance) {
+        if (orbitTrapDistances != null) {
+            orbitTrapDistances[index] = distance;
+        } else if (!Double.isNaN(distance)) {
+            throw new IllegalStateException("Frame does not store orbit-trap distances");
+        }
+    }
+
+    private void copyOrbitTrapDistances(FractalData source, int sourceIndex, int targetIndex, int length) {
+        if (source.orbitTrapDistances != null && orbitTrapDistances != null) {
+            System.arraycopy(source.orbitTrapDistances, sourceIndex, orbitTrapDistances, targetIndex, length);
+        } else if (orbitTrapDistances != null) {
+            java.util.Arrays.fill(orbitTrapDistances, targetIndex, targetIndex + length, Double.NaN);
+        } else if (source.orbitTrapDistances != null) {
+            for (int offset = 0; offset < length; offset++) {
+                setOrbitTrapDistance(targetIndex + offset, source.orbitTrapDistances[sourceIndex + offset]);
+            }
+        }
     }
 
     public void set(
@@ -72,7 +110,7 @@ public class FractalData implements SamplePlane {
         iterations[index] = sample.iterations();
         smoothIterations[index] = sample.smoothIterations();
         escaped[index] = sample.escaped();
-        orbitTrapDistances[index] = sample.orbitTrapDistance();
+        setOrbitTrapDistance(index, sample.orbitTrapDistance());
     }
 
     public void set(
@@ -94,7 +132,7 @@ public class FractalData implements SamplePlane {
         this.iterations[index] = iterations;
         this.smoothIterations[index] = smoothIterations;
         this.escaped[index] = escaped;
-        this.orbitTrapDistances[index] = orbitTrapDistance;
+        setOrbitTrapDistance(index, orbitTrapDistance);
     }
 
     public void copyPixelFrom(
@@ -118,7 +156,7 @@ public class FractalData implements SamplePlane {
         iterations[targetIndex] = sourceData.iterations[sourceIndex];
         smoothIterations[targetIndex] = sourceData.smoothIterations[sourceIndex];
         escaped[targetIndex] = sourceData.escaped[sourceIndex];
-        orbitTrapDistances[targetIndex] = sourceData.orbitTrapDistances[sourceIndex];
+        copyOrbitTrapDistances(sourceData, sourceIndex, targetIndex, 1);
     }
 
     /** Copies one horizontal sample span to another row. */
@@ -154,7 +192,7 @@ public class FractalData implements SamplePlane {
         System.arraycopy(sourceData.iterations, sourceIndex, iterations, targetIndex, length);
         System.arraycopy(sourceData.smoothIterations, sourceIndex, smoothIterations, targetIndex, length);
         System.arraycopy(sourceData.escaped, sourceIndex, escaped, targetIndex, length);
-        System.arraycopy(sourceData.orbitTrapDistances, sourceIndex, orbitTrapDistances, targetIndex, length);
+        copyOrbitTrapDistances(sourceData, sourceIndex, targetIndex, length);
     }
 
     /** Copies a rectangular sample region without reallocating either frame. */
@@ -235,13 +273,7 @@ public class FractalData implements SamplePlane {
                     regionWidth
             );
 
-            System.arraycopy(
-                    sourceData.orbitTrapDistances,
-                    sourceIndex,
-                    orbitTrapDistances,
-                    targetIndex,
-                    regionWidth
-            );
+            copyOrbitTrapDistances(sourceData, sourceIndex, targetIndex, regionWidth);
         }
     }
 }

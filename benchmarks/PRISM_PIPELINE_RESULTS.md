@@ -213,6 +213,38 @@ thread, so preparing it off the FX thread is a candidate change that would
 need its own measurement, including cancellation, generation and memory
 checks.
 
+### Frame preparation change (diagnostic, 2026-10-28)
+
+`FractalData` now allocates the orbit-trap distance plane only when the
+frame's formula has an orbit trap or is a custom formula without that
+guarantee; built-in presets without a trap report `NaN` without the
+full-size `NaN`-filled array. At 3024x1964 this removes about 47 MB of
+allocation and the `Arrays.fill` from every fresh frame prepared on the FX
+thread. A first variant that allocated the plane lazily on the first finite
+distance made FX-thread coloring about 16 ms slower per frame because every
+pixel read checked a volatile field; it was replaced by the construction-time
+decision recorded here.
+
+Six alternating JVMs per variant with the campaign launch commands and
+default heap, comparing the frozen `f8895b6` build with the changed working
+tree (18 samples per group; diagnostic, not a protocol verdict):
+
+| Mode | Metric | Old ES2 | Old Metal | New ES2 | New Metal |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Refined | frame planning, median ms | 2.76 | 14.61 | 0.66 | 1.26 |
+| Refined | first visible publish, median ms | 4.23 | 17.38 | 2.13 | 2.48 |
+| Refined | first visible publish, p90 ms | 28.01 | 28.15 | 11.41 | 12.38 |
+| Fast | first visible publish, median ms | 4.64 | 11.22 | 3.15 | 5.96 |
+| Refined | full publish, median ms | 56.26 | 70.73 | 50.00 | 51.92 |
+
+FX-thread coloring work is unchanged (about 24–25 ms for the overview,
+1.5 ms for the pan step), and ARGB hashes match across all four variants in
+all 16 measured groups. The heap-dependent slow mode of the failing group is
+much rarer, but frame planning still varies with heap state because the
+remaining sample arrays are allocated per frame, and Fast first visible
+publish remains slower under Metal in this small run. Whether the timing gate
+now passes needs a new predeclared paired campaign; the `fail` above stands.
+
 ## Limits
 
 - One Mac model; results do not transfer to Intel Macs or other GPUs, and
