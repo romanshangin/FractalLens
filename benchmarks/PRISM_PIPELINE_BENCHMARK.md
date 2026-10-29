@@ -149,8 +149,11 @@ any inconclusive group leaves the combined decision `inconclusive`: stop this
 budget and request an explicit owner decision on the latency trade-off before
 activation. A timing pass still leaves the other migration gates open.
 
-Status: predeclared, not executed. No new timing conclusion or default-pipeline
-change follows from these policies. Spaces presentation, fixture-specific JFR
+Status: the publication campaign ran in full on 2026-10-28 and ended `fail`
+(one failing group), which rejects default activation under this gate; the
+screen-latency campaign has not been executed. See
+[the confirmation results](PRISM_PIPELINE_RESULTS.md#confirmation-campaign-p17-2026-10-28).
+The default pipeline is unchanged. Spaces presentation, fixture-specific JFR
 attribution, long-session memory and the remaining migration checklist are
 separate open requirements.
 

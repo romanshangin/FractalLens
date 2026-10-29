@@ -202,10 +202,18 @@ delivery foundation should be completed first.
   - [ ] Resolve the 37 inconclusive groups, or record an explicit owner
     decision to accept the latency trade-off for the reliability fix.
     The [predeclared confirmation campaign](benchmarks/PRISM_PIPELINE_BENCHMARK.md#predeclared-confirmation-campaign-p17)
-    retains all 103 groups with larger independent process-pair budgets;
-    execution and the resulting decision remain pending.
-  - [ ] Pass the [Spaces presentation validation](benchmarks/SPACE_SWITCH_VALIDATION.md)
-    on both pipelines.
+    retains all 103 groups with larger independent process-pair budgets.
+    The publication campaign ended `fail` (19 of 28 pass, 8 inconclusive,
+    3024x1964 Refined first visible publish fails), which rejects default
+    activation under this gate; the screen-latency campaign was not executed.
+    See [the confirmation results](benchmarks/PRISM_PIPELINE_RESULTS.md#confirmation-campaign-p17-2026-10-28).
+  - [x] Run the [Spaces presentation validation](benchmarks/SPACE_SWITCH_VALIDATION.md)
+    on both pipelines. Result on one Mac with `-Dprism.order`: ES2 reproduced
+    the stale mixed frame in all 8 controlled window trials with a verdict and
+    in the Mission Control thumbnail and partial swipe; Metal showed the
+    complete frame in all 9 window trials with a verdict and in both. The final
+    startup-selection candidate must repeat it; see
+    [the result and limits](benchmarks/SPACE_SWITCH_VALIDATION.md#result-2026-10-28).
   - [ ] Implement pipeline selection in a startup class that runs before the
     JavaFX toolkit, with the `mtl,es2,sw` chain, macOS only and the user
     override preserved; then pass the remaining checklist sections (visible,

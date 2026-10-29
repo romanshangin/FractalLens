@@ -89,6 +89,130 @@ timing, so these numbers explain the timing results but are not verdicts.
 Pulse counts were similar (4887 ES2, 5069 Metal). FX-thread phases (CSS,
 layout, state copy, bounds update) are equal within a few percent.
 
+## Confirmation campaign (P1.7, 2026-10-28)
+
+Run with the [predeclared confirmation campaign](PRISM_PIPELINE_BENCHMARK.md#predeclared-confirmation-campaign-p17)
+on the same Mac, macOS 27.2, Java 26.0.1 and JavaFX 26.0.2. One frozen build of
+revision `f8895b6` (build identity `c5a00176…aec5`) ran under both pipelines;
+every A log confirmed `ES2Pipeline` and every B log `MTLPipeline`. All 240
+before/after observations recorded AC power and nominal thermal state. The
+runner was prefixed with `caffeinate -d -i -u --`.
+
+An earlier attempt of the publication campaign was stopped by its process
+timeout after 56 of 60 pairs. It is incomplete, kept privately as invalid
+evidence and is not part of this result; the campaign below was rerun in full
+in a new output directory.
+
+### Publication pairs
+
+Policy [`prism-pipeline-fx-confirm.json`](policies/prism-pipeline-fx-confirm.json),
+60 AB/BA process pairs, 180 matched samples per group, no missing pairs.
+Verdict: `fail`, 19 of 28 groups pass, 8 are inconclusive and 1 fails.
+
+| Window | Fixture | Mode | Metric | ES2 ms | Metal ms | Ratio | 95% CI | Verdict |
+| --- | --- | --- | --- | ---: | ---: | ---: | --- | --- |
+| 3024x1964 | overview | Refined | first visible publish | 6.61 | 11.25 | 1.341 | 1.107–1.720 | fail |
+| 1512x982 | aa-regular | Refined | first AA tile | 1.92 | 2.06 | 1.124 | 1.047–1.464 | inconclusive |
+| 3024x1964 | overview | Fast | first visible publish | 9.68 | 10.19 | 1.053 | 1.018–1.250 | inconclusive |
+| 3024x1964 | overview | Fast | full publish | 58.30 | 60.06 | 1.028 | 1.006–1.060 | inconclusive |
+| 3024x1964 | overview | Fast | full post-layout | 58.44 | 60.11 | 1.027 | 1.006–1.060 | inconclusive |
+| 3024x1964 | overview | Refined | full publish | 59.51 | 63.38 | 1.020 | 0.983–1.055 | inconclusive |
+| 3024x1964 | overview | Refined | full post-layout | 61.07 | 63.53 | 1.022 | 0.982–1.059 | inconclusive |
+| 1512x982 | pan-25 | Fast | first post-layout | 9.48 | 9.91 | 1.052 | 1.025–1.063 | inconclusive |
+| 1512x982 | pan-25 | Refined | first post-layout | 9.29 | 9.54 | 1.037 | 1.017–1.050 | inconclusive |
+| 3024x1964 | pan-25 | Fast | full post-layout | 50.84 | 45.91 | 0.957 | 0.931–0.985 | pass |
+| 3024x1964 | pan-25 | Refined | full post-layout | 50.85 | 45.37 | 0.957 | 0.921–0.979 | pass |
+
+The table lists all 9 non-passing groups and the two largest improvements; the
+other 17 groups pass. The failing group reproduces the first campaign's
+3024x1964 Refined outlier with a larger budget: per-process median ratios range
+from 0.15 to 9.76, above 1 in 36 and above 2 in 19 of 60 process pairs, so the slow Metal
+first visible publish is frequent rather than an occasional pair. The 1512x982
+pan step remains about 0.3–0.4 ms slower under Metal. These metrics end on the
+FX thread and do not show where the delay originates.
+
+### Screen latency pairs
+
+Not executed. One JVM of
+[`prism-pipeline-latency-confirm.json`](policies/prism-pipeline-latency-confirm.json)
+took 366 s, so the 30-pair campaign needs about 6 hours, above the 3-hour
+process timeout set for this run. The attempt was stopped during its second JVM,
+before any pair completed, and is kept privately as invalid evidence.
+
+### Decision
+
+The publication campaign has a failing group. Under the predeclared rule this
+rejects default Metal activation under the performance gate, independent of the
+screen-latency result. This is a timing result for one Mac; it does not change
+the Space-switching motivation, and any activation despite it would need a new
+owner decision that records the trade-off without relabeling the result.
+
+### Failing group diagnosis (diagnostic)
+
+Run after the campaign on the same Mac and frozen build, with the campaign's
+launch commands plus diagnostic JVM flags. These runs explain the failing
+group; they are not verdicts and do not change the `fail` label.
+
+Campaign samples (180 per pipeline, 3024x1964 overview, Refined) locate the
+delay before the backend starts:
+
+| Interval | ES2 median ms | Metal median ms |
+| --- | ---: | ---: |
+| FX dispatch | 0.02 | 0.02 |
+| Frame planning (`plan_ms`) | 4.71 | 8.65 |
+| First backend region | 6.42 | 11.16 |
+| First visible publish | 6.61 | 11.25 |
+| Backend render | 39.10 | 38.53 |
+
+First backend region to first visible publish takes about 0.1–0.2 ms under
+both pipelines. For this fixture `plan_ms` covers only the allocation of a
+fresh `RenderFrame` on the FX thread; no Prism code runs in it. It is bimodal,
+about 2 ms or 7–16 ms, and the slow mode follows heap occupancy before the
+sample: below about 400 MiB it stays near 1.9 ms under both pipelines, above
+800 MiB it is 8.5 ms (ES2) and 11.4 ms (Metal). Heap occupancy before the
+sample is higher under Metal (median 980 → 1226 MiB in Refined, 794 → 1021 MiB
+in Fast). Slow allocations occur mostly in samples without a GC: in ES2 Fast,
+111 of 141 samples without a GC and 6 of 39 with a GC are slower than 4 ms.
+
+Six JFR JVMs per pipeline (`settings=profile`, alternating order) show the same
+Java allocation profile under both pipelines (`int[]` about 34%, `double[]`
+24%, `FractalSample` 24–26%, the same per-thread split) and similar GC pause
+medians (about 0.9 ms for humongous-allocation pauses). Metal JVMs had fewer
+humongous-allocation collections (504 against 612). On the FX thread, 45 ES2
+and 44 Metal execution samples fall inside `RenderFrame.create`. Of these, 43
+ES2 and 42 Metal samples are in `Arrays.fill` called from the `FractalData`
+constructor, which fills the full-size orbit-trap distance array with `NaN`;
+the remaining two per pipeline are in `RenderGrid` construction, including
+`BigDecimal` operations. Sampling cannot separate the
+fill itself from page faults on newly committed memory that the fill touches.
+
+The campaign JVMs use the default initial heap, 8 MiB, which grows to its
+4 GiB limit in 9–25 capacity steps per JVM, with no systematic difference
+between pipelines. Two controls with six JVMs per pipeline and 18 samples per
+group separate the fixed heap size from pre-touching:
+
+| Mode | Metric | `-Xms4g` ES2 / Metal ms | `-Xms4g -XX:+AlwaysPreTouch` ES2 / Metal ms |
+| --- | --- | --- | --- |
+| Refined | frame planning | 2.41 / 2.16 | 2.11 / 2.20 |
+| Refined | first visible publish | 3.87 / 3.57 | 3.58 / 3.54 |
+| Fast | frame planning | 7.20 / 5.94 | 5.29 / 5.29 |
+| Fast | first visible publish | 10.11 / 7.72 | 7.83 / 7.75 |
+
+A fixed heap size alone removes the Refined difference and its slow tail;
+pre-touching adds no measurable Refined change. Fast frame planning stays at
+5–7 ms with wide spread in both controls and does not favor ES2.
+
+The failing group is therefore localized to frame preparation on the FX
+thread, the allocation and `NaN` fill of a fresh full-size frame, and depends
+on the JVM heap-sizing state rather than on the Prism publication path. The
+mechanism is not established: first-touch cost of memory committed during heap
+growth is consistent with these runs but remains a hypothesis, as does the
+reason the heap state differs under Metal. The controls are diagnostics, not a
+protocol change. The product path also prepares a fresh frame on the FX
+thread, so preparing it off the FX thread is a candidate change that would
+need its own measurement, including cancellation, generation and memory
+checks.
+
 ## Limits
 
 - One Mac model; results do not transfer to Intel Macs or other GPUs, and
