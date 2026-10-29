@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import os
+import plistlib
 import struct
 import subprocess
 import sys
@@ -51,6 +52,91 @@ class PackageRuntimeContractTest(unittest.TestCase):
         options = package_runtime.jpackage_common(
             "jpackage", "1.0", "modules", "input", "icon")
         self.assertEqual(expected, options[options.index("--module") + 1])
+
+    def jdk_without_jmods(self):
+        jdk = (self.root / "JDK with spaces").resolve()
+        (jdk / "lib").mkdir(parents=True, exist_ok=True)
+        (jdk / "lib/modules").touch()
+        self.assertFalse((jdk / "jmods").exists())
+        return jdk
+
+    def template_extractor(self, jdk, template):
+        def extract(command):
+            resource = "jdk.jpackage/jdk/jpackage/internal/resources/Info-lite.plist.template"
+            self.assertEqual([jdk / "bin/jimage", "extract", "--include", f"glob:/{resource}"],
+                             command[:4])
+            self.assertEqual("--dir", command[4])
+            self.assertEqual(jdk / "lib/modules", command[6])
+            target = Path(command[5]) / resource
+            target.parent.mkdir(parents=True)
+            target.write_text(template, encoding="utf-8")
+        return extract
+
+    def test_macos_resource_uses_runtime_without_jmods_and_preserves_template(self):
+        template = ("<plist version='1.0'><dict>"
+                    "<key>LSMinimumSystemVersion</key><string>10.11</string>"
+                    "<key>CFBundleName</key><string>DEPLOY_BUNDLE_NAME</string>"
+                    "</dict></plist>")
+        jdk = self.jdk_without_jmods()
+        with mock.patch.object(package_runtime, "run",
+                               side_effect=self.template_extractor(jdk, template)) as extract:
+            resources = package_runtime.stage_macos_resources(
+                jdk / "bin/jpackage", self.root / "resources")
+        extract.assert_called_once()
+        self.assertFalse(Path(extract.call_args.args[0][5]).exists())
+        actual = (resources / "Info.plist").read_text(encoding="utf-8")
+        self.assertEqual(template.replace("10.11", "11.0"), actual)
+        self.assertEqual("11.0", plistlib.loads(actual.encode())["LSMinimumSystemVersion"])
+
+    def test_macos_resource_rejects_missing_or_duplicate_deployment_keys(self):
+        jdk = self.jdk_without_jmods()
+        key = "<key>LSMinimumSystemVersion</key><string>10.11</string>"
+        for contents in ("<dict/>", key + key):
+            with self.subTest(contents=contents):
+                with mock.patch.object(package_runtime, "run",
+                                       side_effect=self.template_extractor(jdk, contents)):
+                    with self.assertRaisesRegex(RuntimeError, "exactly one"):
+                        package_runtime.stage_macos_resources(
+                            jdk / "bin/jpackage", self.root / "resources")
+                self.assertFalse((self.root / "resources/Info.plist").exists())
+
+    def test_macos_resource_never_lowers_a_newer_jdk_requirement(self):
+        jdk = self.jdk_without_jmods()
+        for version in ("12.0", "14.0", "unknown"):
+            with self.subTest(version=version):
+                template = f"<key>LSMinimumSystemVersion</key><string>{version}</string>"
+                with mock.patch.object(package_runtime, "run",
+                                       side_effect=self.template_extractor(jdk, template)):
+                    with self.assertRaisesRegex(RuntimeError, "reassessment"):
+                        package_runtime.stage_macos_resources(
+                            jdk / "bin/jpackage", self.root / "resources")
+                self.assertFalse((self.root / "resources/Info.plist").exists())
+
+    def test_macos_resource_extraction_failure_does_not_write_an_override(self):
+        jdk = self.jdk_without_jmods()
+        failure = subprocess.CalledProcessError(1, "jimage")
+        with mock.patch.object(package_runtime, "run", side_effect=failure):
+            with self.assertRaises(subprocess.CalledProcessError):
+                package_runtime.stage_macos_resources(
+                    jdk / "bin/jpackage", self.root / "resources")
+        self.assertFalse((self.root / "resources/Info.plist").exists())
+
+    def test_macos_image_rejects_understated_or_missing_floor_before_launch(self):
+        image = self.root / "FractalLens.app"
+        executable = image / "Contents/MacOS/FractalLens"
+        executable.parent.mkdir(parents=True)
+        executable.touch()
+        for version in (None, "10.11", "12.0"):
+            with self.subTest(version=version):
+                info = {"CFBundleIdentifier": "com.shangin.fractal"}
+                if version is not None:
+                    info["LSMinimumSystemVersion"] = version
+                (image / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
+                with (mock.patch.object(package_runtime.sys, "platform", "darwin"),
+                      mock.patch.object(package_runtime, "run") as launch):
+                    with self.assertRaisesRegex(RuntimeError, "deployment floor"):
+                        package_runtime.validate_image(image, self.root / "report")
+                    launch.assert_not_called()
 
     def test_recognizes_versioned_and_platform_module_descriptors(self):
         regular = self.jar("regular.jar", {"module-info.class": b"module"})

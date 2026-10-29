@@ -81,9 +81,103 @@ notarization acceptance. See the
 
 Inspection of that package again found a binary floor of macOS 11.0 in all
 35 loose Mach-O files and all eight JavaFX graphics native libraries, with
-`LSMinimumSystemVersion=10.11` still in the generated plist. The metadata
-discrepancy and minimum-OS execution remain roadmap follow-up; no supported
-minimum is declared from these binary values.
+`LSMinimumSystemVersion=10.11` still in the generated plist. These historical
+values predate the metadata correction below. Minimum-OS execution remains
+roadmap follow-up; no supported minimum is declared from
+these binary values.
+
+### Deployment metadata correction (2026-10-29)
+
+The packaging script sets `LSMinimumSystemVersion=11.0` in the application
+image before jpackage signs it and creates the DMG. It reads the selected
+JDK's `Info-lite.plist.template` from its `lib/modules` runtime image using
+that same JDK's `bin/jimage extract`, changes only that key, and supplies the
+result as `Info.plist` through jpackage's documented
+[`--resource-dir` override](https://docs.oracle.com/en/java/javase/25/docs/specs/man/jpackage.html).
+This preserves the JDK's launcher, bundle, version and file-association
+placeholders instead of maintaining a separate copied plist. Only the single
+resource is extracted into a temporary directory, which is removed afterwards.
+The build does not require `jmods`: [Temurin 25 omits that directory by default](https://adoptium.net/news/2025/09/eclipse-temurin-25-available)
+with JEP 493 enabled. Missing or multiple deployment keys, an unrecognized version, or a JDK template requiring
+an OS newer than 11.0 fail preparation rather than silently lowering its
+requirement. Packaged-image validation rejects a missing or different value
+before launching the smoke test. Windows packaging does not use this override.
+
+`MACOS_DEPLOYMENT_FLOOR` is a packaging binary floor, not a promise of support
+on macOS 11.0. The inspected JDK, JavaFX graphics/Metal, jpackage launcher,
+LWJGL libraries and AppKit bridge have an 11.0 binary floor; native build
+scripts also target 11.0. The development launcher's source plist is unchanged
+and makes no minimum-version claim. Reassess this setting when changing JDK,
+JavaFX, native libraries, architecture or native build targets.
+
+The [Microsoft JDK support policy](https://learn.microsoft.com/en-us/java/openjdk/support)
+covers maintained operating systems receiving security fixes; it does not
+establish macOS 11 support for this application. CI uses Temurin, whose
+[supported-platform matrix](https://adoptium.net/supported-platforms/) must be
+checked separately from this local Microsoft JDK build. JavaFX's
+[release notes](https://docs.oracle.com/en/java/java-components/javafx/26/release-notes/)
+identify macOS architectures and JDK requirements, not a tested minimum OS for
+this bundle. Binary load commands alone also do not establish Metal device
+capability or runtime correctness. Execution on the eventual supported minimum
+OS, Intel Mac, clean-machine installation and Gatekeeper acceptance remain open.
+
+Initial developer self-validation on Apple M3 Pro, macOS 27.2 ARM64,
+Microsoft OpenJDK 25 (update 4, vendor patch 1) and JavaFX from `pom.xml`:
+
+- The initial 14 packaging contract tests and all three native launcher tests passed.
+- `./mvnw test` passed: 640 tests, zero failures/errors, 135 opt-in skips.
+  Skipped graphical/GPU checks are not accepted by this suite.
+- A fresh `package_runtime.py --version 1.0.0` build produced the DMG and
+  passed packaged JavaFX/AppKit/CPU smoke in the active desktop session.
+- Both the app image and the app inside the read-only mounted DMG passed
+  `codesign --verify --deep --strict`. The mounted app retained the expected
+  bundle identifier, executable and version, declared `11.0`, and passed a
+  separate packaged JavaFX/AppKit/CPU smoke.
+- Reinspection found `minos 11.0` in all 35 loose Mach-O binaries and all eight
+  JavaFX graphics natives from the staged dependency JAR. The metadata now
+  matches this inspected binary floor.
+
+These checks do not include a normal interactive launch/Dock-tooltip check,
+installation into Applications, a clean machine, macOS 11, another JDK vendor,
+Intel Mac or Windows execution. Raw build, test and inspection output stays
+private. P1.7's supported-minimum and platform gates remain open.
+
+### JDK runtime-image extraction follow-up (2026-10-29)
+
+Review identified that the initial template reader required
+`jmods/jdk.jpackage.jmod`, absent from Temurin 25 and therefore incompatible
+with the macOS Runtime Artifacts workflow. The reader now uses the selected
+JDK's `jimage` and `lib/modules` as described above. The contract fixture has
+no `jmods`, checks selection of the same JDK's tool and runtime image with a
+path containing spaces, preserves the remaining template, and checks temporary
+extraction cleanup. A separate regression propagates extraction failure without
+writing an override. The no-`jmods` regression fails with `FileNotFoundError`
+against the previous reader and passes with runtime-image extraction.
+
+Current developer self-validation used Eclipse Temurin 25.0.5+8, macOS 27.2
+ARM64 and the dependencies from `pom.xml` on Apple M3 Pro. The official
+Adoptium archive's SHA-256 was verified against its API metadata, and the
+extracted JDK had `lib/modules` and no `jmods` directory.
+
+- Direct template extraction using that JDK passed without mocked tools.
+- All 15 packaging contract tests and all three native launcher tests passed
+  with Temurin selected through `JAVA_HOME` and `PATH`.
+- `./mvnw test` passed: 640 tests, zero failures/errors, 135 opt-in skips.
+- A fresh `package_runtime.py --version 1.0.0` run built the app image and DMG,
+  including successful JavaFX/AppKit/CPU smoke.
+- The app image and the application in the read-only mounted DMG both declared
+  `11.0` and passed `codesign --verify --deep --strict`; the mounted application
+  also passed a separate JavaFX/AppKit/CPU smoke. All 35 loose Mach-O binaries
+  in the Temurin-based app image again reported `minos 11.0`.
+
+Packaging emitted `Warning: No JDK Modules found`; it was retained in the
+private log, and the build and packaged-runtime checks above completed
+successfully. The host's `hdiutil` also emitted an attach-command deprecation
+warning; read-only mounting and subsequent `diskutil eject` succeeded.
+The GitHub workflow itself was not dispatched. This local Temurin acceptance
+does not establish Windows/Intel Mac execution, clean-machine installation,
+interactive Dock identity, minimum-OS runtime support or vendor support on
+macOS 11. The original Microsoft-JDK results above retain their original scope.
 
 ## Reproducible build command
 
