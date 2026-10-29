@@ -57,7 +57,7 @@ platform gates remain documented in the historical reports.
 
 ## Retained file inventory
 
-The following inventory lists the 118 selected evidence/protocol files, excluding
+The following inventory lists the 120 selected evidence/protocol files, excluding
 this index. No raw log file is included.
 
 - [ALLOCATION_PROFILE_9_4.md](ALLOCATION_PROFILE_9_4.md)
@@ -177,5 +177,7 @@ this index. No raw log file is included.
 - [policies/p1-5-retained-vs-pre-fx-base-confirm.json](policies/p1-5-retained-vs-pre-fx-base-confirm.json)
 - [policies/p1-5-retained-vs-pre-fx.json](policies/p1-5-retained-vs-pre-fx.json)
 - [policies/p1-5-retained-vs-pre-headless.json](policies/p1-5-retained-vs-pre-headless.json)
+- [policies/prism-pipeline-fx-confirm.json](policies/prism-pipeline-fx-confirm.json)
 - [policies/prism-pipeline-fx.json](policies/prism-pipeline-fx.json)
+- [policies/prism-pipeline-latency-confirm.json](policies/prism-pipeline-latency-confirm.json)
 - [policies/prism-pipeline-latency.json](policies/prism-pipeline-latency.json)
