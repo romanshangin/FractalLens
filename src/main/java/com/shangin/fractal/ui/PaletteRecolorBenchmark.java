@@ -1,5 +1,6 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.FractalLauncher;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.formula.FractalSample;
@@ -33,7 +34,7 @@ import java.util.stream.IntStream;
  * deterministic sparse AA mask are prepared outside the palette measurements.
  * Every frame crosses the same SurfaceBuffer publication boundary as the app.
  */
-public final class PaletteRecolorBenchmark extends Application {
+public final class PaletteRecolorBenchmark {
     private static volatile Throwable failure;
     private final AtomicReference<Pending> pending = new AtomicReference<>();
     private Thread worker;
@@ -45,12 +46,11 @@ public final class PaletteRecolorBenchmark extends Application {
     private final List<Row> rows = new ArrayList<>();
 
     public static void main(String[] args) {
-        launch(args);
+        FractalLauncher.launch(BenchmarkApplication.class, args);
         if (failure != null) throw new IllegalStateException("Palette benchmark failed", failure);
     }
 
-    @Override
-    public void start(Stage stage) {
+    private void start(Stage stage) {
         this.stage = stage;
         view = new ImageView();
         view.setPreserveRatio(true);
@@ -242,6 +242,7 @@ public final class PaletteRecolorBenchmark extends Application {
         Files.createDirectories(parent);
         try (BufferedWriter writer = Files.newBufferedWriter(output, StandardCharsets.UTF_8)) {
             writer.write("# " + gpu + "\n");
+            writer.write("# requestedPipeline=" + System.getProperty("prism.order", "default") + "\n");
             writer.write("# outputScale=" + outputScale + "; warmup=" + Integer.getInteger("fractal.benchmark.warmup", 12)
                     + "; samples=" + Integer.getInteger("fractal.benchmark.samples", 40) + "\n");
             writer.write("fixture,backend,phase,iteration,offset,prepare_ns,upload_ns,dispatch_ns,readback_ns,total_ns,fx_queue_ns,publish_ns,to_buffer_ns,next_pulse_ns,uploaded_bytes\n");
@@ -256,8 +257,7 @@ public final class PaletteRecolorBenchmark extends Application {
         }
     }
 
-    @Override
-    public void stop() {
+    private void stop() {
         if (pulseTimer != null) pulseTimer.stop();
         if (worker != null && worker.isAlive()) worker.interrupt();
     }
@@ -267,4 +267,19 @@ public final class PaletteRecolorBenchmark extends Application {
     private record Publication(PaletteRecolorTiming timing, long nextPulseNanos) {}
     private record Row(String fixture, String backend, String phase, int iteration, double offset,
                        PaletteRecolorTiming timing, long nextPulseNanos) {}
+
+    /** JavaFX lifecycle adapter; the outer main class must remain plain Java. */
+    public static final class BenchmarkApplication extends Application {
+        private final PaletteRecolorBenchmark benchmark = new PaletteRecolorBenchmark();
+
+        @Override
+        public void start(Stage stage) {
+            benchmark.start(stage);
+        }
+
+        @Override
+        public void stop() {
+            benchmark.stop();
+        }
+    }
 }

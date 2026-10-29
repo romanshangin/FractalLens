@@ -23,10 +23,13 @@ class FractalLauncherFxTest {
     void entryPointPreservesPipelineOptionsAndForwardsApplicationArguments() throws Exception {
         Path report = directory.resolve("smoke report.properties");
         String requestedPipeline = System.getProperty("prism.order");
+        String expectedPipeline = requestedPipeline == null
+                && System.getProperty("os.name", "").startsWith("Mac")
+                ? "mtl,es2,sw" : requestedPipeline;
         var completed = new CompletableFuture<Void>();
         Thread launcher = new Thread(() -> {
             try {
-                FractalLauncher.main(new String[]{"--package-smoke-test=" + report});
+                launch(new String[]{"--package-smoke-test=" + report});
                 completed.complete(null);
             } catch (Throwable failure) {
                 completed.completeExceptionally(failure);
@@ -42,8 +45,8 @@ class FractalLauncherFxTest {
         }
         assertFalse(launcher.isAlive(), "The production launcher must finish its shutdown");
 
-        assertEquals(requestedPipeline, System.getProperty("prism.order"),
-                "Bootstrap must preserve both user overrides and the unset default");
+        assertEquals(expectedPipeline, System.getProperty("prism.order"),
+                "Bootstrap must select the macOS default and preserve user overrides");
         var checks = new Properties();
         try (var reader = Files.newBufferedReader(report)) {
             checks.load(reader);
@@ -52,5 +55,9 @@ class FractalLauncherFxTest {
         assertEquals("available", checks.getProperty("javafx"));
         assertEquals("complete", checks.getProperty("cpu_render"));
         assertEquals("available", checks.getProperty("cpu_fallback"));
+    }
+
+    void launch(String[] args) {
+        FractalLauncher.main(args);
     }
 }

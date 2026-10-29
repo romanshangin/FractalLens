@@ -23,7 +23,7 @@ class FractalApplicationFxTest {
     @TempDir
     Path directory;
 
-    public static final class StartupApplication extends FractalApplication {
+    public static final class StartupApplication extends FractalFxApplication {
         static final CompletableFuture<Stage> started = new CompletableFuture<>();
 
         @Override

@@ -25,10 +25,17 @@ revision for every copied third-party text.
 The packaged module entry point is `com.shangin.fractal.app.FractalLauncher`,
 the same plain-Java bootstrap used by Maven's `javafx:run` and its macOS
 development launcher. It forwards arguments to
-`Application.launch(FractalApplication.class, args)` without setting Prism
-properties. The application still uses JavaFX's defaults and preserves explicit
-`prism.order` JVM options; automatic Metal selection remains gated by
-[P1.7's checklist](../platform/METAL_MIGRATION_CHECKLIST.md).
+`Application.launch(FractalFxApplication.class, args)` after selecting
+`prism.order=mtl,es2,sw` on macOS when that property is absent. Explicit JVM
+values are preserved, including empty values; Windows and Linux retain their
+JavaFX defaults. Initialization failure can select ES2 or SW, but a native
+Metal crash cannot be recovered by this chain. Use `-Dprism.order=sw` for the
+known VirtualBuddy guest limitation. The owner accepted the measured latency
+trade-off on 2026-10-29; historical performance verdicts remain unchanged.
+Standard/clean-machine DMG installation, guest and minimum-OS acceptance of
+this activation candidate remain open in
+[P1.7's checklist](../platform/METAL_MIGRATION_CHECKLIST.md); a copied-DMG
+development-host check is recorded below.
 
 The following inspection belongs to the uncommitted bootstrap preparation based
 on revision `2139aa063e22c057b1cd0a7f94433c7fd31de1a7`, on macOS 27.2 ARM64.
@@ -58,6 +65,25 @@ bridge, CPU fallback and completed CPU render) and displayed a completed
 restored Mandelbrot scene after a normal launch on this host. This was an
 `--app-image-only` development-host check, not an installed-DMG, clean-machine,
 Dock-tooltip or Metal-migration acceptance check.
+
+On 2026-10-29, the Metal-first activation sources based on `ba05a0c` were built
+with Microsoft OpenJDK 25 (update 4, vendor patch 1) on macOS 27.2 ARM64 into a
+version 1.0.0 DMG.
+The DMG was mounted read-only and the app copied to a temporary installation
+directory, verifying all 132 regular-file hashes before detaching the image.
+The copied app initialized Metal and passed JavaFX, AppKit and CPU smoke with
+no development JDK on PATH and `JAVA_HOME` absent. Normal launch displayed the
+completed restored frame and native badge; AppKit context-menu/Escape and
+successful shutdown were checked. This does not establish a clean-machine or
+standard Applications installation, installed-app Dock tooltip, Gatekeeper or
+notarization acceptance. See the
+[specialized acceptance record](../platform/METAL_MIGRATION_CHECKLIST.md#local-specialized-acceptance-2026-10-29).
+
+Inspection of that package again found a binary floor of macOS 11.0 in all
+35 loose Mach-O files and all eight JavaFX graphics native libraries, with
+`LSMinimumSystemVersion=10.11` still in the generated plist. The metadata
+discrepancy and minimum-OS execution remain roadmap follow-up; no supported
+minimum is declared from these binary values.
 
 ## Reproducible build command
 

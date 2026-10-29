@@ -1,5 +1,6 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.FractalLauncher;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.scene.InteractiveRenderMode;
@@ -32,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * readback as an explicitly labelled proxy for presentation (not panel scanout).
  * Input is synthetic JavaFX dispatch: hardware/OS input latency is excluded.
  */
-public final class InteractionLatencyBenchmark extends Application {
+public final class InteractionLatencyBenchmark {
     private static final List<String> STAGES = List.of("preview_publish", "base_publish", "aa_publish", "complete");
     private final Rectangle[][] markers = new Rectangle[4][8];
     private final Map<Integer, InteractionLatency.Event> markerEvents = new HashMap<>();
@@ -56,11 +57,11 @@ public final class InteractionLatencyBenchmark extends Application {
     private static volatile Throwable failure;
 
     public static void main(String[] args) {
-        launch(args);
+        FractalLauncher.launch(BenchmarkApplication.class, args);
         if (failure != null) throw new IllegalStateException("Latency benchmark failed", failure);
     }
 
-    @Override public void start(Stage stage) {
+    private void start(Stage stage) {
         view = new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE);
         strip = new HBox();
         strip.getChildren().add(new Rectangle(16, 16, Color.MAGENTA));
@@ -309,5 +310,15 @@ public final class InteractionLatencyBenchmark extends Application {
             catch (Throwable error) { result.completeExceptionally(error); }
         });
         return result.get(60, TimeUnit.SECONDS);
+    }
+
+    /** JavaFX lifecycle adapter; the outer main class must remain plain Java. */
+    public static final class BenchmarkApplication extends Application {
+        private final InteractionLatencyBenchmark benchmark = new InteractionLatencyBenchmark();
+
+        @Override
+        public void start(Stage stage) {
+            benchmark.start(stage);
+        }
     }
 }

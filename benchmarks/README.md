@@ -31,6 +31,38 @@ final gates; select a policy intentionally rather than treating every policy
 as an accepted optimization. Local raw output is needed for analysis but is
 not automatically eligible for publication.
 
+## Graphics startup for new runs
+
+The `palette-benchmark`, `interaction-latency` and `gpu-render-benchmark`
+profiles use plain-Java main classes that call the same pre-toolkit bootstrap
+as production. On macOS, an absent `prism.order` now requests `mtl,es2,sw`;
+explicit values, including empty ones, remain unchanged. Other platforms keep
+the JavaFX default. The cold-startup driver also uses this bootstrap. The
+resident GPU benchmark is offscreen and does not initialize JavaFX. The current
+cold-startup probe subclasses `FractalFxApplication`; its shared compiled probe
+requires both frozen builds to contain that lifecycle class. Comparing across
+the older `FractalApplication` lifecycle split requires a version-compatible
+probe and a separately declared campaign, rather than reusing current bytecode
+against an older build.
+
+For new cold-startup campaigns, `definition.json` records every
+`ColdStartupBenchmark.class` / `ColdStartupBenchmark$*.class` file in
+`probe_files`, with paths relative to the probe directory and individual SHA-256
+hashes. `probe_hash_scope=class-family-v1` identifies this scheme;
+`probe_sha256` is the SHA-256 of the UTF-8, key-sorted JSON file map
+(`json.dumps(probe_files, sort_keys=True)`). The runner checks the entire map
+after the campaign, rejecting changed bytes and added or deleted probe classes
+before writing a summary. Historical definitions retain their original
+single-class hash semantics and are not relabeled or rehashed.
+
+For comparisons with historical ES2 runs, set `-Dprism.order=es2` explicitly.
+For paired Prism measurements, continue selecting each pipeline explicitly;
+record `prism.verbose` output to establish the actual initialized pipeline.
+A requested order or CSV metadata alone does not establish which fallback ran.
+Standalone tests and specialized probes that start JavaFX directly still
+require explicit selection. Existing measurements have not been rerun or
+reclassified by this startup change. See [startup policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism-selection).
+
 ## Final decisions and selected campaigns
 
 | Decision | Report | Selected machine-readable evidence |

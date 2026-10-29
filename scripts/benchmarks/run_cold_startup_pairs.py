@@ -2,6 +2,7 @@
 """Measure fresh-process launch to Stage.show and first layout pulse for frozen builds."""
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,13 @@ MARKERS = {
     "stage_shown_ms": "FRACTALLENS_STAGE_SHOWN_EPOCH_MS=",
     "first_layout_pulse_ms": "FRACTALLENS_FIRST_LAYOUT_PULSE_EPOCH_MS=",
 }
+
+
+def probe_snapshot(directory):
+    candidates = [directory / PROBE_CLASS,
+                  *(directory / PROBE_CLASS.parent).glob(PROBE_CLASS.stem + "$*.class")]
+    return {path.relative_to(directory).as_posix(): sha(path)
+            for path in sorted(candidates) if path.is_file()}
 
 
 def power_observation():
@@ -70,12 +78,15 @@ def main():
     probe_file = probe / PROBE_CLASS
     if not probe_file.is_file():
         raise ValueError(f"Missing shared probe class: {probe_file}")
+    probe_files = probe_snapshot(probe)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     (output / ".gitignore").write_text("javafx-cache-*/\nhome-*/\n")
     (output / "tmp").mkdir()
     definition = {"builds": {label: manifest["identity"] for label, manifest in manifests.items()},
-                  "java_sha256": sha(java), "probe_sha256": sha(probe_file),
+                  "java_sha256": sha(java),
+                  "probe_hash_scope": "class-family-v1", "probe_files": probe_files,
+                  "probe_sha256": hashlib.sha256(json.dumps(probe_files, sort_keys=True).encode()).hexdigest(),
                   "runner_sha256": sha(Path(__file__)),
                   "probe_class": str(PROBE_CLASS), "pairs": args.pairs,
                   "max_ratio": args.max_ratio, "confidence": "5000 seeded paired bootstrap medians",
@@ -125,7 +136,7 @@ def main():
             (output / (name + ".json")).write_text(json.dumps(row, indent=2) + "\n")
     for build in builds.values():
         verify_build(build)
-    if sha(probe_file) != definition["probe_sha256"]:
+    if probe_snapshot(probe) != definition["probe_files"]:
         raise ValueError("Probe changed during campaign")
     if sha(Path(__file__)) != definition["runner_sha256"]:
         raise ValueError("Runner changed during campaign")
