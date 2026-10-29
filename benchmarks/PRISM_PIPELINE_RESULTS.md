@@ -270,9 +270,10 @@ Verdict: `fail`, 25 of 28 groups pass, 2 are inconclusive and 1 fails.
 The table lists all 3 non-passing groups and the two lowest ratios. The group
 that failed the confirmation campaign is now inconclusive, with both medians
 about 2.3 ms instead of 6.6 and 11.3 ms. Of the eight groups that were
-inconclusive there, six now pass (the 1512x982 first AA tile, both 1512x982
-pan first post-layout steps and all four 3024x1964 overview full-publication
-groups), and 3024x1964 Fast first visible publish stays inconclusive. A different group now fails: 1512x982
+inconclusive there, seven now pass (the 1512x982 first AA tile, both
+1512x982 pan first post-layout steps and all four 3024x1964 overview
+full-publication groups), and 3024x1964 Fast first visible publish stays
+inconclusive. A different group now fails: 1512x982
 Refined first visible publish, a difference of about 0.1 ms on a sub-1.5 ms
 metric, which passed in the confirmation campaign.
 
@@ -302,9 +303,12 @@ publish:
 | First backend region to first visible publish | 0.111 | 0.142 |
 | First visible publish | 1.031 | 1.130 |
 
-The difference sits mainly in the frame-planning tail. ES2 recorded a GC
-during 113 samples with unchanged planning (median 0.227 ms); Metal recorded
-a GC during 87 samples, and their planning median rose to 0.825 ms. Planning
+The difference sits mainly in the frame-planning tail. The per-sample GC
+counter covers the whole measured operation, including the pixel snapshot
+taken after the timed interval, so it shows that a collection happened during
+the sample, not when. ES2 recorded a GC during 113 samples with unchanged
+planning (median 0.227 ms); Metal recorded a GC during 87 samples, and their
+planning median rose to 0.825 ms. Planning
 exceeded 0.5 ms in 59 Metal and 7 ES2 samples. Without those slow samples,
 first visible publish is 1.027 ms (ES2) and 1.057 ms (Metal). In the Fast
 overview group, which runs first, slow planning occurred in 116 ES2 and 119
@@ -312,9 +316,10 @@ Metal samples.
 
 Six alternating JVMs per pipeline on the frozen `2a19472` build, with the
 campaign launch commands plus GC logging and JFR recording of outside-TLAB
-allocations with stacks, matched each `G1 Humongous Allocation` pause to the
-allocation that completed right after it (213 of 360 ES2 and 164 of 298 Metal
-pauses matched):
+allocations with stacks, attributed each `G1 Humongous Allocation` pause to
+the outside-TLAB allocation that completed within 2 ms after it, a timing
+heuristic rather than a recorded cause (213 of 360 ES2 and 164 of 298 Metal
+pauses were attributed):
 
 | Allocation site (thread) | ES2 pauses | Metal pauses | Median pause, ES2 / Metal |
 | --- | ---: | ---: | --- |
@@ -323,9 +328,9 @@ pauses matched):
 | `SurfaceBuffer` (FX) | 19 | 29 | 0.82 / 0.86 ms |
 | Metal render-target texture (render thread) | — | 4 | — / 0.97 ms |
 
-Humongous-allocation pauses of about 0.85–0.9 ms are therefore triggered by
-the frame's sample arrays allocated on the FX thread under both pipelines,
-which matches the added planning time. Metal also allocates about 30 MB of
+Under both pipelines, the most frequent attributed site of these pauses of
+about 0.85–0.9 ms is the frame's sample arrays allocated on the FX thread,
+which is consistent with the added planning time. Metal also allocates about 30 MB of
 render-target arrays per JVM on the render thread, against about 10.7 GB
 allocated outside TLABs by the FX thread; this may shift when collections
 fall, but that and the link of individual pauses to individual samples of the
@@ -333,10 +338,13 @@ failing group remain inferred, because the benchmark records no timestamps.
 Benchmark verification snapshots also allocate large arrays on the FX thread
 outside the timed interval and shape the heap state for the next sample.
 
-The remaining failure is a GC pause during FX-thread frame allocation rather
-than slower Metal publication. Removing it would require not allocating
-full-size frame storage on the FX thread for each render, which is a larger
-change with its own cancellation, generation and memory checks.
+The most likely explanation of the remaining failure is therefore a GC pause
+during FX-thread frame allocation rather than slower Metal publication. It is
+not proven: confirming it would require correlating the timed interval of each
+sample with pause timestamps, which the benchmark does not record. If it holds,
+removing the failure would require not allocating full-size frame storage on
+the FX thread for each render, a larger change with its own cancellation,
+generation and memory checks.
 
 ## Limits
 
