@@ -117,6 +117,8 @@
   "benchmarks/policies/p1-5-retained-vs-pre-fx-base-confirm.json",
   "benchmarks/policies/p1-5-retained-vs-pre-fx.json",
   "benchmarks/policies/p1-5-retained-vs-pre-headless.json",
+  "benchmarks/policies/prism-pipeline-fx-confirm.json",
   "benchmarks/policies/prism-pipeline-fx.json",
+  "benchmarks/policies/prism-pipeline-latency-confirm.json",
   "benchmarks/policies/prism-pipeline-latency.json"
 ]

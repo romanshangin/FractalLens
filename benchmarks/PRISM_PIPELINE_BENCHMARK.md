@@ -101,6 +101,59 @@ dark appearance) and the portable
 suite, and it applies only to the measured Mac. Windows and Linux do not use
 Metal.
 
+## Predeclared confirmation campaign (P1.7)
+
+The first campaign left 37 of 103 groups inconclusive. The confirmation
+policies retain the entire original matrix, including the 66 passing groups;
+no group is selected by its observed median. The original policies and results
+remain historical evidence. The new policies change only `process_pairs`:
+
+| Part | Confirmation policy | JVM pairs | Samples per group | Warmups per case |
+| --- | --- | ---: | ---: | ---: |
+| Publication | [`prism-pipeline-fx-confirm.json`](policies/prism-pipeline-fx-confirm.json) | 60 | 180 | 3 |
+| Screen latency | [`prism-pipeline-latency-confirm.json`](policies/prism-pipeline-latency-confirm.json) | 30 | 150 | 2 |
+
+Publication has twice the original independent process pairs; screen latency
+has five times the original independent process pairs. Within-JVM sample
+counts remain 3 and 5 respectively; warmups apply to each fixture/mode or
+gesture/mode case, not to the JVM as a whole. More pairs improve precision but do not
+guarantee a decisive result. Both policies retain AB/BA alternation, all
+fixtures, sizes, modes, gestures, metrics, pipeline checks and the 1.05 limit.
+The latency campaign retains its separate JFR diagnostic pair; those diagnostics
+do not explain the 3024x1964 publication outliers because they use a different
+workload and window size.
+
+Freeze revision `f8895b6c136ebfdf9eb8aebc39622196d36d99e2` once for both
+pipelines, using the same JDK and dependencies for compilation and execution.
+Use the commands in **Running**, substituting that revision for `HEAD`, the
+confirmation policies for the original policies, and fresh output directories.
+Prefix **both** timing runners with `caffeinate -d -i -u --`. Run them sequentially
+in an active graphical macOS session with AC power, nominal thermal pressure,
+a configured thermal helper, and no competing builds, tests or desktop use.
+Keep the latency window at 1200x760 logical points and output scale 2, matching
+the first campaign. Inspect actual pipeline initialization and the recorded
+environment rather than assuming requested settings were applied.
+
+The budget is one complete campaign per confirmation policy. Do not inspect
+intermediate timing verdicts, extend the sample budget, relax a limit, drop a
+group, or pool historical samples into the confirmation result. If a campaign
+aborts because of visibility, permission, pipeline, power or thermal problems,
+retain it privately as invalid evidence, correct the environment, and restart
+the same policy in a new directory. Never resume with selected process pairs.
+
+Analyze each complete campaign independently using the existing analyzers and
+the hierarchical bootstrap decision rule above. Report every group, including
+missing pairs. A combined timing pass requires both campaigns to pass. Any
+failing group rejects default activation under this performance gate. Otherwise,
+any inconclusive group leaves the combined decision `inconclusive`: stop this
+budget and request an explicit owner decision on the latency trade-off before
+activation. A timing pass still leaves the other migration gates open.
+
+Status: predeclared, not executed. No new timing conclusion or default-pipeline
+change follows from these policies. Spaces presentation, fixture-specific JFR
+attribution, long-session memory and the remaining migration checklist are
+separate open requirements.
+
 ## Limits
 
 - Results apply to the measured Mac model, macOS, JDK and JavaFX version.

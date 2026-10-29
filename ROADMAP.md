@@ -201,6 +201,9 @@ delivery foundation should be completed first.
     [the results](benchmarks/PRISM_PIPELINE_RESULTS.md).
   - [ ] Resolve the 37 inconclusive groups, or record an explicit owner
     decision to accept the latency trade-off for the reliability fix.
+    The [predeclared confirmation campaign](benchmarks/PRISM_PIPELINE_BENCHMARK.md#predeclared-confirmation-campaign-p17)
+    retains all 103 groups with larger independent process-pair budgets;
+    execution and the resulting decision remain pending.
   - [ ] Pass the [Spaces presentation validation](benchmarks/SPACE_SWITCH_VALIDATION.md)
     on both pipelines.
   - [ ] Implement pipeline selection in a startup class that runs before the

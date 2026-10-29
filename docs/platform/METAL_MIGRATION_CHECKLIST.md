@@ -186,6 +186,8 @@ groups with no failure; 37 groups (10 publication, 27 screen latency) remain
   confirmation campaign in a new output directory. Selecting only groups with a
   median ratio above 1.00 is not sufficient: a favorable median can still have
   an interval that allows a substantial slowdown.
+  The [confirmation policies and stopping rule](../../benchmarks/PRISM_PIPELINE_BENCHMARK.md#predeclared-confirmation-campaign-p17)
+  are prepared; they retain all 103 groups. Preparation is not execution or a pass.
 - [ ] Explain the occasional slow Metal first visible publish at 3024x1964 with
   the JFR pulse phases of that fixture.
 - [ ] Compare memory (RSS and GPU memory) during a long session with large
