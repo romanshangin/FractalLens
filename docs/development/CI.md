@@ -102,8 +102,9 @@ private diagnostics in a disposable checkout. The image lacks ZIP utilities;
 the bootstrap uses JDK ZIP support to extract the wrapper's checksum-verified
 Maven distribution without changing its declared version or checksum.
 
-The [reviewed baseline](../../.qodana/README.md) preserves 116 accepted source contracts
-as sanitized locations and fingerprints. The zero-new-finding gate does not
+The [reviewed baseline](../../.qodana/README.md) preserves 51 accepted source contracts
+as sanitized locations and fingerprints after a reviewed module-model migration.
+The zero-new-finding gate does not
 claim a warning-free application. `scripts/quality/check_qodana.py` also rejects missing
 preparation evidence, unsuccessful analysis, unresolved dependency roots, sanity
 findings, and new or changed findings. Baseline updates require source review.

@@ -1,17 +1,57 @@
 # Qodana acceptance baseline
 
-The baseline contains 116 reviewed findings from source commit
-`2859b0c5155252f35618c8d1abd73b5da3216a93`, analyzed with Qodana Community
+The baseline contains 51 reviewed findings from source commit
+`90ee4bef187f985980c87f2f74dfc52468fa3039`, analyzed with Qodana Community
 2026.2.3 (QDJVM-262.11550). It is a sanitized derivative: source-relative
 locations and matching fingerprints are retained; machine identifiers,
 absolute paths, invocation metadata, and diagnostic logs are omitted.
 
-The review classified 62 module-boundary findings, 33 owner/stack-managed
-resource findings, seven explicitly supported JavaFX reflection accesses,
+The review classified 33 owner/stack-managed resource findings,
+five explicitly supported JavaFX reflection accesses,
 four Optional API contracts, three bounded benchmark polling loops, three
-record-validation assignments, two exact divisions by two, one short-write
-loop, and one branch-dominated boolean assignment. These are accepted
+record-validation assignments, two exact divisions by two, and one short-write
+loop. These are accepted
 contracts, not a claim that all inspection warnings are false positives.
+
+## Reviewed module-model migration
+
+The original baseline contained 116 findings from source commit
+`2859b0c5155252f35618c8d1abd73b5da3216a93`. The saved analysis of
+`ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2` reported 51 of those findings,
+all matching their original fingerprints. The candidate analysis reported
+the same 51 findings, but the imported production module changed from
+`fractal-lens` to `fractal-lens.main`, alongside a separate
+`fractal-lens.test` module. All 51 fingerprints changed.
+
+The migration matched each candidate finding one-to-one against both the
+saved main analysis and the original baseline by rule, message, source path,
+line, and column. Physical locations, including offsets and source snippets,
+were identical between the two analyses, and every affected production file
+was byte-identical between the source revisions and analyzed copies. Only
+the fingerprints of these previously reviewed findings were replaced.
+
+The 65 historical entries absent from both saved analyses were removed:
+62 `ClassEscapesItsScope`, two `Java9ReflectionClassVisibility`, and one
+`ConstantValue`. Their absence is not evidence of newly implemented fixes.
+No newly reported source contract was accepted.
+
+The saved candidate invocation completed analysis but exited with code 255
+because all 51 findings were classified as new against the old baseline.
+The saved failing invocation must continue to be rejected by
+`check_qodana.py`.
+
+On 2026-10-29, a fresh disposable clone of the candidate, with the migrated
+baseline, was analyzed from the host terminal using the image digest pinned
+in the Qodana workflow. The analyzed tracked files matched the candidate,
+except for developer IDE metadata and migration documentation; the baseline,
+source, build settings, and analysis configuration were byte-identical.
+The fresh analysis reported 51 `unchanged` findings and zero `new` findings,
+with `executionSuccessful: true` and exit code 0. The current
+`scripts/quality/check_qodana.py` independently accepted the saved results
+and reproduced the exported 51-finding report. This verifies the local
+baseline migration, not execution of the GitHub workflow or other platforms.
+
+## Acceptance and report handling
 
 CI performs a fresh Maven import without developer IDE metadata, compiles
 production and test sources with dependencies in the analyzer's repository,
