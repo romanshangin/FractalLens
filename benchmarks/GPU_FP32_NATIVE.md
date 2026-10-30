@@ -1,25 +1,16 @@
 # Native Mandelbrot FP32 acceptance contract
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 ## Decision
 
-Use a per-pixel interval certificate with CPU recovery for an experimental hybrid
-backend. Do not enable plain FP32 for an entire frame based only on zoom or
-coordinate spacing. The native probe accepts 89.65% of a complete Retina overview
-with zero false acceptances in the recorded suite. The same certificate rejects
-all pixels at the existing seahorse center at 100× zoom and 300 iterations.
+Experimental hybrid uses per-pixel intervals/CPU recovery, never whole-frame FP32
+from zoom/spacing alone. Native gate: 89.65% Retina overview accepted, zero false
+accepts; seahorse 100×/300 iterations rejects all.
 
-This contract is now integrated with the optional production Mandelbrot backend
-and CPU recovery. The subsequent [8.4 decision gate](GPU_RENDER_BENCHMARK_RESULTS.md)
-passes numeric conformance but finds the hybrid backend slower in all measured
-workloads. CPU rendering remains the default; see `../docs/platform/GPU_RUNTIME.md` for
-the enable command, selection, ownership and reuse rules. The initial CPU experiment is in [GPU_FP32_PRECISION.md](GPU_FP32_PRECISION.md).
+Integrated optional Mandelbrot/recovery passes [8.4 conformance](GPU_RENDER_BENCHMARK_RESULTS.md)
+but loses every measured workload; CPU default. Enable/selection/ownership/reuse:
+`../docs/platform/GPU_RUNTIME.md`. Initial [CPU screen](GPU_FP32_PRECISION.md).
 
 ## Allowed inputs and output tolerance
 
@@ -75,11 +66,9 @@ be within 0.01 of both ends of the certified smooth interval. Shader logarithms,
 square roots and division are not used: the host derives smooth endpoints from
 the squared-radius bounds using the existing double expression.
 
-The CPU oracle is independent of the acceptance test. It checks every accepted
-sample and fails the run if even one violates the output contract. It is not
-needed to evaluate the interval certificate itself. Rejected pixels are counted
-as required CPU recovery in this probe. The integrated backend now implements
-that recovery and publishes only certified or recovered samples.
+Independent CPU oracle checks every accepted sample, fails on any violation;
+certificate evaluation itself needs no oracle. Probe counts rejects as CPU recovery;
+integrated backend recovers/publishes only certified/recovered samples.
 
 ## Native results
 
@@ -100,20 +89,15 @@ Raw per-case counts and shader SHA-256 are saved in
 | Cardioid/bulb boundary sweep | 1000 | 32,768 | 0 | 0 | 0.17% | 0 |
 | Seeded random plane points | 1000 | 65,539 | 9 | 268 | 91.23% | 0 |
 
-The Retina overview accepts 5,324,206 pixels and rejects 614,930. Its maximum
-observed accepted smooth error is 0.000176775, below the 0.01 limit. Exterior and
-interior control frames pass completely at all four recorded iteration budgets.
-The 34-case suite covers 14,926,981 pixel comparisons, including repeated scene
-coordinates at different budgets. All 7,180,271 accepted samples passed the CPU
-oracle. It includes seven small scenes, both pan directions, boundary
-sweeps, fixed-seed random points and two exhaustive Retina frames. Unlike the
-earlier CPU screening, the Retina results cover every pixel.
+Retina overview: 5,324,206 accepted/614,930 rejected; max accepted smooth error
+0.000176775 <0.01. Exterior/interior controls pass all four budgets. 34 cases,
+14,926,981 comparisons including repeated coordinates/budgets; all 7,180,271 accepts
+pass oracle. Seven small scenes, bidirectional pan, boundary/random sweeps/two
+exhaustive Retina frames; unlike CPU screen, Retina covers every pixel.
 
-The boundary sweep perturbs 4096 parametric points on each of the cardioid and
-period-2 bulb using adjacent doubles and ±1e-12 real-coordinate offsets. It
-illustrates conservative rejection: zero observed raw errors does not prove a
-stable interval. Input-rounding collapse and excessively coarse coordinates
-reject whole grids before acceptance, even when a short raw orbit looks harmless.
+Boundary: 4096 parametric points each cardioid/period-2 bulb, adjacent doubles/
+±1e-12 real offsets. Observing no raw errors does not prove that the interval is stable. Rounding collapse/
+coarse inputs reject grids before acceptance, even harmless-looking short orbits.
 
 Zero observed false accepts is evidence for the implementation on this device,
 not cross-platform certification. Shader/compiler/driver changes require rerunning
@@ -131,16 +115,12 @@ unavailable. It never replaces shader execution with CPU calculation. Output is
 `target/mandelbrot-fp32-native.csv`; omit `fp32.native.full` to skip the two full
 Retina frames. The portable suite skips the native gate.
 
-The GLSL, kernel and acceptance gate now live under `src/main`, shared by
-production and the diagnostic. The standalone test adapter owns its
-Vulkan instance/device and shares the existing reference-counted FFM loader. Its
-fixed 16,384-sample batches use two mapped storage buffers (1.25 MiB logical
-storage, a 4 MiB allocation ceiling), with explicit flush/invalidate on non-coherent
-memory. It checks device buffer/workgroup/push-constant limits, waits for each
-fence, and serializes dispatch and destruction. Cancellation after submission
-drains the fence before returning without publishing results. The gate exercises
-pre-submit and post-submit cancellation, buffer reuse with changed iteration
-limits, complete teardown and a new dispatch after reopening.
+Shared production/diagnostic GLSL/kernel/gate: `src/main`. Standalone owns Vulkan
+instance/device, shares refcounted FFM loader. 16,384-sample batches, two mapped
+buffers (1.25 MiB logical, 4 MiB ceiling), noncoherent flush/invalidate. Check
+buffer/workgroup/push limits, fence each dispatch, serialize destruction. Post-submit
+cancel drains before return/no publish. Tests cover pre/post cancel, changed-cap
+buffer reuse, teardown/reopened dispatch.
 
 CSV `wall_ms` includes uploads, raw and interval shader work, readback, CPU oracle
 and checking. It is not kernel timing or evidence of end-to-end acceleration.
@@ -152,18 +132,13 @@ additional rounding; the current result does not validate such reconstruction.
 
 ## Integration and next decision gate
 
-The optional `GpuMandelbrotRenderBackend` uses the existing runtime owner,
-recovers rejected samples at original coordinates, preserves compatible pan
-overlap, and publishes completed 192x192 regions. A bounded GPU worker overlaps
-readback with a bounded host pool that certifies, converts and recovers into
-reusable primitive staging; generation cancellation suppresses stale output.
-Sample-accuracy tags separate certified and CPU-reference cache/reuse requests.
-The hardware integration gate checks output, recovery, shared palette dispatch,
-loss fallback, reopening and opt-in default-service selection. The standalone
-full precision gate still passes against the same production shader.
+Optional `GpuMandelbrotRenderBackend` uses existing owner, original-coordinate
+recovery/pan overlap, complete 192x192 publication. Bounded GPU/readback overlaps
+bounded host certify/convert/recover with reusable primitives; generation cancel
+blocks stale output. Accuracy tags isolate CPU-reference/certified reuse. Hardware
+gate covers output/recovery/shared palette/loss/reopen/opt-in service selection;
+full precision still passes same production shader.
 
-Roadmap 8.5 adds an outward-rounded analytic cardioid/period-2-bulb certificate,
-removes duplicate host smooth calculations, tunes bounded batches, and repeats
-the full gate. Conformance still passes, but every end-to-end case remains slower
-than CPU; GPU calculation therefore stays opt-in. See
-`GPU_RENDER_BENCHMARK_8_5_RESULTS.md`.
+8.5 adds outward analytic cardioid/period-2 certificate, removes duplicate smooth
+work/tunes bounded batches and repeats gate: numeric pass, all end-to-end cases
+slower, GPU opt-in. `GPU_RENDER_BENCHMARK_8_5_RESULTS.md`.

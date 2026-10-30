@@ -2,335 +2,248 @@
 
 ## Communication and repository language
 
-- Speak to the user in Russian and use the informal form of address.
-- Keep all repository content in English. This includes production-code comments,
-  Javadocs, tests, test names, test comments, assertion messages, UI text, error
-  messages, log messages, documentation, benchmark notes, commit messages, and
-  newly added identifiers.
-- Do not add Russian text to repository files unless the task explicitly requires
-  Russian localization.
-- State conclusions concretely: explain what changed, why it changed, how it was
-  verified, and what remains unverified.
-- Do not call work fully verified when required tests were not run, failed, or
-  relevant visible behavior was not checked. Implementation may be complete
-  while verification remains incomplete; state that distinction explicitly.
-- Distinguish product defects from environment failures and provide concrete
-  evidence for that distinction.
-- Short requests such as "Continue" mean proceeding to the next clear item in
-  the accepted plan or `ROADMAP.md`, not repeating the plan.
+- Speak Russian to the user, using the informal form of address.
+- Use English for all repository content: production comments, Javadocs, tests,
+  test names/comments, assertions, UI/error/log messages, documentation,
+  benchmark notes, commits and new identifiers. Add Russian only for explicitly
+  requested Russian localization.
+- Report what changed, why, checks performed and remaining gaps. Do not claim full
+  verification with missing/failed required tests or unchecked relevant visible
+  behavior. Distinguish implementation completion from verification completion.
+- Distinguish product defects from environment failures with concrete evidence.
+- "Continue" means execute the next clear accepted-plan or `ROADMAP.md` item,
+  not repeat the plan.
 
 ## Project overview and sources of truth
 
-FractalLens is a modular desktop application for exploring fractals. The current
-stack and major capabilities are:
+FractalLens is a modular desktop fractal explorer: Java/JavaFX versions from
+`pom.xml`, Maven, JUnit Jupiter, module `com.shangin.fractal`, mandatory CPU and
+optional LWJGL/Vulkan GPU rendering, arbitrary-precision Mandelbrot/Julia deep
+zoom, native macOS AppKit/Objective-C integration and launcher, progressive
+rendering, frame reuse, antialiasing and PNG export.
 
-- Java and JavaFX versions defined by `pom.xml`;
-- Maven;
-- JUnit Jupiter;
-- the Java module `com.shangin.fractal`;
-- a mandatory CPU rendering path;
-- an optional LWJGL/Vulkan GPU path;
-- arbitrary-precision Mandelbrot and Julia deep zoom;
-- native macOS integration through AppKit, Objective-C, and a small launcher;
-- progressive rendering, frame reuse, antialiasing, and PNG export.
+Keep portable Java, JavaFX and CPU rendering compatible with macOS, Windows and
+Linux. `ROADMAP.md` defines packaging/hardware acceptance targets. macOS-specific
+AppKit integration must degrade safely elsewhere.
 
-Portable Java, JavaFX, and CPU-rendering functionality must remain compatible
-with macOS, Windows, and Linux. Packaging and hardware-backed acceptance
-targets are defined by `ROADMAP.md`. Native AppKit integration is macOS-specific
-and must degrade safely elsewhere.
+| Source | Owns |
+| --- | --- |
+| `ROADMAP.md` | Work order, requirements, acceptance criteria |
+| `pom.xml` | Dependency/plugin versions, Maven profiles, launch/test settings |
+| `docs/platform/MACOS_RUN.md` | macOS launch and application identity |
+| `docs/platform/MACOS_UI.md` | Current UI behavior and native/JavaFX boundary |
+| Relevant `*_BENCHMARK.md`, `*_VALIDATION.md`, `*_RESULTS.md` | Measurement protocols and evidence |
+| Existing tests | Executable behavioral contract |
 
-The project sources of truth are:
+Resolve source conflicts explicitly: identify stale documentation/tests or an
+intentional task change, prefer the contract's owning source, and report conflicts
+that affect implementation or verification. Do not duplicate `pom.xml` version
+declarations without a specific reason.
 
-- `ROADMAP.md` for work order, requirements, and acceptance criteria;
-- `pom.xml` for versions, Maven profiles, launch settings, and test settings;
-- `docs/platform/MACOS_RUN.md` for macOS launch and application-identity behavior;
-- `docs/platform/MACOS_UI.md` for current UI behavior and the native/JavaFX boundary;
-- relevant `*_BENCHMARK.md`, `*_VALIDATION.md`, and `*_RESULTS.md` files for
-  established measurement protocols and evidence;
-- existing tests for the executable behavioral contract.
+A direct user task takes precedence over autonomous roadmap selection; use the
+roadmap for that task's requirements, dependencies and acceptance. An unspecified
+"continue" follows unfinished priorities at the start of `ROADMAP.md`. Do not
+start lower-priority optimization with open dependencies or decision gates.
+Task workflows may strengthen, never weaken, these project constraints.
 
-If sources of truth disagree, do not silently choose one. Determine whether the
-discrepancy is stale documentation, a stale test, or an intentional change in
-the current task. Prefer the source that explicitly owns the disputed contract
-and report the conflict when it affects the implementation or verification
-result.
-
-Treat `pom.xml` as the source of truth for dependency and plugin versions. Do
-not duplicate version declarations in new files without a specific reason.
-
-A direct user request defines the current task and takes precedence over
-autonomously selecting the next item from `ROADMAP.md`. Within the scope of that
-request, use the roadmap as the source of requirements, dependencies, and
-acceptance criteria. When the user asks to continue without naming a task,
-follow the unfinished priorities at the beginning of `ROADMAP.md`. Do not
-autonomously start a lower-priority optimization while its dependencies or
-decision gates remain open.
-
-Task-specific workflows may add stricter steps, but they must not weaken or
-override the project-wide constraints in this file.
-
-Do not rewrite historical benchmark results as though they describe a new
-implementation. Record new experiments separately and include the environment,
-inputs, code state, and decision.
+Keep historical benchmark results tied to their original implementation. Record
+new experiments separately with environment, inputs, code state and decision.
 
 ## Project rules
 
-- Inspect the existing flow, dependencies, and object lifecycle before editing.
-- Prefer the smallest correct change.
-- Do not refactor unrelated code.
-- Keep public APIs stable unless the task explicitly requires a change.
-- Reuse existing abstractions instead of implementing parallel logic.
-- Do not add a dependency when the JDK or an existing dependency can reasonably
-  solve the problem.
-- Any new dependency must be justified and compatible with the modular build.
-  Assess its compatibility with all supported platforms, run available
-  platform-specific checks, and explicitly report any platform that was not
-  actually verified.
-- Prefer readable code over clever code.
-- Keep methods and classes focused.
-- Do not leave temporary diagnostics, experimental switches, or benchmark code
-  in the production path without an explicit purpose.
-- Do not hide failures, failing tests, or unexpected warnings merely to make
-  validation pass. Use targeted warning suppression only when the warning is
-  understood, unavoidable, and the reason is documented.
-- Add or update tests whenever observable behavior changes.
-- Fix root causes rather than only masking symptoms.
-- Update documentation when a change affects user-visible behavior, platform
-  support, launch or test commands, a benchmark protocol, a roadmap acceptance
-  criterion, a fallback path, or a precision or performance decision.
-- Mark a roadmap item complete only after its acceptance criteria pass. Do not
-  present a proposal or expected speedup as a completed feature.
+- Inspect existing flow, dependencies and object lifecycle before editing.
+- Make the smallest correct change; do not refactor unrelated code.
+- Keep public APIs stable unless the task explicitly requires a change. Reuse abstractions
+  instead of adding parallel logic.
+- Use the JDK/existing dependencies when reasonable. Justify any new dependency,
+  check modular-build and all-platform compatibility, run available platform
+  checks and identify platforms not actually verified.
+- Prefer readable code; keep methods/classes focused.
+- Leave no temporary diagnostics, experimental switches or benchmark code in the
+  production path without an explicit purpose.
+- Never hide failures, failing tests or unexpected warnings to pass validation.
+  Suppress warnings only narrowly, with an understood, unavoidable and documented
+  reason.
+- Add/update tests for observable behavior changes; fix root causes.
+- Update docs for changes to visible behavior, platform support, launch/test
+  commands, benchmark protocols, roadmap acceptance, fallback paths or
+  precision/performance decisions.
+- Complete roadmap items only after acceptance passes. Proposals/expected
+  speedups are not completed features.
 
 ### Privacy and published data
 
-- Before committing new or generated evidence, run the publication checks
-  listed under "Before committing" in the Git policy below.
-- Keep `scripts/publication/public_benchmark_files.json` and the benchmark
-  index consistent when explicitly selecting new evidence.
-- Do not attach personal self-hosted runners or expose repository secrets to
-  pull requests.
-
-- The public benchmark selection is documented in `benchmarks/README.md` and
-  `docs/development/PUBLICATION.md`. Keep raw logs, diagnostic dumps and unselected working
-  evidence in a private archive. Publish only reviewed summaries and explicitly
-  selected sanitized data. Preserve original measurement identities and label
-  redacted derivatives; do not imply that privately archived inputs are
-  available in a public checkout or that historical checks were rerun.
-
-- Never commit active credentials, tokens, private keys, recovery codes, or
-  other secrets. Before adding benchmark results, logs, test reports, generated
-  files, or diagnostic output, inspect them for secrets and personal machine
-  data. Do not rely on GitHub masking to make a secret safe to print.
-- A surname and contact email address explicitly selected by the user for
-  public use may appear in author metadata and project content. The explicit
-  public identity allowlist is:
-
-  - Surname: `Shangin`, including its use in package and module identifiers
-    such as `com.shangin` and `com.shangin.fractal`.
-  - Contact email address: `shangin.ro@gmail.com`.
-
-  Do not rewrite history solely to remove these approved public details.
-  This exception does not authorize publishing other personal or
-  machine-specific data, even when a prohibited field contains an allowlisted
-  value. Any expansion of this allowlist requires explicit user approval.
-- Apart from the explicitly approved contact email address above, do not
-  publish a user's login name, home directory, email address, computer
-  or host name, machine serial number, hardware UUID, MAC address, private or
-  public IP address, or machine-specific temporary/workspace path in repository
-  files, benchmark evidence, Actions logs, or uploaded artifacts. Use
-  repository-relative paths or stable placeholders such as `${USER_HOME}`,
-  `${PROJECT_DIR}`, and `${TEMP_DIR}`.
-- Benchmark provenance may include only machine details needed to reproduce or
-  interpret a result, such as OS/version, architecture, CPU/GPU model, core and
-  memory counts, driver/runtime versions, and power or thermal state. Filter
-  system-report commands to those fields; never upload unfiltered hardware or
-  software profiler output.
-- If a live secret is found in a working tree or any published location, revoke
-  or rotate it with its issuer first. Then remove it from the current files and
-  arrange cleanup of every affected published Git ref, Actions log/artifact,
-  release, cache, and other retained copy. Deleting a file in a later commit
-  does not remove it from history or invalidate a credential. Verify the
-  cleanup at each affected destination; do not claim it is complete from a
-  current-tree scan alone.
-- Before publishing a change that includes historical/generated evidence,
-  scan all included files and review the relevant published Git history and
-  retained Actions logs/artifacts. Do not rewrite shared Git history or delete
-  published logs/artifacts without explicit owner authorization.
+- Before committing new/generated evidence, run the Git policy's publication
+  checks. Keep `scripts/publication/public_benchmark_files.json` and the benchmark
+  index consistent when selecting new evidence.
+- Never attach personal self-hosted runners or expose secrets to pull requests.
+- Follow `benchmarks/README.md` and `docs/development/PUBLICATION.md`: privately
+  archive raw logs, dumps and unselected evidence; publish only reviewed
+  summaries and explicitly selected sanitized data. Preserve measurement
+  identities, label redacted derivatives, and never imply private inputs are in
+  the public checkout or historical checks were rerun.
+- Never commit active credentials, tokens, private keys, recovery codes or other
+  secrets. Inspect new benchmark results, logs, reports, generated files and
+  diagnostics for secrets/personal machine data; GitHub masking is insufficient.
+- Explicitly approved public identity:
+  - Surname: `Shangin`, including `com.shangin` and `com.shangin.fractal` identifiers.
+  - Contact email: `shangin.ro@gmail.com`.
+  Do not rewrite history solely to remove these. This exception permits no other
+  personal/machine data, including prohibited fields containing an allowlisted
+  value. Expanding the allowlist requires explicit user approval.
+- Apart from that email, never publish login names, home directories, email
+  addresses, computer/host names, serial numbers, hardware UUIDs, MAC addresses,
+  private/public IPs or machine-specific temporary/workspace paths in repository
+  files, evidence, Actions logs or uploads. Use repository-relative paths or
+  `${USER_HOME}`, `${PROJECT_DIR}`, `${TEMP_DIR}`.
+- Benchmark provenance may contain only reproducibility-relevant details:
+  OS/version, architecture, CPU/GPU model, core/memory counts, driver/runtime
+  versions, power/thermal state. Filter system reports to these fields; never
+  upload unfiltered hardware/software profiler output.
+- For a live secret in any working tree/published location: revoke/rotate with its
+  issuer first, remove current copies, then arrange cleanup of every affected
+  published Git ref, Actions log/artifact, release, cache and retained copy.
+  Later file deletion neither removes history nor invalidates credentials.
+  Verify each destination; a current-tree scan does not prove cleanup.
+- Before publishing historical/generated evidence, scan included files and review
+  relevant published history and retained Actions logs/artifacts. Shared-history
+  rewrites and published log/artifact deletion require explicit owner authorization.
 
 ## Architecture constraints
 
-Preserve the existing package boundaries:
+Preserve package boundaries; move responsibilities only for a clear reason.
 
-- `app` owns application startup and application-level integration;
-- `scene` owns scene and rendering configuration;
-- `formula` owns mathematical formulas and fractal presets;
-- `math` owns coordinates, viewports, and numeric value types;
-- `render` owns CPU rendering, deep zoom, caches, frame reuse, and progress
-  publication;
-- `config` owns iteration-limit policies used to configure renders;
-- `controller` owns rendering orchestration and lifecycle;
-- `ui` owns JavaFX presentation, input, menus, dialogs, and result display;
-- `coloring` owns palettes and coloring algorithms;
-- `export` owns export workflows and export rendering;
-- `gpu` owns the optional Vulkan/LWJGL runtime and GPU backends;
-- `src/main/macos` contains native macOS sources and metadata;
-- `scripts` contains reproducible build, diagnostic, and benchmark tools.
+| Area | Responsibility |
+| --- | --- |
+| `app` | Startup and application integration |
+| `scene` | Scene/rendering configuration |
+| `formula` | Formulas and fractal presets |
+| `math` | Coordinates, viewports, numeric types |
+| `render` | CPU/deep-zoom rendering, caches, reuse, progress publication |
+| `config` | Iteration-limit policies |
+| `controller` | Rendering orchestration/lifecycle |
+| `ui` | JavaFX presentation, input, menus, dialogs, result display |
+| `coloring` | Palettes and coloring algorithms |
+| `export` | Export workflows/rendering |
+| `gpu` | Optional Vulkan/LWJGL runtime/backends |
+| `src/main/macos` | Native macOS sources/metadata |
+| `scripts` | Reproducible build, diagnostic, benchmark tools |
 
-Do not move responsibilities between layers without a clear reason. UI code
-must not implement fractal mathematics, formulas must not depend on JavaFX, and
-GPU code must not become a prerequisite for CPU execution.
+UI must not implement fractal math; formulas must not depend on JavaFX; CPU
+execution must not require GPU code.
 
 ### Rendering and concurrency
 
-Rendering is asynchronous and cancellable. Changes that affect rendering,
-render orchestration, scene transitions, publication, cancellation, or
-lifecycle must account for races between old and new scenes.
+Asynchronous, cancellable rendering requires accounting for old/new scene races
+in rendering, orchestration, transitions, publication, cancellation and lifecycle.
 
-- Never publish a tile, progress event, or completed frame after its render
-  generation has been cancelled or superseded.
-- Scene changes, resize, pan, zoom, and reset must not receive pixels from stale
-  work.
-- Preserve atomic publication where partial publication would produce seams,
-  bands, or a mixture of different frames.
-- Do not block the JavaFX Application Thread with calculation, worker waits, or
-  heavy I/O.
-- Modify the JavaFX scene graph only on the JavaFX Application Thread.
-- Native callbacks arriving outside the JavaFX Application Thread must dispatch
+- Never publish tiles, progress or frames from cancelled/superseded generations.
+  Scene changes, resize, pan, zoom and reset must not receive stale pixels.
+- Preserve atomic publication against seams, bands and mixed frames.
+- Keep calculation, worker waits and heavy I/O off the JavaFX Application Thread;
+  mutate its scene graph only there. Native callbacks from other threads dispatch
   application actions through `Platform.runLater`.
-- Close `AutoCloseable` resources, executors, and native handles explicitly.
-  Remove or unregister listeners when their owning lifecycle ends.
-- Verify idempotent close and cancellation during partially completed work.
-- A cancelled coordinator `Future` is not fully drained until its registered
-  worker tasks have actually stopped.
-- Frame-reuse changes must cover pan in every direction, no overlap, zero shift,
-  resize, antialiasing, and iteration-limit changes.
-- Evaluate publication-path optimizations by gesture-to-visible-update latency,
-  not throughput alone.
+- Explicitly close `AutoCloseable` resources, executors and native handles;
+  unregister listeners when their owner lifecycle ends.
+- Verify idempotent close and cancellation during partial work. A cancelled
+  coordinator `Future` is drained only after registered workers actually stop.
+- Reuse changes must cover pan in every direction, no overlap, zero shift, resize,
+  antialiasing and iteration-limit changes.
+- Judge publication optimizations by gesture-to-visible latency, not throughput alone.
 
 ### macOS integration
 
-Prefer native system behavior on macOS while retaining a working JavaFX
-fallback.
+Prefer native macOS behavior; retain a working JavaFX fallback.
 
-- Do not draw imitations of standard window buttons, title bars, or system
-  menus.
-- Keep the standard JavaFX window decoration so AppKit provides the native
-  frame and controls.
-- Native bridges must not break Windows, Linux, or startup when a native library
-  cannot be loaded.
-- Retain the JavaFX context-menu fallback when the AppKit bridge is unavailable.
-- Calculate popup coordinates relative to the owning content view in logical
-  points.
-- Do not manually multiply coordinates by the Retina scale or convert through
-  the primary display height.
-- Account for the AppKit view's flipped coordinate system.
-- A native menu session must cancel correctly on close, replacement, resize,
-  window movement, focus loss, and scene detachment.
-- JNI and Objective-C callbacks must not mutate JavaFX UI directly.
-- Launcher changes must preserve JVM arguments, application arguments,
-  `@argfiles`, `JDK_JAVA_OPTIONS`, exit status, and paths containing spaces.
-- Do not modify the installed JDK to implement the launcher.
-- The acceptance check for application identity is the visible Dock tooltip
-  `FractalLens`; a process name or `localizedName` is insufficient.
-- Preserve normal development launch through `./mvnw compile javafx:run`
-  (the `javafx-maven-plugin` run goal).
+- Do not imitate standard window buttons, title bars or system menus. Keep
+  standard JavaFX decoration so AppKit provides the native frame/controls.
+- Native bridges must preserve Windows/Linux and startup on library-load failure.
+  Keep the JavaFX context-menu fallback when AppKit is unavailable.
+- Use popup coordinates relative to the owning content view, in logical points;
+  account for its flipped coordinates. Never multiply by Retina scale or convert
+  via primary-display height.
+- Cancel native menu sessions on close, replacement, resize, window movement,
+  focus loss and scene detachment.
+- JNI/Objective-C callbacks must not mutate JavaFX UI directly.
+- Launcher changes must preserve JVM/application arguments, `@argfiles`,
+  `JDK_JAVA_OPTIONS`, exit status and paths with spaces; never modify the installed JDK.
+- Identity acceptance requires the visible Dock tooltip `FractalLens`; process
+  name/`localizedName` is insufficient.
+- Preserve `./mvnw compile javafx:run` development launch (`javafx-maven-plugin` run goal).
 
 ### GPU rules
 
-The GPU renderer is optional. CPU rendering remains the default and mandatory
-fallback.
+GPU rendering is optional; CPU is the default and mandatory fallback.
 
-- Do not enable a GPU path by default based only on a local speedup.
-- Every GPU change requires a CPU reference and a conformance check.
-- Do not weaken precision gates to obtain a better benchmark result.
-- Do not hide mismatches behind a tolerance when the contract requires exact
-  output.
-- If the required device or capability is unavailable, report that condition
-  correctly and fall back to CPU.
-- Do not generalize Apple Silicon results to Intel Mac, AMD Mac, or Windows.
-- Native GPU tests are opt-in and do not replace the portable CPU suite.
-- Promote a GPU path only after the correctness, latency, throughput, memory,
-  and platform gates in `ROADMAP.md` pass.
+- Local speedup alone cannot justify enabling GPU by default.
+- Every GPU change needs a CPU reference and conformance check. Never weaken
+  precision gates for performance or tolerate mismatches where exact output is required.
+- Report unavailable devices/capabilities accurately; fall back to CPU.
+- Do not generalize Apple Silicon results to Intel/AMD Mac or Windows.
+- Opt-in native GPU tests do not replace the portable CPU suite.
+- Promotion requires `ROADMAP.md` correctness, latency, throughput, memory and
+  platform gates to pass.
 
 ## Numerical correctness and deep zoom
 
-Numerical correctness takes precedence over a local performance improvement.
+Numerical correctness takes priority over local performance gains.
 
-- Preserve supplied decimal viewport coordinates. Do not convert them to
-  `double` prematurely.
-- Never reconstruct exact coordinates from values that have already been
-  rounded.
-- Validate coordinates, scale, render dimensions, and iteration limits before
-  starting expensive work.
-- Preserve center, pixel spacing, dimension parity, and coordinate mapping when
-  changing the render grid.
-- Do not apply Mandelbrot-specific assumptions to Julia, Burning Ship, Tricorn,
-  or Multibrot without separate proof.
-- For Julia, remember that `z0` is the pixel and `c` is fixed.
-- Julia perturbation uses `delta z0`; do not mechanically copy Mandelbrot's
-  `delta c` formulation.
-- Do not use Mandelbrot cardioid or interior shortcuts for Julia.
-- Do not select the Julia deep-zoom backend from viewport spacing alone. Loss of
-  precision can occur along an orbit near the critical point.
-- Exact fallback must remain correct and bounded. An optimization must never
-  silently publish an approximately incorrect frame.
-- When changing formulas or precision selection, validate individual samples
-  and complete frames at known coordinates.
-- A small test frame does not prove that deep zoom is usable at a realistic
-  window size. Measure realistic frames and time to first visible progress.
+- Preserve decimal viewport inputs; never prematurely convert to `double` or
+  reconstruct exact coordinates from rounded values.
+- Validate coordinates, scale, dimensions and iteration limits before expensive work.
+- Preserve center, pixel spacing, dimension parity and mapping when changing grids.
+- Mandelbrot assumptions need separate proof for Julia, Burning Ship, Tricorn or Multibrot.
+- Julia uses pixel `z0` and fixed `c`; perturbation uses `delta z0`, not a copied
+  Mandelbrot `delta c` formulation. Do not use Mandelbrot cardioid/interior shortcuts.
+- Julia backend selection cannot rely on viewport spacing alone: orbit precision
+  can fail near the critical point.
+- Keep exact fallback correct and bounded; never silently publish approximate wrong frames.
+- Formula/precision changes need sample and complete-frame checks at known coordinates.
+- Small frames do not prove realistic-window usability. Measure realistic frames
+  and time to first visible progress.
 
 ## Testing rules
 
-Choose validation proportional to the risk of the change.
-
-Run Maven through the checked-in Maven Wrapper so the pinned Maven version is
-used: `./mvnw` on macOS and Linux, `mvnw.cmd` or `.\mvnw.cmd` on Windows. The
-commands below use the POSIX form. A system `mvn` is not a substitute for
-recorded validation.
+Match validation to risk. Use the checked-in pinned Maven Wrapper: `./mvnw` on
+macOS/Linux, `mvnw.cmd` or `.\mvnw.cmd` on Windows. Commands below use POSIX form;
+system `mvn` is not recorded validation.
 
 ### Targeted tests
 
-Run the nearest tests first during development to get fast feedback while
-iterating:
+Run nearest tests first during development:
 
 ```shell
 ./mvnw -Dtest=RelevantTest test
 ```
 
-List multiple related test classes with a comma when necessary. Passing targeted
-tests is an intermediate development check; it does not replace the required
-pre-handoff suite.
+Separate multiple classes with commas. Targeted passes are intermediate checks,
+not substitutes for the pre-handoff suite.
 
 ### Portable test suite
 
-Before handing off any change under `src/` (production code, resources such as
-CSS, shaders, and native sources, and tests) or to `pom.xml`, `.mvn/`, `mvnw`,
-or `mvnw.cmd`, run the full portable suite:
+Before handing off changes under `src/` (production, resources including CSS,
+shaders/native sources, tests), or to `pom.xml`, `.mvn/`, `mvnw`, `mvnw.cmd`, run:
 
 ```shell
 ./mvnw test
 ```
 
-After build, dependency, or module-setting changes, or when stale output is
-possible, use:
+After build/dependency/module changes or possible stale output, use:
 
 ```shell
 ./mvnw clean test
 ```
 
-Do not substitute targeted tests for the full portable suite before handoff.
-Also run any relevant opt-in JavaFX, GPU, native, or benchmark validation called
-for by the changed subsystem. Changes under `scripts/` require the matching
-script tests below. Changes to scripts that run during the Maven build or wrap
-the CI test command, such as `scripts/macos/build-macos-menu` and
-`scripts/ci/run-ci-tests`, also require the full portable suite. Documentation-only changes do not require the
-application test suite. If the full suite cannot run because of an environment
-failure or an explicit user constraint, report that limitation and the exact
-checks that did run; do not imply full validation.
+Targeted tests never replace this suite. Also run applicable opt-in JavaFX, GPU,
+native and benchmark checks. For `scripts/` changes, run matching script tests.
+Build/CI wrappers such as `scripts/macos/build-macos-menu` and
+`scripts/ci/run-ci-tests` also require the full portable suite. Documentation-only
+changes need no application suite. If environment failure or a user constraint
+blocks it, report the limitation and exact checks run; do not imply full validation.
 
 ### Script tests
 
-Run the tests for each changed `scripts/` directory from the repository root:
+Run from the repository root for each changed directory:
 
 | Changed directory | Command |
 | --- | --- |
@@ -342,70 +255,56 @@ Run the tests for each changed `scripts/` directory from the repository root:
 | `scripts/ci/` | `bash scripts/ci/test-run-ci-tests`; for PowerShell changes also `scripts/ci/test-run-ci-tests.ps1` in a PowerShell session |
 | `scripts/macos/` | `python3 scripts/macos/test_macos_launcher.py` (macOS with native developer tools) |
 
-Analyzer tests do not run measurement campaigns. A PowerShell test on macOS is
-not Windows acceptance. Report platform-specific script tests that could not
-run on the current host as not run.
+Analyzer tests do not run campaigns; PowerShell on macOS is not Windows acceptance.
+Identify unrun platform-specific script tests.
 
 ### Reusing automated execution evidence
 
-In an orchestrated task, a required automated check may reuse execution evidence
-from an earlier stage instead of executing the same command again. Evidence must
-match the exact current candidate (base revision, merge base and content), check
-definition and applicable environment, retain an intact execution log, and report
-a successful execution. Use `scripts/orchestration/check.ts` and the private run registry as
-described in `docs/development/TASK_ORCHESTRATOR.md`; a prose handoff alone is not
-reusable execution evidence. Do not repeat a valid PASS merely for confidence.
-Review may run diagnostics for a concrete suspected finding. Verification must
-independently assess coverage, skips and remaining acceptance criteria and run
-missing checks. Reuse does not waive the full portable suite, required subsystem
-checks, visible acceptance or independent review. Stale, insufficient or suspicious
-evidence must be replaced; a skipped required test is not a PASS.
+Orchestrated checks may reuse earlier successful execution only for the exact
+current candidate (base revision, merge base, content), check definition and
+applicable environment, with intact execution logs. Use
+`scripts/orchestration/check.ts` and the private registry per
+`docs/development/TASK_ORCHESTRATOR.md`; prose handoffs are insufficient.
+Do not repeat valid PASS evidence for confidence alone. Review may diagnose a
+concrete suspected finding. Verification must independently assess coverage,
+skips and remaining acceptance, then run missing checks. Reuse waives no portable,
+subsystem, visible or independent-review requirements. Replace stale,
+insufficient or suspicious evidence; a required skip is not PASS.
 
 ### JavaFX and visible behavior
 
-Automated model tests are not sufficient evidence for visible UI changes.
+Model tests alone cannot validate visible UI changes.
 
-- Add or update an appropriate JavaFX test for changed UI behavior.
-- Also inspect the running application when behavior depends on layout, system
-  menus, the window manager, appearance, focus, or animation.
-- Check light and dark appearance when colors or native materials change.
-- For dialogs, check focus, Enter, Escape, Cancel, Apply, and validation errors.
-- Preserve invalid drafts when the user must be able to correct them.
-- Fractal changes and Reset View must not expose stale or partially mismatched
-  pixels.
-- Remove the loading screen only after full `RenderStatus.COMPLETE`, or finish
-  it correctly on `FAILED`.
-- Tests for menus that depend on the current viewport must wait for the initial
-  render before firing menu actions.
-- Explicitly list any visual behavior that could not be checked.
+- Add/update appropriate JavaFX tests. Inspect the running app for layout, system
+  menus, window-manager, appearance, focus or animation behavior.
+- Check light/dark appearance for color/native-material changes.
+- Check dialog focus, Enter, Escape, Cancel, Apply and validation errors; preserve
+  invalid drafts for correction.
+- Fractal changes/Reset View must not expose stale or mixed pixels.
+- Remove loading only after full `RenderStatus.COMPLETE`, or finish correctly on `FAILED`.
+- Viewport-dependent menu tests must await initial rendering before actions.
+- Explicitly list unchecked visual behavior.
 
-JavaFX integration tests are opt-in:
+JavaFX integration is opt-in:
 
 ```shell
 ./mvnw -Dfractal.fx.tests=true "-Djavafx.cachedir=TASK_SPECIFIC_TEMP_DIRECTORY" -DreuseForks=false -Dtest=RelevantFxTest test
 ```
 
-- Run portable JavaFX tests in an active graphical session.
-- Run macOS-specific JavaFX or native-integration tests in an active graphical
-  macOS session.
-- Display rule: if the current sandbox is known to have no display, do not
-  attempt JavaFX integration tests or JavaFX-initializing benchmarks there; run
-  them directly in the active desktop session. If an unexpected sandbox run
-  reaches `Screen.getMainScreen` with an empty screen list, rerun the unchanged
-  test in a desktop session and record the sandbox failure as an environment
-  limit.
-- Replace `TASK_SPECIFIC_TEMP_DIRECTORY` with a task-specific directory under
-  the platform's temporary directory, for example
-  `$TMPDIR/fractallens-fx-<task>` on macOS, `/tmp/fractallens-fx-<task>` on
-  Linux, or `$env:TEMP\fractallens-fx-<task>` in PowerShell. Use a fresh
-  directory per task so cache `.lock` files from other runs do not interfere.
-  The resolved path is machine-specific; do not record it in repository files
-  or published evidence.
-- Use `-DreuseForks=false` when suites that call `Platform.exit()` run together.
-- `No toolkit found`, Prism failures, CVDisplayLink failures,
-  `Screen.getMainScreen` failures, and cache `.lock` failures can be environment
-  problems; classify them with evidence before attributing them to the product.
-- Do not report a skipped test as passed.
+- Portable JavaFX tests require an active graphical session; macOS-specific/native
+  integration requires an active graphical macOS session.
+- With a known display-less sandbox, run JavaFX tests/initializing benchmarks
+  directly in the active desktop session. If an unexpected sandbox run reaches
+  `Screen.getMainScreen` with no screens, rerun the unchanged test on desktop and
+  record the sandbox failure as an environment limit.
+- Replace `TASK_SPECIFIC_TEMP_DIRECTORY` with a fresh task-specific platform-temp
+  directory: `$TMPDIR/fractallens-fx-<task>` on macOS, `/tmp/fractallens-fx-<task>`
+  on Linux, `$env:TEMP\fractallens-fx-<task>` in PowerShell. Fresh caches prevent
+  other runs' `.lock` interference. Never publish resolved machine-specific paths.
+- Use `-DreuseForks=false` when combining suites that call `Platform.exit()`.
+- `No toolkit found`, Prism, CVDisplayLink, `Screen.getMainScreen` and cache `.lock`
+  failures may be environmental; classify with evidence before blaming the product.
+- A skipped test is not a pass.
 
 ### GPU tests
 
@@ -415,75 +314,56 @@ Run native GPU smoke tests separately:
 ./mvnw -Pgpu-smoke test
 ```
 
-The result applies only to the device, driver, and platform actually used.
+Results apply only to the tested device, driver and platform.
 
 ### macOS launcher tests
 
-After launcher, bundle-metadata, or launch-option changes, run:
+After launcher, bundle-metadata or launch-option changes, run:
 
 ```shell
 python3 scripts/macos/test_macos_launcher.py
 ```
 
-Also launch the application. Include `compile` so the launch uses the current
-sources and the rebuilt native bridge rather than stale output:
+Launch current sources/rebuilt bridge, including `compile`:
 
 ```shell
 ./mvnw compile javafx:run
 ```
 
-Manually verify Dock identity and any affected system behavior.
+Manually verify Dock identity and affected system behavior.
 
 ### Test design
 
-- A regression test should fail for the original defect and pass after the fix.
-- Test observable behavior rather than implementation details unless the
-  internal contract is itself the subject of the test.
-- Use deterministic coordination points for concurrency tests instead of
-  unreliable delays.
-- Do not fix a flaky test by increasing `sleep` when a concrete state can be
-  awaited.
-- Use decimal fixtures and mathematical properties for precision regressions.
-- For frame reuse and publication, validate frame or pixel contents rather than
-  callbacks alone.
-- For UI tests, assert state after the relevant JavaFX event queue work has run.
-- Keep unit or contract tests for native integration in addition to real
-  platform validation.
+- Regression tests should fail before the fix and pass after it.
+- Test observable behavior unless an internal contract is itself under test.
+- Coordinate concurrency deterministically; do not replace flaky checks with
+  longer `sleep` when a concrete state can be awaited.
+- Use decimal fixtures/math properties for precision regressions.
+- Reuse/publication tests must inspect frames/pixels, not callbacks alone.
+- Assert UI state after relevant JavaFX queue work.
+- Keep native unit/contract tests alongside real-platform validation.
 
 ## Git policy
 
-- Check `git status` before editing.
-- If the working tree is already dirty, inspect the existing diff before editing
-  so that pre-existing user changes can be distinguished from changes made for
-  the current task.
-- Every task that changes repository files starts on its own new task branch.
-  Create the branch before the first edit, including documentation-only and
-  one-line changes. Never edit files for a task while `main` is checked out.
-  Read-only work such as analysis, review, or running checks needs no branch.
-  The only exception is a task branch other than `main` that the user has
-  already selected or created for the current task; see below.
-- Create the new branch from `main` unless the user explicitly specifies
-  another base. Verify the selected base and the new branch's merge base. If
-  pre-existing user changes are present, create the branch in place (for
-  example `git switch -c <branch>`) so those changes are carried over without
-  being stashed, reset, or otherwise disturbed.
-- Name task branches according to the planned changes: `feature/<description>`
-  for new or expanded functionality, `fix/<description>` for defect corrections,
-  and `chore/<description>` for maintenance, tooling, CI, or documentation.
-  Use a concise English description in lowercase with hyphens. For mixed work,
-  choose the prefix that matches the primary purpose. Honor an explicit branch
-  name supplied by the user.
-- Do not switch branches when doing so would overwrite, move, or otherwise
-  disturb pre-existing user changes.
-- When the user has already selected or created the task branch, preserve and
-  use that branch unless it is `main`.
-- Treat existing changes as user-owned; do not delete or overwrite unrelated
-  changes.
-- Do not use destructive commands such as `git reset --hard`.
-- Do not include IDE metadata, temporary files, generated output, or unrelated
-  benchmark artifacts unless they are explicitly part of the task.
-- Before committing new or generated evidence (benchmark results, logs, test
-  reports, generated files, or diagnostic output), run:
+- Check `git status` before editing. Inspect pre-existing staged/unstaged diffs
+  in dirty trees to distinguish user changes.
+- Start every repository-changing task on a new task branch before any edit,
+  including docs/one-line changes. Never edit on `main`; read-only analysis,
+  reviews and checks need no branch. Exception: reuse a non-`main` branch the
+  user already selected/created for this task.
+- Branch from `main` unless the user names another base; verify base and merge
+  base. With pre-existing changes, branch in place (for example
+  `git switch -c <branch>`) without stashing, resetting or disturbing them.
+- Names: `feature/<description>` for functionality, `fix/<description>` for defects,
+  `chore/<description>` for maintenance/tooling/CI/docs; use concise lowercase
+  English with hyphens. Mixed tasks follow their primary purpose; honor user names.
+- Never switch branches if that would overwrite, move or disturb user changes.
+  Preserve unrelated user-owned changes; never use `git reset --hard` or similar
+  destructive commands.
+- Exclude IDE metadata, temporary/generated files and unrelated benchmark
+  artifacts unless explicitly in scope.
+- Before committing new/generated evidence (benchmarks, logs, reports, generated
+  files, diagnostics), run:
 
   ```shell
   python3 scripts/publication/check_public_data.py
@@ -491,44 +371,34 @@ Manually verify Dock identity and any affected system behavior.
   python3 scripts/publication/check_secrets.py --tree
   ```
 
-  The first secret scan covers the complete Git history; `--tree` covers every
-  file a commit can include: tracked files plus untracked files that Git does
-  not ignore, uncommitted changes included. Ignored output and nested
-  worktrees such as `.claude/worktrees/` are not part of the candidate.
-  `--tree` replaces the history scan rather than extending it, so one run does
-  not cover both. Unresolved findings are listed by path, rule and line without
-  matched values. The scans need
-  Gitleaks; CI uses version 8.30.1. Put a local `gitleaks` on `PATH` or pass
-  `--gitleaks <path>`. `scripts/publication/install-gitleaks` is a Linux x64 CI
-  installer only. If Gitleaks is unavailable, report the secret scan as not
-  run.
-- Do not create commits or push changes unless the user explicitly asks.
-  When the user asks to run `scripts/orchestration/task-orchestrator.ts`
-  without `--dry-run`, that request is the explicit authorization for standard
-  delivery described in `docs/development/TASK_ORCHESTRATOR.md`: committing
-  the intended changes, pushing the task branch, and creating or updating its
-  pull request. It never authorizes force-push, merge, close, or auto-merge.
-  Approval for one task or run does not extend to later tasks.
-- Never push directly to `main`.
-- Merge into `main` only through a pull request.
-- Do not create, merge, or close a pull request unless explicitly asked.
-- Do not bypass CI failures.
+  The first secret scan covers full Git history; `--tree` instead covers tracked
+  plus non-ignored untracked files, including uncommitted changes. Ignored output
+  and nested worktrees such as `.claude/worktrees/` are outside the candidate.
+  One scan cannot cover both. Findings show path/rule/line without matched values.
+  Gitleaks is required (CI: 8.30.1); put it on `PATH` or use `--gitleaks <path>`.
+  `scripts/publication/install-gitleaks` is Linux x64 CI-only. Report secret scans
+  as not run if Gitleaks is unavailable.
+- Do not commit/push unless explicitly asked. A non-`--dry-run` request for
+  `scripts/orchestration/task-orchestrator.ts` authorizes that run's standard
+  delivery per `docs/development/TASK_ORCHESTRATOR.md`: commit intended changes,
+  push the task branch and create/update its PR. It never authorizes force-push,
+  merge, close or auto-merge, nor later tasks/runs.
+- Never push directly to `main`; merge only through PRs. Do not create, merge or
+  close PRs without explicit instruction; never bypass CI failures.
 
 ## Review severity definitions
 
-- **Critical**: causes or can realistically cause data loss, security exposure,
-  unrecoverable corruption, application-wide failure, fundamentally incorrect
-  rendering, or a release-blocking failure with no reasonable workaround.
-- **Major**: causes incorrect behavior, a significant regression, broken
-  platform or fallback behavior, a concurrency or resource-lifecycle defect
-  with meaningful correctness, stability, leak, or supported-workflow impact,
-  or a substantial performance/UX failure. A workaround may exist, but the
-  change should not be accepted without addressing the issue.
-- **Minor**: a localized correctness, robustness, test-coverage, documentation,
-  or maintainability issue with limited impact that does not invalidate the main
-  workflow. Suggestions with no concrete impact are not Minor findings.
+- **Critical**: realistic data loss, security exposure, unrecoverable corruption,
+  application-wide failure, fundamentally incorrect rendering or release-blocking
+  failure without a reasonable workaround.
+- **Major**: incorrect behavior, significant regression, broken platform/fallback,
+  concurrency/resource-lifecycle defect with meaningful correctness, stability,
+  leak or supported-workflow impact, or substantial performance/UX failure.
+  A workaround does not justify acceptance without a fix.
+- **Minor**: localized correctness, robustness, coverage, documentation or
+  maintainability issue with limited impact that preserves the main workflow.
+  Suggestions without concrete impact are not Minor.
 
-There is no lower severity level. Do not report nits, informational notes, or
-optional suggestions as findings; mention them, if at all, only as residual
-observations outside the findings list. Ignore purely stylistic preferences
-unless they harm correctness or maintainability.
+No lower severity exists. Exclude nits, informational notes and optional
+suggestions from findings; at most mention them as residual observations.
+Ignore style preferences unless they harm correctness/maintainability.

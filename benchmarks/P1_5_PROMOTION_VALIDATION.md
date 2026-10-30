@@ -1,44 +1,32 @@
 # P1.5 retained CPU AA promotion assessment — 2026-09-25 to 2026-09-28
 
-Script layout note (2026-10-15): recorded commands below retain their historical
-paths and measurement identities. For new runs, benchmark tools now live in
-`scripts/benchmarks/`; see [the scripts index](../scripts/README.md).
+Script layout (2026-10-15): historical commands/measurement identities are preserved. For new runs use `scripts/benchmarks/`; see [the scripts index](../scripts/README.md).
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 ## Decision and scope
 
-**P1.5 is complete for the retained CPU antialiasing (AA) change against its
-pre-`3454dc7` implementation.** The owner accepted a retained-Julia first-tile
-exception on 2026-09-27; all other paired timing and cold-startup criteria
-passed on the current source. The first AA tile for retained Julia remains a
-measured performance cost, not a passing timing group.
-The cache change from `3454dc7` passed portable, macOS JavaFX/native,
-exact-frame, and sustained diagnostic checks. Its earlier paired measurements
-show a substantial full-frame gain and a retained-Julia first-tile regression.
-Seven current-source first-tile candidates were measured against a frozen control.
-D passed headless and cold-startup gates but only 16 of 18 JavaFX timing groups
-in its final confirmation. E and F passed their first-tile target but did not
-establish the retained full-AA control at their predeclared screening gates.
-G failed the retained first-tile target in its headless screen.
-All candidates were removed; no new production optimization is promoted.
+**P1.5 is complete for the retained CPU AA change against pre-`3454dc7`.**
+The owner accepted the retained-Julia first-tile exception on 2026-09-27; all other
+current-source paired and cold-startup criteria passed. The first tile remains
+a measured cost, not a timing PASS. The `3454dc7` cache change passed portable,
+macOS JavaFX/native, exact-frame and sustained checks. Earlier pairs showed a
+full-frame gain and a retained-Julia first-tile regression. Of seven candidates
+against a frozen control, D passed headless and cold-startup gates but only 16
+of 18 final JavaFX groups. E and F passed the first-tile target but did not
+establish the retained full-AA control; G failed its headless first-tile target.
+All candidates were removed; no new production optimization was promoted.
 
 P1.2 and P1.3 rejected their candidates and left no production optimization;
 P1.4 only profiled allocation sites. The CPU AA change is the retained P1
 optimization requiring this assessment. Future retained optimizations need
 their own 9.9 evidence; these results cannot pre-approve them.
 
-The checkout started clean at `a6531c12a752f84acced1f2b9537a09b411fdb88`
-on `main`; validation ran on `codex/p1-5`. The diagnostic driver was changed
-before the sustained run to use a JavaFX native cache inside its fresh output
-directory. The [source hash manifest](p1-5-aa-sustained-20260924/source-sha256.json)
-captures that exact driver and the compiled source inputs. A later ignore-rule
-addition only excludes extracted JavaFX binaries from the evidence directory.
+Validation started from clean `main` at `a6531c12a752f84acced1f2b9537a09b411fdb88`
+and ran on `codex/p1-5`. Before the sustained run, the driver moved its JavaFX
+cache into the fresh output directory. The [source manifest](p1-5-aa-sustained-20260924/source-sha256.json)
+identifies that driver and its compiled inputs. A later ignore rule only excluded
+extracted JavaFX binaries from the evidence directory.
 
 ## Existing paired decision and remaining first-publication issue
 

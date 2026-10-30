@@ -1,23 +1,20 @@
 # CLAUDE.md
 
-Project rules, communication language, architecture constraints, testing policy,
-privacy rules and Git policy live in `AGENTS.md`. They are mandatory and are
-imported here so they are not duplicated:
+Mandatory project, language, architecture, test, privacy and Git rules are
+imported from `AGENTS.md`:
 
 @AGENTS.md
 
-This file adds a working map of the repository: layout, commands and where to
-look for things. When this file and `AGENTS.md`, `ROADMAP.md` or `pom.xml`
-disagree, those files win; fix this file.
+Repository map: layout, commands, entry points. Conflicts defer to `AGENTS.md`,
+`ROADMAP.md` and `pom.xml`; fix this file.
 
 ## What the project is
 
-FractalLens is a JavaFX desktop fractal explorer (Mandelbrot, Julia, Burning
-Ship, Tricorn, cubic Multibrot) with precision-preserving Mandelbrot/Julia deep
-zoom, progressive cancellable CPU rendering, frame reuse, antialiasing, palettes,
-session restore, bookmarks, undo/redo and PNG export. Supported distribution
-targets are macOS and Windows; portable code must also work on Linux. An
-optional LWJGL/Vulkan (MoltenVK on macOS) GPU path exists but is off by default.
+JavaFX desktop fractal explorer: Mandelbrot, Julia, Burning Ship, Tricorn,
+cubic Multibrot; precise Mandelbrot/Julia deep zoom; progressive cancellable CPU
+rendering/reuse/AA/palettes; sessions, bookmarks, undo/redo, PNG export.
+macOS/Windows distributions, portable Linux code. Optional LWJGL/Vulkan (macOS
+MoltenVK) is disabled by default.
 
 - Single Maven module, Java module `com.shangin.fractal`
   (`src/main/java/module-info.java`), main class
@@ -81,14 +78,12 @@ part of the source; do not edit or commit them.
 
 ### Main runtime flow
 
-`FractalLauncher` → `FractalFxApplication` → `MainView` (menus, indicators) → `FractalView`
-(input, camera, debounced requests) → `FractalRenderController` →
-`FractalRenderService` → `PrecisionSelectingRenderBackend`, which picks
-`DirectDoubleRenderBackend` when hardware doubles are safe and a deep-zoom
-backend otherwise. Progress is published in batches on the caller's executor
-(the FX thread for the UI) and stale generations must never publish. Colors are
-applied by `FractalColorizer` / `coloring`, and the frame is shown through
-`FractalSurface` / `SurfaceBuffer`.
+`FractalLauncher` → `FractalFxApplication` → `MainView` (menus/indicators) →
+`FractalView` (input/camera/debounce) → `FractalRenderController` →
+`FractalRenderService` → `PrecisionSelectingRenderBackend`:
+`DirectDoubleRenderBackend` when doubles are safe, deep zoom otherwise.
+Batch progress uses caller executor (UI: FX); stale generations never publish.
+`FractalColorizer`/`coloring` colors; `FractalSurface`/`SurfaceBuffer` displays.
 
 The scene (`scene/FractalScene`) is the reproducible state used by session
 restore, bookmarks, shared presets, undo/redo and export.
@@ -126,10 +121,9 @@ Notes:
 | macOS launcher | `python3 scripts/macos/test_macos_launcher.py` | after launcher/bundle/launch-option changes |
 | Script tests | per changed directory, see "Script tests" in `AGENTS.md` | Python `unittest`, `node --test` for orchestration, Bash/PowerShell CI wrappers |
 
-FX test classes live mostly in `src/test/java/com/shangin/fractal/ui/` plus
-`app/FractalApplicationFxTest` and `app/FractalLauncherFxTest`.
-Native GPU tests are `*NativeTest` under `gpu/`.
-Without the opt-in property these tests are skipped, and a skip is not a pass.
+FX tests: mostly `src/test/java/com/shangin/fractal/ui/`, plus
+`app/FractalApplicationFxTest`, `app/FractalLauncherFxTest`. Native GPU:
+`*NativeTest` in `gpu/`. Without opt-in they skip; skips are not passes.
 
 CI runs `./mvnw --batch-mode --no-transfer-progress -Dfractal.gpu.enabled=false clean test`
 through `scripts/ci/run-ci-tests` on Ubuntu (`ci.yml`) and macOS/Windows
@@ -139,14 +133,13 @@ through `scripts/ci/run-ci-tests` on Ubuntu (`ci.yml`) and macOS/Windows
 
 Benchmarks are opt-in Maven profiles; never wire them into the default build.
 
-- Headless (exec `integration-test` phase, test classpath): `benchmark`
-  (frame reuse), `baseline-benchmark`, `aa-benchmark`, `formula-benchmark`,
-  `symmetry-benchmark`, `render-tuning-benchmark`, `julia-pipeline-benchmark`,
-  `perturbation-benchmark`, `series-approximation-benchmark`,
-  `distance-estimation-benchmark`, `fp32-precision`.
-  Example: `./mvnw -Pperturbation-benchmark verify -DskipTests` (the
-  `fp32-precision` docs use `-DskipTests integration-test`). Protocol-specific
-  properties are documented in the matching `benchmarks/*_BENCHMARK.md`.
+- Headless (exec `integration-test` phase, test classpath): `benchmark` (frame reuse),
+  `baseline-benchmark`, `aa-benchmark`, `formula-benchmark`, `symmetry-benchmark`,
+  `render-tuning-benchmark`, `julia-pipeline-benchmark`, `perturbation-benchmark`,
+  `series-approximation-benchmark`, `distance-estimation-benchmark`, `fp32-precision`.
+  Example: `./mvnw -Pperturbation-benchmark verify -DskipTests` (the `fp32-precision`
+  docs use `-DskipTests integration-test`). Protocol-specific properties are in the
+  matching `benchmarks/*_BENCHMARK.md`.
 - JavaFX-launched (replace the main class for `javafx:run`):
   `palette-benchmark`, `interaction-latency`, `gpu-render-benchmark`,
   `gpu-resident-benchmark`, `gpu-diagnostics`.

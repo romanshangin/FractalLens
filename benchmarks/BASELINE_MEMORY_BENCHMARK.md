@@ -1,8 +1,6 @@
 # Roadmap 9.1 allocation and sustained-memory diagnostics
 
-> Publication scope: use this protocol for fresh runs in a new output directory.
-> Keep raw logs and diagnostic captures private; publish only reviewed summaries
-> and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
+> Publication: use a new output directory for fresh runs. Keep raw logs/diagnostics private; publish only reviewed summaries and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
 `BaselineMemoryBenchmark` reuses the installed-handler input driver and the
 decimal-authoritative `9.1-v2` fixtures. This is a diagnostic workload, not an

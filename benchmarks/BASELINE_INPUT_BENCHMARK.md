@@ -1,8 +1,6 @@
 # Roadmap 9.1 production input baseline
 
-> Publication scope: use this protocol for fresh runs in a new output directory.
-> Keep raw logs and diagnostic captures private; publish only reviewed summaries
-> and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
+> Publication: use a new output directory for fresh runs. Keep raw logs/diagnostics private; publish only reviewed summaries and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
 [`BaselineInputBenchmark`](../src/test/java/com/shangin/fractal/render/BaselineInputBenchmark.java)
 connects the versioned `9.1-v2` [fixture matrix](BASELINE_BENCHMARK.md) to the

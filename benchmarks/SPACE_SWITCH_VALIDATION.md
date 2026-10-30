@@ -126,25 +126,22 @@ driver uncommitted:
   canvas focus was confirmed. Native pointer automation then returned
   `noWindowsAvailable`. These attempts are invalid trials, not presentation
   failures or successful acceptance checks.
-- Desktop launch access subsequently became unavailable. The final driver adds
-  the controlled F8 drag so that the next run does not depend on that pointer
-  automation. It still requires an independently observed system Space switch.
+- Desktop launch access subsequently became unavailable. The final driver adds the
+  controlled F8 drag so that the next run is independent of that pointer automation. It
+  still requires an independently observed system Space switch.
 - Valid offscreen-completion trials: ES2 **0**, Metal **0**. Return-to-Space and
   Mission Control thumbnail acceptance are **pending**. No comparison of
   failure rates or conclusion that Metal fixes the defect is established by
   these preparation runs.
 
-The driver gate has portable tests covering held calculation until scheduled
-release, completed pixel contents, cancellation without publication and
-idempotent close while calculation is held. They do not replace the visible
-desktop matrix. Raw launch logs remain private; the final controlled-drag
-driver has not yet completed a desktop acceptance trial.
+Portable gate tests held/scheduled release, actual pixels, cancel without publish,
+idempotent held close; not visible matrix. Launch logs private; final controlled
+driver had no desktop acceptance yet at this stage.
 
-Developer checks on the final driver passed: all three `SpaceSwitchProbeTest`
-tests; the full portable suite with an isolated JavaFX cache (481 executed,
-130 opt-in skips, no failures/errors); all 14 publication-script tests;
-`check_public_data.py`; secret scans of history and the candidate tree; and
-`git diff --check`. The skipped FX/native tests are not desktop acceptance.
+Final driver: three `SpaceSwitchProbeTest` passes; portable isolated-cache
+481 executed/130 skips/no failures-errors; 14 publication tests;
+`check_public_data.py`, history/tree secrets, `git diff --check` pass.
+Skipped FX/native is not desktop acceptance.
 
 2026-10-28 desktop run, ES2, Apple M3 Pro, macOS 27.2, JDK 26.0.1 and JavaFX
 26.0.2; the log confirmed `ES2Pipeline`:
@@ -177,13 +174,12 @@ tests; the full portable suite with an isolated JavaFX cache (481 executed,
   `complete` with `focused=false`, focus returned about 5.4 s and 4.8 s later.
   Their window verdicts were not recorded, and trial 8 was followed by zoom
   input, so both are unobserved.
-- A second natural, ungated drag in the same process reached `complete` with
-  focus about 0.72 s before focus loss, so it is inconclusive as an offscreen
-  trial. After a Space swipe away and back about 10 s later, an unaided
-  full-screen capture showed the complete frame with the status badge
-  `Complete`. In the earlier natural attempt with a mixed frame, focus was lost
-  about 0.24 s after completion; two observations do not establish a timing
-  dependence.
+- A second natural, ungated drag in the same process reached `complete` with focus about
+  0.72 s before focus loss, so it is inconclusive as an offscreen trial. After a Space
+  swipe away and back about 10 s later, an unaided full-screen capture showed the
+  complete frame with the status badge `Complete`. In the earlier natural attempt with a
+  mixed frame, focus was lost about 0.24 s after completion; two observations do not
+  prove a timing dependence.
 - Trials 9 and 10 (F7 and a manual drag) are valid offscreen trials; focus
   returned about 3.9 s and 3.4 s after completion. Their window verdicts were
   not recorded, and trial 10 was followed by zoom input, so both are
@@ -314,21 +310,19 @@ and `-Dprism.order` selecting the pipeline:
 | ES2 | 8 failures of 8 | 1 failure of 1 | 1 failure of 1 | 6 | 5 |
 | Metal | 9 passes of 9 | 1 pass of 1 | 1 pass of 1 | 2 | 1 |
 
-ES2 reproduced the reported symptom in every controlled trial with a verdict:
-after the frame completed offscreen, the window, the Mission Control
-thumbnail and a partial swipe kept a mixed preview and refined frame while the
-status badge read `Complete`, and a small pan restored the display in every
-case where recovery was checked. Metal showed the complete frame in every
-trial with a verdict, and its thumbnail visibly advanced while the window was
-offscreen. The run therefore establishes the regression comparison on this
-Mac: the defect is specific to ES2 here and was not observed with Metal.
+ES2 reproduced the symptom in every controlled trial with a recorded verdict.
+After offscreen completion, the window, Mission Control thumbnail and partial
+swipe kept a mixed preview and refined frame while the badge read `Complete`.
+A small pan restored the display in every case where recovery was checked.
+Metal showed the complete frame in every trial with a verdict, and its thumbnail
+visibly advanced while the window was offscreen. This run established the
+regression comparison on this Mac: the defect was reproduced with ES2 and was
+not observed with Metal.
 
-Limits: one Mac; finite trial counts, so the Metal result is bounded evidence
-rather than proof; Mission Control and partial swipes have one trial per
-pipeline; no logged natural attempt in a fresh process; the two ES2
-processes' raw logs for the early trials were overwritten after recording;
-and the pipeline was requested with `-Dprism.order`, not through the
-startup selection that a default switch would add. That final candidate must
-repeat this check before section 4 of the
-[Metal migration checklist](../docs/platform/METAL_MIGRATION_CHECKLIST.md)
-is ticked.
+Limits: one Mac and finite trial counts mean the Metal result is bounded evidence
+rather than proof. Mission Control and partial swipes had one trial per pipeline;
+there was no logged natural attempt in a fresh process. Early raw logs from two
+ES2 processes were overwritten after recording. The pipeline was selected with
+`-Dprism.order`, not through the startup selection for a default switch. The final
+candidate must repeat this check before section 4 of the
+[checklist](../docs/platform/METAL_MIGRATION_CHECKLIST.md) closes.

@@ -189,7 +189,6 @@ then ran in full on 2026-10-28 and ended `fail` (25 pass, 2 inconclusive,
 1512x982 Refined first visible publish fails). See
 [the post-change results](PRISM_PIPELINE_RESULTS.md#post-change-publication-campaign-p17-2026-10-28).
 
-
 ## Sample-to-GC correlation diagnostics (P1.7)
 
 `-Dbaseline.fx.jfr=true` enables a test-only
@@ -274,7 +273,6 @@ correlation run, with no retain/reject timing verdict or extension based on
 results. Record power/thermal conditions and any uncontrolled competing desktop
 work as diagnostic limits. Existing campaign `fail` results remain unchanged.
 
-
 ## Fresh-frame planning decomposition (diagnostic, P1.7)
 
 This is a new diagnostic question and budget after the completed sample/GC
@@ -336,7 +334,6 @@ the same budget in a fresh directory after fixing the environment. Small
 non-graphical configuration/schema smoke checks do not belong to this budget.
 Raw traces and working analysis remain private; publish a sanitized summary and
 an explicit `inconclusive` decision if the cause remains unresolved.
-
 
 ## Bounded worker preparation experiment (P1.7)
 

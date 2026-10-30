@@ -1,11 +1,6 @@
 # CPU antialiasing cache optimization
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Measurement dates: 2026-09-05–06. Baseline rendering code: `6c263f6`.
 Machine: Apple M3 Pro, 12 logical processors, macOS 26.6.2,
@@ -13,43 +8,29 @@ Java 26.0.1, JavaFX 26.0.2, 2 GiB JVM heap, 11 AA workers.
 
 ## Cause and implementation
 
-Every traversed pixel previously called the synchronized, access-order
-`AntialiasSampleCache.color`, including millions of misses on a fresh frame.
-For each AA candidate, encoding/insertion and a second lookup/color operation
-also ran under that shared cache monitor. The smooth-coloring path first
-colored the entire base image, then overwrote it with another complete pass
-using quantized base phases.
+Every pixel previously called synchronized access-order `AntialiasSampleCache.color`,
+including millions of fresh misses. Candidate encoding/insertion/second lookup also
+held that monitor. Smooth coloring filled base, then overwrote it with quantized phases.
 
-The service now captures a read-only cache snapshot once, prepares retained
-colors and a membership mask, and performs worker lookups without acquiring
-the cache monitor. Fresh frames use an empty snapshot and allocate no retained
-color array. Retained AA colors remain separate from the base-color image so
-candidate detection still sees precisely the same base pixels.
+One read-only snapshot prepares retained colors/mask; workers look up without
+cache locking. Fresh frames allocate no retained color array. Keep AA colors
+separate so detection sees identical base pixels.
 
-Each worker stages at most one 32x32 tile. It encodes each candidate's phases
-once and colors directly from the staged value; completed tiles enter the
-cache in one merge. Sample arrays are reused within a tile, while each cached
-phase payload owns its copy. Smooth base colors are prepared only once.
-Sample positions, candidate thresholds, 4x4/direct and 2x2–4x4/deep sampling,
-iteration budgets, smooth phases and linear-light averaging remain unchanged.
+Worker stages at most one 32x32 tile, encodes phases once/colors from staging,
+merges completed tile once. Reuse tile sample arrays; cached payloads own copies.
+Prepare smooth base once. Positions/thresholds, 4x4 direct/2x2–4x4 deep, caps,
+phases/linear-light averages unchanged.
 
-Tile admission is serialized with frame replacement, cache shifting and
-cancellation. A cancelled worker cannot write its staged samples into the next
-frame's cache. Changing the sampling pattern invalidates old AA samples;
-changing the phase color scale excludes incompatible snapshots. Palette or
-offset changes at the same phase scale can reuse the samples.
+Serialize admission with replacement/shift/cancel; stale workers cannot write
+next cache. Pattern changes invalidate samples, phase-scale changes exclude
+snapshots; same-scale palette/offset changes reuse samples.
 
-The cache retains its existing payload budget and pixel eviction mechanism.
-Snapshot reads do not update individual LRU positions; admissions still evict
-the oldest map entries, with tile completion determining insertion order.
-A retained-color snapshot adds at most one ARGB array plus a membership bitset
-(about 23.4 MiB at 3024x1964) when cached samples exist, in addition to
-the existing snapshot index/reference arrays. A running snapshot can also keep
-evicted phase payloads alive until refinement finishes. Worker staging is bounded
-by the worker count and 1024 pixels per active tile. This is not a claim that
-the cache's payload counter includes map/object overhead or measures process RSS.
-If even one candidate cannot fit in the configured cache, its original uncached
-coloring path is retained.
+Keep payload budget/eviction. Reads no longer update individual LRU; admissions
+evict oldest entries in tile-completion order. Retained snapshot adds one ARGB/
+bitset (about 23.4 MiB at 3024x1964) plus existing index/reference arrays; it can
+retain evicted phases until refinement ends. Worker staging ≤worker count ×1024
+pixels. Payload counter is not object/map overhead or RSS. If one candidate
+cannot fit cache, retain original uncached coloring.
 
 ## Contention evidence
 
@@ -60,11 +41,9 @@ across worker threads. The optimized recording has no contended entries on
 that monitor; the service monitor used for tile admission/startup records 368
 events totaling 17.926 ms.
 
-These durations overlap across threads and include cold/warmup frames.
-Low-threshold JFR recording substantially increases baseline runtime; the
-performance tables use separate uninstrumented runs. Contention on
-`ValidityMask` also appears during untimed base rendering and is not attributed
-to this AA change. See saved diagnostic counters (private archive: `CPU_AA_CONTENTION_PROFILE.csv`).
+JFR durations overlap threads/include cold-warmups; low threshold inflates baseline.
+Tables use separate uninstrumented runs. Untimed base `ValidityMask` contention is
+not AA-change attribution. Private counters: `CPU_AA_CONTENTION_PROFILE.csv`.
 
 `InteractiveAntialiasService.Profile` now exposes cache snapshot preparation,
 tile-merge elapsed time and merge count separately. Worker stage timings are
@@ -104,10 +83,9 @@ were run without concurrent profiling, builds or tests.
 
 ## JavaFX publication comparison
 
-The existing production-service/JavaFX benchmark has an explicit CPU-only mode
-for this comparison. The same measurement driver is used with each build;
-normal paired CPU/GPU mode still requires real GPU execution. CPU-only rows
-do not establish GPU conformance.
+The existing production-service/JavaFX benchmark has an explicit CPU-only mode for this
+comparison. The same measurement driver is used with each build; normal paired CPU/GPU
+mode still requires real GPU execution. CPU-only rows do not prove GPU conformance.
 
 Three fresh JVM pairs use the same cold/warmup/measured counts as the AA
 service comparison: 30 measured frames per build per case. Total time includes
@@ -121,13 +99,10 @@ CPU_AA_FX_BENCHMARK_RESULTS.csv (private archive: `CPU_AA_FX_BENCHMARK_RESULTS.c
 | overview-aa | 3024x1964 | 1378.67 → 332.33 | 4.15x | 1452.58 → 409.83 | 9.45 → 10.20 |
 | overview-refined | 3024x1964 | 1393.72 → 283.65 | 4.91x | 1543.52 → 325.57 | 95.12 → 79.76 |
 
-Refined first-publication medians improve. Fast base-publication medians
-increase by 0.35 ms at 1512x982 and 0.75 ms at Retina, before AA starts;
-the measured total-frame improvement does not imply faster base calculation.
-The ordinary mode publishes the base image first, while Refined waits for useful refinement;
-their first-publication values have different meanings. AA numerical checks
-come from the headless pixel comparisons and regression suite, not the
-CPU-only driver’s `max_smooth_error=0` placeholder.
+Refined first publication improves; Fast base increases 0.35 ms at 1512x982,
+0.75 ms Retina before AA. Total gains do not imply faster base. Ordinary first
+base and Refined first useful AA have different meanings. Numeric evidence is
+headless pixels/regressions, not CPU-only `max_smooth_error=0` placeholder.
 
 | Mode | Size | Median GC time per frame before → after, ms | Median heap after frame before → after, MiB |
 | --- | --- | ---: | ---: |
@@ -136,10 +111,10 @@ CPU-only driver’s `max_smooth_error=0` placeholder.
 | overview-aa | 3024x1964 | 9.5 → 6.0 | 418.1 → 833.3 |
 | overview-refined | 3024x1964 | 10.5 → 5.0 | 717.6 → 1006.6 |
 
-Heap observations include live objects and garbage awaiting collection; they
-are not retained-cache size, allocation rate or RSS. GC/memory columns remain
-in the raw data. These bounded runs do not establish long-duration thermal
-behavior or memory usage during repeated cancellation.
+Heap observations include live objects and garbage awaiting collection; they are not
+retained-cache size, allocation rate or RSS. GC/memory columns remain in the raw data.
+These bounded runs do not prove long-duration thermal behavior or memory usage during
+repeated cancellation.
 
 These measurements end at PixelBuffer publication. macOS emitted CVDisplayLink
 warnings during the test-window run; actual display scanout/vsync latency is
@@ -182,16 +157,13 @@ Data: CPU_AA_FOLLOWUP_RESULTS.csv (private archive: `CPU_AA_FOLLOWUP_RESULTS.csv
 | deep | 417.44 → 414.17 | 431.97 → 441.20 | 15.25 → 14.94 |
 | resume-julia | 280.18 → 25.91 | 294.04 → 34.28 | 6.38 → 11.10 |
 
-Deep-AA time is effectively unchanged in this fixture; the optimization is
-not a demonstrated deep-zoom speedup. Retained Julia finishes about ten times
-faster, with a first-tile tradeoff of about 5 ms: retained colors are prepared
-before tile dispatch. This is a measured limitation of the snapshot approach,
-recorded as follow-up work in roadmap 9.2. The fresh-frame JavaFX gains do not
-erase that limitation.
+Deep AA is unchanged here, no proven deep speedup. Retained Julia completes
+~tenfold faster but first tile costs ~5 ms for retained-color preparation.
+Roadmap 9.2 retains that snapshot limitation; fresh FX gains do not erase it.
 
-Validation: the complete default Maven suite passes: **353 tests discovered,
-333 executed, 20 opt-in cases skipped; no failures or errors**. The two AA test
-classes contain 21 passing tests, including five new regressions.
+Validation: the complete default Maven suite passes: **353 tests discovered, 333
+executed, 20 opt-in cases skipped; no failures/errors**. The two AA test classes contain
+21 passing tests, including five new regressions.
 
 The opt-in JavaFX integration suite also passes: **16 reported, 14 executed,
 2 fullscreen cases skipped**. This covers resize/pan retention, Refined AA

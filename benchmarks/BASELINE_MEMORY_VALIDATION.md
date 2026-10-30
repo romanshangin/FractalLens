@@ -1,27 +1,20 @@
 # Roadmap 9.1 allocation and sustained memory — 2026-09-08 local
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
-The allocation profile identifies repeated arbitrary-precision coordinate work
-in deep AA as a follow-up target. This step adds diagnostic infrastructure and
-evidence; it does not optimize the production renderer or establish a speedup.
-See [the workload and reproduction contract](BASELINE_MEMORY_BENCHMARK.md).
+Deep-AA arbitrary-precision coordinate allocation is a follow-up target.
+Diagnostic infrastructure/evidence, no production optimization/speedup.
+[Workload/reproduction](BASELINE_MEMORY_BENCHMARK.md).
 
-Branch: `codex/roadmap-9-1-memory-profiling`, based on `c2ec1a8`. Data identify
-that base plus the working tree through source SHA-256 manifests. The final
-sustained runner additionally moves each case into a completed helper method
-before the detached GC checkpoint, avoiding dependence on the liveness of
-large `Result` locals in the long-running main method. The earlier allocation
-profile remains useful for allocation attribution; its detached-memory values
-are not the final sustained ownership evidence.
-The earlier driver and launcher are preserved only in the private archive as
-source snapshots (private archive: `baseline-9-1-memory-allocation-20260908/source-snapshots`);
-their SHA-256 values exactly match the allocation run's recorded manifest.
+Validation ran on `codex/roadmap-9-1-memory-profiling`, based on `c2ec1a8`;
+source SHA-256 manifests identify the base plus working-tree changes. In the final
+sustained runner, each case returned from a helper before the detached GC
+checkpoint, avoiding dependence on large `Result` locals in the long-running main
+method. The earlier allocation profile remains useful for allocation attribution,
+but its detached-memory values are not the final sustained ownership evidence.
+The earlier driver and launcher are preserved only as private source snapshots
+(`baseline-9-1-memory-allocation-20260908/source-snapshots`); their SHA-256 values
+exactly match the allocation run's manifest.
 
 ## Environment and boundaries
 
@@ -32,11 +25,11 @@ verify JavaFX 26.0.2, the ES2 pipeline, Apple M3 Pro renderer, vsync and 2x scal
 GPU fractal calculation is disabled. The allocation and sustained JVMs run
 sequentially, without competing tests, builds or rendering suites.
 
-Navigation uses installed handlers and production base/AA caches. All seed,
-forward and return results pass the same exact sample/ARGB controls as the input
-baseline. Controls and scene preparation have separate wall-clock intervals;
-the process-level memory and CPU observations still include that work. Base
-request diagnostics retain generation identity and require worker drain.
+Navigation uses installed handlers and production base/AA caches. All seed, forward and
+return results pass the same sample/ARGB controls as the input baseline. Controls and
+scene preparation have separate wall-clock intervals; the process-level memory and CPU
+observations still include that work. Base request diagnostics retain generation
+identity and require worker drain.
 
 Foundation thermal state is available. It is an OS pressure observation, not
 temperature, clock frequency or energy. Power-source observations are saved;
@@ -73,22 +66,16 @@ application stack frame yields the following attribution within navigation:
 | `PreciseRenderGrid.realAt` | 2.05 GB | 4.93% |
 | `PreciseRenderGrid.rawImaginaryAt` | 1.56 GB | 3.75% |
 
-These groups are exclusive nearest-frame attribution, not inclusive call-tree
-costs. JFR weights can represent earlier allocations on the same thread;
-time-window joins are approximate at boundaries. They neither establish exact
-allocation counts nor quantify the speedup achievable by removing them.
+Groups are exclusive nearest-frame, not inclusive costs. Weights may include prior
+thread allocations; scope joins are approximate, not exact counts/potential speedup.
 
-Code inspection corroborates the mechanism: `sampleDeepGrid` constructs precise
-subpixel coordinates, `PreciseSampler.sample` subtracts the reference coordinates,
-and the two immutable reference-coordinate accessors call `BigDecimal.doubleValue`
-again for each sample. This motivates the explicit follow-up in 9.4: first
-evaluate memoizing those immutable conversions, then exact coordinate component
-reuse, preserving operation order and numerical controls.
+Inspection: `sampleDeepGrid` builds precise subpixels, `PreciseSampler.sample`
+subtracts reference, immutable accessors repeat `BigDecimal.doubleValue` per sample.
+9.4 follow-up: memoize immutable conversions, then exact component reuse, preserving
+operation order/numeric controls.
 
-Navigation-scoped GC counters accumulate 253 ms over 33.58 s; the profile does
-not show that GC pauses alone explain the arithmetic/allocation cost. Primitive
-integer arrays in these stacks often belong to arbitrary-precision arithmetic,
-so treating every `int[]` allocation as a pixel-buffer copy would be incorrect.
+Navigation GC counters: 253 ms/33.58 s, not proof pauses explain arithmetic/
+allocation. Many `int[]` stacks belong to big-number math, not pixel copies.
 
 ## Sustained run
 
@@ -126,13 +113,12 @@ JavaFX peer/resource cleanup to complete on a particular pulse.
 
 RSS and detached heap checkpoints (private archive: `baseline-9-1-memory-sustained-final-20260908/memory.svg`).
 
-Exact-target timing groups are saved per round. For example, deep-AA pinch
-Fast completion is 5156.50 / 5107.67 / 5012.09 / 5055.69 ms, while the Fast
-direct/deep/reverse return is 7336.99 / 7469.16 / 7276.41 / 7799.82 ms.
-This shows why nominal thermal pressure and a bounded heap do not establish
-constant latency for every scenario. There is one observation per case/round;
-warmup, GC and scheduling remain mixed. No stable p95, thermal-causality or
-before/after speedup claim is made.
+Exact-target timing groups are saved per round. For example, deep-AA pinch Fast
+completion is 5156.50 / 5107.67 / 5012.09 / 5055.69 ms, while the Fast
+direct/deep/reverse return is 7336.99 / 7469.16 / 7276.41 / 7799.82 ms. This shows why
+nominal thermal pressure and a bounded heap do not prove constant latency for every
+scenario. There is one observation per case/round; warmup, GC and scheduling remain
+mixed. No stable p95, thermal-causality or before/after speedup claim is made.
 
 ## Validation and limits
 
@@ -143,8 +129,8 @@ captures. Regression cases reject missing controls/checkpoints, incomplete
 rounds, scope overlap, short runs and failed native captures. JFR tests cover
 nanosecond timestamps with timezone offsets and allocation scope boundaries.
 
-- `mvn clean test`: **394 tests, zero failures/errors, 37 skipped**.
-  Saved log (private archive: `baseline-9-1-memory-sustained-final-20260908/clean-test.log`).
+- `mvn clean test`: **394 tests, no failures/errors, 37 skipped**. Saved log (private
+  archive: `baseline-9-1-memory-sustained-final-20260908/clean-test.log`).
 - Python baseline validators: **22 tests passed**.
   Saved log (private archive: `baseline-9-1-memory-sustained-final-20260908/python-tests.log`).
 - Graphical `BaselineInputBenchmarkTest`: **16 tests passed**.
@@ -157,22 +143,14 @@ nanosecond timestamps with timezone offsets and allocation scope boundaries.
   NMT capture even when the workload finishes first.
   Validation record (private archive: `baseline-9-1-memory-sustained-final-20260908/validation.txt`).
 
-The first restricted graphical probe failed to access a display/NMT. Temporary
-development probes under `target` are excluded from accepted datasets and are
-removed by the final clean build.
-The initial sustained run at
-`benchmarks/baseline-9-1-memory-sustained-20260908` was stopped to isolate
-per-case stack lifetimes; its `SUPERSEDED` marker excludes it from conclusions.
-It has no monitor success marker. Historical CSVs are not overwritten.
-New process CSVs are normalized to LF for review; their original CRLF byte
-streams were retained as `process-original.csv.gz` in the private archive.
-Those captures and logs are excluded from the public evidence. Numeric
-observations in this historical report are unchanged.
+Restricted first probe lacked display/NMT. Temporary `target` probes are excluded/
+clean-build removed. Initial `benchmarks/baseline-9-1-memory-sustained-20260908`
+stopped to isolate stack lifetime: `SUPERSEDED`, no monitor success, excluded
+from conclusions. Historical CSVs are never overwritten. New CSVs normalized LF;
+original CRLF `process-original.csv.gz`/logs remain private. Reported numbers unchanged.
 
-The eight-fixture selection is not full formula/feature coverage, and a bounded
-soak does not prove indefinite memory stability. NMT excludes some native graphics
-and third-party allocations; committed memory and RSS have different meanings.
-Forced GC checkpoints do not describe normal interactive GC cadence. Physical
-scanout, temperature sensors, clock throttling and energy remain unmeasured.
-The final uninstrumented 30-pair/multiple-process decision protocol in 9.1
-remains open; these diagnostic timings cannot close that gate.
+The eight fixtures do not provide full coverage, and a bounded soak does not
+prove indefinite memory stability.
+NMT excludes graphics/third-party allocations; committed/RSS differ. Forced GC
+is not normal cadence. No scanout/temperature/clocks/energy. Diagnostic timings
+cannot close 9.1 uninstrumented 30-pair/multi-process gate.

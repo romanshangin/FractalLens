@@ -1,25 +1,16 @@
 # Roadmap 9.1 fixture validation
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
-Recorded 2026-09-07 UTC (2026-09-06 local). Source: branch
-`codex/roadmap-9-1-baseline-fixtures`, working-tree implementation on parent
-`0c1b5a49fa1d9bf490cee9ed7085946ba9b0a57e`. The saved output explicitly labels
-that working-tree state. This is validation of the measurement harness, not
-an optimization comparison or a completed Retina performance baseline.
+2026-09-07 UTC (2026-09-06 local), `codex/roadmap-9-1-baseline-fixtures`,
+working tree on `0c1b5a49fa1d9bf490cee9ed7085946ba9b0a57e`, explicitly labeled
+in output. Harness validation only, not optimization or completed Retina baseline.
 
 ## Inputs and environment
 
-The [canonical matrix](BASELINE_FIXTURES.csv) pins 28 sequences / 37 steps at
-480x270, 1512x982 and 3024x1964 (111 manifest rows). Tests validate the full
-manifest, iteration caps and supported backends without rendering the two
-large matrices. The executed validation uses all 28 sequences at 480x270;
-resize targets 608x342.
+[Matrix](BASELINE_FIXTURES.csv): 28 sequences/37 steps at 480x270, 1512x982,
+3024x1964 (111 rows). Tests validate full manifest/caps/backends without rendering
+the two large sizes. Execution covers all 28 at 480x270, resize 608x342.
 
 Hardware read through `sysctl`: Apple M3 Pro, 19,327,352,832 bytes RAM (18 GiB).
 macOS 26.6.2, aarch64, 12 reported processors, 11 workers per production pool,
@@ -55,10 +46,10 @@ conformance against a different implementation.
 | Scaled exponent | Production rendering completed at 1e-400; regression confirms c=2 and its immediate positive neighbor retain different escape iterations |
 | Retained AA | Regression compares every output pixel with an empty-cache Julia refinement; preparation is excluded from the measured second-AA interval |
 
-`mvn clean test` passed: 364 tests, zero failures/errors, 20 expected skips
-(14 opt-in JavaFX tests and six native GPU tests). After adding the retained
-reverse-navigation case, the final targeted `BaselineBenchmarkTest` run passed
-all six tests. No production rendering code changed.
+`mvn clean test` passed: 364 tests, no failures/errors, 20 expected skips (14 opt-in
+JavaFX tests and six native GPU tests). After adding the retained reverse-navigation
+case, the final targeted `BaselineBenchmarkTest` run passed all six tests. No production
+rendering code changed.
 
 The summary script was exercised against the completed run, a duplicate-row
 input and an incomplete-run input; the malformed inputs were rejected. A new

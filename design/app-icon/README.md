@@ -1,24 +1,29 @@
-# FractalLens — матовая иконка
+# FractalLens — matte icon
 
-Выбранный пользователем Мандельброт: однотонный синий силуэт `#103B75` на светлом фоне `#D9EDF8`. Из рисунка убраны блики, свечение, текстура, объём и градиенты. Силуэт и фон разделены; нативные слои квадратные, без заранее скруглённых углов.
+Owner-selected Mandelbrot: flat `#103B75` silhouette on `#D9EDF8`, no highlights,
+glow, texture, volume or gradients. Separate square native silhouette/background
+layers, no baked corner rounding.
 
-- `matte-square.png` — сохранённый результат правки через встроенный imagegen.
-- `mandelbrot.png` — прозрачный слой силуэта, 1024×1024.
-- `flat-square.png` — плоская композиция, 1024×1024, без маски.
-- `FractalLens.icon` — проект, созданный и проверенный в Apple Icon Composer. Эффекты слоя, блики группы, полупрозрачность и тени отключены. Скругление и системное оформление фона оставлены macOS.
-- `macos-legacy-mask.png` — альфа-маска из экспорта Xcode, используется только для совместимости с Java Dock API и ICNS.
+- `matte-square.png`: saved built-in imagegen edit.
+- `mandelbrot.png`: transparent silhouette, 1024×1024.
+- `flat-square.png`: flat unmasked composition, 1024×1024.
+- `FractalLens.icon`: created/verified in Apple Icon Composer; layer effects,
+  group highlights, translucency/shadows off. macOS supplies corner/background styling.
+- `macos-legacy-mask.png`: Xcode-export alpha mask for Java Dock/ICNS compatibility only.
 
-PNG и ICNS приложения находятся в `src/main/resources/com/shangin/fractal/app/icons/`. Они используют плоский рисунок без нарисованных бликов. Maven и общая конфигурация IntelliJ передают ICNS в `-Xdock:icon` до инициализации JavaFX.
+Flat PNG/ICNS (no painted highlights):
+`src/main/resources/com/shangin/fractal/app/icons/`. Maven/shared IntelliJ pass
+ICNS via `-Xdock:icon` before JavaFX initializes.
 
-## Пересборка
+## Rebuild
 
-Из корня проекта, с установленным Pillow:
+From repository root, with Pillow installed:
 
 ```sh
 python3 scripts/packaging/build_app_icon.py
 ```
 
-Скомпилировать нативный исходник инструментами Xcode:
+Compile native artwork with Xcode:
 
 ```sh
 mkdir -p target/native-icon
@@ -29,21 +34,29 @@ xcrun actool design/app-icon/FractalLens.icon \
   --output-format human-readable-text
 ```
 
-Нативный экспорт содержит `Assets.car`, `FractalLens.icns` и ключи Info.plist. Для `.app` с нативной многослойной иконкой нужны оба ресурса и `CFBundleIconName=FractalLens`; одной копии `.icon` в JAR недостаточно. Текущий запуск JavaFX из Maven/IDE использует совместимые PNG/ICNS. Обычная упаковка `jpackage --icon src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns` также поддерживается.
+Native export: `Assets.car`, `FractalLens.icns`, Info.plist keys. Layered `.app`
+needs both resources plus `CFBundleIconName=FractalLens`; `.icon` in JAR alone is
+insufficient. Maven/IDE JavaFX uses compatible PNG/ICNS; ordinary
+`jpackage --icon src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns`
+is also supported.
 
-## Проверка
+## Validation
 
-Проект открыт в Icon Composer и успешно скомпилирован `actool`. Рисунок проверен в нативном экспорте. Реальная иконка Dock прочитана до и после установки через Java Taskbar: обе соответствуют новому Мандельброту. Слой силуэта сохраняет прозрачные поля, фон композиции непрозрачный.
+The project was opened in Icon Composer, compiled with `actool`, and inspected
+in the native export. The Dock icon was read before and after it was set through
+the Java Taskbar API; both images matched the selected Mandelbrot artwork.
+The silhouette retains transparent margins; the composition background is opaque.
 
-## Источники и происхождение
+## Sources and provenance
 
 - [Apple: App icons](https://developer.apple.com/design/human-interface-guidelines/app-icons)
 - [Apple: Creating your app icon using Icon Composer](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer)
-- [Java: параметры macOS](https://docs.oracle.com/en/java/javase/25/docs/specs/man/java.html#extra-options-for-macos)
+- [Java: macOS options](https://docs.oracle.com/en/java/javase/25/docs/specs/man/java.html#extra-options-for-macos)
 
-Правка выполнена встроенным imagegen; альфа-канал, разделение слоёв и размеры подготовлены программно с ранее полученным разрешением пользователя. Лицензию Icon Composer пользователь принял самостоятельно.
+Built-in imagegen edit; alpha/layer separation/dimensions prepared programmatically
+with prior user permission. User independently accepted Icon Composer's license.
 
-### Промпт imagegen
+### Imagegen prompt
 
 ```text
 Use case: precise-object-edit.

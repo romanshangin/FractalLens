@@ -1,11 +1,6 @@
 # CPU/GPU optimization analysis
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Analysis date: 2026-09-05. Repository baseline: `6c263f6`.
 
@@ -16,34 +11,23 @@ Code descriptions and historical timings below refer to baseline `6c263f6`.
 
 ## Decision and scope
 
-Keep CPU calculation as the default. Prioritize CPU antialiasing, then extend
-the successful deep-zoom algorithms. The most useful new GPU algorithm experiment
-is a CPU high-precision reference with GPU perturbation/BLA, rather than another
-direct FP32 certificate or a repeat of the rejected double-single recovery loop.
-Hardware-native FP64 and selective use of the resident backend remain separate
-conditional opportunities.
+Keep CPU default; prioritize AA then deep algorithms. Preferred new GPU experiment:
+CPU high-precision reference/GPU perturbation-BLA, not another direct FP32 certificate
+or rejected double-single loop. Native FP64/selective residency remain conditional.
 
-The integrated GPU calculation path currently accepts only certified Mandelbrot
-jobs without orbit traps, with 1–1000 iterations and a supported coordinate
-grid. Deep zoom and unsupported work use CPU. A future GPU perturbation path
-must establish its own higher-iteration contract; the existing FP32 gate does
-not cover it. See [runtime modes](../docs/platform/GPU_RUNTIME.md#platform-and-numeric-requirements)
-and [backend eligibility](../src/main/java/com/shangin/fractal/gpu/GpuMandelbrotRenderBackend.java).
+GPU accepts certified no-trap Mandelbrot, 1–1000 iterations/supported grids;
+deep/unsupported → CPU. GPU perturbation needs a separate higher-cap contract,
+not existing FP32 permission. [Modes](../docs/platform/GPU_RUNTIME.md#platform-and-numeric-requirements),
+[eligibility](../src/main/java/com/shangin/fractal/gpu/GpuMandelbrotRenderBackend.java).
 
-This analysis covers the relevant families of optimization: avoiding work,
-reducing iteration work, numerical representations, SIMD and scheduling,
-allocation and synchronization, AA/coloring, transfers and presentation,
-backend selection, platform APIs, and export. It distinguishes measured results
-from proposed experiments; it cannot establish an exhaustive list of every
-possible algorithm or guarantee a speedup for an unimplemented option.
+Scope: work avoidance/iteration reduction, representations, SIMD/scheduling,
+allocation/synchronization, AA/coloring, transfers/presentation, selection/APIs/export.
+Distinguish measurements/proposals; no exhaustive algorithm list or guaranteed gain.
 
-The saved reports, raw GPU CSVs and current implementation were inspected.
-Retina medians used below were recomputed from `phase=sample` rows. No new
-performance run was performed for the initial analysis; the CPU AA follow-up
-linked above contains subsequent measurements. Existing CPU
-experiments have smaller sample counts and older runtimes than the recent GPU
-gates; their outcomes are evidence about those implementations and workloads,
-not universal hardware limits.
+Inspected reports/raw GPU CSV/current code; recomputed Retina medians from
+`phase=sample`. Initial analysis ran no new timings; linked CPU AA follow-up did.
+Older CPU experiments use fewer samples/older runtimes: implementation/workload
+evidence, not universal hardware limits.
 
 The executable follow-up is [roadmap section 9](../ROADMAP.md#9-pursue-cpugpu-optimization-from-the-measured-bottlenecks).
 Existing sections 8.7 and 8.8 retain the separate Windows and Intel/AMD Mac work.
@@ -87,12 +71,10 @@ Sources: primary CSV (private archive: `GPU_RENDER_BENCHMARK_8_5_RESULTS.csv`) a
 Refined CSV (private archive: `GPU_RENDER_BENCHMARK_8_5_REFINED.csv`). Refined first publication is
 also worse on GPU: 244.50 vs 92.26 ms. Neither timer measures physical scanout.
 
-The resident benchmark instead ends at a returned ARGB array. It uses fixed 300
-iterations and ICE coloring, with no JavaFX publication, AA, pan reuse or input
-latency. Its conformance comparison checks colors, not the full sample plane.
-These limits follow directly from
-[`GpuResidentRenderBenchmark`](../src/main/java/com/shangin/fractal/ui/GpuResidentRenderBenchmark.java)
-and its [native test](../src/test/java/com/shangin/fractal/gpu/GpuResidentMandelbrotNativeTest.java).
+Resident benchmark ends at ARGB: fixed 300 iterations/ICE, no FX/AA/reuse/input
+latency; color checks, not full sample conformance.
+[Driver](../src/main/java/com/shangin/fractal/ui/GpuResidentRenderBenchmark.java),
+[native test](../src/test/java/com/shangin/fractal/gpu/GpuResidentMandelbrotNativeTest.java).
 
 | Retina workload | CPU to ARGB | Resident GPU to ARGB | Recovery fraction | Decision |
 | --- | ---: | ---: | ---: | --- |
@@ -130,13 +112,10 @@ are outside `aa_cache_color_cpu_ms`. Millions of cache misses can therefore
 serialize workers without appearing in the reported cache/color interval.
 This is a code-supported hypothesis, not a newly measured root cause.
 
-First capture monitor/parking, allocation and worker-idle profiles alongside
-AA wall time. Compare an immutable lookup snapshot for retained samples,
-tile-local primitive sample staging, one cache merge per completed tile and
-coloring directly from that staging. Preserve bounded memory, cancellation,
-palette phases, pan/resize retention and the exact existing sampling pattern.
-The old scalar `FractalSample` escape-analysis experiment does not cover
-`FractalSample[16]` objects passed to the AA cache.
+First profile monitor/parking, allocations/idle and AA wall. Compare immutable
+retained lookups, tile-local primitive staging, single tile merge/direct staged
+coloring. Preserve bounded memory/cancel/phases/pan-resize/exact pattern. Scalar
+`FractalSample` escape analysis does not cover cache-passed `FractalSample[16]`.
 
 Candidate detection also reruns a derivative orbit for non-edge pixels in
 [`AdaptivePngExportService`](../src/main/java/com/shangin/fractal/export/AdaptivePngExportService.java).
@@ -154,18 +133,14 @@ references. The [perturbation backend](../src/main/java/com/shangin/fractal/rend
 caches exact-match primary orbits but keeps additional references and BLA
 tables local to a generation.
 
-Compare primitive block arrays, tile-local bounds, sampler/table sharing with
-explicit ownership, and bounded reuse of compatible references. Extend scaled
-rebasing/BLA only with exponent-preserving arithmetic. A reference that remains
-useful after pan need not equal the new center, but its precision, coverage,
-glitch behavior and iteration capacity must still be checked. Never reuse a
-viewport-specific radius without recomputing its bound.
+Compare primitive blocks/tile bounds, explicitly owned sampler/table sharing and
+bounded compatible-reference reuse. Scaled rebasing/BLA must preserve exponents.
+Pan references need not equal center, but require precision/coverage/glitch/capacity
+checks; viewport radii always need new bounds.
 
-Higher-order series, polynomial block approximations and adaptive error bounds
-are research options for scenes where strict BLA accepts no useful skips.
-Begin with an offline correctness/skip-coverage experiment. The existing cubic
-series and loose-radius failures make another unchecked threshold sweep a poor
-next step.
+Where strict BLA cannot skip, research higher-order series/polynomial blocks/
+adaptive bounds via offline correctness/coverage first. Cubic/loose-radius failures
+do not justify another unchecked threshold sweep.
 
 ### GPU: correction cost is numerical, not just transfer overhead
 
@@ -174,11 +149,9 @@ escape and 48.84% to an excessive smooth interval. All other categories are
 zero. Dispatch, palette-phase tuning or list compaction may reduce overhead,
 but they do not fix these rejected orbits.
 
-A useful new experiment must reduce the actual work: share an accurate CPU
-reference, skip many iterations on GPU, or use hardware with efficient native
-FP64. Another possibility is to avoid dispatching costly scenes at all. An
-early CPU fallback protects latency; it does not make GPU calculation faster
-on that scene or pass the existing cross-scene GPU gate.
+New work must reduce computation via shared reference, GPU skips/native FP64,
+or avoid expensive dispatches. Early CPU fallback protects latency but neither
+speeds GPU nor passes cross-scene GPU gates.
 
 ### Presentation: optimize it as its own measured stage
 
@@ -238,12 +211,12 @@ algorithmic foundations already used by the CPU backend, and are documented by
 [Mathr](https://mathr.co.uk/web/deep-zoom.html). A GPU implementation is a proposed
 application of these ideas, not an observed FractalLens GPU result.
 
-Start with the existing scalar CPU reference/BLA data and fixed diagnostic
-grids. Quantify GPU error from reference conversion, coefficient conversion,
-delta updates, escape testing and smooth evaluation. FP32 BLA needs its own
-error/radius policy; copying CPU `2^-52` bounds or increasing them to `2^-23`
-does not establish correctness. Retain exact CPU recovery from original
-coordinates and report failure density and recovery cost.
+Start with the existing scalar CPU reference/BLA data and fixed diagnostic grids.
+Quantify GPU error from reference conversion, coefficient conversion, delta updates,
+escape testing and smooth evaluation. FP32 BLA needs its own error/radius policy;
+copying CPU `2^-52` bounds or increasing them to `2^-23` does not prove correctness.
+Retain exact CPU recovery from original coordinates and report failure density and
+recovery cost.
 
 Test both the BLA-friendly `1e-30`/`1e-80` views and boundary views where BLA
 cannot skip. Deep zoom may help amortization, but it may also leave only two
@@ -260,19 +233,15 @@ bounded in both elapsed time and recurrence steps.
 
 ### Numerical and spatial shortcuts: preserve the contract
 
-Classifying a tile from matching corner or border colors (including naive
-Mariani–Silver/boundary-tracing fills) can miss small structures and smooth
-variation. Quadtree subdivision is useful as scheduling; filling a region
-without evaluating its pixels needs a conservative numerical argument or must
-remain an approximate preview. Similarly, reaching `maxIterations` means
-bounded under this render contract, not a proof of mathematical membership.
+Matching corners/borders (naive Mariani–Silver/boundary fills) can miss structure/
+smooth variation. Quadtree scheduling is useful; unevaluated fills require
+conservative proof or approximate-preview status. `maxIterations` means bounded
+under render contract, not proven mathematical membership.
 
-Native FP64, FMA, fast-math, different logarithms, multiword arithmetic and MPFR
-can change rounding and boundary iteration counts. Treat them as numerical
-backend changes, not mechanically exact replacements. MPFR provides explicit
-binary precision and rounding, which makes it a candidate reference engine;
-decimal and binary operation sequences still need conformance comparisons.
-[MPFR manual](https://www.mpfr.org/mpfr-current/mpfr.html#Introduction-to-MPFR).
+FP64/FMA/fast-math/logarithms/multiword/MPFR can change rounding/boundary counts:
+numerical backend changes, not exact drop-ins. MPFR's explicit binary precision/
+rounding makes it a reference candidate, still requiring decimal/binary conformance.
+[Manual](https://www.mpfr.org/mpfr-current/mpfr.html#Introduction-to-MPFR).
 
 ### Hardware and API choices
 
@@ -283,25 +252,19 @@ an explicitly enabled capability, not a throughput guarantee.
 Windows native Vulkan and Intel/AMD Mac validation remain mandatory separate
 tracks; do not infer their results from Apple Silicon.
 
-Java's JDK 26 Vector API is still an incubating API. Revisit it for a concrete
-species or lane-management improvement, rather than relying on a future
-stabilization date. [OpenJDK announcement](https://inside.java/2025/12/02/jep529-target-jdk26/).
-GPU subgroup arithmetic/ballot features should also be queried at runtime;
-their availability and widths are device-dependent.
-[Vulkan subgroup guide](https://docs.vulkan.org/guide/latest/subgroups.html).
+JDK 26 Vector API is incubating: revisit concrete species/lane improvements,
+not assumed stabilization. [OpenJDK](https://inside.java/2025/12/02/jep529-target-jdk26/).
+Query device-dependent GPU subgroup widths/arithmetic/ballots at runtime.
+[Vulkan guide](https://docs.vulkan.org/guide/latest/subgroups.html).
 
-Native Metal is a possible macOS optimization experiment, while native Vulkan
-retains Windows portability. CUDA would be an NVIDIA-only optional backend;
-OpenCL/SYCL or a Java-to-GPU compiler such as TornadoVM would need a separately
-verified device/runtime matrix and equivalent precision tests. WebGPU, OpenGL,
-or a renderer/UI rewrite likewise require evidence of a specific bottleneck.
-None has been benchmarked here as an equivalent replacement, so no migration
-or support claim follows from listing them.
+Metal is a macOS experiment; Vulkan retains Windows portability. CUDA is NVIDIA-
+only/optional. OpenCL/SYCL/TornadoVM need verified device/runtime matrices/equal
+precision tests. WebGPU/OpenGL/UI-renderer rewrites need measured bottlenecks.
+None is benchmarked here as equivalent, so listing grants no migration/support claim.
 
-Apple shared memory allows both processors to access resources, but still
-requires synchronization. It does not remove Java array copies, queue waits or
-JavaFX upload costs. Native memory experiments must also cover discrete GPUs.
-[Apple resource storage modes](https://developer.apple.com/documentation/metal/setting-resource-storage-modes).
+Apple shared memory still needs synchronization and leaves Java copies, queue
+waits/FX uploads. Native-memory experiments must cover discrete GPUs too.
+[Storage modes](https://developer.apple.com/documentation/metal/setting-resource-storage-modes).
 
 CPU/GPU selection by measured hardware and number type has precedent in
 [Fraktaler 3's documented calibration](https://fraktaler.mathr.co.uk/#wisdom).
@@ -322,10 +285,10 @@ precision policy transfers to FractalLens.
    steady state, first useful region, full frame and cancellation latency.
 3. **Profile independently.** Use JFR/appropriate native profilers for locks,
    allocation, worker utilization, kernel occupancy and transfers. Extend AA
-   instrumentation around initial cache lookup, scheduling and waits. Do not
-   treat overlapping worker elapsed times as an additive critical path. GPU
-   timestamp absence remains unavailable, not zero. Uninstrumented rows with
-   zero component fields do not prove that recovery or transfers were free.
+   instrumentation around initial cache lookup, scheduling and waits. Do not treat
+   overlapping worker elapsed times as an additive critical path. GPU timestamp absence
+   is unavailable, not zero. Uninstrumented rows with zero component fields do not prove
+   that recovery or transfers were free.
 4. **Keep numerical gates.** Ordinary exact CPU paths retain exact sample
    equivalence where required. The integrated certified GPU gate retains exact
    escape/iteration and finite smooth error <= 0.01; deep CPU changes retain
@@ -357,10 +320,10 @@ precision policy transfers to FractalLens.
 
 ## Existing reproduction entry points
 
-Use these profiles for the corresponding scope; they are not one interchangeable
-benchmark. Save new runs to distinct files instead of overwriting historical
-evidence. Commands below are starting points, not a claim they ran in this
-analysis. Full scene coverage and confirmation counts are future 9.1 work.
+Use these profiles for the matching scope; they are not one interchangeable benchmark.
+Save new runs to distinct files instead of overwriting historical evidence. Commands
+below are starting points, not a claim they ran in this analysis. Full scene coverage
+and confirmation counts are future 9.1 work.
 
 ```sh
 mvn test

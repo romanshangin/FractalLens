@@ -1,25 +1,17 @@
 # Series approximation benchmark results
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 ## Decision
 
-Keep the current per-pixel perturbation recurrence. The tested cubic series
-does not yet provide enough safe end-to-end gain to justify adding it to the
-production deep-zoom backend.
+Retain per-pixel perturbation: tested cubic series lacks enough safe end-to-end
+gain for production deep zoom.
 
 ## Method
 
-`SeriesApproximationBenchmark` precomputes the first three complex polynomial
-coefficients of the Mandelbrot perturbation recurrence and uses them to skip
-16, 32, or 64 initial iterations. It compares the result with the existing
-full perturbation recurrence at every pixel, including both escape iteration
-and smooth iteration value.
+`SeriesApproximationBenchmark` computes three complex polynomial coefficients,
+skips 16/32/64 initial Mandelbrot iterations and compares every pixel's escape/
+smooth iteration against full perturbation.
 
 The benchmark is isolated in the test source set and can be run with:
 
@@ -42,8 +34,6 @@ and three measured runs:
 | 1e16 | 32 | 1.030x | 0 | 0 | 0 |
 | 1e16 | 64 | 1.068x | 0 | 0 | 0 |
 
-At the current `1e-6` smooth-value tolerance, skips of 16 and 32 are accurate
-but save too little work. A skip of 64 is still modest and already exceeds the
-tolerance at 1e8 zoom. A production attempt would therefore need an adaptive
-validity bound, higher-order coefficients, and measurements inside the tiled
-backend; this experiment does not justify that added complexity.
+At `1e-6` smooth tolerance, 16/32 skips are accurate but save too little; 64
+still gains little and exceeds tolerance at 1e8 zoom. Production would need
+adaptive validity, higher order and tiled measurements; added complexity unjustified.

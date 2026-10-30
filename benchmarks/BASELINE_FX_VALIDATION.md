@@ -1,11 +1,6 @@
 # Roadmap 9.1 JavaFX baseline validation
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Date: 2026-09-07. Work starts from `0c83aa7` on
 `codex/roadmap-9-1-fx-baselines`. Saved runs identify their working-tree state
@@ -38,12 +33,10 @@ system activity and power/thermal state were not controlled or measured.
 
 ## Failure found by the long run
 
-The first JavaFX run exhausted a 4 GiB heap after writing 450 step rows, during
-same-grid control allocation for `seahorse-adaptive` / requested Refined at
-1512x982. The runner repeatedly replaces surfaces in one window. Inspection
-showed that removed `FractalSurface` objects stayed strongly referenced by their
-old `Scene.windowProperty` and `Window.outputScaleX/YProperty` listeners. Each
-surface could therefore retain its render frames and image buffers.
+First FX run exhausted 4 GiB at row 450, same-grid control allocation for
+`seahorse-adaptive`, requested Refined, 1512x982. Replaced `FractalSurface` objects
+remained held by old `Scene.windowProperty`/`Window.outputScaleX/YProperty`
+listeners, retaining frames/buffers.
 
 Two targeted regressions reproduced the cause before the fix:
 
@@ -52,10 +45,9 @@ Two targeted regressions reproduced the cause before the fix:
 - A weak reference to a detached surface could not clear after pulse settlement
   and explicit collection while the original window remained alive.
 
-The fix retains listener identities and removes both scene and window
-subscriptions on detach/window change. Reattachment restores one active
-subscription. The renderer's calculation, AA and presentation policies are
-unchanged. Both regressions pass with the fix.
+Fix retains listener identities, unsubscribes scene/window on detach/change,
+restores one subscription on reattach. Calculation/AA/presentation unchanged;
+both regressions pass.
 
 The failed run remains private diagnostic evidence, including
 its environment (private archive: `baseline-9-1-fx-20260907/environment.txt`),
@@ -78,11 +70,11 @@ directory. Its after-step used-heap observations range from about 0.016 to
   environment (private archive: `baseline-9-1-fx-fixed-20260907/environment.txt`),
   graphics/launch log (private archive: `baseline-9-1-fx-fixed-20260907/launch.log`):
   1,110 rows, including 1,050 completed frames and 60 cancellation cases.
-- Conformance marker (private archive: `baseline-9-1-fx-fixed-20260907/SUCCESS`):
-  all 210 non-cancelled final-sequence steps passed per-sample and per-ARGB-pixel
-  comparison against fresh same-grid CPU controls. All 1,050 completed FX rows
-  also match the corresponding headless sample/ARGB fingerprints across modes
-  and repetitions. Both manifests match the canonical 111-row manifest exactly.
+- Conformance marker (private archive: `baseline-9-1-fx-fixed-20260907/SUCCESS`): all
+  210 non-cancelled final-sequence steps passed per-sample and per-ARGB-pixel comparison
+  against fresh same-grid CPU controls. All 1,050 completed FX rows also match the
+  matching headless sample/ARGB fingerprints across modes and repetitions. Both
+  manifests match the canonical 111-row manifest exactly.
 
 The headless data remain valid after the listener fix: that process does not
 instantiate `FractalSurface`, and its calculation/coloring/AA implementations
@@ -104,25 +96,21 @@ Refined Julia's base-publication fields are absent, not zero; its first visible
 update is an AA tile. The three-sample tails and differences between modes are
 not an optimization gate, and none of these values is a display/scanout time.
 
-The fully reused return is an actionable non-arithmetic control: all 5,939,136
-samples are retained, with no new backend region, yet the backend takes about
-4.86 s headlessly and 4.83 s in the FX run. The current direct renderer still
-builds missing spans for every tile. `ValidityMask.missingRowSpans` calls
-unbounded `BitSet.nextClearBit` from each row start; a fully ready mask makes
-those calls scan into the remaining frame. This is consistent with the prior
-[validity-scan diagnosis](INTERACTION_LATENCY_RESULTS.md). No new JFR/native
-attribution was captured here, and no mask optimization is included in this
-change. The fixture supplies a repeatable control for that follow-up; controller
-shortcuts can bypass some fully cached requests, so it is not a latency claim
-about every real navigation gesture.
+Full reuse retains 5,939,136 samples/zero regions yet takes about 4.86 s headless,
+4.83 s FX. Per-tile `ValidityMask.missingRowSpans` repeatedly invokes unbounded
+`BitSet.nextClearBit` into the ready suffix, consistent with prior
+[diagnosis](INTERACTION_LATENCY_RESULTS.md). No new JFR/native attribution or mask
+optimization. Repeatable follow-up control, not every gesture's latency:
+controller shortcuts bypass some cached requests.
 
 ## Verification
 
-`mvn clean test`: 374 tests, zero failures/errors, 27 opt-in skips. A separate
-graphical run passes all eight new JavaFX baseline/lifetime tests and 14 existing
-resize/input tests (two further explicitly gated cases remain skipped).
-Baseline regression summary (private archive: `baseline-9-1-fx-fixed-20260907/fx-regressions.txt`),
-resize regression summary (private archive: `baseline-9-1-fx-fixed-20260907/resize-regressions.txt`).
+`mvn clean test`: 374 tests, no failures/errors, 27 opt-in skips. A separate graphical
+run passes all eight new JavaFX baseline/lifetime tests and 14 existing resize/input
+tests (two further explicitly gated cases remain skipped). Baseline regression summary
+(private archive: `baseline-9-1-fx-fixed-20260907/fx-regressions.txt`), resize
+regression summary (private archive:
+`baseline-9-1-fx-fixed-20260907/resize-regressions.txt`).
 
 Coverage includes hidden Refined base publication, complete retained-frame return
 with no new region, cancelled-generation suppression, same-frame AA preparation,
@@ -137,11 +125,8 @@ rejected. Old result files are not overwritten.
 
 ## Remaining boundaries
 
-This work supplies scope-matched JavaFX base/AA publication and software
-post-layout observations. It does not time production input handlers on the
-matrix, hardware/OS input delivery, compositor capture or physical scanout.
-The existing [interaction measurements](INTERACTION_LATENCY_RESULTS.md) remain
-a separate dataset. Allocation stacks, task scheduling internals, other
-cancellation phases and sustained native-memory/thermal behavior remain open
-in 9.1. The listener regression and the repeated matrix are evidence for this
-specific ownership fix, not a general memory bound or thermal conclusion.
+Scope-matched base/AA FX publication/post-layout only: excludes matrix production
+input, hardware/OS delivery, compositor/scanout. Older [interaction data](INTERACTION_LATENCY_RESULTS.md)
+stays separate. 9.1 allocation stacks/scheduling/other cancellation/native-memory/
+thermal gates remain open. Listener regression/matrix supports this ownership fix,
+not general memory bounds or thermal conclusions.

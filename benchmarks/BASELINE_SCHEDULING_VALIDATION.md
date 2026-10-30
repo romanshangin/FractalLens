@@ -1,22 +1,14 @@
 # Roadmap 9.1 scheduling validation — 2026-09-08
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
-The new opt-in diagnostics identify a coordinator-side cancellation bottleneck:
-a fully reused 3024x1964 direct frame spends about five seconds scanning its
-validity mask while creating **zero worker tasks**. Cancelling during that
-planning scan takes about five seconds to drain. This step measures and locates
-the problem; it does not change the mask algorithm or claim a speedup.
+Opt-in diagnostics locate ~five-second 3024x1964 fully reused direct-frame
+mask planning with **zero worker tasks**; in-planning cancellation drains in
+~five seconds. Diagnosis only, no algorithm/speedup change.
 
-Branch: `codex/roadmap-9-1-scheduling-diagnostics`, based on `7f3b0e2`.
-All accepted datasets describe that base plus the scheduling working tree and
-include source SHA-256 hashes. Raw CSVs and logs remain in the private archive;
-they are not distributed with this report. See [the measurement contract](BASELINE_SCHEDULING_BENCHMARK.md).
+`codex/roadmap-9-1-scheduling-diagnostics`, base `7f3b0e2` plus diagnostic
+working tree/source SHA-256. Raw CSV/logs private, not distributed.
+[Contract](BASELINE_SCHEDULING_BENCHMARK.md).
 
 ## Runtime and limits
 
@@ -61,9 +53,8 @@ Three-sample diagnostic medians for selected cases:
 | cancel-direct, first backend region | 0.066 | 0.683 | absent | 0.233 |
 | cancel-deep, first backend region | 0.085 | 1.490 | absent | 0.103 |
 
-These are overlapping scopes and a small sample, not established distribution
-tails. In particular, first-region cancellation excludes time spent preparing
-that first region. It cannot diagnose cancellation during a long planning scan.
+Overlapping small-sample scopes are not tails. First-region cancel excludes
+region preparation and cannot diagnose planning cancellation.
 
 ## Fully reused Retina frame and cancellation during planning
 
@@ -71,10 +62,9 @@ that first region. It cannot diagnose cancellation during a long planning scan.
 raw diagnostics (private archive: `baseline-9-1-scheduling-retina-final-20260908/diagnostics.csv`),
 derived intervals (private archive: `baseline-9-1-scheduling-retina-final-20260908/scheduling-summary.csv`).
 
-One first sequence and one sample run the canonical direct/deep/reverse fixture.
-After each fully reused reverse, an additional request is cancelled after
-planning starts. All **eight requests** pass sample controls and strict drain
-validation. Reverse and planning-cancel requests create zero worker tasks.
+Canonical direct/deep/reverse runs first sequence/one sample. Fully reused reverse
+adds planning-cancel request; all **eight requests** pass exact/drain validation.
+Reverse/cancel create zero workers.
 
 | Request | Phase | Planning ms | Mask scan ms | Cancel → drain ms |
 |---|---|---:|---:|---:|
@@ -119,8 +109,8 @@ excluding untimed seed/control work. Canonical manifests still match `9.1-v1`.
 
 ## Regression and validation evidence
 
-- Final `mvn clean test`: **394 tests, zero failures/errors, 37 skipped**.
-  Saved log (private archive: `baseline-9-1-scheduling-final-20260908/clean-test.log`).
+- Final `mvn clean test`: **394 tests, no failures/errors, 37 skipped**. Saved log
+  (private archive: `baseline-9-1-scheduling-final-20260908/clean-test.log`).
 - Opt-in graphical `BaselineInputBenchmarkTest`: **16 tests passed**, including
   replacement identity and exact real-handler output. Its deliberately injected
   asynchronous timer failure is expected regression output.

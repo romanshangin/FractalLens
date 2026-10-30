@@ -1,23 +1,19 @@
 # macOS interface
 
-The main window contains only the fractal canvas and the standard window frame.
-`MainMenuBar` uses JavaFX's system menu integration: on macOS the menus live in
-the menu bar at the top of the display. Other platforms retain an in-window menu
-bar. The rendering pipeline, precision limits, and pointer gestures are unchanged.
+The window contains a fractal canvas and standard frame. `MainMenuBar` uses
+JavaFX system integration: display-top menus on macOS, in-window menus elsewhere.
+Rendering, precision limits and pointer gestures are unchanged.
 
-Production startup uses the plain `FractalLauncher` entry point before starting
-JavaFX. On macOS it selects `mtl,es2,sw` when `prism.order` is absent and
-preserves explicit JVM overrides. Metal is preferred for reliable presentation
-across Spaces, with an owner-accepted latency trade-off. Final-candidate
-acceptance remains open in the [migration checklist](METAL_MIGRATION_CHECKLIST.md);
-see [startup and override commands](MACOS_RUN.md#javafx-startup-and-prism-selection).
+Plain `FractalLauncher` runs before JavaFX; on macOS it sets `mtl,es2,sw` only
+when `prism.order` is absent, preserving explicit overrides. Metal addresses
+Spaces reliability with an owner-accepted latency cost. Final acceptance:
+[migration checklist](METAL_MIGRATION_CHECKLIST.md).
+[Startup/overrides](MACOS_RUN.md#javafx-startup-and-prism-selection).
 
-The main window also registers its commands as JavaFX's application-default
-system menu. Glass otherwise replaces them with an empty default when the stage
-loses focus, leaving only the application name during a macOS Spaces activation
-gap. The commands remain installed across Space and application switches without
-requiring pointer movement over the menu bar. Closing the view clears the default
-registration so it does not retain the closed view's commands.
+Registering commands as JavaFX's application-default system menu prevents Glass
+from replacing them with an empty menu on focus loss during Spaces activation.
+Commands survive Space/app switches without pointer input over the menu bar.
+View close clears registration and releases its commands.
 
 Run the native menu regression in an active macOS desktop session:
 
@@ -25,38 +21,30 @@ Run the native menu regression in an active macOS desktop session:
 mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-system-menu" -DreuseForks=false -Dtest=MacSystemMenuFxTest test
 ```
 
-The regression inspects the AppKit menu before focus loss, while an unowned
-window without menus has focus, after focus returns, and after view disposal.
-It also gates the CPU renderer to inspect every Color and Render command in both
-JavaFX and AppKit during startup, after completion, during another render, and
-after its completion. An AppKit menu update during the first render reproduces
-validation of an opened menu; assertions after completion do not refresh the
-native menu or supply pointer input.
+The regression inspects AppKit before focus loss, during focus on an unowned
+menu-less window, after focus return and after disposal. A gated CPU render checks
+every JavaFX/AppKit Color/Render action during startup, completion, another render
+and its completion. Updating AppKit during the first render simulates open-menu
+validation; completion assertions neither refresh menus nor supply pointer input.
 
-
-2026-10-03 render-availability validation on macOS 27.0 arm64, JDK 26.0.1,
-and JavaFX 26.0.2: the regression reproduced a native-disabled Edit Palette item
-after completion on the original implementation. After the fix, both native
-menu tests and all five MainMenuBar tests passed without skips. `mvn test` passed
-with 400 executed tests and 63 opt-in skips. In the current development launch,
-Color and Render were opened during separate Julia renders: native accessibility
-reported disabled actions during calculation and enabled actions in the same
-open menus after completion, without pointer input over those actions. Deep Zoom
-Antialiasing remained unavailable in standard mode, and the palette editor opened
-with its shortcut and was cancelled. The UI tool could not capture a screenshot,
-so the actual painted enabled/disabled appearance remains visually unverified.
-Windows and Linux runtime checks were not run for this change.
+2026-10-03, macOS 27.0 arm64/JDK 26.0.1/JavaFX 26.0.2: original regression
+reproduced disabled native Edit Palette after completion. Fix: both native menu
+and all five MainMenuBar tests passed without skips; `mvn test`: 400 executed,
+63 opt-in skips. Development Julia renders showed accessibility actions disabled
+during calculation and enabled after completion in the same open Color/Render
+menus, without pointer input. Deep Zoom Antialiasing stayed unavailable in standard
+mode; palette shortcut opened the editor, then Cancel closed it. Screenshot capture
+failed: painted enabled/disabled states unverified. Windows/Linux runtime not run.
 
 For visible acceptance, switch to another Space, activate another application,
 then return to FractalLens without moving the pointer onto the menu bar and check
 that File through Help remain visible and usable.
 
-Validation on 2026-09-29: the native regression failed on the original code
-because all nine command menus disappeared on focus loss, then passed after
-registration was added (1 test, no skips). `mvn test` passed with 399 executed
-tests and 60 opt-in skips. The user confirmed the original Spaces sequence and
-opening Help in the current development build; the running process was checked
-to distinguish it from an older packaged copy with the same bundle identifier.
+2026-09-29: original code lost all nine menus on focus loss; registration fix
+passed the native regression (1 test, no skips). `mvn test`: 399 executed,
+60 opt-in skips. User confirmed Spaces reproduction sequence and Help opening
+in the development build; process inspection excluded an older packaged app
+with the same bundle identifier.
 
 The system application menu is named **FractalLens**, including its Hide and Quit
 commands. `-Xdock:name` alone does not reliably name this menu in JavaFX 26.
@@ -79,17 +67,12 @@ The name takes effect on restart. When packaging with `jpackage`, also use
 
 ## Application icon
 
-The selected Mandelbrot icon is bundled in
-`src/main/resources/com/shangin/fractal/app/icons/fractallens.png` (1024×1024,
-RGBA). `ApplicationIcon` loads it from the application resources at startup.
-On macOS the Maven profile and shared IntelliJ run configuration supply
-`-Xdock:icon` with the absolute path to `FractalLens.icns`. The native launcher
-therefore has the correct icon before JavaFX creates the application; setting
-it only in `Application.start()` caused the generic Java icon to flash first.
-`ApplicationIcon` retains its public `Taskbar` API fallback for custom launchers.
-Other platforms use `Stage.getIcons()`.
-macOS does not receive a window document-proxy icon. Restart the application
-to see the change.
+Startup `ApplicationIcon` loads bundled 1024×1024 RGBA
+`src/main/resources/com/shangin/fractal/app/icons/fractallens.png`. macOS Maven/shared
+IntelliJ supplies absolute `FractalLens.icns` via `-Xdock:icon`, setting the native
+icon before JavaFX; setting only `Application.start()` flashed Java's generic icon.
+Custom launchers retain public `Taskbar` fallback; other platforms use `Stage.getIcons()`.
+macOS has no window document-proxy icon. Restart to see changes.
 
 For a macOS application bundle, pass these additional `jpackage` options:
 
@@ -98,14 +81,12 @@ For a macOS application bundle, pass these additional `jpackage` options:
 --icon src/main/resources/com/shangin/fractal/app/icons/FractalLens.icns
 ```
 
-The ICNS contains standard and Retina representations up to 1024 pixels.
-The matte revision removes painted highlights, glow, gradients, and bevels.
-Its unmasked square artwork and native Icon Composer source are in
-`design/app-icon/`; the original glossy concept remains in `design/icon-concepts/`.
-To rebuild PNG, ICNS, and the foreground layer, run `python3 scripts/packaging/build_app_icon.py`
-with Pillow installed. The compatibility mask is derived from Apple's native
-export and is applied only to the flattened Java/ICNS assets, not the native layers.
-See `design/app-icon/README.md` for native compilation and packaging instructions.
+ICNS includes standard/Retina sizes through 1024 pixels. Matte artwork removes
+highlights, glow, gradients and bevels. Unmasked square/native Icon Composer sources:
+`design/app-icon/`; glossy original: `design/icon-concepts/`. With Pillow, rebuild
+PNG/ICNS/foreground using `python3 scripts/packaging/build_app_icon.py`. Apple's
+native-export compatibility mask affects flattened Java/ICNS only, never native
+layers. Native compilation/packaging: `design/app-icon/README.md`.
 
 Custom Java launch configurations must supply this VM option before the main class
 (replace the project path; retain quotes when it contains spaces):
@@ -123,20 +104,15 @@ API references: [Java Taskbar](https://docs.oracle.com/en/java/javase/25/docs/ap
 The initial canvas uses 75% of the primary screen's width and height, preserving
 the screen proportions, and the window opens centered.
 
-Full screen and ordinary window resizing share the same behavior. At the preset's
-initial view, the last completed image stretches immediately across the entire
-canvas. A fitted frame starts rendering after the window size has remained stable
-for 75 ms, then replaces the preview atomically when ready. Intermediate resize
-tiles stay hidden so that
-different aspect ratios cannot produce side bands or split fractal contours.
-In a zoomed view, the center and render-pixel
-spacing stay fixed: expansion reuses the center (including AA) and computes only
-the exposed borders; shrinking a completed frame crops it without rendering.
-The next pan keeps the resized frame's iteration limit, so dragging after either
-operation also calculates only the newly exposed edge strips.
-Render dimensions use equal parity to keep centered copies on integer pixels.
-If resizing interrupts AA publication, missing display tiles are completed even
-when their sample data is already cached.
+Fullscreen/window resize share behavior. At initial view, stretch the completed
+image immediately; after 75 ms stable size, render the fitted frame and replace
+preview atomically. Hide intermediate tiles to prevent mixed-aspect side bands/
+split contours. Zoomed resize preserves center/render-pixel spacing: expansion
+reuses center/AA and computes exposed borders; shrinking a complete frame crops
+without rendering. Subsequent pan retains the resized iteration limit and computes
+only exposed strips. Equal dimension parity keeps centered copies on integer
+pixels. Interrupted AA publication completes missing display tiles even with
+cached samples.
 
 The native JavaFX regression checks can be run with
 `mvn -Dfractal.fx.tests=true -Dtest=FractalResizeFxTest test` on a desktop session.
@@ -157,28 +133,22 @@ restarts the render. Edit Iteration Settings is available for every fractal when
 rendering is idle. Edit Julia Parameters is enabled only for Julia. See
 [Render settings (P2.6)](#render-settings-p26).
 
-On other platforms the platform shortcut modifier replaces Command.
-Arrow keys pan the focused canvas after zooming in. Page Up and Page Down zoom
-around the center, and Home resets the view. Pointer-centered scrolling, dragging, and
-trackpad gestures remain available. Menu and keyboard zoom preserve the center.
-Right-clicking the canvas opens a single **Copy Coordinates and Zoom** command.
-It copies the current center's real and imaginary coordinates and zoom together
-as plain text, preserving decimal precision for sharing a view.
-`FractalContextMenu` owns the commands and lifecycle separately from the renderer.
-On macOS it opens a real AppKit `NSMenu` through the small Objective-C/JNI bridge
-in `src/main/macos/FractalContextMenu.m`. AppKit controls appearance, highlighting,
-keyboard navigation and tracking. No CSS or custom appearance is applied to it.
-The existing styled JavaFX popup remains available on other platforms and when
-the native library or the required JavaFX module access is unavailable.
+Other platforms use their shortcut modifier instead of Command. Focused-canvas
+arrows pan after zooming; Page Up/Down zoom centrally, Home resets. Pointer-centered
+scroll, drag and trackpad remain; menu/key zoom preserves center. Right-click
+**Copy Coordinates and Zoom** copies exact decimal real/imaginary center and zoom
+as shareable plain text. Renderer-independent `FractalContextMenu` owns commands/
+lifecycle. macOS uses AppKit `NSMenu` via Objective-C/JNI
+`src/main/macos/FractalContextMenu.m`: native appearance, highlighting, keyboard
+navigation/tracking, no CSS/custom styling. Styled JavaFX fallback covers other
+platforms, unavailable native library or missing JavaFX module access.
 
-Each native menu session is created and cancelled on the JavaFX/AppKit main
-thread. Opening is scheduled in the native run loop so the Java call returns
-before AppKit starts tracking; selection is delivered with `Platform.runLater`
-after tracking finishes. Closing or replacing a session suppresses its pending
-callback and releases its JNI global reference. Window movement, resizing, focus
-loss, scene detachment and canvas commands cancel the session. Input consumed by
-AppKit follows the system menu's behavior; JavaFX input that reaches the canvas
-continues through the existing dismissal filter.
+Create/cancel native sessions on the JavaFX/AppKit main thread. Native-run-loop
+scheduling returns from Java before tracking; selection uses `Platform.runLater`
+after tracking. Close/replacement suppresses pending callbacks and releases JNI
+global references. Movement, resize, focus loss, scene detachment and canvas
+commands cancel tracking. AppKit-consumed input follows system-menu behavior;
+JavaFX canvas input uses the existing dismissal filter.
 
 Opening is scheduled in the default run-loop mode so a replacement waits for
 the previous menu's tracking loop to unwind. Scheduling it in common modes can
@@ -191,12 +161,11 @@ its flipped-coordinate convention. There is no manual Retina multiplication or
 conversion through the primary screen's height. AppKit positions the popup
 within the current display's available area.
 
-The `macos-native-menu` Maven profile compiles a universal `arm64`/`x86_64`
-`libfractal-menu.dylib` during `process-classes` and includes it in the application
-JAR. Both `mvn javafx:run` and `mvn package` run this phase. Building requires the
-macOS SDK and Xcode Command Line Tools; running the packaged library does not.
-A direct IDE launch should first run `mvn process-classes` so the library exists
-in the output directory. Besides native access, custom launchers need:
+`macos-native-menu` builds universal `arm64`/`x86_64` `libfractal-menu.dylib`
+during `process-classes` into the JAR; both `mvn javafx:run` and `mvn package` run
+it. Building needs macOS SDK/Xcode Command Line Tools; packaged execution does not.
+Before direct IDE launch, run `mvn process-classes` for output-directory natives.
+Custom launchers need native access plus:
 
 ```text
 --enable-native-access=javafx.graphics,org.lwjgl,com.shangin.fractal
@@ -212,13 +181,10 @@ include this library along with the other native dependencies.
 See [AppKit popup positioning](https://developer.apple.com/documentation/appkit/nsmenu/popup(positioning:at:in:)?language=objc)
 and [native tracking cancellation](https://developer.apple.com/documentation/appkit/nsmenu/canceltrackingwithoutanimation()).
 
-Coordinates use an owner-associated sheet; custom gradients use a nonmodal
-editor with a live draft-gradient preview. Both retain explicit Go/Apply and
-Cancel actions. Coordinate validation keeps invalid input visible
-and explains how to fix it. The coordinate dialog also exposes a copyable zoom
-value and the current deep-zoom status. Palette edits are drafts until Apply;
-Cancel leaves the current palette unchanged. Editing a preset clears its menu
-checkmark to indicate a custom gradient.
+Coordinates use an owner sheet with Go/Cancel, exact invalid-draft feedback,
+copyable zoom and deep-zoom status. Palette uses a nonmodal live-gradient draft
+editor with Apply/Cancel: only Apply changes the palette. Editing a preset clears
+its checkmark to indicate a custom gradient.
 
 Color and Render remain openable during startup and later renders. Their action
 items, including palette, orbit-trap and quality choices, are explicitly
@@ -227,16 +193,13 @@ state even when a menu was opened during rendering; hovering or reopening is not
 required. Disabling only the parent menu lets AppKit validation leave child items
 inactive after the JavaFX parent is re-enabled.
 
-Deep zoom antialiasing is available only in deep zoom. Palette animation is unavailable
-when histogram coloring or an orbit trap is active; its checkmark clears when
-navigation or a scene change stops animation. Export becomes available after
-a completed frame exists. It opens an independent width/height editor and a
-system save panel, then renders the captured scene off-screen. While active,
-the same command becomes **Cancel Export PNG** and remains available during
-navigation. Completion appears as a nonmodal in-window status; errors still use
-an alert. On macOS the size editor uses AppKit, with the shared JavaFX dialog
-as fallback. See the
-[export contract and acceptance gaps](../architecture/PNG_EXPORT.md).
+Deep AA is available only in deep zoom. Histogram/orbit traps disable palette
+animation; navigation/scene changes stopping it clear its checkmark. After a
+completed frame, export captures the scene through independent width/height and
+system-save dialogs, then renders off-screen. Active **Cancel Export PNG** remains
+available during navigation. Completion is inline/nonmodal; errors use alerts.
+macOS size editor is AppKit with shared JavaFX fallback.
+[Export contract/acceptance gaps](../architecture/PNG_EXPORT.md).
 
 PNG export progress shares the bottom-left render indicator. Results clear after
 four seconds. Export filenames omit the palette; the size editor offers Export…
@@ -244,14 +207,11 @@ and an approximate size before compression. Closing during export asks for
 confirmation, with No, Return as the default/Escape action; Yes, Close cancels the
 export and continues shutdown. macOS system Quit uses the same close-request path.
 
-
-Color → Palette lists the default Ice preset first, followed by Ocean, Fire,
-Plasma, Forest, Grayscale, Aurora, Sunset, Twilight, Coral, Desert, Emerald,
-Amethyst, Copper and Blue & Gold. The eight presets from Aurora through Copper
-use deeper shadows and brighter, more saturated highlights. Blue & Gold combines
-navy, blue, cyan, cream, gold, orange and brown in a cyclic gradient.
-Each built-in preset contains at least five distinct color
-stops; custom palettes can still contain as few as two stops.
+Color → Palette order: default Ice, Ocean, Fire, Plasma, Forest, Grayscale,
+Aurora, Sunset, Twilight, Coral, Desert, Emerald, Amethyst, Copper, Blue & Gold.
+The eight Aurora–Copper presets deepen shadows and brighten/saturate highlights.
+Blue & Gold cycles navy, blue, cyan, cream, gold, orange and brown. Built-ins have
+at least five distinct stops; custom palettes may have two.
 
 Color → Reset Colors to Defaults restores the startup Ice palette and its
 original stops, the default color scale, and zero offset. It turns off histogram
@@ -286,51 +246,40 @@ mvn -Dfractal.fx.tests=true \
     -Djavafx.cachedir=/tmp/fractallens-javafx-cache test
 ```
 
-The native suite checks AppKit target/action, cancellation, suppression of stale
-selection callbacks, scene detachment, window resize, repeated close and live
-render publication during menu tracking. Its optional full-screen test visits
-every attached display and enters/exits full screen. It uses a test-only FFM
-probe to inspect the tracking session and invoke NSMenu actions; it does not
-substitute a JavaFX popup or synthesize global keyboard input. The existing
-JavaFX-menu test exercises the fallback directly. Run these classes in separate
-processes (or use `-DreuseForks=false`) because they shut down JavaFX at the end.
+Native tests cover AppKit target/action, cancellation/stale selection, scene
+detachment, resize, repeated close and publication during tracking. Optional
+fullscreen visits every display and enters/exits fullscreen. A test-only FFM probe
+inspects tracking/invokes NSMenu actions, without JavaFX substitution/global keys.
+The JavaFX-menu test directly covers fallback. Use separate processes or
+`-DreuseForks=false`: these classes shut down JavaFX.
 
-2026-09-10 validation: macOS 26.6.2, Apple M3 Pro, JDK 26.0.2 and JavaFX 26.0.2,
-using the built-in Liquid Retina XDR display (3456×2234). The three native tests
-and the existing JavaFX fallback test passed in separate JVMs. This includes
-actual frame completion and publication while NSMenu is tracking, window resize,
-scene detachment, stale-selection suppression, immediate menu replacement,
-native target/action, and full-screen entry/exit. The action probe no longer
-issues a separate cancellation: the production action must finish tracking.
+2026-09-10: macOS 26.6.2, Apple M3 Pro, JDK 26.0.2, JavaFX 26.0.2, built-in
+3456×2234 Liquid Retina XDR. Three native tests and JavaFX fallback passed in
+separate JVMs: frame completion/publication during NSMenu tracking, resize,
+detachment, stale-selection suppression, immediate replacement, target/action,
+fullscreen entry/exit. Probe supplies no separate cancellation: production action
+must finish tracking.
 
-In the running application, right-click exposed a native accessibility `menu`
-with the Objective-C `choose:` action. Escape, outside click and application
-focus switching dismissed it. Keyboard selection and direct accessibility
-activation both closed the menu and updated the clipboard. Reading the result
-in a temporary coordinate-dialog field confirmed current exact coordinates and
-`Zoom: 1.25` after zooming, and `Zoom: 1` after restarting at the initial view;
-the test dialog was cancelled without applying the pasted text.
+Running app: right-click exposed native accessibility `menu`/Objective-C `choose:`.
+Escape, outside click and app focus change dismissed it. Keyboard/accessibility
+selection closed it and updated clipboard. Pasting into a temporary coordinate
+draft verified exact center and `Zoom: 1.25`, then `Zoom: 1` after initial-view
+restart. Cancel discarded the pasted draft.
 
-The Maven build packages both arm64 and x86_64 slices in the JAR. Native runtime
-checks were performed on arm64; Intel and Windows runtime checks were not run.
-Final `mvn package`: 405 tests, 0 failures/errors, 42 opt-in tests skipped.
-The separate GUI run passed all four selected tests without skips; its reports
-were retained in `target/native-menu-validation/`. `git diff --check` passed.
-Only one physical display was attached. Multi-display/mixed-DPI placement and
-negative screen origins remain a separate hardware-validation item in the
-roadmap; the single-display test is not evidence for those cases.
+JAR contains arm64/x86_64; runtime checked only on arm64, not Intel/Windows.
+Final `mvn package`: 405 tests, 0 failures/errors, 42 opt-in skips. Separate GUI:
+four selected tests pass, no skips; reports `target/native-menu-validation/`.
+`git diff --check` passed. One physical display only: multi-display/mixed-DPI/
+negative-origin placement remains a separate roadmap hardware gate.
 
-Resize regression checks: `mvn -Dfractal.fx.tests=true -Dtest=FractalResizeFxTest test`.
-Add `-Dfractal.fx.fullscreen=true` to exercise two native full-screen/window cycles
-at approximately 650,000× and 426 billion× zoom. These opt-in checks open macOS
-windows, verify full image coverage and preserved center pixels, and save snapshots
-to `target/fullscreen-zoom-60-qa.png` and `target/fullscreen-zoom-120-qa.png`.
-No-op scrolling and clicks must leave pending rendering intact.
-In a zoomed resize, completed base-pass pixels at newly exposed edges are shown
-immediately. Refined AA tiles replace those pixels in place instead of clearing
-the base layer and revealing a stair-stepped transparent boundary. The reported
-trackpad case is retained as an opt-in native regression fixture; it performs
-eight separate zoom gestures and waits for a completed refined frame after each.
+Resize: `mvn -Dfractal.fx.tests=true -Dtest=FractalResizeFxTest test`.
+Add `-Dfractal.fx.fullscreen=true` for two native fullscreen/window cycles at
+approximately 650,000× and 426 billion×. macOS windows check full coverage/center
+pixels, saving `target/fullscreen-zoom-60-qa.png` and
+`target/fullscreen-zoom-120-qa.png`. No-op scroll/click must preserve pending work.
+Zoomed expansion immediately shows completed border base pixels; AA replaces
+in place without clearing base/revealing a transparent stair-step. Reported
+trackpad fixture runs eight separate zooms, awaiting complete refinement each time.
 
 `mvn -o test`: 299 tests, 0 failures, 0 errors, 2 skipped native GPU tests.
 The final UI changes also pass `mvn -o -q -DskipTests compile`.
@@ -350,13 +299,11 @@ Java launch on Microsoft OpenJDK 25.0.4 read back the actual native Dock image:
 has no document-proxy icon. PNG alpha and all eight ICNS representations were
 also decoded and checked successfully.
 
-The matte revision was opened in Icon Composer and compiled by Xcode `actool`.
-An actual JavaFX launch with `-Xdock:icon` read the native Dock image both before
-and after `ApplicationIcon.install()`: both matched the Mandelbrot asset
-(mean RGB difference 2.24/255 at 128×128, allowing native resampling). Maven's
-forwarded JVM arguments also contained the correct absolute ICNS path. Compilation
-and `git diff --check` passed. This check specifically covers the startup flash,
-not only the icon after the application has initialized.
+Matte icon opened in Icon Composer and compiled with Xcode `actool`. JavaFX
+`-Xdock:icon` launch read native Dock images before/after `ApplicationIcon.install()`:
+both match Mandelbrot (mean RGB difference 2.24/255 at 128×128, native resampling
+allowed). Maven forwarded the correct absolute ICNS. Compilation and
+`git diff --check` passed. Covers startup flash, not just initialized icon.
 
 ### Viewport mode indicator
 
@@ -365,23 +312,15 @@ of the viewport. A blue dot marks **Standard** rendering; a soft coral dot marks
 **Deep Zoom**, following the controller's actual precision policy. The badge is
 informational, with no click action, and is not included in PNG exports.
 
-On macOS the badge is an AppKit view in the window's content view, built by the
-existing `libfractal-menu` bridge (`FractalStatusBadge.m`, `MacStatusBadge`).
-It uses Liquid Glass (`NSGlassEffectView`) when the bridge is built with SDK 26
-or newer and runs on macOS 26 or later; otherwise, including any build with an
-older SDK, a within-window `NSVisualEffectView` with the popover material. The
-bridge compiles with older SDKs, which only lose the Liquid Glass branch. Text is
-the small system font (11 pt, medium) with tabular digits, the rendering
-indicator is a native mini spinner, and the hover text is a native tooltip. The
-view swallows clicks, scrolling and gestures so they never pan or zoom the
-fractal, and it exposes the badge text and details to accessibility. It is
-created when the window is shown, released when the window hides or the view
-closes, and raised above the loading material when that is attached later.
-`MacStatusBadgeFxTest` reads the native view back through the bridge and checks
-that the badge is the topmost content subview after the loading material
-attaches and stays 12 points from the left and bottom edges after a resize. If
-the bridge is unavailable, and on Windows and Linux, the JavaFX label (11 px
-system font, 12 px tooltip) remains the presentation.
+macOS badge: content-view AppKit overlay from `libfractal-menu`
+(`FractalStatusBadge.m`, `MacStatusBadge`). SDK 26+ on macOS 26+ uses Liquid Glass
+`NSGlassEffectView`; older SDK/OS uses within-window popover `NSVisualEffectView`.
+Older SDK builds compile without Liquid Glass. Small system font: 11 pt medium,
+tabular digits; native mini spinner/tooltip. It consumes clicks/scroll/gestures,
+exposes text/details to accessibility, is created on show and released on hide/
+close, and rises above later loading material. `MacStatusBadgeFxTest` reads native
+state: topmost after loading attachment, 12-point left/bottom inset after resize.
+Unavailable bridge/Windows/Linux use JavaFX label (11 px system font, 12 px tooltip).
 
 The badge stays visible over the loading screen, so the first render of a
 restored deep-zoom scene shows its mode and progress instead of only the icon.
@@ -389,29 +328,19 @@ Its width reserves every digit and a three-digit percentage, so progress
 changes never resize it; it changes width only when the state or wording does
 (for example `Rendering 42%` → `Complete 7.50 s`).
 
-Help → FractalLens Help has a **Render status** section that explains the
-badge: what Standard and Deep Zoom mean and their dot colors; the states
-`Waiting`, `Rendering N%` (covering the whole frame, including any AA pass),
-`Complete` with its time, `Interrupted` and `Failed`; and that PNG export
-progress and its result appear in the badge. A following **Render Settings**
-section explains the three presentations chosen in File → Settings… for
-standard and deep zoom: Base only, Base, then antialiasing, and Antialiased
-display. The native Help panel and the JavaFX Help window show the same text
-from one shared source; the JavaFX window scrolls like the native panel.
+Help → FractalLens Help explains **Render status**: Standard/Deep Zoom and dot
+colors; `Waiting`, whole-frame/AA `Rendering N%`, `Complete`/duration, `Interrupted`,
+`Failed`; PNG progress/outcomes in the badge. **Render Settings** explains File →
+Settings… standard/deep Base only, Base, then antialiasing, Antialiased display.
+Native/JavaFX Help share text; both scroll.
 
-The badge shows the base-render percentage, refinement state, and latest viewport
-render duration without requiring hover. The percentage counts exact ready pixels,
-including samples reused from a previous frame. Hovering shows only the current zoom
-and the effective iteration limit, as two short lines (`Zoom: …`, `Iterations: …`);
-descriptions of the Standard and Deep Zoom modes are not repeated there. Zoom and
-iteration values below one million are shown as whole numbers; larger values use
-three significant digits in powers of ten, with an approximation mark when rounded.
-The hover text does not repeat the render duration. Cancelled or failed work
-never appears as a completed duration; current render and recolor failures show
-an in-application error.
-Enabling deep antialiasing after completion adds refinement time to the base
-render duration without counting the intervening idle time. Palette animation
-and export do not replace the viewport timing.
+Badge shows exact ready-pixel base progress (including reuse), refinement state
+and latest viewport duration without hover. Tooltip contains only `Zoom: …` and
+`Iterations: …` (effective limit), not mode descriptions/duration. Below one
+million: integers; larger: three significant digits in powers of ten, approximation
+mark if rounded. Cancel/failure is never a completed duration; render/recolor
+failures use application errors. Post-completion deep AA adds refinement time,
+excluding idle; palette animation/export never replace viewport timing.
 
 P1.1 validation on an active macOS 27.0 desktop: a Page Up render from a restored
 deep Mandelbrot scene visibly advanced through 0%, 30%, and 68% before showing
@@ -422,27 +351,18 @@ performance measurement.
 
 ### Render settings (P2.6)
 
-File → Settings… (⌘,) opens the application Settings window. It replaces the
-former Display Quality submenu and Deep Zoom Antialiasing menu item, and it is
-the place for future application settings. Its only section so far is
-**Render Settings**. On macOS the window is an owner-associated AppKit sheet built
-by the existing parameter-sheet bridge: each setting is an `NSPopUpButton` with a
-right-aligned label and a hint. The shared JavaFX form, with one combo box per
-setting, remains the fallback on bridge failure and on Windows/Linux. Return
-applies, Escape and Cancel discard the draft, and only Apply changes the scene.
-Reset to Defaults selects Antialiased display for standard zoom and Base only for
-deep zoom in the draft; like the other edits it takes effect only on Apply.
-Both forms focus the Standard zoom setting first; the native sheet does so only
-while macOS Keyboard navigation is on. With it off, AppKit keeps Tab off pop-up
-buttons and buttons, as in System Settings, so no control is focused and no stale
-focus ring stays on a pop-up button; Return and Escape still apply and cancel.
-The native sheet's text is not selectable, so clicking a hint never takes
-keyboard focus, and with Keyboard navigation on Tab moves only between the
-pop-up buttons and the buttons.
-The menu item stays enabled while rendering because applying the settings
-cancels the current render and starts a new one. The command lives in File
-rather than the macOS application menu because JavaFX has no public API for
-adding items to that system-owned menu.
+File → Settings… (⌘,) replaces Display Quality/Deep Zoom Antialiasing menu items
+with one application window for future settings; currently **Render Settings** only.
+macOS uses the parameter-sheet bridge's owner AppKit sheet, right-aligned labels/
+hints and `NSPopUpButton` fields. Bridge failure/Windows/Linux use shared JavaFX
+combo boxes. Return/Apply commits; Escape/Cancel discards. Reset to Defaults changes
+only drafts (standard Antialiased display, deep Base only) until Apply. Initial
+focus is Standard zoom; native focus requires macOS Keyboard navigation. With it
+off, AppKit skips pop-ups/buttons like System Settings: no focus/stale ring,
+Return/Escape still work. Native text is unselectable; hints cannot take focus.
+With Keyboard navigation on, Tab visits only pop-ups/buttons. Enabled during
+rendering: Apply cancels/restarts rendering. File hosts the command because
+JavaFX's public API cannot add to the system-owned application menu.
 
 Render Settings offers the same three presentations for standard zoom and for
 deep zoom. Both are stored in the scene's `AntialiasSettings` as
@@ -454,36 +374,24 @@ deep zoom. Both are stored in the scene's `AntialiasSettings` as
 | Base, then antialiasing | `FAST` | Progressive base samples, then antialiased tiles in place |
 | Antialiased display | `REFINED` | Only refined antialiased tiles are shown |
 
-The defaults are Antialiased display for standard zoom and Base only for deep
-zoom, which keeps the earlier behavior. The renderer uses the deep zoom mode
-whenever a Mandelbrot or Julia frame needs deep zoom precision and the standard
-mode otherwise, so both settings can be changed at any zoom. Deep zoom
-antialiasing uses the existing precise candidate-only pass (`refineDeep`). In
-Antialiased display, deep zoom shows only those refined tiles, which can take
-much longer than the base render.
+Defaults preserve earlier behavior: standard Antialiased display, deep Base only.
+Mandelbrot/Julia requiring precise rendering use the deep setting, all other
+frames the standard setting; both remain editable at any zoom. Deep AA uses
+candidate-only `refineDeep`; Antialiased display shows refined tiles only and
+may take much longer than base rendering.
 
-Base only reaches `RenderStatus.COMPLETE` when the base render finishes; no
-refinement starts. While a frame renders, the badge always shows
-`Rendering N%`, where N is the progress toward the fully finished frame in the
-mode that applies to the current zoom; there is no separate `Refining…` state.
-In Base only the percentage is the share of ready base samples. In Base, then
-antialiasing and Antialiased display the base render and the AA pass each
-account for half: the base render reaches 50%, and the AA pass adds the share of
-pixels whose AA colors are published. Samples and AA pixels reused by a pan or
-zoom count as done from the start of the render, so panning a finished frame by
-half the width starts at about 50% in every mode. The percentage never moves
-backwards, and 100% is reported only when the last AA tile is published. Switching to Base only
-drops reused antialiased pixels from the display, including pixels reused from a
-retained preview of an interrupted render, and hides cached antialiasing samples
-from palette recoloring, so the frame and later recoloring show base colors only.
-The cached samples themselves are kept and follow frame reuse; they exist for
-smooth palettes only. For every coloring, including Histogram Coloring and Orbit
-Trap, a switch to Base only on a completed frame also keeps the AA colors it took
-off the screen, with their mask. Switching that same frame back to an
-antialiasing mode with an unchanged coloring restores them without any AA work;
-a palette or coloring change in between discards them, and the smooth-palette
-cache still avoids recalculating subsamples. In deep zoom the AA reference orbit
-is built only when a pixel actually needs new subsamples.
+Base only completes at `RenderStatus.COMPLETE` after base, without refinement.
+All modes show whole-frame `Rendering N%`, no separate `Refining…`. Base only
+counts ready samples; AA modes allocate half to base (50%) and half to published
+AA pixels. Reuse counts immediately: a half-width pan of a complete frame starts
+near 50% in every mode. Progress is monotonic; AA modes reach 100% only on last
+AA publication. Base-only switching removes displayed AA, including interrupted-
+render retained previews, and hides cached AA from recoloring. Smooth-only cached
+samples remain for reuse. On completed frames, all colorings (Histogram Coloring/
+Orbit Trap included) retain removed AA colors/mask: switching back with unchanged
+coloring restores them without AA work. Palette/coloring changes discard retained
+colors; smooth cache still avoids new subsample calculation. Deep-AA reference
+orbits build only when new subsamples are needed.
 
 When the visible frame is complete and the new scene differs only in its
 antialiasing modes, the controller changes the presentation of that frame in
@@ -497,15 +405,11 @@ mask of the visible frame:
 | Between Base, then antialiasing and Antialiased display on a fully antialiased frame | Nothing is recalculated or republished; the render completes at once |
 | From Base only (or a partly antialiased frame) to either antialiasing mode | Kept AA colors are restored when the coloring is unchanged; any remaining AA tiles are applied in place over the visible base, reusing cached AA samples, so only pixels never antialiased need new subsamples |
 
-Antialiased display normally hides base samples until their AA tile is ready;
-on a mode switch the base is already visible, so hiding it again would only blank
-the image. Otherwise, for example after a pan, zoom or resize, base samples are
-reused through the existing frame reuse and the selected mode applies as
-described above. Both modes are part of the scene, so they follow Undo/Redo,
-bookmarks, shared presets and session restore. The former Deep Zoom
-Antialiasing switch was transient and turned off when the view left deep zoom;
-the deep zoom mode now persists like the standard mode. PNG export keeps its
-own adaptive antialiasing policy.
+Antialiased display hides base until AA tiles arrive, except mode switches keep
+already-visible base to avoid blanking. Pan/zoom/resize use normal frame reuse
+and the selected mode. Both scene modes persist through Undo/Redo, bookmarks,
+shared presets/restore; unlike the old transient Deep Zoom Antialiasing switch,
+leaving deep zoom does not clear its mode. PNG export keeps independent adaptive AA.
 
 Known limitation: for Histogram Coloring and Orbit Trap there are no cached AA
 samples, so finished AA colors survive only on the visible frame. A pan made
@@ -550,11 +454,11 @@ above. Not verified: Windows, Linux, Intel Mac and the opt-in fullscreen tests.
 
 ### P2.1 acceptance
 
-Acceptance on 2026-10-12 reconciled the open roadmap checkboxes with the existing
-implementation; no production behavior was changed. Source base:
+Acceptance on 2026-10-12 reconciled the open roadmap checkboxes with the implementation;
+no production behavior was changed. Source base:
 `3fdc50d71bdb2f654dd7e092821959d5ed93d376`, with additional menu-to-frame tests.
-Environment: Apple Silicon, macOS 27.0.1, Maven JDK 26.0.2, JavaFX 26.0.2;
-the graphical checks ran in an active desktop session.
+Environment: Apple Silicon, macOS 27.0.1, Maven JDK 26.0.2, JavaFX 26.0.2; the graphical
+checks ran in an active desktop session.
 
 | Requirement | Current acceptance evidence |
 | --- | --- |
@@ -574,10 +478,10 @@ mvn test
 mvn javafx:run
 ```
 
-The targeted portable run passed 31 tests. The final graphical/native run passed
-21 tests with no skips. The full portable run reported 503 tests: 431 executed,
-72 opt-in skips, zero failures or errors. JavaFX test forks emitted the existing
-native-access warning for `javafx.graphics`; it did not prevent these checks.
+The targeted portable run passed 31 tests. The final graphical/native run passed 21
+tests without skips. The full portable run reported 503 tests: 431 executed, 72 opt-in
+skips, no failures/errors. JavaFX test forks emitted the existing native-access warning
+for `javafx.graphics`; it did not prevent these checks.
 
 Manual checks covered initial selected-field focus, keyboard Enter, validation
 without losing drafts, Apply, Reset, Cancel/Escape, return to canvas keyboard
@@ -615,14 +519,13 @@ validation messages without overlapping actions. The palette menu regression
 now waits for the requested coloring in the completed render, rather than only
 for the synchronous scene-setting update.
 
-This is partial alignment, not full HIG compliance. Background, input, label,
-border and error colors are custom light/dark values, rather than AppKit
-semantic colors. Text fields and buttons remain JavaFX controls. Native desktop
-tinting is not implemented for these opaque backgrounds. Increase Contrast and
-Reduce Transparency, separately and together, and a live system appearance
-change in the running application were not manually verified in this audit.
-DialogPane snapshots do not establish native window-frame behavior. Native
-sheets remain an open roadmap item.
+This is partial alignment, not full HIG compliance. Background, input, label, border and
+error colors are custom light/dark values, rather than AppKit semantic colors. Text
+fields and buttons remain JavaFX controls. Native desktop tinting is not implemented for
+these opaque backgrounds. Increase Contrast and Reduce Transparency, separately and
+together, and a live system appearance change in the running application were not
+manually verified in this audit. DialogPane snapshots do not prove native window-frame
+behavior. Native sheets remain an open roadmap item.
 
 Calculated contrast for normal states is 14.94:1 / 13.00:1 for body text,
 5.77:1 / 7.58:1 for hints and 6.00:1 / 7.17:1 for errors (light / dark).
@@ -638,22 +541,22 @@ remain visible and cannot be applied. Inline errors clear after correction.
 Horizontal padding belongs to content rather than the DialogPane itself so
 wrapped validation text is measured correctly and stays clear of the buttons.
 
-Validation on macOS (2026-09-11): three graphical regression tests passed with
-no skips, covering light/dark appearance, system accent, button order, initial
-and restored focus, exact coordinates, invalid palette drafts, Apply and Escape.
-Snapshots for both editors, Help and alerts were visually reviewed and are saved
-in `target/dialog-qa/`, alongside the graphical test report. Manual keyboard
-checks also confirmed coordinate validation with Return and correction with Tab.
+Validation on macOS (2026-09-11): three graphical regression tests passed without skips,
+covering light/dark appearance, system accent, button order, initial and restored focus,
+exact coordinates, invalid palette drafts, Apply and Escape. Snapshots for both editors,
+Help and alerts were visually reviewed and are saved in `target/dialog-qa/`, alongside
+the graphical test report. Manual keyboard checks also confirmed coordinate validation
+with Return and correction with Tab.
 
 ```sh
 mvn -q -Dfractal.fx.tests=true -Dtest=FractalDialogsFxTest -Djavafx.cachedir=/tmp/fractallens-javafx-cache test
 mvn -q package
 ```
 
-The package build passed: 408 tests, zero failures/errors, 45 opt-in tests skipped.
-These are owner-associated JavaFX WINDOW_MODAL dialogs. The roadmap separately
-tracks reduced modality and native AppKit sheets; this appearance step does not
-implement those later changes. Windows runtime verification remains outstanding.
+The package build passed: 408 tests, no failures/errors, 45 opt-in tests skipped. These
+are owner-associated JavaFX WINDOW_MODAL dialogs. The roadmap separately tracks reduced
+modality and native AppKit sheets; this appearance step does not implement those later
+changes. Windows runtime verification remains outstanding.
 
 ### Native iteration settings sheet
 
@@ -676,27 +579,24 @@ It accesses the internal JavaFX Glass peer inside the native bridge, avoiding
 duplicate cross-module Java reflection. Missing peers and zero handles fail
 before native presentation; JavaFX upgrades still require bridge validation.
 
-Active-desktop checks on Apple Silicon covered applying both values, reset and
-cancel, invalid drafts including integer overflow, and owner closure/disposal
-before a queued Apply result. A separate appearance test verifies inherited Aqua
-and Dark Aqua from the native owner without modifying system preferences.
-Forcing a high-contrast appearance alone was normalized by macOS to ordinary
-Aqua without the global accessibility setting, so that experiment does not
-verify Increase Contrast. Manual checks in the current application confirmed the
-dark sheet layout, initial selection, Tab, Return, Escape, Reset and Apply,
-including opening and cancelling in full screen and returning to windowed mode.
-Light/high-contrast layout, live OS preference changes, Increase Contrast,
-Reduce Transparency,
-multiple displays, VoiceOver, Intel macOS and the Windows
-and Linux fallback runtime remain unverified. Other dialogs were still JavaFX
-at this validation point; this first native form did not establish
-application-wide HIG compliance.
+Active-desktop checks on Apple Silicon covered applying both values, reset and cancel,
+invalid drafts including integer overflow, and owner closure/disposal before a queued
+Apply result. A separate appearance test verifies inherited Aqua and Dark Aqua from the
+native owner without modifying system preferences. Forcing a high-contrast appearance
+alone was normalized by macOS to ordinary Aqua without the global accessibility setting,
+so that experiment does not verify Increase Contrast. Manual checks in the current
+application confirmed the dark sheet layout, initial selection, Tab, Return, Escape,
+Reset and Apply, including opening and cancelling in full screen and returning to
+windowed mode. Light/high-contrast layout, live OS preference changes, Increase
+Contrast, Reduce Transparency, multiple displays, VoiceOver, Intel macOS and the Windows
+and Linux fallback runtime are unverified. Other dialogs were still JavaFX at this
+validation point; this first native form did not establish application-wide HIG
+compliance.
 
-Final validation on 2026-10-04: the portable suite reported 500 tests, zero
-failures/errors and 69 opt-in skips. The targeted desktop suite reported 18
-tests, zero failures/errors and one skip (the separately gated native context
-menu full-screen test). Sheet full-screen behavior was checked manually as
-described above.
+Final validation on 2026-10-04: the portable suite reported 500 tests, no
+failures/errors and 69 opt-in skips. The targeted desktop suite reported 18 tests, no
+failures/errors and one skip (the separately gated native context menu full-screen
+test). Sheet full-screen behavior was checked manually as described above.
 
 ```sh
 mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-sheet-cache" \
@@ -794,11 +694,10 @@ mvn -Dfractal.fx.tests=true "-Djavafx.cachedir=${TEMP_DIR}/fractallens-native-ju
   -Dtest=MacJuliaSheetFxTest,MacIterationSheetFxTest,MainMenuBarFxTest,FractalDialogsFxTest test
 ```
 
-Aqua/Dark Aqua inheritance and draft preservation were checked automatically;
-light layout was not visually inspected. Live OS preference changes, Increase
-Contrast, Reduce Transparency, VoiceOver, multiple displays, Intel macOS, and
-Windows/Linux fallback execution remain unverified.
-
+Aqua/Dark Aqua inheritance and draft preservation were checked automatically; light
+layout was not visually inspected. Live OS preference changes, Increase Contrast, Reduce
+Transparency, VoiceOver, multiple displays, Intel macOS, and Windows/Linux fallback
+execution are unverified.
 
 ### Native windows (P2.4)
 
@@ -890,12 +789,11 @@ separately gated fullscreen tests. No additional manual UI acceptance was
 performed in this repair round; these checks are developer self-validation.
 
 Full manual acceptance remains pending: light layout, live OS appearance and
-accessibility changes, VoiceOver, all focus/keyboard combinations, native color
-panel interactions, full-screen transitions, and mixed-DPI/negative-origin/display-
-edge context menus on multiple physical displays. Windows/Linux and Intel Mac
-runtime checks remain unverified; the universal native library is compiled for
-both macOS architectures. These gaps were closed by the
-[P2.4 acceptance](#p24-acceptance) on 2026-10-27.
+accessibility changes, VoiceOver, all focus/keyboard combinations, native color panel
+interactions, full-screen transitions, and mixed-DPI/negative-origin/display- edge
+context menus on multiple physical displays. Windows/Linux and Intel Mac runtime checks
+are unverified; the universal native library is compiled for both macOS architectures.
+These gaps were closed by the [P2.4 acceptance](#p24-acceptance) on 2026-10-27.
 
 The export-close Escape repair preserves Return on the safe default button.
 An `NSButton` has one key equivalent, and setting the default button cell restores
@@ -906,38 +804,37 @@ removed on either completion or disposal, including owner closure. Keyboard
 regressions dispatch native `NSEvent` key-down events through `NSApplication`
 and check the false result, sheet cleanup and continued owner visibility.
 
-Escape-repair developer checks on 2026-10-15 passed `mvn clean test` (561 reported,
-454 executed, 107 opt-in skips) and the seven-class native desktop command above
-with `-Dfractal.fx.fullscreen=true` (77 executed, no skips). Both runs had zero
-failures/errors. The final keyboard regression failed for Escape, while Return
-passed, on an isolated build with the pre-repair native source; both keys passed
-with the repair. The universal arm64/x86_64 bridge compiled with warnings treated
-as errors. In the running application with a temporary profile, a 4000×4000
-Julia export continued after Escape dismissed its close confirmation and after
-Return dismissed a freshly reopened confirmation. The PNG finished successfully
-and the application then closed normally. These are developer self-validation
-results; fresh independent review and verification remain required for the changed
-candidate. The broader P2.4 acceptance gaps above were open at that time; fallback runtime
-checks were not repeated for this native-only repair.
+Escape-repair developer checks on 2026-10-15 passed `mvn clean test` (561 reported, 454
+executed, 107 opt-in skips) and the seven-class native desktop command above with
+`-Dfractal.fx.fullscreen=true` (77 executed, no skips). Both runs had no
+failures/errors. The final keyboard regression failed for Escape, while Return passed,
+on an isolated build with the pre-repair native source; both keys passed with the
+repair. The universal arm64/x86_64 bridge compiled with warnings treated as errors. In
+the running application with a temporary profile, a 4000×4000 Julia export continued
+after Escape dismissed its close confirmation and after Return dismissed a freshly
+reopened confirmation. The PNG finished successfully and the application then closed
+normally. These are developer self-validation results; fresh independent review and
+verification remain required for the changed candidate. The broader P2.4 acceptance gaps
+above were open at that time; fallback runtime checks were not repeated for this
+native-only repair.
 
-The JavaFX palette-preview repair on 2026-10-15 routes color, add/remove and
-position edits through the existing validation callback. Only a fully valid
-draft reaches the preview, using `previewStops()` rather than committed spinner
-values. A regression compares every preview pixel across invalid text and color
-changes, add/remove, correction and a subsequent color change before Apply.
-It failed against the incoming implementation and passed after the repair.
-Developer checks passed `mvn clean test` (562 reported, 454 executed, 108 opt-in
-skips), `FractalDialogsFxTest` in the active desktop (7 executed, no skips), and
-an isolated build without the native bridge running
-`DialogRoutingFallbackFxTest,FractalDialogsFxTest,MainMenuBarFxTest` (35 reported,
-34 executed, one native-only overlap skip). All final runs had zero failures or
-errors; the expected missing-library fallback warnings were retained. Visible
-fallback inspection checked invalid-text retention, Apply rejection, clearing
-the error and updating the gradient after correction, and Escape cancellation.
-Color-change preview correctness was checked by the pixel regression; selecting
-a color through the live JavaFX popup was not established during this inspection.
-No Windows/Linux or Intel Mac runtime acceptance was added. Fresh independent
-review and verification remain required for this changed candidate.
+The JavaFX palette-preview repair on 2026-10-15 routes color, add/remove and position
+edits through the existing validation callback. Only a fully valid draft reaches the
+preview, using `previewStops()` rather than committed spinner values. A regression
+compares every preview pixel across invalid text and color changes, add/remove,
+correction and a subsequent color change before Apply. It failed against the incoming
+implementation and passed after the repair. Developer checks passed `mvn clean test`
+(562 reported, 454 executed, 108 opt-in skips), `FractalDialogsFxTest` in the active
+desktop (7 executed, no skips), and an isolated build without the native bridge running
+`DialogRoutingFallbackFxTest,FractalDialogsFxTest,MainMenuBarFxTest` (35 reported, 34
+executed, one native-only overlap skip). All final runs had no failures/errors; the
+expected missing-library fallback warnings were retained. Visible fallback inspection
+checked invalid-text retention, Apply rejection, clearing the error and updating the
+gradient after correction, and Escape cancellation. Color-change preview correctness was
+checked by the pixel regression; selecting a color through the live JavaFX popup was not
+established during this inspection. No Windows/Linux or Intel Mac runtime acceptance was
+added. Fresh independent review and verification remain required for this changed
+candidate.
 
 ### P2.4 acceptance
 
@@ -982,6 +879,5 @@ work around this AppKit placement.
 Observation: a right-click on an inactive window only activates it, as for
 other AppKit windows.
 
-Independent review and verification were not run as separate workflow stages
-for this acceptance. Windows, Linux and Intel Mac are covered only by the
-portable CI suite.
+Independent review and verification were not separate workflow stages for this
+acceptance. Windows, Linux and Intel Mac are covered only by the portable CI suite.
