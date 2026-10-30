@@ -181,8 +181,14 @@ include this library along with the other native dependencies.
 See [AppKit popup positioning](https://developer.apple.com/documentation/appkit/nsmenu/popup(positioning:at:in:)?language=objc)
 and [native tracking cancellation](https://developer.apple.com/documentation/appkit/nsmenu/canceltrackingwithoutanimation()).
 
-Coordinates use an owner sheet with Go/Cancel, exact invalid-draft feedback,
-copyable zoom and deep-zoom status. Palette uses a nonmodal live-gradient draft
+Coordinates use an owner sheet with Go/Cancel, exact invalid-draft feedback and
+deep-zoom status. Real, Imaginary and Zoom are editable; Zoom is relative to the
+fitted initial view, as in the badge, and starts as the exact value that Copy
+Coordinates and Zoom copies. An unchanged zoom keeps the current scale exactly
+and only moves the center; a new zoom must be at least 1 and, for fractals
+without deep zoom, within their double-precision limit, otherwise the draft
+stays open for correction. A new zoom replaces the view like a bookmark and is
+undoable. Palette uses a nonmodal live-gradient draft
 editor with Apply/Cancel: only Apply changes the palette. Editing a preset clears
 its checkmark to indicate a custom gradient.
 
@@ -708,7 +714,7 @@ messages through AppKit when the bridge is available:
 | --- | --- | --- |
 | Iteration Settings / Julia Parameters / Add Bookmark | Existing native field sheets | JavaFX owner-modal forms |
 | Settings (P2.6) | Native sheet with labelled pop-up buttons | JavaFX owner-modal form with combo boxes |
-| Go to Coordinates | Native two-field sheet; exact decimal parsing, selectable hint with the compact badge zoom (`Zoom: ≈1.23 × 10^30`) and deep-zoom state | JavaFX owner-modal form |
+| Go to Coordinates | Native three-field sheet (Real, Imaginary, Zoom); exact decimal parsing, shared Java validation and a selectable hint with the deep-zoom state | JavaFX owner-modal form with the same fields and validation |
 | Export PNG dimensions | Native two-field sheet with the shared memory-budget validation and live size estimate | JavaFX owner-modal form |
 | Render/export/bookmark/preset errors | Asynchronous `NSAlert` sheet | JavaFX owner-modal alert |
 | Close while exporting (including system Quit) | Asynchronous `NSAlert` decision; Return/Escape defaults to returning | JavaFX owner-modal decision |

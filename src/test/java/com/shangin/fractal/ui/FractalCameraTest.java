@@ -2,6 +2,7 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalSample;
+import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.FractalCalculator;
 import com.shangin.fractal.render.FrameReusePlanner;
@@ -13,6 +14,7 @@ import com.shangin.fractal.render.RenderRegion;
 import com.shangin.fractal.render.RenderRequest;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -129,6 +131,46 @@ class FractalCameraTest {
         assertEquals(100.0, camera.viewport().centerReal(), DELTA);
         assertEquals(-100.0, camera.viewport().centerImaginary(), DELTA);
         assertFalse(camera.setCenter(100.0, -100.0, width, height));
+    }
+
+    @Test
+    void destinationAppliesZoomRelativeToFittedHomeView() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(1000, 700);
+        var center = new PreciseComplex("-0.743643887037151000000000000000001", "0.131825904205330000000000002");
+        BigDecimal home = camera.defaultViewport(1000, 700).scaleExact();
+
+        Viewport deep = camera.destination(center, new BigDecimal("1E40"), 1000, 700);
+
+        assertEquals(center, deep.center());
+        assertEquals(0, home.movePointLeft(40).compareTo(deep.scaleExact()));
+        assertEquals(0, home.compareTo(camera.destination(center, BigDecimal.ONE, 1000, 700).scaleExact()));
+    }
+
+    @Test
+    void destinationWithoutZoomKeepsCurrentScaleExactly() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(1000, 700);
+        camera.zoomBy(310, 270, 0.37, 1000, 700, 2000, 1400);
+        BigDecimal scale = camera.viewport().scaleExact();
+
+        Viewport moved = camera.destination(new PreciseComplex("0.25", "-0.5"), null, 1000, 700);
+
+        assertEquals(scale, moved.scaleExact());
+        assertEquals(new PreciseComplex("0.25", "-0.5"), moved.center());
+    }
+
+    @Test
+    void canGoToRejectsZoomBeyondDirectPrecisionOnlyWithoutDeepZoom() {
+        var center = new PreciseComplex("-0.5", "0.25");
+        for (FractalPreset preset : FractalPreset.values()) {
+            FractalCamera camera = new FractalCamera(preset);
+            camera.resize(1000, 700);
+            assertTrue(camera.canGoTo(camera.destination(center, new BigDecimal("1000"), 1000, 700), 2000, 1400));
+            assertEquals(preset.supportsDeepZoom(),
+                    camera.canGoTo(camera.destination(center, new BigDecimal("1E30"), 1000, 700), 2000, 1400),
+                    preset::toString);
+        }
     }
 
     @Test

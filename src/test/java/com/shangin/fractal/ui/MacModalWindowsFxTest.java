@@ -51,22 +51,32 @@ class MacModalWindowsFxTest {
     }
 
     @Test void coordinatesRetainExactDraftsAndApplyOnFxThread() throws Exception {
-        var result = new CompletableFuture<PreciseComplex>();
-        var sheet = fx(() -> MacFormSheet.coordinates(owner, new PreciseComplex("0", "0"),
-                FractalDialogs.coordinateHint(new BigDecimal("1E30"), true),
+        var result = new CompletableFuture<CoordinateTarget>();
+        var sheet = fx(() -> MacFormSheet.coordinates(owner, new PreciseComplex("0", "0"), new BigDecimal("1E30"),
+                FractalDialogs.coordinateHint(true),
+                target -> target.zoom() == null || target.zoom().compareTo(new BigDecimal("1E40")) <= 0,
                 value -> { assertTrue(Platform.isFxApplicationThread()); result.complete(value); }));
         fx(() -> {
+            assertEquals("1000000000000000000000000000000", AppKitParameterProbe.text(sheet, "third"));
             AppKitParameterProbe.text(sheet, "first", "NaN");
             AppKitParameterProbe.action(sheet, "apply");
             assertEquals("NaN", AppKitParameterProbe.text(sheet, "first"));
             assertTrue(AppKitParameterProbe.showing(sheet));
             AppKitParameterProbe.text(sheet, "first", "-0.743643887037151000000000000000001");
             AppKitParameterProbe.text(sheet, "second", "0.131825904205330000000000000000002");
+            for (String invalid : List.of("0.5", "zoom", "1e41")) {
+                AppKitParameterProbe.text(sheet, "third", invalid);
+                AppKitParameterProbe.action(sheet, "apply");
+                assertTrue(AppKitParameterProbe.showing(sheet), invalid);
+                assertEquals(invalid, AppKitParameterProbe.text(sheet, "third"));
+                assertEquals(FractalDialogs.COORDINATE_ERROR, AppKitParameterProbe.text(sheet, "error"));
+            }
+            AppKitParameterProbe.text(sheet, "third", "2.5e35");
             AppKitParameterProbe.action(sheet, "apply");
             return null;
         });
-        assertEquals(new PreciseComplex("-0.743643887037151000000000000000001",
-                "0.131825904205330000000000000000002"), result.get(10, TimeUnit.SECONDS));
+        assertEquals(new CoordinateTarget(new PreciseComplex("-0.743643887037151000000000000000001",
+                "0.131825904205330000000000000000002"), new BigDecimal("2.5e35")), result.get(10, TimeUnit.SECONDS));
     }
 
     @Test void exportValidatesDraftsAndDiscardsResultAfterOwnerClosure() throws Exception {

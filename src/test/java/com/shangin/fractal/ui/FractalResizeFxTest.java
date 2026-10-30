@@ -519,6 +519,40 @@ class FractalResizeFxTest {
     }
 
     @Test
+    void goToCoordinatesWithZoomPublishesTheExactDestinationAndUndoes() throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE, true));
+        FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+        var center = new com.shangin.fractal.math.PreciseComplex(
+                "-0.743643887037151000000000000000001", "0.131825904205330000000000000000002");
+        var zoom = new java.math.BigDecimal("1E20");
+        try {
+            changeView(view, surface, () -> {
+                view.resize(320, 240);
+                view.layout();
+            });
+            Viewport home = fx(view::sceneSnapshot).viewport();
+            Viewport expected = new FractalCamera(FractalPreset.MANDELBROT).destination(center, zoom, 320, 240);
+            changeView(view, surface, () -> {
+                assertTrue(view.canGoTo(new CoordinateTarget(center, zoom)));
+                view.goTo(new CoordinateTarget(center, zoom));
+            }, 30);
+            fx(() -> {
+                assertEquals(expected, view.sceneSnapshot().viewport());
+                assertEquals(expected, surface.completedRender().frame().job().viewport());
+                return null;
+            });
+            changeView(view, surface, view::undoScene);
+            assertEquals(home, fx(view::sceneSnapshot).viewport());
+
+            changeView(view, surface, () -> view.setFractal(FractalPreset.TRICORN));
+            assertFalse(fx(() -> view.canGoTo(new CoordinateTarget(center, zoom))));
+            assertTrue(fx(() -> view.canGoTo(new CoordinateTarget(center, java.math.BigDecimal.TEN))));
+        } finally {
+            fx(() -> { view.close(); return null; });
+        }
+    }
+
+    @Test
     void deepJuliaCompletesAndRevealsTheCanvasAtWindowResolution() throws Exception {
         FractalView view = fx(() -> new FractalView(FractalPreset.JULIA, PalettePreset.ICE, true));
         FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());

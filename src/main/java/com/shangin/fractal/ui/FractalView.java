@@ -283,6 +283,27 @@ public class FractalView extends StackPane {
         recalculate();
     }
 
+    /** Go to Coordinates: an unchanged zoom only moves the center; a new zoom replaces the view. */
+    void goTo(CoordinateTarget target) {
+        if (target.zoom() == null) {
+            setCenter(target.center().real(), target.center().imaginary());
+            return;
+        }
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+        if (width < 2 || height < 2) return;
+        goTo(camera.destination(target.center(), target.zoom(), width, height));
+    }
+
+    /** Whether Go to Coordinates can reach a target within this fractal's precision limit. */
+    boolean canGoTo(CoordinateTarget target) {
+        int width = (int) getWidth();
+        int height = (int) getHeight();
+        if (width < 2 || height < 2) return true;
+        return camera.canGoTo(camera.destination(target.center(), target.zoom(), width, height),
+                Math.max(2, fractalSurface.renderWidth()), Math.max(2, fractalSurface.renderHeight()));
+    }
+
     private void dismissContextMenu() {
         if (contextMenu != null) contextMenu.hide();
     }

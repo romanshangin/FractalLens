@@ -14,6 +14,8 @@ import java.util.Map;
 /** An asynchronous AppKit sheet; its owner and callback live only for the session. */
 abstract class MacParameterSheet<T> implements AutoCloseable {
     private static final Map<Window, MacParameterSheet<?>> ACTIVE = new IdentityHashMap<>();
+    /** ASCII unit separator: not typeable, so it cannot be confused with draft text. */
+    static final String THIRD_DRAFT_SEPARATOR = "\u001f";
     private final ArrayList<Runnable> waiting = new ArrayList<>();
     private final Window owner;
     private final Consumer<T> apply;
@@ -33,8 +35,8 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
         requireFxThread();
         if (!owner.isShowing()) throw new IllegalStateException("Sheet owner must be showing");
         long window = MacContextMenu.windowHandle(owner);
-        handle = open(window, title, hint, firstLabel, secondLabel, firstId, secondId,
-                first, second, defaultFirst, defaultSecond, error, 0, "Apply");
+        handle = open(window, title, hint, firstLabel, secondLabel, "", firstId, secondId, "",
+                first, second, "", defaultFirst, defaultSecond, error, 0, "Apply");
         finishOpening();
     }
 
@@ -42,8 +44,8 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
                                      String error, String confirmTitle) throws ReflectiveOperationException {
         requireFxThread();
         if (!owner.isShowing()) throw new IllegalStateException("Sheet owner must be showing");
-        handle = open(MacContextMenu.windowHandle(owner), title, hint, label, "", id, "",
-                "", "", "", "", error, 1, confirmTitle);
+        handle = open(MacContextMenu.windowHandle(owner), title, hint, label, "", "", id, "", "",
+                "", "", "", "", "", error, 1, confirmTitle);
         finishOpening();
     }
 
@@ -51,9 +53,22 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
                               String firstId, String secondId, String first, String second,
                               String error, String confirm, boolean palette) {
         requireFxThread();
-        handle = open(MacContextMenu.windowHandle(owner), title, hint, firstLabel, secondLabel,
-                firstId, secondId, first, second, "", "", error, palette ? 3 : 2, confirm);
+        handle = open(MacContextMenu.windowHandle(owner), title, hint, firstLabel, secondLabel, "",
+                firstId, secondId, "", first, second, "", "", "", error, palette ? 3 : 2, confirm);
         if (palette) finishModelessOpening(); else finishOpening();
+    }
+
+    /**
+     * A three-field form. Native callbacks still pass two drafts: the second carries the
+     * second and third fields joined by {@link #THIRD_DRAFT_SEPARATOR}.
+     */
+    final void showFormNative(String title, String hint, String firstLabel, String secondLabel,
+                              String thirdLabel, String firstId, String secondId, String thirdId,
+                              String first, String second, String third, String error, String confirm) {
+        requireFxThread();
+        handle = open(MacContextMenu.windowHandle(owner), title, hint, firstLabel, secondLabel, thirdLabel,
+                firstId, secondId, thirdId, first, second, third, "", "", error, 2, confirm);
+        finishOpening();
     }
 
     final void showChoicesNative(String title, String hint, List<SettingsWindow.ChoiceField> fields,
@@ -160,7 +175,8 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
     }
 
     private native long open(long window, String title, String hint, String firstLabel, String secondLabel,
-                             String firstId, String secondId, String first, String second,
+                             String thirdLabel, String firstId, String secondId, String thirdId,
+                             String first, String second, String third,
                              String defaultFirst, String defaultSecond, String error,
                              int kind, String confirmTitle);
     private native long openChoices(long window, String title, String hint, String[] sections,

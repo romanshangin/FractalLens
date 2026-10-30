@@ -104,13 +104,17 @@ class FractalDialogsFxTest {
 
     @Test void coordinatesThemeFocusOrderValidationAndExactResult() throws Exception {
         var dialog = fx(() -> FractalDialogs.coordinateDialog(owner, FractalPreset.MANDELBROT.defaultViewport(),
-                new BigDecimal("1.25"), false));
+                new BigDecimal("1.25"), false, target -> target.zoom() == null
+                        || target.zoom().compareTo(new BigDecimal("1E12")) <= 0));
         try {
             fx(() -> { dialog.show(); return null; });
             fx(() -> {
                 var pane = dialog.getDialogPane();
                 var real = field(dialog, "coordinate-real");
                 var imaginary = field(dialog, "coordinate-imaginary");
+                var zoom = field(dialog, "coordinate-zoom");
+                assertEquals("1.25", zoom.getText());
+                assertTrue(zoom.isEditable());
                 assertSame(real, pane.getScene().getFocusOwner());
                 assertEquals(real.getText(), real.getSelectedText());
                 pane.getScene().getPreferences().setColorScheme(ColorScheme.LIGHT);
@@ -147,10 +151,22 @@ class FractalDialogsFxTest {
                 real.setText("-0.743643887037151000000000000000000001");
                 imaginary.setText("1.25e-30");
                 assertFalse(pane.lookup("#dialog-validation-error").isVisible());
+                for (String invalid : List.of("0.5", "zoom", "1e13")) {
+                    zoom.setText(invalid);
+                    zoom.fireEvent(new ActionEvent());
+                    assertTrue(dialog.isShowing(), invalid);
+                    assertSame(zoom, pane.getScene().getFocusOwner());
+                    assertEquals(invalid, zoom.getText());
+                    assertTrue(((Label) pane.lookup("#dialog-validation-error")).getText()
+                            .contains(invalid.equals("1e13") ? "precisely" : "at least 1"), invalid);
+                }
+                zoom.setText("1e12");
+                assertFalse(pane.lookup("#dialog-validation-error").isVisible());
                 imaginary.fireEvent(new ActionEvent());
                 assertFalse(dialog.isShowing());
-                assertEquals(new BigDecimal(real.getText()), dialog.getResult().real());
-                assertEquals(new BigDecimal(imaginary.getText()), dialog.getResult().imaginary());
+                assertEquals(new BigDecimal(real.getText()), dialog.getResult().center().real());
+                assertEquals(new BigDecimal(imaginary.getText()), dialog.getResult().center().imaginary());
+                assertEquals(0, new BigDecimal("1e12").compareTo(dialog.getResult().zoom()));
                 return null;
             });
             fx(() -> { assertSame(ownerField, owner.getScene().getFocusOwner()); return null; });
@@ -442,7 +458,7 @@ class FractalDialogsFxTest {
 
     @Test void escapeCancelsInvalidDraftAndHelpAndMessagesShareTheme() throws Exception {
         var coordinate = fx(() -> FractalDialogs.coordinateDialog(owner, FractalPreset.MANDELBROT.defaultViewport(),
-                BigDecimal.ONE, false));
+                BigDecimal.ONE, false, target -> true));
         fx(() -> { coordinate.show(); return null; });
         fx(() -> {
             field(coordinate, "coordinate-real").setText("invalid");
