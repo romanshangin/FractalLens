@@ -19,6 +19,7 @@
 @property NSWindow *owner;
 @property NSTextField *first;
 @property NSTextField *second;
+@property NSTextField *third;
 @property NSTextField *error;
 @property BOOL cancelled;
 @property BOOL finished;
@@ -91,6 +92,9 @@ static NSString *firstDraft(FractalParameterSession *session) {
 }
 
 static NSString *secondDraft(FractalParameterSession *session) {
+    // A three-field form packs its last two drafts; Java splits them at the unit separator.
+    if (session.third) return [NSString stringWithFormat:@"%@\x1f%@",
+            session.second.stringValue, session.third.stringValue];
     if (!session.colors) return session.second ? session.second.stringValue : @"";
     NSMutableArray *drafts = [NSMutableArray new];
     for (NSColorWell *well in session.colors) {
@@ -218,7 +222,7 @@ static jint invalidField(FractalParameterSession *session) {
     if (invalidIndex != 0) {
         self.error.stringValue = self.validationError;
         NSTextField *invalid = self.positions ? self.positions[MIN((NSUInteger)invalidIndex - 1, self.positions.count - 1)]
-                : invalidIndex == 1 ? self.first : self.second;
+                : invalidIndex == 1 ? self.first : invalidIndex == 3 && self.third ? self.third : self.second;
         [self.panel makeFirstResponder:invalid];
         [invalid selectText:nil];
         return;
@@ -364,10 +368,12 @@ static NSButton *button(NSString *title, id target, SEL action) {
 
 JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
 (JNIEnv *env, jobject callback, jlong windowHandle, jstring title, jstring hintText,
- jstring firstLabel, jstring secondLabel, jstring firstId, jstring secondId,
- jstring first, jstring second, jstring defaultFirst, jstring defaultSecond, jstring errorText,
- jint kind, jstring confirmTitle) {
+ jstring firstLabel, jstring secondLabel, jstring thirdLabel, jstring firstId, jstring secondId,
+ jstring thirdId, jstring first, jstring second, jstring third, jstring defaultFirst,
+ jstring defaultSecond, jstring errorText, jint kind, jstring confirmTitle) {
     BOOL singleField = kind == 1;
+    NSString *thirdTitle = nativeString(env, thirdLabel);
+    BOOL thirdField = kind == 2 && thirdTitle.length > 0;
     if (!sheetMainThread(env)) return 0;
     NSWindow *owner = (__bridge NSWindow *)(void *)(intptr_t)windowHandle;
     if (!owner.isVisible || owner.attachedSheet) return 0;
@@ -413,9 +419,18 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
     session.first.action = @selector(apply:);
     session.second.target = session;
     session.second.action = @selector(apply:);
-    NSArray *rows = singleField ? @[@[label(nativeString(env, firstLabel)), session.first]] : @[
-        @[label(nativeString(env, firstLabel)), session.first],
-        @[label(nativeString(env, secondLabel)), session.second]];
+    NSMutableArray *rows = [NSMutableArray arrayWithObject:@[label(nativeString(env, firstLabel)), session.first]];
+    if (!singleField) [rows addObject:@[label(nativeString(env, secondLabel)), session.second]];
+    if (thirdField) {
+        session.third = [NSTextField textFieldWithString:nativeString(env, third)];
+        session.third.identifier = nativeString(env, thirdId);
+        session.third.accessibilityLabel = thirdTitle;
+        session.third.delegate = session;
+        [(NSTextFieldCell *)session.third.cell setSendsActionOnEndEditing:NO];
+        session.third.target = session;
+        session.third.action = @selector(apply:);
+        [rows addObject:@[label(thirdTitle), session.third]];
+    }
     NSGridView *grid = [NSGridView gridViewWithViews:rows];
     grid.rowSpacing = 12;
     grid.columnSpacing = 12;
@@ -497,7 +512,8 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
         [session.error.heightAnchor constraintGreaterThanOrEqualToConstant:32],
         [actions.widthAnchor constraintEqualToAnchor:body.widthAnchor]]];
     session.first.nextKeyView = singleField ? cancel : session.second;
-    session.second.nextKeyView = kind == 0 ? reset : cancel;
+    session.second.nextKeyView = kind == 0 ? reset : thirdField ? session.third : cancel;
+    session.third.nextKeyView = cancel;
     reset.nextKeyView = cancel;
     cancel.nextKeyView = apply;
     apply.nextKeyView = session.first;

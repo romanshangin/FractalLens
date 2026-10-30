@@ -291,8 +291,7 @@ final class MainMenuBar extends MenuBar {
     }
 
     private void showCoordinates() {
-        FractalDialogs.coordinates(stage, viewport, zoom, deepZoom, center ->
-                fractalView.setCenter(center.real(), center.imaginary()));
+        FractalDialogs.coordinates(stage, viewport, zoom, deepZoom, fractalView::canGoTo, fractalView::goTo);
     }
 
     private void resetColors() {

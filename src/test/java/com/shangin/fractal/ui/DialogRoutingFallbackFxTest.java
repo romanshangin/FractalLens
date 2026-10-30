@@ -60,17 +60,18 @@ class DialogRoutingFallbackFxTest {
     }
 
     @Test void coordinateAndExportCallbacksPreserveExactValues() throws Exception {
-        var center = new CompletableFuture<PreciseComplex>();
+        var center = new CompletableFuture<CoordinateTarget>();
         Platform.runLater(() -> FractalDialogs.coordinates(owner,
                 new Viewport(new PreciseComplex("0", "0"), BigDecimal.ONE),
-                BigDecimal.ONE, false, center::complete));
+                BigDecimal.ONE, false, target -> true, center::complete));
         fx(() -> {
             var dialog = pane("Go to Coordinates");
             ((TextField) dialog.lookup("#coordinate-real")).setText("-0.743643887037151000000000001");
             primary(dialog);
             return null;
         });
-        assertEquals(new PreciseComplex("-0.743643887037151000000000001", "0"), center.get(10, TimeUnit.SECONDS));
+        assertEquals(new CoordinateTarget(new PreciseComplex("-0.743643887037151000000000001", "0"), null),
+                center.get(10, TimeUnit.SECONDS));
         var size = new CompletableFuture<RenderTarget>();
         Platform.runLater(() -> FractalDialogs.exportSize(owner, new RenderTarget(640, 440), size::complete));
         fx(() -> {

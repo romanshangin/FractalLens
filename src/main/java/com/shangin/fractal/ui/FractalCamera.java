@@ -61,6 +61,28 @@ public final class FractalCamera {
         preserveViewportAtInitialSize = false;
     }
 
+    /**
+     * The viewport at an exact center and a zoom relative to the fitted home view;
+     * a {@code null} zoom keeps the current scale exactly.
+     */
+    public Viewport destination(PreciseComplex center, BigDecimal zoom, int width, int height) {
+        validateDimensions(width, height);
+        Objects.requireNonNull(center);
+        if (zoom == null) return new Viewport(center, viewport.scaleExact());
+        if (zoom.signum() <= 0) throw new IllegalArgumentException("Zoom must be positive");
+        Viewport home = defaultViewport(width, height);
+        // Quotient digits are relative, so the zoom's own digits plus guards keep the scale exact enough.
+        MathContext context = new MathContext(Math.max(home.mathContext().getPrecision(),
+                zoom.precision() + home.mathContext().getPrecision()), home.mathContext().getRoundingMode());
+        return new Viewport(center, home.scaleExact().divide(zoom, context));
+    }
+
+    /** Whether a destination is renderable by this preset's backends at the given render size. */
+    public boolean canGoTo(Viewport destination, int renderWidth, int renderHeight) {
+        validateDimensions(renderWidth, renderHeight);
+        return !mustRemainInDirectPrecision(Objects.requireNonNull(destination), renderWidth, renderHeight);
+    }
+
     /** Installs an already validated scene snapshot without coordinate rounding. */
     void restore(FractalPreset preset, Viewport viewport, int width, int height) {
         this.preset = Objects.requireNonNull(preset);

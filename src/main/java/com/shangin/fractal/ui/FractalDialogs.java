@@ -5,7 +5,6 @@ import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.export.AdaptivePngExportService;
 
 import com.shangin.fractal.coloring.ColorStop;
-import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.IterationSettings;
@@ -34,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.Map;
 import java.util.IdentityHashMap;
 import javafx.stage.Modality;
@@ -58,19 +58,45 @@ final class FractalDialogs {
         }
     }
 
+    /** The native sheet's single validation message; the JavaFX dialog names the failing rule. */
+    static final String COORDINATE_ERROR = "Enter numbers for the coordinates and a zoom of at least 1 "
+            + "that this fractal can render precisely. Scientific notation, such as 1.5e-12, is supported.";
+    private static final String COORDINATE_NUMBER_ERROR =
+            "Enter a number for each coordinate. Scientific notation, such as 1.5e-12, is supported.";
+    private static final String ZOOM_NUMBER_ERROR =
+            "Enter a zoom of at least 1. Scientific notation, such as 1e30, is supported.";
+    private static final String ZOOM_PRECISION_ERROR = "This fractal cannot render this zoom precisely. "
+            + "Enter a smaller zoom; deep zoom is available for Mandelbrot and Julia.";
+
     @SuppressWarnings("resource") // ACTIVE owns the asynchronous sheet until completion or owner closure.
     static void coordinates(Window owner, Viewport viewport, BigDecimal zoom, boolean deepZoom,
-                            Consumer<PreciseComplex> apply) {
+                            Predicate<CoordinateTarget> reachable, Consumer<CoordinateTarget> apply) {
         if (MacParameterSheet.hasOpenSheet(owner)) return;
-        if (!nativeDialog(() -> MacFormSheet.coordinates(owner, viewport.center(),
-                coordinateHint(zoom, deepZoom), apply)))
-            coordinates(owner, viewport, zoom, deepZoom).ifPresent(apply);
+        if (!nativeDialog(() -> MacFormSheet.coordinates(owner, viewport.center(), zoom,
+                coordinateHint(deepZoom), reachable, apply)))
+            coordinateDialog(owner, viewport, zoom, deepZoom, reachable).showAndWait().ifPresent(apply);
     }
 
-    /** One-line native hint; the zoom uses the same compact form as the render badge tooltip. */
-    static String coordinateHint(BigDecimal zoom, boolean deepZoom) {
-        return (deepZoom ? "High-precision deep zoom is active. " : "Move the center without changing zoom. ")
-                + "Zoom: " + RenderValueFormat.zoom(zoom);
+    static String coordinateHint(boolean deepZoom) {
+        return "Enter the center and the zoom relative to the initial view."
+                + (deepZoom ? " High-precision deep zoom is active." : "");
+    }
+
+    /**
+     * Shared native and JavaFX validation: zero when the drafts are valid, otherwise the
+     * one-based index of the field to correct (1 real, 2 imaginary, 3 zoom).
+     */
+    static int invalidCoordinateField(String real, String imaginary, String zoom, BigDecimal currentZoom,
+                                      Predicate<CoordinateTarget> reachable) {
+        if (!isCoordinate(real)) return 1;
+        if (!isCoordinate(imaginary)) return 2;
+        CoordinateTarget target;
+        try {
+            target = CoordinateTarget.parse(real, imaginary, zoom, currentZoom);
+        } catch (IllegalArgumentException invalid) {
+            return 3;
+        }
+        return reachable.test(target) ? 0 : 3;
     }
 
     static void palette(Window owner, List<ColorStop> stops, Consumer<List<ColorStop>> apply) {
@@ -185,32 +211,28 @@ final class FractalDialogs {
         }
     }
 
-    static Optional<PreciseComplex> coordinates(Window owner, Viewport viewport,
-                                                BigDecimal zoom, boolean deepZoom) {
-        return coordinateDialog(owner, viewport, zoom, deepZoom).showAndWait();
-    }
-
-    static Dialog<PreciseComplex> coordinateDialog(Window owner, Viewport viewport,
-                                                   BigDecimal zoom, boolean deepZoom) {
-        Dialog<PreciseComplex> dialog = new Dialog<>();
+    static Dialog<CoordinateTarget> coordinateDialog(Window owner, Viewport viewport, BigDecimal zoom,
+                                                     boolean deepZoom, Predicate<CoordinateTarget> reachable) {
+        Dialog<CoordinateTarget> dialog = new Dialog<>();
         dialog.setTitle("Go to Coordinates");
         TextField real = new TextField(viewport.center().real().toString());
         TextField imaginary = new TextField(viewport.center().imaginary().toString());
+        TextField scale = new TextField(CoordinateTarget.zoomText(zoom));
         real.setId("coordinate-real");
         imaginary.setId("coordinate-imaginary");
+        scale.setId("coordinate-zoom");
         real.setPromptText("For example, -0.75");
         imaginary.setPromptText("For example, 0");
-        ZoomIndicator scale = new ZoomIndicator();
-        scale.setZoom(zoom);
+        scale.setPromptText("For example, 1e12");
         GridPane fields = new GridPane(12, 12);
         fields.addRow(0, label("Real", real), real);
         fields.addRow(1, label("Imaginary", imaginary), imaginary);
         fields.addRow(2, label("Zoom ×", scale), scale);
-        for (Node field : List.of(real, imaginary, scale)) {
+        List<TextField> inputs = List.of(real, imaginary, scale);
+        for (Node field : inputs) {
             GridPane.setHgrow(field, Priority.ALWAYS);
         }
-        Label hint = new Label(deepZoom ? "High-precision deep zoom is active."
-                : "Move the center of the view without changing its zoom.");
+        Label hint = new Label(coordinateHint(deepZoom));
         hint.setWrapText(true);
         hint.getStyleClass().add("dialog-hint");
         Label error = errorLabel();
@@ -222,18 +244,16 @@ final class FractalDialogs {
         DialogAppearance.install(dialog, owner, () -> real);
         Button confirm = DialogAppearance.buttons(dialog, go, ButtonType.CANCEL);
         confirm.addEventFilter(ActionEvent.ACTION, event -> {
-            if (!validateCoordinates(dialog, real, imaginary, error, true)) event.consume();
+            if (!validateCoordinates(dialog, inputs, zoom, reachable, error, true)) event.consume();
         });
-        real.setOnAction(event -> { confirm.fire(); event.consume(); });
-        imaginary.setOnAction(event -> { confirm.fire(); event.consume(); });
-        for (TextField field : List.of(real, imaginary)) {
+        for (TextField field : inputs) {
+            field.setOnAction(event -> { confirm.fire(); event.consume(); });
             field.textProperty().addListener(ignored -> {
-                if (error.isVisible()) validateCoordinates(dialog, real, imaginary, error, false);
+                if (error.isVisible()) validateCoordinates(dialog, inputs, zoom, reachable, error, false);
             });
         }
         dialog.setResultConverter(button -> button == go
-                ? new PreciseComplex(new BigDecimal(real.getText().trim()),
-                        new BigDecimal(imaginary.getText().trim())) : null);
+                ? CoordinateTarget.parse(real.getText(), imaginary.getText(), scale.getText(), zoom) : null);
         return dialog;
     }
 
@@ -466,7 +486,7 @@ final class FractalDialogs {
                 + "Drag to move. Use arrow keys to pan, Page Up and Page Down to zoom, and Home to reset the view.\n"
                 + "Scroll with a mouse to zoom toward the pointer.\n"
                 + "On a trackpad, pinch to zoom and scroll with two fingers to pan.\n\n"
-                + "Use View to zoom, reset the view, enter coordinates, or go full screen.\n"
+                + "Use View to zoom, reset the view, enter coordinates and zoom, or go full screen.\n"
                 + "Choose a formula in Fractal, then use Go to for interesting places in that fractal.\n"
                 + "Choose a palette in Color.\n"
                 + "Edit iteration settings in Render. For Julia, edit both constant components there; Reset to Defaults restores -0.8 and 0.156 before Apply.\n"
@@ -605,22 +625,35 @@ final class FractalDialogs {
         return error;
     }
 
-    private static boolean validateCoordinates(Dialog<?> dialog, TextField real, TextField imaginary,
-                                               Label error, boolean focus) {
-        TextField firstInvalid = null;
-        for (TextField field : List.of(real, imaginary)) {
-            boolean invalid = !isCoordinate(field.getText());
-            field.pseudoClassStateChanged(PseudoClass.getPseudoClass("invalid"), invalid);
-            field.setAccessibleHelp(invalid ? "Enter a number; scientific notation is supported." : null);
-            if (invalid && firstInvalid == null) firstInvalid = field;
+    private static boolean validateCoordinates(Dialog<?> dialog, List<TextField> fields, BigDecimal zoom,
+                                               Predicate<CoordinateTarget> reachable, Label error, boolean focus) {
+        int invalidIndex = invalidCoordinateField(fields.get(0).getText(), fields.get(1).getText(),
+                fields.get(2).getText(), zoom, reachable);
+        for (int i = 0; i < fields.size(); i++) {
+            boolean invalid = i + 1 == invalidIndex;
+            fields.get(i).pseudoClassStateChanged(PseudoClass.getPseudoClass("invalid"), invalid);
+            fields.get(i).setAccessibleHelp(invalid ? (i < 2
+                    ? "Enter a number; scientific notation is supported."
+                    : "Enter a zoom of at least 1 that this fractal can render precisely.") : null);
         }
-        if (firstInvalid == null) {
+        if (invalidIndex == 0) {
             clearError(dialog, error);
             return true;
         }
-        showError(dialog, error, "Enter a number for each coordinate. Scientific notation, such as 1.5e-12, is supported.");
+        showError(dialog, error, invalidIndex < 3 ? COORDINATE_NUMBER_ERROR
+                : isZoom(fields.get(2).getText(), zoom) ? ZOOM_PRECISION_ERROR : ZOOM_NUMBER_ERROR);
+        TextField firstInvalid = fields.get(invalidIndex - 1);
         if (focus) { firstInvalid.requestFocus(); firstInvalid.selectAll(); }
         return false;
+    }
+
+    private static boolean isZoom(String text, BigDecimal currentZoom) {
+        try {
+            CoordinateTarget.parse("0", "0", text, currentZoom);
+            return true;
+        } catch (IllegalArgumentException invalid) {
+            return false;
+        }
     }
 
     private static boolean validateJuliaParameters(Dialog<?> dialog, TextField real, TextField imaginary,
