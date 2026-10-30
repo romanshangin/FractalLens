@@ -1,8 +1,6 @@
 # Roadmap 9.1 JavaFX publication baseline
 
-> Publication scope: use this protocol for fresh runs in a new output directory.
-> Keep raw logs and diagnostic captures private; publish only reviewed summaries
-> and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
+> Publication: use a new output directory for fresh runs. Keep raw logs/diagnostics private; publish only reviewed summaries and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
 [`BaselineFxBenchmark`](../src/test/java/com/shangin/fractal/render/BaselineFxBenchmark.java)
 uses the same `9.1-v2` fixture objects and exact [manifest](BASELINE_FIXTURES.csv)

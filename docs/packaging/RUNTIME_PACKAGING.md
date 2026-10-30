@@ -1,47 +1,32 @@
 # Runtime packaging
 
-Automatic runs build and smoke-test packages but do not upload artifacts. A
-manual dispatch can set `upload_artifacts: true` after private-destination
-validation and artifact review. Provenance and smoke-report text must pass the
-privacy guard first; PRs cannot enable uploads. Test logs and Surefire reports
-are excluded. See [CI publication controls](../development/CI.md).
+Automatic builds smoke-test without uploads. Reviewed manual dispatch may set
+`upload_artifacts: true` after private-destination validation/privacy-checked
+provenance/smoke text. PRs cannot enable uploads; exclude test logs/Surefire.
+[CI controls](../development/CI.md).
 
-FractalLens produces platform-native, self-contained runtime artifacts with JDK
-25 `jlink` and `jpackage`. The macOS output is a DMG containing `FractalLens.app`;
-the Windows output is an EXE installer. Neither artifact requires Java to be
-installed on the destination machine.
+JDK 25 `jlink`/`jpackage` produces self-contained macOS DMG (`FractalLens.app`)
+and Windows EXE; destination needs no Java.
 
-The application starts with the optional GPU runtime disabled. The CPU renderer
-is the default and remains fully functional. Platform JavaFX modules and LWJGL
-native libraries are included. The macOS artifact also compiles and includes
-the AppKit canvas-menu bridge. The application icon, FractalLens's Apache License
-2.0 text, complete pinned third-party license and notice texts, embedded JDK
-legal notices and build provenance travel with the runtime.
-`packaging/THIRD-PARTY-LICENSES.txt` records the source tag or embedded native
-revision for every copied third-party text.
+GPU runtime starts disabled; fully functional CPU default. Include platform
+JavaFX/LWJGL natives, macOS-built AppKit menu bridge, icon, Apache License 2.0,
+complete pinned third-party licenses/notices, embedded JDK legal text/provenance.
+`packaging/THIRD-PARTY-LICENSES.txt` records each text's source tag/native revision.
 
 ## Startup and macOS deployment floor
 
-The packaged module entry point is `com.shangin.fractal.app.FractalLauncher`,
-the same plain-Java bootstrap used by Maven's `javafx:run` and its macOS
-development launcher. It forwards arguments to
-`Application.launch(FractalFxApplication.class, args)` after selecting
-`prism.order=mtl,es2,sw` on macOS when that property is absent. Explicit JVM
-values are preserved, including empty values; Windows and Linux retain their
-JavaFX defaults. Initialization failure can select ES2 or SW, but a native
-Metal crash cannot be recovered by this chain. Use `-Dprism.order=sw` for the
-known VirtualBuddy guest limitation. The owner accepted the measured latency
-trade-off on 2026-10-29; historical performance verdicts remain unchanged.
-Standard/clean-machine DMG installation, guest and minimum-OS acceptance of
-this activation candidate remain open in
-[P1.7's checklist](../platform/METAL_MIGRATION_CHECKLIST.md); a copied-DMG
-development-host check is recorded below.
+Packages and Maven `javafx:run`/native development share plain
+`com.shangin.fractal.app.FractalLauncher`: set macOS `prism.order=mtl,es2,sw` only
+if absent, forward args to `Application.launch(FractalFxApplication.class, args)`.
+Explicit/empty JVM values win; Windows/Linux defaults stay. Initialization can
+fall back to ES2/SW, native crashes cannot. VirtualBuddy needs `-Dprism.order=sw`.
+Owner accepted latency 2026-10-29, historical verdicts unchanged. Standard/clean
+DMG, guest/minimum-OS acceptance stays open in
+[P1.7 checklist](../platform/METAL_MIGRATION_CHECKLIST.md); copied-DMG host check below.
 
-The following inspection belongs to the uncommitted bootstrap preparation based
-on revision `2139aa063e22c057b1cd0a7f94433c7fd31de1a7`, on macOS 27.2 ARM64.
-It used Microsoft Build of OpenJDK 25 (update 4, vendor patch 1) and the JavaFX
-version pinned in `pom.xml`. These are observed binary/metadata values, not a new supported-OS
-claim or an update to the historical P0.2 evidence.
+Inspection: uncommitted bootstrap based on `2139aa063e22c057b1cd0a7f94433c7fd31de1a7`,
+macOS 27.2 ARM64, Microsoft OpenJDK 25 (update 4, vendor patch 1), `pom.xml` JavaFX.
+Observed metadata/binaries only, no new OS support or revised historical P0.2 evidence.
 
 | Component inspected | Deployment floor or metadata |
 | --- | --- |
@@ -188,16 +173,13 @@ available through the repository wrapper or `PATH`, then run:
 python3 scripts/packaging/package_runtime.py --version 1.0.0
 ```
 
-On Windows, use `python` if that is the installed Python command. WiX Toolset
-3.14 is required by `jpackage` to create the EXE installer. Packaging must run
-on the target operating system; `jpackage` does not cross-package native
-installers.
+On Windows, use `python` if that is the installed Python command. WiX Toolset 3.14 is
+required by `jpackage` to create the EXE installer. Package on the target operating
+system; `jpackage` does not cross-package native installers.
 
-The command performs a clean Maven package, constructs a minimal modular runtime,
-builds an app image, starts its launcher, initializes JavaFX, loads the AppKit
-bridge on macOS, verifies CPU fallback, completes a small CPU render, and only
-then creates the installer. Use `--app-image-only` while iterating when an
-installer is not needed.
+Clean Maven package → minimal modular runtime/app image → launcher/JavaFX/AppKit
+(macOS)/CPU fallback/complete small render smoke → installer. Use
+`--app-image-only` during iteration without installer.
 
 Outputs are under `target/runtime-package`:
 
@@ -207,11 +189,10 @@ Outputs are under `target/runtime-package`:
   module/native/license hashes, smoke result and final artifact hash;
 - `smoke-report.properties`, the packaged-launcher result.
 
-`.github/workflows/runtime-artifacts.yml` runs the same command from a clean
-checkout on hosted macOS and Windows runners. It retains the installer,
-checksum, provenance and smoke report together for 30 days. A hosted runner
-proves only its own architecture. Intel/AMD Mac and additional Windows hardware
-coverage remains tracked separately in `ROADMAP.md`.
+`.github/workflows/runtime-artifacts.yml` runs from clean hosted macOS/Windows
+checkouts, retaining installer/checksum/provenance/smoke together for 30 days.
+Hosted acceptance covers its architecture only; Intel/AMD Mac/additional Windows
+hardware remains in `ROADMAP.md`.
 
 ## Clean-machine launch checklist
 
@@ -233,20 +214,17 @@ Use a machine without a development JDK or Maven installation.
 5. Close and reopen the application. Confirm that no Java, JavaFX, LWJGL or
    AppKit-library error is shown and that normal CPU rendering still works.
 
-Record the workflow run URL, artifact checksum, provenance file, target machine,
-installation result and checklist result. Do not describe a build-machine smoke
-test as a completed clean-machine check.
+Record run URL, artifact checksum/provenance, target machine, install/checklist
+results. Build-host smoke is not clean-machine acceptance.
 
 ## P0.2 acceptance record
 
-This is the original private-repository acceptance record. Its Actions runs,
-artifacts and PR revisions are not published here or evidence that CI passed
-in a new destination repository. Original checksums and revision identifiers
-remain historical provenance; see [publication provenance](../development/PUBLICATION.md).
+Original private-repository evidence: Actions/artifacts/PR revisions are not
+published or new-destination CI proof. Original checksums/revisions remain provenance:
+[publication](../development/PUBLICATION.md).
 
-The owner accepted P0.2 with the macOS virtual-machine exception below. This
-decision closes the roadmap packaging item; it does not turn the failed default
-macOS launch into a passing check or establish support for that environment.
+Owner closes P0.2 with the macOS VM exception below, without passing failed
+default launch or supporting that environment.
 
 - Historical Runtime Artifacts run `35557346815` (private archive)
   passed its hosted macOS ARM64 and Windows X64 packaging, packaged-launcher
@@ -255,21 +233,20 @@ macOS launch into a passing check or establish support for that environment.
   the PR merge revision `3331e33c7babf3635cd4f1ade1e75cff0a8595fc`,
   version `1.0.3`, and `working_tree_dirty=false` on both platforms.
 - The macOS artifact `FractalLens-1.0.3.dmg` had SHA-256
-  `71d2dfb9a6d6c3513aabfbb51077e0b3b40641e44a425f765eee7ac7cf02a0e7`.
-  On a VirtualBuddy macOS Sonoma 14.8.9 (23J631) ARM64 guest without JDK or
-  Maven, the downloaded artifact checksum was independently verified and
-  provenance checks passed in the guest. The app installed, and the unsigned-app
-  Gatekeeper exception was granted. The default Finder launch
-  showed the loading screen and then crashed with `NSInvalidArgumentException`:
-  `AppleParavirtDevice newArgumentEncoderWithLayout:` in `libprism_mtl.dylib`.
-  An explicit ES2 launch could not initialize `MacGLFactory`. With
+  `71d2dfb9a6d6c3513aabfbb51077e0b3b40641e44a425f765eee7ac7cf02a0e7`. On a VirtualBuddy
+  macOS Sonoma 14.8.9 (23J631) ARM64 guest without JDK or Maven, the downloaded artifact
+  checksum was independently verified and provenance checks passed in the guest. The app
+  installed, and the unsigned-app Gatekeeper exception was granted. The default Finder
+  launch showed the loading screen and then crashed with `NSInvalidArgumentException`:
+  `AppleParavirtDevice newArgumentEncoderWithLayout:` in `libprism_mtl.dylib`. An
+  explicit ES2 launch could not initialize `MacGLFactory`. With
   `JAVA_TOOL_OPTIONS="-Dprism.order=sw -Dprism.verbose=true"`, the installed app
-  initialized `SWPipeline`, displayed the completed Mandelbrot frame, and
-  passed Dock tooltip, pan, zoom, Reset View, AppKit context menu/Escape, PNG
-  export, and app-icon checks. The default Finder launch failed; a physical
-  clean Apple Silicon Mac was unavailable, so physical macOS launch behavior
-  remains unverified. The software-pipeline result is a diagnostic control,
-  not a general macOS graphics default or a pass for the default-launch step.
+  initialized `SWPipeline`, displayed the completed Mandelbrot frame, and passed Dock
+  tooltip, pan, zoom, Reset View, AppKit context menu/Escape, PNG export, and app-icon
+  checks. The default Finder launch failed; a physical clean Apple Silicon Mac was
+  unavailable, so physical macOS launch behavior is unverified. The software-pipeline
+  result is a diagnostic control, not a general macOS graphics default or a pass for the
+  default-launch step.
 - The Windows artifact `FractalLens-1.0.3.exe` had SHA-256
   `b18c687b666452414b9574021ac1c6d539471671056d254383db9da6f08a4826`.
   On a Windows 11 Home 10.0.26200 x64 laptop, Java and Maven were removed
@@ -281,19 +258,16 @@ macOS launch into a passing check or establish support for that environment.
   zoom, Reset View, JavaFX canvas context menu, PNG export, and close/reopen.
   This was a machine with development tools removed, not a newly installed OS.
 
-The macOS virtual Metal crash remains an unresolved compatibility limitation.
-Do not describe the Sonoma/VirtualBuddy default launch as validated, infer
-physical Mac behavior from the VM, or treat these unsigned CI artifacts as
-public release candidates. Signing and notarization remain separate release
-work as described below.
+Virtual Metal crash is unresolved. Never claim Sonoma/VirtualBuddy default launch
+passed, infer physical behavior from VM, or call unsigned CI artifacts release
+candidates. Signing/notarization remain separate.
 
 ## Signing and release boundary
 
-CI artifacts are intentionally unsigned. Building and smoke testing are
-independent of release credentials. macOS Developer ID signing, notarization and
-stapling, and Windows Authenticode signing are separate release steps and must
-operate on the already validated artifacts. Unsigned builds can trigger
-Gatekeeper or SmartScreen warnings and are not public release candidates.
+CI artifacts are unsigned; build/smoke needs no release credentials. Separate
+macOS Developer ID signing/notarization/stapling and Windows Authenticode must
+use validated artifacts. Unsigned Gatekeeper/SmartScreen warnings are possible;
+these are not public release candidates.
 
 FractalLens source code, project documentation, screenshots, and original project
 images are licensed under the [Apache License 2.0](../../LICENSE), unless otherwise

@@ -5,62 +5,47 @@ The automatically activated `macos-app-name` profile launches through
 `scripts/macos/macos-java`. Dock sees a `FractalLens.app` bundle with its own name,
 identifier and icon, rather than the shared `java` executable.
 
-The launcher creates a small, locally signed development bundle under
-`target/macos-launcher/`. It builds a small native launcher with the local
-macOS SDK and links to the Maven JDK's runtime libraries; it does not modify
-the installed JDK. This requires Xcode or its Command Line Tools.
-Unchanged bundles are reused. `mvn clean` removes them, and the next launch
-recreates them. JVM arguments, module paths and application arguments from
-the JavaFX Maven plugin are forwarded unchanged.
+Local SDK builds/signs a development bundle in `target/macos-launcher/`, linked
+to Maven JDK runtime libraries without modifying the JDK. Requires Xcode/Command
+Line Tools. Reuse unchanged bundles; `mvn clean` removes them, next launch rebuilds.
+Forward JavaFX-plugin JVM arguments, module paths and app arguments unchanged.
 
-The window title bar and close/minimize/full-screen buttons are provided by
-AppKit through JavaFX's default decorated stage. On macOS Tahoe, build with
-SDK 26 or newer to obtain the current native appearance. An executable built
-with an older SDK gets the compatibility design, including smaller buttons.
-No JavaFX imitation of the title bar or custom window buttons is used.
+Default JavaFX decoration delegates title bar/close/minimize/fullscreen to AppKit.
+For current Tahoe appearance build with SDK 26+; older SDKs get compatibility
+controls, including smaller buttons. No JavaFX imitations/custom buttons.
 
-Run `python3 scripts/macos/test_macos_launcher.py` for opt-in macOS checks of the
-SDK identity, bundle signature, concurrent creation, cache reuse, argument
-quoting, `@argfiles`, `JDK_JAVA_OPTIONS` and exit status. Set `JAVA_HOME` to
-check a particular JDK. The native shim uses OpenJDK's exported JLI launcher
-ABI, so these checks should be repeated when changing the JDK major version.
+`python3 scripts/macos/test_macos_launcher.py` opt-in checks SDK identity,
+signature, concurrent creation/cache reuse, quoting, `@argfiles`, `JDK_JAVA_OPTIONS`
+and exit status. Select JDK with `JAVA_HOME`; repeat for major JDK changes because
+the shim uses OpenJDK's exported JLI launcher ABI.
 
-This bundle is for Maven development runs and depends on the installed JDK.
-It is not a standalone distribution or a Finder launcher. In an IDE, use the
-same Maven goal to obtain the Dock name; a direct Java Application run bypasses
-the bundle. Windows and Linux keep the normal Java launcher.
+Development bundle needs the installed JDK; not a standalone/Finder app. IDEs
+must use the same Maven goal for Dock identity; direct Java launch bypasses it.
+Windows/Linux use the normal launcher.
 
-For the self-contained Finder application and DMG installer, use the pipeline
-documented in `docs/packaging/RUNTIME_PACKAGING.md`. That artifact includes its own runtime and
-does not use this development launcher.
+Self-contained Finder/DMG distribution has its own runtime and no development
+launcher: `docs/packaging/RUNTIME_PACKAGING.md`.
 
-For a manual check, launch the application and hover over its Dock icon:
-the tooltip must say **FractalLens**. Checking only the running process's
-`localizedName` is insufficient: it can be FractalLens while Dock still says java.
+Manual identity check: launch, hover Dock icon, require **FractalLens** tooltip.
+`localizedName` alone can say FractalLens while Dock still says java.
 
 ## JavaFX startup and Prism selection
 
-Maven and the packaged application enter through
-`com.shangin.fractal.app.FractalLauncher`. This class does not extend JavaFX
-`Application`; its `main` runs before the toolkit and calls
-`Application.launch(FractalFxApplication.class, args)`. The native development
-launcher forwards Maven's module/main-class arguments unchanged, so it uses
-the same entry point without a separate native pipeline setting.
+Maven/packages enter plain `com.shangin.fractal.app.FractalLauncher`, not JavaFX
+`Application`. Its pre-toolkit `main` calls
+`Application.launch(FractalFxApplication.class, args)`. Native development launch
+forwards module/main-class unchanged; no separate native pipeline policy.
 
-On macOS, the bootstrap sets `prism.order=mtl,es2,sw` before starting
-JavaFX, only when the property is absent. Any explicit value, including an
-empty value, is preserved. Windows and Linux keep their JavaFX defaults.
-Metal is preferred to address stale presentation after a Space switch. If it
-cannot initialize, Prism tries ES2 and then software rendering. This chain
-does not recover from a native crash or hang after pipeline initialization.
-The known VirtualBuddy Metal crash therefore still requires an explicit
-`-Dprism.order=sw` workaround; ES2 also failed to initialize in that guest.
+macOS sets `prism.order=mtl,es2,sw` before JavaFX only if absent; explicit values,
+including empty, win. Windows/Linux defaults are unchanged. Metal addresses stale
+Space-switch presentation; initialization falls back to ES2 then SW. Native
+post-initialization crashes/hangs cannot recover. VirtualBuddy's known Metal crash
+still needs `-Dprism.order=sw`; ES2 initialization also failed there.
 
-The owner accepted the measured latency trade-off on 2026-10-29; the historical
-performance gate remains `fail`. This activation candidate does not close
-[P1.7](../../ROADMAP.md#p17-evaluate-metal-as-the-default-macos-prism-pipeline):
-final-candidate Spaces, packaging and platform acceptance remain tracked by the
-[Metal migration checklist](METAL_MIGRATION_CHECKLIST.md).
+Owner accepted latency costs on 2026-10-29; historical performance stays `fail`.
+[P1.7](../../ROADMAP.md#p17-evaluate-metal-as-the-default-macos-prism-pipeline)
+remains open for final-candidate Spaces/packaging/platform acceptance:
+[checklist](METAL_MIGRATION_CHECKLIST.md).
 
 For an explicit diagnostic selection, supply JVM options before launch, for example:
 
@@ -70,19 +55,14 @@ JAVA_TOOL_OPTIONS="-Dprism.order=es2 -Dprism.verbose=true" ./mvnw compile javafx
 JAVA_TOOL_OPTIONS="-Dprism.order=sw -Dprism.verbose=true" ./mvnw compile javafx:run
 ```
 
-These commands replace `JAVA_TOOL_OPTIONS` for that command; preserve any other
-required options when using them. User-supplied pipeline options are forwarded
-unchanged. Tests and specialized probes that start JavaFX directly bypass
-`FractalLauncher` and must select the intended pipeline explicitly.
+Commands replace `JAVA_TOOL_OPTIONS`; preserve other required options. Pipeline
+overrides forward unchanged. Direct-JavaFX tests/probes bypass `FractalLauncher`
+and must select their pipeline explicitly.
 
-The original `com.shangin.fractal.app.FractalApplication` main-class name is a
-plain-Java compatibility entry point delegating to `FractalLauncher`; direct
-Java launches now apply the same policy before starting the toolkit. The
-JavaFX lifecycle belongs to `FractalFxApplication`, which is not a main class.
-The `palette-benchmark`, `interaction-latency` and `gpu-render-benchmark`
-Maven profiles retain their main-class names, but those classes are now plain
-bootstraps calling `FractalLauncher.launch` with public JavaFX lifecycle
-adapters. They therefore use the same default as the application. Cold-startup
-measurement follows that bootstrap as well. User-supplied pipeline values still
-win; comparisons with historical ES2 measurements must select `es2` explicitly.
-Non-graphical benchmarks do not initialize Prism.
+Compatibility `com.shangin.fractal.app.FractalApplication` is plain Java,
+delegating to `FractalLauncher` before toolkit startup. `FractalFxApplication`
+owns lifecycle, not `main`. Unchanged `palette-benchmark`, `interaction-latency`,
+`gpu-render-benchmark` main names now bootstrap via `FractalLauncher.launch` and
+public lifecycle adapters. They and cold-startup measurement share app defaults;
+user pipeline values win. Select `es2` explicitly for historical ES2 comparisons.
+Non-graphical benchmarks never initialize Prism.

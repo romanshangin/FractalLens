@@ -2,26 +2,23 @@
 
 ## Report and causes
 
-The initial Julia backend iterated every pixel with BigDecimal. Small correctness
-fixtures passed, but this did not establish usable window-size latency.
+Original Julia iterated each pixel in BigDecimal. Small correctness passes did
+not prove window-size usability.
 
-The supplied pixelation case has center approximately
-`0.000054529976490780839 - 0.000020399686433499972 i` and zoom
-`1.6120713667355477e10`. The exact copied input is retained in
-`src/test/resources/julia/reported-pixelation.txt` (over 9,000 digits per value).
-At this center, the first Julia step contracts pixel differences by roughly
-`2 * abs(z0)`. The coordinate-only double gate missed rounding when adding c,
-so the application displayed Standard while neighboring orbits collapsed into
-blocks. More AA samples could not repair that loss.
+Reported center ≈`0.000054529976490780839 - 0.000020399686433499972 i`, zoom
+`1.6120713667355477e10`; exact input (>9,000 digits/value):
+`src/test/resources/julia/reported-pixelation.txt`. First Julia step contracts
+differences by `2 * abs(z0)`. Coordinate-only double gating missed rounding on
+adding c: Standard display showed collapsed neighboring orbits/blocks. AA cannot
+repair lost precision.
 
-Navigation also added another guard-digit budget to previously computed values.
-Repeated gestures grew their precision into thousands of digits. Per-pixel exact
-orbits consequently became much more expensive than needed for the pixel scale.
+Navigation repeatedly added guard budgets, inflating precision to thousands of
+digits and exact per-pixel orbit cost beyond pixel-scale needs.
 
 ## Implementation
 
-- Julia uses a shared BigDecimal reference orbit, with the fixed c represented
-  by the same exact binary values as JuliaFormula.
+- Julia uses a shared BigDecimal reference orbit, with the fixed c represented by the
+  same binary values as JuliaFormula.
 - Pixel offsets evolve with delta z' = 2 Z delta z + delta z squared, delta c = 0.
   Two-component double arithmetic carries the small displacement through the
   critical-point neighborhood. The error propagation uses the actual orbit
@@ -40,10 +37,10 @@ orbits consequently became much more expensive than needed for the pixel scale.
 - The same sampler serves base frames, optional deep AA, and adaptive PNG export.
 - Direct selection, the Deep Zoom indicator/presentation, and export share the
   Julia orbit-precision gate. Overview rendering stays on the standard backend.
-- Derived viewports retain an existing guard budget rather than adding it again.
-  Exact input coordinates remain authoritative; excessive render-grid precision
-  is bounded by pixel depth plus guard digits. Ordinary existing grids and the
-  canonical 9.1-v1 manifest remain unchanged.
+- Derived viewports retain an existing guard budget rather than adding it again. Exact
+  input coordinates remain authoritative; excessive render-grid precision is bounded by
+  pixel depth plus guard digits. Ordinary existing grids and the canonical 9.1-v1
+  manifest are unchanged.
 
 ## Evidence
 
@@ -57,17 +54,14 @@ AA was off. The image-producing measurement includes PNG encoding.
 | Reported coordinates, two-component reference implementation / 4 | 2600x1675 | 97 ms | 53.61 s |
 | Reported coordinates, reduced norm overhead / 4 | 640x412 | 68 ms | 4.75 s |
 
-The full-size output was visually inspected: the block artifacts are replaced
-by fine spiral detail. First ready region is a backend event, not a claim that
-an initial loading overlay has already been removed. The JavaFX regression
-separately checks completed-frame visibility and loading-layer removal.
+Inspected full-size output replaces blocks with fine spirals. First ready region
+is a backend event, not loading-overlay removal; separate FX regression checks
+completed visibility/loading removal.
 
-Regression coverage compares sparse full-resolution samples at the exact reported
-coordinates with independent doubled-precision iteration, requires a single
-shared reference and no per-pixel exact fallback there, and checks repelling
-fixed-point neighborhoods at multiple depths with every orbit trap. Other checks
-cover scales through 1e-400, cancellation, ready-pixel reuse, shifted grids,
-iteration caps, precise AA/PNG sampling, and 500 consecutive zoom gestures.
+Regressions compare sparse full-resolution reported-coordinate samples to doubled-
+precision independent iteration, require one shared reference/no exact per-pixel
+fallback, and test repelling fixed-point neighborhoods at multiple depths/all traps.
+Also cover 1e-400, cancel/reuse/shifted grids/caps, precise AA/PNG and 500 zooms.
 
 Run the diagnostic with:
 
@@ -84,10 +78,9 @@ Julia is not guaranteed to have Mandelbrot BLA throughput.
 
 ### Profiling decision gate
 
-Before P2.5, any pixel delta below `Double.MIN_NORMAL` (spans below roughly
-`1e-305` at window sizes) skipped perturbation: the sampler built up to eight
-recovery references per worker and then iterated each remaining pixel in
-BigDecimal. This was measured before the change was retained.
+Before P2.5, offsets below `Double.MIN_NORMAL` (window spans roughly <`1e-305`)
+skipped perturbation: up to eight recovery references/worker, then BigDecimal per
+remaining pixel. Measured before retain decision.
 
 - Control: `3806a6d` (exact fallback for subnormal deltas).
 - Candidate: the same base with the scaled-delta sampler and the parameterized
@@ -108,10 +101,8 @@ BigDecimal. This was measured before the change was retained.
 | `1e-400` / 96x64 | 180–189 ms / 5.33, 5.32, 5.32 s | 42–48 ms / 218, 218, 266 ms |
 | `1e-310` / 640x400 (1 control, 2 candidate) | 159 ms / 113.4 s | 60–62 ms / 1.53, 1.43 s |
 
-The exact fallback is therefore a material user-visible cost: a window-size
-frame below the normal-double range took almost two minutes. The scaled-delta
-candidate completes it in about 1.5 s; normal-delta frames are unchanged within
-noise. Decision: **retain**.
+Exact subnormal fallback is material: window frame nearly two minutes versus
+scaled candidate about 1.5 s; normal offsets unchanged within noise. **Retain**.
 
 ### Correctness evidence
 

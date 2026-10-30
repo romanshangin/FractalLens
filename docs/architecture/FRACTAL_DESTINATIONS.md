@@ -1,10 +1,9 @@
 # Go to destinations
 
-The Go to menu lists bookmarks for the current Fractal selection. A bookmark replaces
-both center and vertical span in one render. Coordinates are decimal strings.
-Zoom displayed by the app is fitted home height / bookmark span; window aspect ratio
-can therefore change the displayed magnification. Source magnifications are not
-universally interchangeable. The catalog uses explicit vertical spans for reproducible framing.
+Go to lists bookmarks for the selected Fractal. Each replaces center/vertical span
+in one render using decimal-string coordinates and explicit spans for reproducible
+framing. Displayed zoom = fitted home height / bookmark span, so aspect ratio matters;
+source magnifications are not universally interchangeable.
 
 ## Sources (accessed 2026-09-11)
 
@@ -33,5 +32,5 @@ universally interchangeable. The catalog uses explicit vertical spans for reprod
   (-1.25, 0), 4×; (-1.756, 0), 25×; (-1.9412, 0), 300×;
   (-0.85, 0.145), 30×. Heights use 2.5 / magnification, adapted to our home scale.
 
-Every bookmark is checked against the implemented formula for non-uniform escape
-structure, and the catalog is rendered as a contact sheet during its regression test.
+Regressions check each bookmark for non-uniform escape structure against its
+formula and render the catalog as a contact sheet.

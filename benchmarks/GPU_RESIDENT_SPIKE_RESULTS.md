@@ -1,11 +1,6 @@
 # GPU-resident Mandelbrot feasibility spike
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Date: 2026-09-05
 
@@ -15,16 +10,12 @@ Software: Java 26.0.2, macOS 26.6.2, Vulkan 1.1.350 through MoltenVK
 
 ## Question and gate
 
-The spike tests whether removing the full calculation-sample round trip can make
-the existing certified FP32/CPU-recovery design competitive. It keeps canonical
-samples in Vulkan storage, reads back only rejected pixel indices, calculates
-those pixels exactly on CPU, uploads their corrections, colors on GPU, and reads
-back only final ARGB.
+Test avoiding full sample round trip: canonical Vulkan samples →reject indices
+readback →exact CPU recovery/correction upload →GPU color →final ARGB only.
 
-The predeclared go/no-go gate is at least a 15% paired median end-to-end win over
-the direct CPU render plus coloring at both 1512x982 and 3024x1964, across
-overview, exterior, and seahorse scenes. Any failed scene keeps the spike out of
-production backend selection.
+Predeclared gate: paired median end-to-end ≥15% faster than direct CPU/color
+at both 1512x982/3024x1964 for overview/exterior/seahorse. Any failure blocks
+production selection.
 
 ## Paired medians
 
@@ -41,10 +32,8 @@ and final readback are included.
 | exterior | 3024x1964 | 49.551 | 7.976 | 0.161x | 83.9% faster | 99.89% |
 | seahorse | 3024x1964 | 125.887 | 156.173 | 1.241x | 24.1% slower | 31.47% |
 
-The two Retina seahorse medians spend 117.013 ms in exact CPU recovery after
-4,070,274 of 5,938,136 pixels are rejected. That recovery alone is close to the
-complete CPU baseline. By contrast, the Retina exterior view rejects only 6,553
-pixels and spends 0.177 ms in recovery.
+Retina seahorse: 4,070,274/5,938,136 rejected, 117.013 ms exact recovery,
+almost full CPU baseline. Exterior: 6,553 rejects/0.177 ms recovery.
 
 ## Correctness and transfer observations
 
@@ -63,16 +52,11 @@ Raw samples and cold/warmup rows are in
 
 ## Decision
 
-**No-go for production integration.** The experiment proves that whole-frame
-residency can overcome the earlier transfer deficit for low-rejection frames,
-but it fails the cross-scene 15% gate. CPU remains the default and the existing
-production GPU backend is unchanged.
+**No-go.** Residency overcomes transfer deficit with few rejects, but fails
+15% cross-scene gate. CPU default/production GPU unchanged.
 
-A future experiment is justified only if it directly reduces correction-heavy
-recovery—for example, a stronger certified kernel or an adaptive early fallback
-based on rejection density. Palette residency, pan reuse, AA sample storage, and
-feature-parity work should not be layered onto this spike before that bottleneck
-is removed.
+Future work must reduce recovery (stronger certificate/rejection-density early
+fallback). No palette/pan/AA storage/parity layering until recovery bottleneck falls.
 
 ## Follow-up rejection profile
 
@@ -85,40 +69,29 @@ measured frames:
 | 1512x982 | 1,017,433 | 520,316 (51.14%) | 497,117 (48.86%) | 0 |
 | 3024x1964 | 4,070,274 | 2,082,327 (51.16%) | 1,987,947 (48.84%) | 0 |
 
-The zero categories are bounded/raw mismatch, iteration mismatch, invalid
-interval, palette-phase mismatch, and the catch-all path. Consequently, palette
-mapping, phase quantization, and dispatch tuning cannot materially reduce CPU
-recovery. An early fallback can cap a future production regression, but after a
-full FP32 pass it cannot produce the required 15% seahorse win.
+Zero categories: bounded/raw, iteration, invalid interval, palette-phase, catch-all.
+Palette/quantization/dispatch tweaks cannot reduce recovery materially. Early fallback
+can cap regression, but after full FP32 cannot deliver 15% seahorse gain.
 
-The next justified calculation experiment is a second, higher-precision GPU
-certificate applied only to FP32 rejections. It must keep the same conformance
-contract and pass the existing cross-scene gate before any production wiring.
-Raw diagnostic pairs are in
+Next justified compute experiment: higher-precision reject-only certificate,
+same conformance/cross-scene gate before production. Private raw pairs:
 `GPU_RESIDENT_REJECTION_PROFILE.csv` (private archive: `GPU_RESIDENT_REJECTION_PROFILE.csv`).
 
 ### Centered-error certificate attempt
 
-A second outward-rounded FP32 recurrence was then applied only to rejected
-pixels. It tracked an error radius around the raw orbit to retain more
-correlation than the rectangular interval. The result was unambiguous: it
-certified zero additional pixels in all three 384x256 conformance scenes and at
-both full-size seahorse resolutions.
+Reject-only outward FP32 radius around raw orbit retained more correlation than
+rectangles but certified zero extra pixels in three 384x256 scenes/both full
+seahorse sizes.
 
-At 3024x1964, the extra pass raised median calculation time from 27.06 to 46.65
-ms while leaving all 4,070,274 CPU corrections in place. It was therefore
-removed from the implementation. Measurements from the rejected prototype are
-preserved in
-`GPU_RESIDENT_SECOND_STAGE_PROFILE.csv` (private archive: `GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`).
-Further work needs a genuinely higher-precision GPU representation; another
-FP32 interval reformulation is not justified by these results.
+3024x1964: calculation 27.06 →46.65 ms, same 4,070,274 CPU corrections.
+Second pass removed; preserve `GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`
+(private archive: `GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`). Future work needs
+higher precision, not reshaped FP32 intervals.
 
 ### Double-single accuracy ceiling
 
-The next experiment emulated higher precision with a two-float orbit for every
-FP32 rejection. It intentionally measured the optimistic ceiling before adding
-a rigorous stability certificate: every finite double-single result was used,
-so CPU recovery fell to zero.
+Optimistic two-float reject recovery accepted every finite double-single before
+rigorous stability certification, eliminating CPU recovery.
 
 | Scene | Size | CPU, ms | GPU, ms | Result | Outliers > 1 | Max channel error |
 |---|---:|---:|---:|---:|---:|---:|
@@ -129,10 +102,8 @@ so CPU recovery fell to zero.
 | exterior | 3024x1964 | 52.016 | 7.915 | 84.8% faster | 0 | 1 |
 | seahorse | 3024x1964 | 127.928 | 175.677 | 37.3% slower | 54 | 189 |
 
-The ceiling already fails performance on the two scenes that need emulation,
-and accepting its results fails conformance. A stability certificate and exact
-fallback would only add work. The double-single path was therefore removed;
-raw samples are preserved in
+Emulation ceiling fails timing on both relevant scenes and conformance; stability/
+exact fallback only adds work. Path removed; preserve
 `GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv` (private archive: `GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`).
 
 This closes the current resident-calculation branch of 8.6. Further GPU render

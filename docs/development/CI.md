@@ -1,10 +1,9 @@
 # Continuous integration
 
-Historical checks belong to the original private repository. They do not certify
-runs in the new destination; see [publication provenance](PUBLICATION.md).
-The workflows use GitHub-hosted runners, a read-only `contents` token, immutable
-action pins and checkouts with credential persistence disabled. No workflow uses
-`pull_request_target`, repository secrets, write permissions or a personal runner.
+Historical private-repository runs do not certify the new destination:
+[provenance](PUBLICATION.md). Workflows use GitHub-hosted runners, read-only
+`contents`, immutable action pins and no persisted checkout credentials. No
+`pull_request_target`, repository secrets, write permissions or personal runners.
 
 ## Portable build
 
@@ -25,25 +24,21 @@ portable pass is not device conformance or a performance result.
 
 ## Console output and artifacts
 
-Test and packaging commands run through `scripts/ci/run-ci-tests` or its PowerShell
-counterpart. Python 3 is required. `scripts/publication/privacy.py` redacts known home,
-project and temporary roots, the current login/hostname, email addresses other
-than the approved contact, machine identifiers, addresses and common credential
-forms before output reaches the console or `target/ci-test.log`. Known secret
-environment values are also removed. Filtering failure withholds command output
-and fails the step. Redaction is best effort, not proof of absence of secrets.
+Test/packaging commands use `scripts/ci/run-ci-tests` or PowerShell equivalent
+(Python 3 required). Before console/`target/ci-test.log`,
+`scripts/publication/privacy.py` removes known home/project/temp roots, login/host,
+nonapproved emails, machine IDs/addresses, common credentials and known secret
+environment values. Filter failure withholds output/fails the step. Best-effort
+redaction does not prove absence of secrets.
 
-The test command's exit status is preserved after successful filtering. Failed
-output keeps both diagnostic edges within the existing 8,000-unit console budget
-(bytes in Bash; .NET characters in PowerShell). Successful output is also
-filtered. The raw temporary capture is deleted; the local retained log is the
-filtered version. Surefire reports and test logs are not uploaded automatically.
+Successful filtering preserves command exit status and filters all output.
+Failures retain both diagnostic edges within 8,000 units (Bash bytes, PowerShell
+.NET characters). Delete raw temp capture; retain filtered local log only.
+No automatic Surefire/test-log uploads.
 
-Runtime installers have a separate, explicit manual upload switch, off by
-default. Generated provenance and smoke-report text must pass the privacy check
-before upload. This does not inspect the contents of installers or establish
-release acceptance; validate them in the private destination first. See
-[packaging](../packaging/RUNTIME_PACKAGING.md).
+Installer upload is separately/manual enabled, default off; provenance/smoke text
+must pass privacy checks first. This neither inspects installer contents nor grants
+release acceptance: validate privately. [Packaging](../packaging/RUNTIME_PACKAGING.md).
 
 ## Publication checks
 
@@ -57,63 +52,48 @@ python3 scripts/publication/check_public_data.py
 python3 scripts/publication/check_secrets.py --gitleaks /path/to/gitleaks
 ```
 
-The public-data guard scans tracked files plus non-ignored new files, rejects
-raw diagnostic/credential filenames, known prohibited identity patterns and
-unreviewed benchmark paths. `scripts/publication/public_benchmark_files.json` is the explicit
-benchmark selection. Extending it requires reviewing the data and updating the
-benchmark index. Known PNG/ICNS assets still require visual and metadata review;
-this text guard does not inspect their pixels or prove binary privacy.
+Public-data guard scans tracked/nonignored new files, rejecting raw diagnostic/
+credential names, prohibited identity patterns and unreviewed benchmark paths.
+Selection: `scripts/publication/public_benchmark_files.json`; additions need data
+review/index update. PNG/ICNS still need visual/metadata review: text scanning
+neither reads pixels nor proves binary privacy.
 
-Gitleaks 8.30.1 is installed on Linux x64 from its official release after verifying
-a pinned SHA-256. It scans the complete fetched Git history with default rules,
-no project ignore list, inline allow comments disabled, archive/decode depth 5
-and no size limit. The wrapper independently classifies only structured
-benchmark JSON file-checksum matches. An arbitrary credential field is not a
-checksum exception. Unresolved findings or scanner errors fail without printing
-matched values; it lists their paths, rule IDs, lines and commits grouped by
-top-level path and file, and withholds any path the public-data guard would
-reject. A full scan should also be run before a local commit; use `--tree` to
-scan current uncommitted files. `--tree` scans the same file set as the
-public-data guard (tracked files plus non-ignored new files) from a temporary
-copy, so ignored build output and nested worktrees such as
-`.claude/worktrees/` do not affect the result. Never publish the scanner report
-without review.
+Install official Linux x64 Gitleaks 8.30.1 after pinned SHA-256 verification.
+Scan complete fetched history with defaults, no project ignores/inline allow
+comments, archive/decode depth 5, no size limit. Wrapper independently exempts
+only structured benchmark-JSON file checksums, never arbitrary credential fields.
+Findings/errors fail without matched values; report paths/rule IDs/lines/commits
+grouped by top-level path/file, withholding paths rejected by public-data guard.
+Run full scan before local commits too; separately use `--tree` for uncommitted
+tracked/nonignored new files via temp copy. Ignored outputs/nested worktrees
+like `.claude/worktrees/` are excluded. Review scanner reports before publication.
 
-Raw benchmark output remains private. The paired-run driver records OS,
-release and architecture without querying a hostname. Benchmark metadata is
-sanitized only when serialized; executable commands, locks and numerical
-observations are unchanged. Generated directories and raw logs/dumps are ignored
-by default. Existing selected evidence stays tracked. Local raw runs remain
-sensitive and must not be force-added wholesale.
+Keep raw benchmarks private. Pair driver records OS/release/architecture without
+hostname queries. Sanitize metadata only at serialization; commands/locks/numbers
+stay unchanged. Generated/raw logs/dumps default ignored, selected evidence stays
+tracked. Never force-add sensitive local runs wholesale.
 
 ## Qodana and fork pull requests
 
-The existing JVM Community linter runs without `QODANA_TOKEN` on every configured
-PR, including forks, on `main` pushes and manual dispatch. The action is pinned
-to v2026.2.2. It performs a full analysis (`pr-mode: false`) with comments,
-annotations, fixes, cache export and raw report uploads disabled. This avoids write
-operations that a fork's restricted token cannot perform and does not silently
-skip fork analysis. The current linter version remains defined in `.qodana/qodana.yaml`.
+JVM Community runs token-free (`QODANA_TOKEN` unused) for configured PRs/forks,
+`main` pushes/manual dispatch. Action pin v2026.2.2; linter version:
+`.qodana/qodana.yaml`. Full `pr-mode: false`, no comments/annotations/fixes/cache
+exports/raw uploads: fork read-only tokens work without silently skipping analysis.
 
-The analyzer image is pinned by digest. Its bootstrap compiles production and
-test sources with the Maven Wrapper before a fresh import from `pom.xml`, using
-the analyzer's dependency repository. Developer IDE metadata is moved into
-private diagnostics in a disposable checkout. The image lacks ZIP utilities;
-the bootstrap uses JDK ZIP support to extract the wrapper's checksum-verified
-Maven distribution without changing its declared version or checksum.
+Digest-pinned image compiles production/tests via Maven Wrapper, then freshly
+imports `pom.xml` with analyzer dependencies. Disposable checkout moves IDE metadata
+to private diagnostics. Without ZIP utilities, JDK ZIP extracts checksum-verified
+Wrapper Maven; declared version/checksum stay unchanged.
 
-The [reviewed baseline](../../.qodana/README.md) preserves 51 accepted source contracts
-as sanitized locations and fingerprints after a reviewed module-model migration.
-The zero-new-finding gate does not
-claim a warning-free application. `scripts/quality/check_qodana.py` also rejects missing
-preparation evidence, unsuccessful analysis, unresolved dependency roots, sanity
-findings, and new or changed findings. Baseline updates require source review.
+[Reviewed baseline](../../.qodana/README.md): 51 accepted contracts with sanitized
+locations/fingerprints after module migration; zero-new is not zero-warning.
+`scripts/quality/check_qodana.py` rejects missing preparation, failed analysis,
+unresolved dependencies, sanity/new/changed findings. Baseline edits need source review.
 
-After a successful run, only source-relative rule/location/message fields are
-exported to `qodana-reviewed-findings`, retained for seven days. Both the
-public-data guard and Gitleaks must pass before that upload. Raw SARIF, HTML,
-logs, IDE metadata and caches are never uploaded. Local analysis does not prove
-the changed workflow or actual fork permissions work on GitHub.
+Successful analysis exports source-relative rule/location/message only to
+`qodana-reviewed-findings` for seven days, after public-data/Gitleaks passes.
+Never upload raw SARIF/HTML/logs/IDE metadata/caches. Local analysis does not prove
+GitHub workflow/fork permissions.
 
 Community token behavior is documented by [JetBrains](https://www.jetbrains.com/help/qodana/github.html).
 The runner/token restrictions follow [GitHub's security guidance](https://docs.github.com/en/actions/reference/security/secure-use)
@@ -121,30 +101,24 @@ and [fork event behavior](https://docs.github.com/en/actions/reference/workflows
 
 ## Hardware validation
 
-The former `native-gpu.yml` self-hosted workflow is removed from the current
-configuration. Do not attach personal runners to the destination repository or
-expose an organization runner group to it. Local hardware work remains manual
-and its raw output private:
+`native-gpu.yml` self-hosted workflow is removed. No personal runners/organization
+runner groups on the destination. Hardware checks stay local/manual, raw output private:
 
 ```sh
 ./mvnw -Pgpu-smoke test
 ```
 
-Use an active desktop session on the actual target device, record only permitted
-hardware/runtime fields and retain the platform limits from `ROADMAP.md`.
-Windows CPU fallback checks are not Windows GPU conformance; Intel/AMD Mac and
-Windows GPU promotion gates remain open. Removing a workflow does not unregister
-runners from the old private repository, and this change does not alter that
-repository's settings.
+Use target-device active desktop; record only permitted hardware/runtime fields
+and `ROADMAP.md` limits. Windows CPU fallback is not GPU conformance; Windows/
+Intel/AMD Mac promotion remains open. Workflow removal neither unregisters old
+private runners nor changes old repository settings.
 
 ## Required private-destination acceptance
 
-Local checks do not simulate GitHub's authorization or execute hosted workflows.
-Before opening access, run a same-repository PR and a real external fork PR,
-including the first-contributor approval flow. Confirm portable tests, publication
-checks, Qodana and applicable packaging jobs run with read-only permissions and
-no secrets. Confirm there are no PR comments, report uploads or runner requests
-outside this policy. Inspect successful and failing Actions logs and any manually
-uploaded installer/provenance files. Run on Windows and macOS; a PowerShell test
-on macOS is not Windows acceptance. These destination checks remain pending
+Local checks cannot simulate GitHub authorization/run hosted workflows. Before
+public access, test same-repository and real external-fork PRs, including first-
+contributor approval. Confirm portable/publication/Qodana/applicable packaging
+jobs, read-only permissions, no secrets or unauthorized comments/uploads/runner
+requests. Inspect passing/failing Actions logs and manual installer/provenance
+uploads. Run Windows/macOS; macOS PowerShell is not Windows acceptance. Pending
 until the new private repository exists.

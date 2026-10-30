@@ -1,25 +1,15 @@
 # Roadmap P1.4 allocation profile — 2026-09-24
 
-Script layout note (2026-10-15): recorded commands below retain their historical
-paths and measurement identities. For new runs, benchmark tools now live in
-`scripts/benchmarks/`; see [the scripts index](../scripts/README.md).
+Script layout (2026-10-15): historical commands/measurement identities are preserved. For new runs use `scripts/benchmarks/`; see [the scripts index](../scripts/README.md).
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 ## Decision and scope
 
-**Profile complete.** The current renderer still allocates heavily in both
-immutable reference-coordinate conversion and precise deep antialiasing (AA)
-coordinate construction. The former also appears in non-AA deep navigation.
-These are concrete candidates for the first 9.4 experiments. This is one
-instrumented diagnostic run, not a control/candidate comparison. No production
-optimization or timing-based retain/reject decision is made here; the 9.4
-optimization and promotion gates remain open.
+**Profile complete.** Immutable reference-coordinate conversion and precise deep-AA
+coordinate creation allocate heavily; conversion also affects non-AA navigation.
+First 9.4 candidates, not retained optimizations: one instrumented run, no paired
+comparison/timing decision; optimization/promotion gates remain open.
 
 The source is `03b2f105ea6141d06668f232c1456c74eb127c37` on
 `codex/p1-4-allocation-profile`, matching `main` before this documentation
@@ -108,25 +98,18 @@ and `cancel-deep` (0.500 GB); the deep AA coordinate group appears only in
 `deep-glitch-aa`. No weight in either candidate group was attributed to the
 selected direct seahorse or regular Julia fixtures.
 
-Code inspection explains these stacks. `ReferenceOrbit` stores immutable
-`BigDecimal` centre coordinates, while its `cRealAsDouble` and
-`cImaginaryAsDouble` accessors call `doubleValue()` again for each sample.
-`sampleDeepGrid` constructs two exact offset coordinates per subpixel with
-`BigDecimal.valueOf`, multiplication and add/subtract; `PreciseSampler.sample`
-then subtracts the reference centre with the render `MathContext`. The sampled
-classes in these groups are mainly `int[]`, `BigInteger`, `MutableBigInteger`
-and `BigDecimal`, consistent with arbitrary-precision arithmetic rather than
-pixel-buffer copies.
+`ReferenceOrbit` stores immutable `BigDecimal` center; `cRealAsDouble`/
+`cImaginaryAsDouble` repeat `doubleValue()` per sample. `sampleDeepGrid` builds
+two subpixel offsets via `BigDecimal.valueOf`, multiply/add/subtract;
+`PreciseSampler.sample` subtracts reference under render `MathContext`. Mainly
+`int[]`, `BigInteger`, `MutableBigInteger`, `BigDecimal`: big-number math, not
+pixel copies.
 
 ## Next experiment boundary
 
-Evaluate memoizing the two reference `double` values once per completed
-`ReferenceOrbit`, then exact coordinate component reuse in deep AA. Each
-candidate must retain decimal coordinate authority, the same `MathContext`
-operation order, cancellation and reference-cache ownership, and exact
-sample/ARGB controls. Use frozen control/candidate builds and the
-[alternating paired protocol](BASELINE_PAIRS_BENCHMARK.md) for any timing-based
-retain/reject decision, including base/AA publication and the relevant
-non-deep control workloads. Separate JFR runs can show whether allocation sites
-move; they cannot establish a latency gain. A realistic-window and sustained
-gate is still required before promoting a retained change under 9.9.
+Evaluate cached reference `double` conversions per completed `ReferenceOrbit`,
+then exact deep-AA component reuse. Preserve decimal authority, `MathContext`
+operation order, cancel/cache ownership and exact sample/ARGB. Timing decisions
+need frozen builds/[alternating pairs](BASELINE_PAIRS_BENCHMARK.md), base/AA
+publication and non-deep controls. Separate JFR proves changed allocation sites,
+not latency gains; realistic-window/sustained 9.9 gates still apply.

@@ -1,8 +1,6 @@
 # Alternating build comparisons for roadmap 9.1
 
-> Publication scope: use this protocol for fresh runs in a new output directory.
-> Keep raw logs and diagnostic captures private; publish only reviewed summaries
-> and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
+> Publication: use a new output directory for fresh runs. Keep raw logs/diagnostics private; publish only reviewed summaries and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
 The paired runner compares frozen builds through the existing
 [headless](BASELINE_BENCHMARK.md) or [JavaFX publication](BASELINE_FX_BENCHMARK.md)

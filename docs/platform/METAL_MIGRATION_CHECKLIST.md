@@ -1,36 +1,29 @@
 # Metal Prism pipeline migration checklist
 
-This checklist tracks final acceptance of the Metal-first macOS Prism startup
-candidate in roadmap item P1.7. On 2026-10-29 the owner selected Metal for its
-Spaces presentation reliability and accepted the measured latency trade-off,
-including the historical failing publication gate. This authorizes default
-activation in the implementation candidate without further performance tuning;
-it does not declare the remaining acceptance checks passed. Historical
-`fail`, `inconclusive` and rejected experiment results remain unchanged.
+Final acceptance for roadmap P1.7 Metal-first macOS startup. On 2026-10-29 owner
+chose Spaces reliability over measured latency costs, including failed publication:
+default activation candidate authorized without more tuning, remaining checks not
+passed. Historical `fail`, `inconclusive` and rejected results are unchanged.
 
-Background: JavaFX 26 on macOS defaults to `es2,mtl,sw`. On ES2, a frame
-completed while the window is on another Space can stay invisible after
-returning. Controlled manual trials did not reproduce this with
-`-Dprism.order=mtl`. The timing comparison is recorded in
-[the Prism pipeline results](../../benchmarks/PRISM_PIPELINE_RESULTS.md).
+JavaFX 26 macOS defaults to `es2,mtl,sw`. ES2 may hide off-Space completed frames
+after return; controlled `-Dprism.order=mtl` trials did not reproduce it.
+[Timing results](../../benchmarks/PRISM_PIPELINE_RESULTS.md).
 
 ## 1. Design decisions before implementation
 
-`FractalLauncher` is the shared plain-Java entry point for Maven (including
-the native macOS development launcher) and jpackage. Before calling
-`Application.launch(FractalFxApplication.class, args)`, it sets
-`prism.order=mtl,es2,sw` only on macOS and only when the property is absent.
-Even an explicitly empty user value is preserved. Other platforms keep their
-JavaFX defaults. No extra experimental application switch is added. The
-focus-repaint decision remains pending final-candidate section 4 trials.
+Shared plain-Java `FractalLauncher` handles Maven/native development/jpackage.
+Before `Application.launch(FractalFxApplication.class, args)`, set
+`prism.order=mtl,es2,sw` on macOS only if absent; preserve even empty overrides.
+Other-platform defaults stay. No extra experimental app switch. Focus-repaint
+decision awaits final-candidate section 4 trials.
 
-- [x] **Single selection point that runs before the toolkit starts.**
-  `FractalLauncher`, the compatibility `FractalApplication` main class and the
-  three graphical Maven benchmark main classes are plain Java. They route
-  startup through `FractalLauncher.launch` before `Application.launch`.
-  `FractalFxApplication` owns the production JavaFX lifecycle; benchmarks use
-  dedicated lifecycle adapters. Tests and specialized probes starting JavaFX
-  directly must still select the intended pipeline explicitly.
+- [x] **Single selection point that runs before toolkit startup.** `FractalLauncher`,
+  the compatibility `FractalApplication` main class and the three graphical Maven
+  benchmark main classes are plain Java. They route startup through
+  `FractalLauncher.launch` before `Application.launch`. `FractalFxApplication` owns the
+  production JavaFX lifecycle; benchmarks use dedicated lifecycle adapters. Tests and
+  specialized probes starting JavaFX directly must still select the intended pipeline
+  explicitly.
 - [x] **macOS only, user override preserved.** Set the order only on macOS and
   only when `prism.order` is not already defined, so `-Dprism.order=es2` in
   JVM options or `JAVA_TOOL_OPTIONS` still wins. Windows and Linux keep the
@@ -190,13 +183,10 @@ Repeat both checks once startup pipeline selection exists.
 
 ## 9. Performance gate
 
-The [Prism pipeline protocol](../../benchmarks/PRISM_PIPELINE_BENCHMARK.md)
-declares a 1.05 limit for every group. The owner decision below supersedes this
-limit as an activation gate, while preserving all measured verdicts.
-The first campaign passed 66 of 103
-groups with no failure; 37 groups (10 publication, 27 screen latency) remain
-`inconclusive`. Unperformed measurements below remain documented gaps; further
-confirmation is no longer required for the owner decision.
+[Prism protocol](../../benchmarks/PRISM_PIPELINE_BENCHMARK.md) sets 1.05 per-group
+limit; owner decision supersedes activation gating, not verdicts. First campaign:
+66/103 pass, none fail, 37 `inconclusive` (10 publication, 27 screen). Unperformed
+measurements remain gaps; owner decision needs no further confirmation.
 
 - [ ] Resolve all 37 inconclusive groups of both campaigns with a predeclared
   confirmation campaign in a new output directory. Selecting only groups with a
@@ -218,12 +208,12 @@ confirmation is no longer required for the owner decision.
 - [ ] Compare memory (RSS and GPU memory) during a long session with large
   windows.
 - [x] **Owner decision, 2026-10-29:** accept Metal for the Spaces reliability
-  improvement despite the measured latency trade-off and the failing publication
-  gate. The post-change failing group was 1512x982 Refined first visible publish:
-  pooled medians 1.03 ms ES2 and 1.13 ms Metal; matched ratio 1.119, interval
-  1.064–1.243. Screen-latency confirmation and long-session memory comparison
-  remain unperformed. This acceptance does not establish a uniform <=5%
-  slowdown, waive other checklist sections or relabel any result as a pass.
+  improvement despite the measured latency trade-off and the failing publication gate.
+  The post-change failing group was 1512x982 Refined first visible publish: pooled
+  medians 1.03 ms ES2 and 1.13 ms Metal; matched ratio 1.119, interval 1.064–1.243.
+  Screen-latency confirmation and long-session memory comparison remain unperformed.
+  This acceptance does not prove a uniform <=5% slowdown, waive other checklist sections
+  or relabel any result as a pass.
 
 ## 10. Coverage matrix and documentation
 
@@ -240,17 +230,13 @@ unverified.
 | VirtualBuddy macOS guest | historical Metal crash; current guest check deferred, local VM library empty |
 | Windows, Linux | startup selection unit contracts only for this candidate; platform execution deferred |
 
-Bootstrap preparation was additionally exercised on macOS 27.2 ARM64 using the
-normal Maven entry point and a JDK 25 app image. The normal Maven run reported
-`ES2Pipeline` with the unchanged `es2,mtl,sw` default. Developer tests cover
-module entry-point structure and Maven/jpackage entry-point agreement. The
-production-entry-point JavaFX smoke passed with the property unset and in
-separate explicit `mtl`, `es2` and `sw` forks; verbose logs confirmed the
-requested pipeline in each explicit fork. The existing application startup
-focus test, packaging script contracts and native launcher contracts also
-passed. These checks validate bootstrap preparation only; they do not close
-the automatic-selection, displayed-image comparison, fallback-initialization,
-Spaces, installed-DMG, VM, minimum-OS or performance requirements above.
+Bootstrap preparation: macOS 27.2 ARM64, normal Maven and JDK 25 app image.
+Maven confirmed `ES2Pipeline`/unchanged `es2,mtl,sw`. Tests cover entry structure/
+Maven-jpackage agreement. Production smoke passed unset and separate explicit
+`mtl`/`es2`/`sw` forks, with actual pipelines in verbose logs; focus, packaging
+contracts/native launcher also passed. Preparation only: automatic selection,
+displayed comparison, initialization fallback, Spaces, installed DMG, VM,
+minimum OS/performance remain open.
 
 - [x] Update `docs/platform/MACOS_RUN.md` and `docs/platform/MACOS_UI.md`: the
   selected pipeline, how it is selected and how to return to ES2.
@@ -268,18 +254,17 @@ Based on revision `ba05a0ce5017c9de888fc1e5e1411fb0b6c95fa2`, on macOS 27.2
 ARM64 with the JDK and JavaFX configuration from `pom.xml`:
 
 - Targeted launcher/module unit tests: 6 tests, no failures or skips.
-- `./mvnw clean test` in the active IDE desktop: 639 tests, 134 opt-in skips,
-  no failures or errors. The earlier restricted-shell attempt had six
-  `ExportFailureMessageTest` errors caused by `No toolkit found`; the unchanged
-  full command passed in the desktop session. This is an environment limit,
-  not a repaired product defect.
+- `./mvnw clean test` in the active IDE desktop: 639 tests, 134 opt-in skips, no
+  failures/errors. The earlier restricted-shell attempt had six
+  `ExportFailureMessageTest` errors caused by `No toolkit found`; the unchanged full
+  command passed in the desktop session. This is an environment limit, not a repaired
+  product defect.
 - Production-entry-point smoke with `prism.order` absent: 1 test, no skips;
   verbose output confirmed `MTLPipeline` and the smoke verified CPU completion.
-- Full Metal JavaFX command from section 8: 657 tests, 13 conditional skips,
-  no failures or errors. All 14 executed `*FxTest` classes reported
-  `MTLPipeline`. The skips include three fullscreen checks, the separate
-  no-native-bridge configuration, and other opt-in benchmark/GPU checks.
-  Skipped scenarios are not accepted by this result.
+- Full Metal JavaFX command from section 8: 657 tests, 13 conditional skips, no
+  failures/errors. All 14 executed `*FxTest` classes reported `MTLPipeline`. The skips
+  include three fullscreen checks, the separate no-native-bridge configuration, and
+  other opt-in benchmark/GPU checks. Skipped scenarios are not accepted by this result.
 - Explicit ES2 launcher smoke: 1 test; software launcher/startup tests: 2 tests;
   no skips or failures. Verbose output confirmed `ES2Pipeline` and `SWPipeline`
   respectively. This validates overrides, not failed-Metal initialization.
@@ -297,21 +282,19 @@ ARM64 with the JDK and JavaFX configuration from `pom.xml`:
   application exit was successful. This limited inspection does not cover the
   controlled Spaces matrix, image comparisons, Dock tooltip or all UI scenarios.
 
-Final-candidate Spaces/thumbnail trials, initialization failure fallback,
-fullscreen acceptance, light/dark comparison, display changes, PNG comparison,
-long-session memory, GPU coexistence, installed DMG, VM, supported minimum OS,
-other Macs, Windows/Linux execution and final CI remain unverified. The earlier
-bootstrap checks and historical measurements above retain their own scope.
+Final-candidate Spaces/thumbnail trials, initialization failure fallback, fullscreen
+acceptance, light/dark comparison, display changes, PNG comparison, long-session memory,
+GPU coexistence, installed DMG, VM, supported minimum OS, other Macs, Windows/Linux
+execution and final CI are unverified. The earlier bootstrap checks and historical
+measurements above retain their own scope.
 
 ## Entry-point correction developer checks (2026-10-29)
 
-The original `FractalApplication` main-class name is now plain Java, delegating
-to `FractalLauncher`; `FractalFxApplication` owns the unchanged production
-lifecycle. The graphical Maven benchmark main classes are also plain Java and
-launch dedicated lifecycle adapters through the same bootstrap. The UI package
-is opened only to `javafx.graphics` for adapter construction; no implementation
-package is exported. The cold-startup probe uses the new lifecycle class, with
-its frozen-build compatibility limit documented in the benchmark index.
+Plain compatibility `FractalApplication` delegates `FractalLauncher`;
+`FractalFxApplication` keeps production lifecycle. Graphical benchmark mains also
+bootstrap dedicated adapters. Open `ui` only to `javafx.graphics` for construction;
+export no implementation package. Cold startup uses new lifecycle; frozen-build
+compatibility is in benchmark index.
 
 Final-source developer checks on macOS 27.2 ARM64, JDK 26.0.1, and the JavaFX
 version pinned in `pom.xml`:
@@ -330,11 +313,11 @@ version pinned in `pom.xml`:
   skips and initialized `SWPipeline`. Both forward application arguments and
   verify CPU completion and shutdown.
 - Native launcher script: 3 tests passed. Packaging script: 10 tests passed.
-- A restricted-shell full-suite attempt with `prism.order=sw` failed while
-  extracting JavaFX natives: the default cache `.lock` was not writable,
-  followed by six `ExportFailureMessageTest` initialization errors. The
-  unchanged final suite passed in the desktop session. These errors do not
-  establish a product defect and were not hidden by changing assertions.
+- A restricted-shell full-suite attempt with `prism.order=sw` failed while extracting
+  JavaFX natives: the default cache `.lock` was not writable, followed by six
+  `ExportFailureMessageTest` initialization errors. The unchanged final suite passed in
+  the desktop session. These errors do not prove a product defect and were not hidden by
+  changing assertions.
 
 Six real `compile javafx:run` smoke processes additionally passed. Every
 process logged the expected initialized pipeline and exited successfully:
@@ -348,15 +331,13 @@ process logged the expected initialized pipeline and exited successfully:
 | `gpu-render-benchmark` | absent | Metal |
 | `palette-benchmark` | `sw` | SW |
 
-Compatibility launches supplied `--package-smoke-test=${TEMP_DIR}/report.properties`
-through `javafx.args`; the reports confirmed CPU completion. Palette/GPU smoke
-used CPU-only mode, 32x24 frames, one warmup and one sample; GPU-render selected
-`overview`. Interaction smoke used a 320x240 logical canvas, one sample, zero
-warmup, `wheel` only and `fractal.latency.noScreen=true`. Each process had an
-isolated JavaFX cache, verbose Prism logging and fresh private output. CSV
-metadata recorded the requested pipeline; verbose logs established the actual
-pipeline. These are functional startup checks, not performance results or
-GPU/JavaFX coexistence acceptance. No historical measurements were rerun.
+Compatibility runs used `javafx.args` with
+`--package-smoke-test=${TEMP_DIR}/report.properties`, confirming CPU completion.
+Palette/GPU: CPU-only 32x24, one warmup/sample, GPU scene `overview`. Interaction:
+320x240 logical, one sample, zero warmup, `wheel`, `fractal.latency.noScreen=true`.
+All isolated JavaFX caches/private outputs/verbose logs. CSV records requested,
+logs actual pipeline. Functional startup only, no performance/GPU coexistence
+acceptance or historical rerun.
 
 The normal `./mvnw compile javafx:run` also initialized Metal with the absent
 pipeline property. The completed restored deep-zoom frame and native status
@@ -367,38 +348,27 @@ Raw logs, CSVs and smoke reports remain private.
 
 ### Cold-startup probe integrity correction (2026-10-29)
 
-The startup probe's nested lifecycle class must participate in its identity.
-New cold-startup definitions now use `probe_hash_scope=class-family-v1`,
-recording the main class and every nested/anonymous class in `probe_files` and
-a combined `probe_sha256`. The runner compares the complete file map again
-before writing summary results, rejecting byte changes, additions and deletions.
-The benchmark index documents the new hash semantics; historical definitions
-retain their original single-class identity.
+Probe identity includes nested lifecycle: new `probe_hash_scope=class-family-v1`
+definitions record main/nested/anonymous `probe_files` and combined `probe_sha256`.
+Before summary, compare entire map; reject byte changes/additions/deletions.
+Index defines semantics; historical single-class identities remain.
 
-Developer validation: all 101 benchmark script tests passed, including seven
-new cold-startup runner regressions. The unchanged-probe test drives the real
-runner through all 60 simulated process launches and checks the saved file map
-and combined identity. Mutation tests reject changed/added/deleted nested
-classes and a deleted main class without writing a summary; separate tests
-cover cross-campaign identity changes and a missing main class before launch.
-The nested-class modification regression was also run against the original
-runner: it failed because the expected integrity error was not raised.
-No JavaFX process or measurement campaign was launched for these script tests.
-Java sources are unchanged by this correction; the earlier application suites
-were not repeated.
+101 benchmark script tests passed, seven new cold-startup regressions. Real
+runner's unchanged probe drives 60 simulated launches, checking map/identity.
+Mutated/added/deleted nested or deleted main classes reject without summaries;
+separate tests cover cross-campaign changes/prelaunch missing main. Nested mutation
+regression fails original runner (missing expected integrity error). No JavaFX or
+measurement campaign ran; unchanged Java/application suites were not repeated.
 
 ## Local specialized acceptance (2026-10-29)
 
-The owner requested all available local checks and deferred unavailable external
-display, minimum-macOS, Windows/Linux and additional-Mac execution to the
-roadmap. P1.7 remains open. Environment: Apple M3 Pro, macOS 27.2 ARM64,
-Microsoft OpenJDK 25 (update 4, vendor patch 1) and JavaFX from `pom.xml`.
-Sources are the activation
-working tree based on `ba05a0ce5017c9de888fc1e5e1411fb0b6c95fa2`; the source
-candidate previously reviewed as CLEAN had content identity
-`sha256:5678ea1e228e26cc88ea1666058430e10bd7ce0a87df4b7a1bb780da84e374e3`.
-Only documentation changed while these results were recorded; the old identity
-does not identify or review the expanded documentation candidate.
+Owner requested available local checks; external display/minimum macOS/
+Windows/Linux/additional Macs deferred to roadmap, P1.7 open. Apple M3 Pro,
+macOS 27.2 ARM64, Microsoft OpenJDK 25 (update 4, vendor patch 1), `pom.xml` JavaFX.
+Activation working tree base `ba05a0ce5017c9de888fc1e5e1411fb0b6c95fa2`;
+previous CLEAN content `sha256:5678ea1e228e26cc88ea1666058430e10bd7ce0a87df4b7a1bb780da84e374e3`.
+Only docs changed during recording; old identity neither identifies nor reviews
+the expanded documentation.
 
 ### Functional launch and GPU coexistence
 
@@ -432,43 +402,33 @@ backend's statistics without replacing the production render service:
 - Application shutdown succeeded. `./mvnw -Pgpu-smoke test` additionally passed
   five tests without skips under this JDK.
 
-A separate desktop run enabled `fractal.fx.tests=true`,
-`fractal.fx.fullscreen=true`, `prism.order=mtl` and `reuseForks=false`, selecting
-`MacContextMenuFxTest#nativeMenuTracksOnAvailableDisplaysAndInFullScreen` and
+Separate desktop run: `fractal.fx.tests=true`, `fractal.fx.fullscreen=true`,
+`prism.order=mtl`, `reuseForks=false`;
+`MacContextMenuFxTest#nativeMenuTracksOnAvailableDisplaysAndInFullScreen`,
 `FractalResizeFxTest#reportedTrackpadZoomFullscreenCase+nativeFullscreenZoomMustFillEntireImage`.
-All four cases passed without skips, with Metal initialized in both forks.
-This covers the local display only; external-display coverage remains deferred.
-The earlier full-suite fullscreen skips remain part of that original run;
-these are new successful executions of those scenarios.
+Four cases pass without skips, Metal in both forks. Local display only; external
+coverage deferred. Original suite skips remain historical; these are new executions.
 
-The current `ColdStartupBenchmark` main and nested lifecycle class were copied
-with compatible application classes and dependencies to a private snapshot.
-Its real JavaFX process initialized Metal, emitted exactly one stage-shown and
-one later first-layout-pulse marker, and exited successfully. This single-build
-functional check does not constitute a two-build cold-startup timing campaign;
-no historical timing verdict was recomputed.
+Current `ColdStartupBenchmark` main/nested lifecycle plus compatible app/dependencies
+copied to private snapshot. Real process initialized Metal, emitted exactly one
+stage-shown and one later first-layout-pulse marker, exited successfully.
+Single-build functionality, not paired timing/recomputed historical verdict.
 
 ### Initialization-failure controls
 
-Two private copies of the graphics dependency omitted only
-`libprism_mtl.dylib`, or both `libprism_mtl.dylib` and `libprism_es2.dylib`.
-The application's classes, launcher policy and original dependency cache were
-unchanged. Each run used an empty cache, the absent `prism.order` property,
-production CPU-only flags and the existing `--package-smoke-test` path.
+Private graphics copies omitted `libprism_mtl.dylib`, or both it and
+`libprism_es2.dylib`. App classes/policy/original cache unchanged. Each used empty
+cache, absent `prism.order`, production CPU-only flags and `--package-smoke-test`.
 
-Both final runs exited successfully and reported JavaFX, AppKit bridge,
-CPU fallback and completed CPU render. Logs show the expected native-library
-load failures, followed by `ES2Pipeline` for the first case and `SWPipeline` for
-the second. This establishes the fallback chain for library-load initialization
-failure on this host, not recovery from native crashes/hangs or all device
-initialization failures.
+Both final runs exit successfully: JavaFX/AppKit/CPU fallback/complete CPU frame.
+Expected load errors precede `ES2Pipeline`, then `SWPipeline` respectively.
+Proves host library-load initialization fallback, not crash/hang recovery or all
+device initialization failures.
 
-Early diagnostic runs are retained privately: isolated renamed native JARs
-initially produced an LWJGL search-path warning; supplying native libraries then
-exposed a missing `fractal.gpu.enabled=false` flag in the diagnostic command,
-which violated the CPU-only smoke precondition. Both corrected final commands
-set the production CPU-only flags and the explicit LWJGL native directory.
-No product code or assertions were changed to obtain the final results.
+Private early diagnostics: renamed native JARs caused LWJGL search warning;
+adding native libraries exposed missing `fractal.gpu.enabled=false`, violating
+CPU-only smoke precondition. Corrected final commands set CPU-only flags/explicit
+LWJGL native directory; no product/assertion edits to pass.
 
 ### Exact PNG comparison
 
@@ -495,35 +455,26 @@ smoke-tested a DMG using JDK 25. It was mounted read-only, its application copie
 to a temporary installation directory, and all 132 copied regular-file hashes
 matched the mounted app. The image was detached before execution.
 
-The copied app passed its smoke with `JAVA_HOME` absent and only system
-directories on PATH: initialized Metal, available AppKit bridge, CPU fallback
-and complete CPU frame. A normal launch of the same copied app displayed its
-completed restored deep-zoom frame and native badge; the AppKit context menu
-opened and Escape dismissed it. Shutdown returned zero. This is a copied-DMG
-development-host check; standard Applications installation, installed-app Dock
-tooltip, Gatekeeper/notarization and a clean machine remain unverified.
+Copied-app smoke passed without `JAVA_HOME`, system-only PATH: Metal/AppKit/
+CPU fallback/complete frame. Normal launch showed restored deep frame/badge;
+native context menu opened/Escape closed it, shutdown zero. Development-host
+copied-DMG check only; Applications install, installed Dock tooltip, Gatekeeper/
+notarization/clean-machine remain unverified.
 
-Binary inspection of this package found `minos 11.0` in all 35 loose Mach-O
-files, including the JDK runtime, launcher and bridge. All eight JavaFX graphics
-native libraries also specify 11.0. The generated plist still claims
-`LSMinimumSystemVersion=10.11`. This is an unresolved metadata discrepancy,
-not proof of macOS 11 support. Microsoft's
-[OpenJDK support policy](https://learn.microsoft.com/en-us/java/openjdk/support)
-covers actively maintained operating systems receiving security fixes; that
-policy and Mach-O metadata do not establish a tested product minimum.
+All 35 loose Mach-O files (JDK/launcher/bridge included) and eight JavaFX graphics
+natives specify `minos 11.0`; plist claims `LSMinimumSystemVersion=10.11`.
+Unresolved discrepancy, not macOS 11 support. Microsoft
+[OpenJDK policy](https://learn.microsoft.com/en-us/java/openjdk/support) covers
+maintained OSs receiving security fixes; neither policy nor metadata proves a
+tested product minimum.
 
-The owner reported successful startup/shutdown and Dock identity, Spaces return,
-Mission Control/partial swipe, progressive render and scene changes, window
-resize/fullscreen, native UI, both appearances, lock/sleep/wake, bookmarks,
-Undo/Redo and session restore on the activation candidate. No controlled-trial
-counts are inferred. The owner declined to repeat the earlier ES2 visual
-comparison. AA display behavior on enlargement and keyboard fullscreen exit
-remain separate product follow-ups.
+Owner reported activation-candidate startup/shutdown/Dock, Spaces/Mission Control/
+partial swipe, progressive rendering/scenes, resize/fullscreen/native UI, light/
+dark, lock/sleep/wake, bookmarks/Undo/Redo/restore. No inferred trial counts;
+owner declined another ES2 visual comparison. Enlargement AA/fullscreen keyboard
+exit remain separate follow-ups.
 
-VirtualBuddy was available, but its selected library showed no virtual machines;
-the guest check was not run. External displays, other Macs, Windows/Linux and
-minimum-OS execution are explicitly deferred in `ROADMAP.md`. The known guest
-Metal crash, standard/clean installation acceptance, fallback focus-repaint
-decision, final-candidate image-comparison gaps and final CI remain open.
-Raw logs, diagnostic sources, CSVs and PNGs are private working evidence; none
-is selected public benchmark data.
+VirtualBuddy had no listed VMs: guest not run. `ROADMAP.md` defers external
+displays, other Macs, Windows/Linux/minimum OS. Guest Metal crash, standard/clean
+install, fallback focus repaint, final image comparison/CI remain open. Raw logs,
+diagnostic sources/CSVs/PNGs stay private, not selected benchmark evidence.

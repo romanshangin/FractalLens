@@ -1,11 +1,6 @@
 # Frame reuse benchmark results
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
 Measured on 2026-08-27 with Java 26.0.1 on arm64, using 11 render workers,
 300 maximum iterations, two warm-up runs, and five measured runs. Times below
@@ -35,18 +30,13 @@ are medians from the dedicated `benchmark` Maven profile.
 
 ## Conclusions
 
-- Frame reuse is decisively effective for ordinary short and medium pans.
-- The benefit scales with overlap: reusing 95% of a frame produced a 10-19x
-  speedup, while reusing only 25% produced about a 1.2x speedup.
-- Calculated tile counts track the missing image area closely, confirming that
-  the speedup comes from avoided calculation rather than measurement artifacts.
-- Tile size 64 produced the best median total times in most configurations, but
-  its time to the first freshly calculated tile was less consistent. Tile size
-  32 remains the default as a balanced choice for progressive responsiveness.
-- Core colorization becomes a significant fraction of near-full pan time, so
-  future optimization should avoid recoloring pixels that can be shifted from
-  the displayed image.
+- Reuse is effective for short/medium pans.
+- Overlap scales gains: 95% → 10-19x, 25% → about 1.2x.
+- Calculated tiles track missing area, supporting avoided-work rather than artifact gains.
+- Tile 64 usually wins median total but first-tile latency varies; default 32
+  balances progressive responsiveness.
+- Near-full pans spend substantial time coloring; avoid recoloring shiftable pixels.
 
 These measurements exclude JavaFX scheduling, PixelBuffer upload, and the
-displayed-image shift. A UI-level benchmark is still required before making
-claims about end-to-end presentation latency.
+displayed-image shift. A UI-level benchmark remains required before making claims about
+end-to-end presentation latency.

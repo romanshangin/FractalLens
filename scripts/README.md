@@ -1,7 +1,6 @@
 # Repository scripts
 
-Run commands from the repository root unless a tool documents another working
-directory. Tools and their tests are grouped by function:
+Run from the repository root unless a tool specifies otherwise. Tools/tests by function:
 
 | Directory | Responsibility | Entry points |
 | --- | --- | --- |
@@ -13,8 +12,7 @@ directory. Tools and their tests are grouped by function:
 | `publication/` | Redaction, public-data policy, secret scanning and benchmark allowlist | `privacy.py`, `check_public_data.py`, `check_secrets.py`, `install-gitleaks` |
 | `quality/` | Qodana bootstrap and report acceptance | `prepare-qodana`, `check_qodana.py` |
 
-The Node package metadata and TypeScript configuration belong to `orchestration/`.
-Install its development type definitions with:
+Node metadata/TypeScript configuration: `orchestration/`. Install development types:
 
 ```sh
 npm ci --prefix scripts/orchestration
@@ -32,16 +30,12 @@ bash scripts/ci/test-run-ci-tests
 python3 scripts/macos/test_macos_launcher.py
 ```
 
-The macOS launcher checks require macOS and its native developer tools.
-PowerShell wrapper checks run with `scripts/ci/test-run-ci-tests.ps1` in a
-PowerShell session. JavaFX/desktop and hardware-backed benchmark acceptance
-still follow `AGENTS.md`; analyzer tests do not execute measurement campaigns.
+macOS launcher checks need macOS/native developer tools. Run
+`scripts/ci/test-run-ci-tests.ps1` in PowerShell for wrapper checks. Desktop/hardware
+acceptance follows `AGENTS.md`; analyzer tests do not execute campaigns.
 
-For the task workflow and check harness, see
-[the orchestrator guide](../docs/development/TASK_ORCHESTRATOR.md).
-For benchmark protocols and publication rules, see
-[the benchmark index](../benchmarks/README.md).
-Historical measurement records retain their original script paths and hashes.
-`prepare_baseline_build.py` selects either the current or legacy native helper
-path from the requested revision; moving current tooling does not rewrite old
-snapshot identities or rerun historical measurements.
+[Orchestrator/check harness](../docs/development/TASK_ORCHESTRATOR.md);
+[benchmark protocols/publication](../benchmarks/README.md). Historical commands
+retain original paths/hashes. `prepare_baseline_build.py` selects current/legacy
+native helpers by revision; moving tools neither changes snapshot identity nor
+reruns measurements.

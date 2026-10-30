@@ -1,76 +1,62 @@
 # FractalLens development roadmap
 
 CPU/GPU optimization review (2026-09-05):
-[analysis, experiment inventory and validation rules](benchmarks/CPU_GPU_OPTIMIZATION_ANALYSIS.md).
-Keep CPU as the default after the failed 8.5 and resident 8.6 gates. The next
-optimization work is section 9: establish comparable measurements, investigate
-CPU AA synchronization, improve CPU/deep-zoom work, then test different GPU
-algorithms. Completed and rejected experiments below remain historical evidence;
-new unchecked items are proposals, not measured speedups.
+[analysis, experiments and validation rules](benchmarks/CPU_GPU_OPTIMIZATION_ANALYSIS.md).
+CPU stays default after failed 8.5/resident 8.6 gates. Section 9 orders the next
+work: comparable measurements, CPU AA synchronization, CPU/deep-zoom improvements,
+then different GPU algorithms. Completed/rejected experiments are historical;
+unchecked proposals are not measured speedups.
 
-Completed historical items refer to the original recorded validation. The
-public evidence set is intentionally smaller; see [publication provenance](docs/development/PUBLICATION.md)
-for archived inputs, original SHA values and replay limits. Migration does not
-rerun or extend those acceptance results. The public configuration removes the
-original self-hosted lanes and automatic raw-report uploads; hardware checks
-remain manual and their acceptance gates remain unchanged. See [CI](docs/development/CI.md).
+Historical completion refers to original validation, not a migration rerun or
+extended acceptance. The smaller public evidence set retains original SHAs and
+archived-input/replay limits: [publication provenance](docs/development/PUBLICATION.md).
+Public configuration removes original self-hosted lanes and automatic raw-report
+uploads; hardware checks are manual with unchanged gates. See [CI](docs/development/CI.md).
 
 Checkboxes represent acceptance state: a parent item remains open until every
 required implementation and validation step beneath it is complete.
 
 ## 0. Prioritized backlog
 
-This section is the execution order for all unfinished work below. The detailed
-sections remain the source of requirements and acceptance criteria. A lower
-priority does not cancel an item; it means that its dependencies, evidence or
-delivery foundation should be completed first.
+Execution order for all unfinished work; detailed sections own requirements and
+acceptance. Lower priority postpones an item until dependencies, evidence or
+delivery foundations are ready; it does not cancel it.
 
 ### P0. Infrastructure and delivery foundation — do first
 
-- [x] **P0.1. Make the build continuously reproducible.** Add CI for the
-  portable CPU-default build and tests on macOS and Windows, with dependency
-  caching, clean-checkout execution and uploaded test reports. Keep
-  hardware-native GPU suites in explicit opt-in jobs because ordinary CI
-  runners do not prove GPU conformance.
-- [x] **P0.2. Produce installable, smoke-tested runtime artifacts.** Define a
-  versioned `jlink`/`jpackage`-style pipeline for the macOS app and Windows
-  application, including JavaFX/LWJGL natives, the AppKit bridge where
-  applicable, icons, launch options, licenses and CPU fallback. Record artifact
-  provenance and a clean-machine launch checklist. Signing/notarization may
-  remain a separate release step, but packaging must be automated and
-  repeatable. The pipeline and build-machine launcher smoke are implemented in
-  `scripts/packaging/package_runtime.py` and `.github/workflows/runtime-artifacts.yml`.
-  Both hosted jobs and the Windows clean-machine checklist passed. The owner
-  accepted P0.2 with an explicit macOS VirtualBuddy/Sonoma exception: the
-  default Finder launch crashes in the virtual Metal pipeline, while the
-  software-pipeline launch and manual functionality checks pass. This is not a
-  passing default macOS clean-machine launch; physical macOS clean-machine
-  behavior remains unverified. See `docs/packaging/RUNTIME_PACKAGING.md` for the evidence and
-  release boundary.
+- [x] **P0.1. Make the build continuously reproducible.** CPU-default portable
+  macOS/Windows CI: dependency caching, clean checkouts, uploaded test reports.
+  Hardware-native GPU suites require explicit opt-in jobs; ordinary CI is not
+  GPU conformance evidence.
+- [x] **P0.2. Produce installable, smoke-tested runtime artifacts.** Automated,
+  repeatable, versioned `jlink`/`jpackage` macOS/Windows pipeline: JavaFX/LWJGL
+  natives, applicable AppKit bridge, icons, launch options, licenses, CPU fallback,
+  provenance and clean-machine checklist. Signing/notarization may be separate.
+  Pipeline/build-host smoke: `scripts/packaging/package_runtime.py`,
+  `.github/workflows/runtime-artifacts.yml`. Both hosted jobs and Windows
+  clean-machine checks passed. Owner accepted P0.2 with a VirtualBuddy/Sonoma
+  exception: default Finder launch crashes in virtual Metal; software launch and
+  manual functionality pass. Default macOS clean-machine launch did not pass;
+  physical clean-machine behavior is unverified. Evidence/release boundary:
+  `docs/packaging/RUNTIME_PACKAGING.md`.
 - [x] **P0.3. Close the current measurement gate before starting another
-  optimization.** Finish the open 9.1 paired-decision item and the already
-  implemented 9.3 bounded-`ValidityMask` candidate with fixed power conditions,
-  fresh output directories, at least 30 alternating pairs and multiple process
-  starts. Retain or reject the candidate explicitly; do not leave production
-  code in a permanently provisional state. Two fresh 30-process-pair campaigns
-  confirmed the retained-frame gain, but the aggregate control budget remained
-  inconclusive. The candidate was rejected and removed; see
-  [the final decision](benchmarks/VALIDITY_MASK_OPTIMIZATION.md).
-- [x] **P0.4. Turn reproducibility into a product contract.** Implement section
-  5 JSON scene serialization and last-session restore before undo/redo,
-  shareable presets or new export variants. Version the schema and test
-  migration, malformed input, precise decimal coordinates and atomic recovery
-  after an interrupted write. The version 2 format, version 1 migration,
-  platform session locations and recovery contract are documented in
+  optimization.** Finish 9.1 paired decision and implemented 9.3 bounded-`ValidityMask`
+  candidate with fixed power, fresh outputs, at least 30 alternating pairs and
+  multiple process starts. Explicitly retain/reject; no permanently provisional
+  production code. Two fresh 30-process-pair campaigns confirmed retained-frame
+  gains but left aggregate controls inconclusive: candidate rejected/removed.
+  See [final decision](benchmarks/VALIDITY_MASK_OPTIMIZATION.md).
+- [x] **P0.4. Turn reproducibility into a product contract.** Section 5 versioned
+  JSON/last-session restore precedes undo/redo, shared presets and new exports.
+  Test migration, malformed input, exact decimal coordinates and interrupted-write
+  atomic recovery. Version 2, version 1 migration, platform paths and recovery:
   `docs/architecture/SESSION_FORMAT.md`.
-- [x] **P0.5. Define platform validation lanes.** Treat the Windows runtime
-  work in 8.7 and Intel/AMD Mac work in 8.8 as hardware-backed infrastructure
-  tracks. They may run when hardware is available and do not block the
-  CPU-default macOS artifact, but they must precede enabling GPU modes on those
-  platforms. The manual native workflow now has a physical Intel Mac x64 lane;
-  the Windows x64 lane remains a CPU-fallback contract until its GPU runtime is
-  implemented. `docs/development/CI.md` defines the runner, evidence, and promotion boundaries.
-  Neither 8.7 nor 8.8 hardware acceptance is complete.
+- [x] **P0.5. Define platform validation lanes.** Hardware-backed Windows runtime
+  (8.7) and Intel/AMD Mac (8.8) tracks may run when hardware is available without
+  blocking CPU-default macOS artifacts, but must precede GPU activation there.
+  Manual native workflow has a physical Intel Mac x64 lane; Windows x64 stays a
+  CPU-fallback contract until GPU implementation. Runner/evidence/promotion rules:
+  `docs/development/CI.md`. Neither hardware acceptance is complete.
 
 - [x] **P0 exit criterion:** a clean checkout is tested automatically, produces a
   traceable installable artifact, restores a versioned scene safely, and the
@@ -78,115 +64,80 @@ delivery foundation should be completed first.
 
 ### P1. Production reliability and measured latency
 
-- [x] **P1.1.** Replace user-visible stack traces with in-application errors,
-  then add render progress/status and keyboard navigation from section 4.
-  Current render and recolor failures use the application error dialog. The
-  viewport badge shows exact base-frame progress and completion/refinement
-  status; arrow keys, Page Up/Down, and Home navigate the focused canvas.
-- [x] **P1.2.** Run the retained-snapshot preparation experiment in 9.2; accept
-  it only if first-tile and full-frame behavior both pass. The on-demand
-  tile-coloring candidate was rejected: exact pixels matched, but the joint
-  timing gate did not pass. See [the decision](benchmarks/RETAINED_SNAPSHOT_PREPARATION.md).
-- [x] **P1.3.** Measure JavaFX dirty rectangles, callback coalescing, staging
-  reuse and redundant copies from 9.3. A visible JavaFX probe characterized
-  local update/copy/buffer costs. The 30-pair end-to-end queued-callback
-  candidate failed its timing targets and was removed; no production change was
-  retained. See [the P1.3 decision](benchmarks/FX_PUBLICATION_P1_3.md).
-- [x] **P1.4.** Profile the concrete allocation candidates at the start of 9.4,
-  especially immutable reference conversions and precise AA coordinate
-  construction. The current-source JFR profile confirms both as substantial
-  deep-render allocation sites; see [the profile](benchmarks/ALLOCATION_PROFILE_9_4.md).
-  Optimization and its retain/reject gate remain open in 9.4.
-- [x] **P1.5.** Promote every retained change through the portable/native/FX
-  and sustained gates in 9.9; this is part of the change, not a later cleanup
-  phase. The retained CPU AA path passed a current-source 652-second exact
-  navigation/memory diagnostic and applicable portable/macOS FX tests; an
-  initial native run passed and a final native rerun passed in an active
-  desktop session.
-  Seven current-source first-tile candidates were measured against a frozen
-  control. D passed headless and cold-startup gates but its 120-pair JavaFX
-  confirmation left two fresh-AA first-tile controls inconclusive. E and F
-  each passed the retained first-tile target, but their predeclared screens
-  left retained full AA inconclusive against the 5% limit. G failed the
-  retained first-tile target in its 60-pair headless screen. All were removed.
-  The owner explicitly accepted the original retained-Julia first-tile cost
-  (about 5 ms) as an exception for the existing cache optimization. Exact
-  output, portable, applicable macOS FX/native and sustained checks passed.
-  A current-source comparison against the pre-optimization AA path passed all
-  eight headless timing groups and all 16 JavaFX AA groups. Three base-only
-  publication controls were initially inconclusive; a predeclared 240-pair
-  confirmation passed all four base-only controls and four AA controls. The
-  before/after 30-pair AC cold-startup gate also passed. This closes promotion
-  of the retained CPU AA change under the accepted first-tile exception.
-  The first-tile optimization opportunity remains open in 9.2; see
-  [the P1.5 assessment](benchmarks/P1_5_PROMOTION_VALIDATION.md).
+- [x] **P1.1.** Replace stack traces with application errors; add section 4
+  progress/status and keyboard navigation. Render/recolor failures use the error
+  dialog; the viewport badge reports exact base progress and completion/refinement.
+  Arrow keys, Page Up/Down and Home navigate the focused canvas.
+- [x] **P1.2.** Run 9.2 retained-snapshot preparation; require both first-tile and
+  full-frame acceptance. On-demand tile coloring matched exact pixels but failed
+  the joint timing gate: [rejected](benchmarks/RETAINED_SNAPSHOT_PREPARATION.md).
+- [x] **P1.3.** Measure 9.3 dirty rectangles, callback coalescing, staging reuse and
+  redundant copies. Visible JavaFX probe characterized update/copy/buffer costs.
+  The 30-pair end-to-end queued-callback candidate failed timing and was removed;
+  no production change retained. [Decision](benchmarks/FX_PUBLICATION_P1_3.md).
+- [x] **P1.4.** Profile 9.4 allocation candidates, especially immutable reference
+  conversion and precise AA coordinates. Current-source JFR confirms substantial
+  deep-render allocation at both sites: [profile](benchmarks/ALLOCATION_PROFILE_9_4.md).
+  Optimization/retain-reject gate remains open in 9.4.
+- [x] **P1.5.** Retained changes must pass 9.9 portable/native/FX and sustained gates
+  within the change. CPU AA passed current-source 652-second exact navigation/memory,
+  portable/macOS FX and initial/final active-desktop native checks. Seven first-tile
+  candidates used a frozen control: D passed headless/cold startup but its 120-pair
+  FX confirmation left two fresh-AA first-tile controls inconclusive; E/F passed
+  retained first-tile targets but left full AA inconclusive at 5%; G failed its
+  target in 60 headless pairs. All were removed. Owner accepted the original
+  retained-Julia first-tile cost (about 5 ms) solely for the existing cache change.
+  Exact output and applicable portable/macOS FX/native/sustained checks passed.
+  Current-source versus pre-optimization AA passed all eight headless and 16 FX AA
+  groups. Three initially inconclusive base-publication controls prompted a
+  predeclared 240-pair confirmation, passing four base-only and four AA controls.
+  The 30-pair AC cold-startup gate passed. Promotion is complete under the exception;
+  first-tile optimization remains open in 9.2.
+  [Assessment](benchmarks/P1_5_PROMOTION_VALIDATION.md).
 
 ### P1.6. Triage the full-project IntelliJ inspection report
 
-- [x] **P1.6. Triage the full-project IntelliJ inspection report.** The
-  2026-09-28 `Inspect Code` run used the `Project Default` profile, whole
-  project scope, and included test sources. IDEA displayed 25,829 items. Its
-  SARIF export contains 25,810 results (18 errors, 293 warnings, and 25,499
-  notes). A later matched run displayed 25,936 items and exported 25,920 SARIF
-  results and 25,942 XML problems. The 16-item IDEA/SARIF gap is accounted for
-  by 22 `unused` method/constructor warnings omitted from SARIF and six more
-  spelling entries in both exports than in the IDEA tree. The earlier 19-item
-  gap belongs to a different run. Most results come from
-  proofreading benchmark outputs, retained source snapshots, and historical
-  evidence rather than production code. Treat inspection levels as tool
-  severity only; confirm runtime and product impact before assigning a fix.
-  The full high-risk list now has source-level dispositions. The three nullable
-  shaderc byte results receive a guard before Vulkan use; the other reviewed
-  cases retain their ownership, arithmetic, module, or benchmark contracts.
-  See the inspection inventory for all 22 XML-only entries and rule-group
-  dispositions. A full-scope post-fix rerun displays 25,983 items and exports
-  25,967 SARIF results; the remaining 16-result difference is fully accounted
-  for by `unused` warnings omitted from SARIF. The shaderc data-flow warnings
-  are gone. No remaining finding is confirmed as a Critical or Major product
-  defect. The 18 remaining IDEA errors are 12 generic-CSS findings on JavaFX
-  syntax and 6 XML-schema findings in a retained, well-formed benchmark SVG;
-  they are not product errors. All other results are classified as noncritical
-  in the inspection report, with source-level dispositions for the higher-risk
-  groups. A narrower inspection profile would make future reports easier to
-  read, but is optional hygiene rather than a P1.6 correctness gate.
-  Work in this order:
-  - [x] Audit possible correctness and lifecycle findings first: module API
-    visibility (62), JavaFX reflective access (8), nullability/data flow (6),
-    unmanaged `AutoCloseable` use (33), exact `BigDecimal.divide` calls (2),
-    waits in loops (3), ignored return values (1), and always-returning
-    methods (2). Trace each warning to its caller and lifecycle; fix confirmed
-    defects and add focused regression coverage. Record intentional contracts
-    and false positives without weakening module, precision, or resource
-    guarantees.
-  - [x] Resolve framework and markup findings: validate the 12 CSS parser
-    errors against JavaFX CSS (`:focused` and `derive(...)` are framework
-    constructs), the 81 unknown-property warnings, and 28 unused selectors
-    against actual dialog styles; inspect 6 XML errors in retained benchmark
-    SVGs and preserve historical evidence. Fix product defects or adjust the
-    inspection scope/profile for unsupported dialects and historical artifacts.
-    Source-level checks and relevant JavaFX integration tests found no CSS
-    product defect. The retained SVG parses as XML; generic schema errors do
-    not establish a runtime or artifact defect.
-  - [x] Review remaining maintainability warnings in production and benchmark
-    code, including visibility leaks (62), parameter/dataflow warnings (10
-    same-value parameters, 6 field mutability, 4 field-to-local), exception
-    printing (5), unused declarations/parameters (3), redundant string
-    conversions (3), `Optional` fields/parameters (4), and the remaining
-    low-count style/API suggestions. The full XML export exposes 22 omitted
-    SARIF declarations, including executable entry points and retained API
-    hooks; their disposition is recorded without changing public contracts or
-    measured benchmark behavior.
-  - [x] Classify the remaining report noise as noncritical. The captured later
-    export includes 25,283 spelling notes, 96 grammar notes, 124 style notes,
-    77 Markdown table notes, and 11 HTTP-link notes, largely in generated
-    benchmark output, retained snapshots, or vendored licenses. Keep those
-    artifacts unchanged. A future project inspection profile may exclude them
-    from proofreading and limit CSS/XML checks to supported dialects; that
-    profile has not been created or validated in this task.
-  - [x] Rerun the documented project inspection after triage, export the result,
-    reconcile IDEA and SARIF totals, and record fixed findings plus accepted
-    noncritical results. Every high-impact candidate is fixed or evidenced as
-    intentional; this does not claim that every inspection warning disappeared.
+- [x] **P1.6. Triage the full-project IntelliJ inspection report.**
+  2026-09-28 `Inspect Code`, `Project Default`, whole project including tests:
+  IDEA 25,829; SARIF 25,810 (18 errors, 293 warnings, 25,499 notes). Later matched
+  run: IDEA 25,936; SARIF 25,920; XML 25,942. Its 16-item IDEA/SARIF gap is 22
+  omitted `unused` method/constructor warnings minus six extra exported spelling
+  entries; the earlier 19-item gap is a different run. Most findings proofread
+  benchmark output, retained snapshots and historical evidence. Tool severity
+  requires runtime/product impact confirmation before fixing.
+  All high-risk cases have source dispositions: three nullable shaderc byte results
+  are guarded before Vulkan; remaining ownership/arithmetic/module/benchmark
+  contracts stay intact. Inventory records all 22 XML-only entries and rule groups.
+  Full-scope post-fix run: IDEA 25,983; SARIF 25,967, with all 16 omitted `unused`
+  warnings accounted for and shaderc data-flow warnings gone. No confirmed Critical
+  or Major remains. The 18 IDEA errors are 12 generic-CSS JavaFX-syntax findings
+  and 6 schema findings in a well-formed retained SVG, not product errors.
+  Remaining findings are noncritical, with higher-risk source dispositions.
+  A narrower profile is optional hygiene, not a P1.6 gate. Work order:
+  - [x] Audit correctness/lifecycle first: module visibility (62), JavaFX reflection
+    (8), nullability/data flow (6), unmanaged `AutoCloseable` (33), exact
+    `BigDecimal.divide` (2), loop waits (3), ignored returns (1), always-returning
+    methods (2). Trace callers/lifecycles; fix defects with regressions. Record
+    intentional contracts/false positives without weakening module, precision or
+    resource guarantees.
+  - [x] Resolve markup/framework findings: 12 CSS errors (`:focused`, `derive(...)`
+    are JavaFX), 81 unknown properties, 28 unused selectors against actual styles;
+    inspect 6 SVG XML errors, preserving evidence. Fix defects or adjust unsupported
+    dialect/historical-artifact scope. Source and JavaFX checks found no CSS defect;
+    retained SVG parses, so schema warnings do not prove runtime/artifact failure.
+  - [x] Review production/benchmark maintainability: visibility leaks (62), parameters/
+    dataflow (10 same-value, 6 field mutability, 4 field-to-local), exception printing
+    (5), unused declarations/parameters (3), string conversions (3), `Optional`
+    fields/parameters (4), other low-count style/API items. XML exposes 22 SARIF-omitted
+    declarations, including entry points/API hooks; dispositions preserve public
+    contracts and measured benchmark behavior.
+  - [x] Classify noise as noncritical: later export has 25,283 spelling, 96 grammar,
+    124 style, 77 Markdown-table and 11 HTTP-link notes, mostly generated output,
+    snapshots/licenses. Preserve artifacts. A future profile may exclude proofreading
+    and restrict CSS/XML to supported dialects; none was created/validated here.
+  - [x] Rerun documented full-project inspection, export/reconcile IDEA/SARIF totals,
+    record fixes and accepted noncritical findings. Every high-impact candidate is
+    fixed or evidenced intentional; not every warning disappeared.
 
 ### P1.7. Evaluate Metal as the default macOS Prism pipeline
 
@@ -325,98 +276,69 @@ delivery foundation should be completed first.
 
 ### P2. Product foundation and user workflows
 
-- [x] **P2.1.** Complete iteration/Julia editing and the zoom/iteration presentation in
-  section 4. Existing controls passed current-source portable, active-desktop
-  JavaFX/native and manual macOS acceptance. Menu-to-frame regressions verify
-  the applied iteration limit and exact Julia samples; restart checks preserve
-  both editors' values. See [acceptance and platform limits](docs/platform/MACOS_UI.md#p21-acceptance).
-- [x] **P2.2.** Build undo/redo and bookmarks on the versioned scene format, then add
-  copyable/shareable viewport presets. The owner accepted P2.2 on 2026-10-14
-  after successful manual Undo/Redo, bookmark persistence/replacement/deletion,
-  and valid/invalid clipboard-preset checks. The native name sheet passed macOS
-  developer UI checks; platform limits remain recorded in the UI documentation.
-  This product acceptance does not replace review or delivery of the current fixes. See
-  [scene workflows](docs/architecture/SESSION_FORMAT.md#scene-history-bookmarks-and-shared-presets-p22).
-- [x] **P2.3.** Accept the unified tiled, cancellable high-resolution/off-screen
-  export pipeline based on `FractalScene` and an independent `RenderTarget`.
-  Section 6 owns the consolidated requirements; see
-  [export contract](docs/architecture/PNG_EXPORT.md).
-  - Status: the owner accepted P2.3 on 2026-10-27 after manual macOS checks of
-    the size sheet, save panel, progress, cancellation, overwrite and write
-    errors, close confirmation, focus, light and dark appearance, full screen,
-    and exports of every preset including deep Mandelbrot and Julia. Manual
-    acceptance found an export error message that showed the hidden staging
-    path, fixed in PR #33. Independent review and verification were not run as
-    separate stages. Windows, Linux and Intel Mac are covered only by the
-    portable CI suite. See
-    [manual acceptance](docs/architecture/PNG_EXPORT.md#manual-acceptance-2026-10-27).
-- [x] **P2.4.** Make every modal window on macOS native through AppKit, including
-  parameter forms and alerts. Reduce unnecessary modality, retain JavaFX fallback
-  when the bridge is unavailable and on other platforms, and finish multi-display
-  context-menu validation when suitable hardware is available. Native coordinate/
-  export forms and alerts, plus nonmodal palette/Help windows, are implemented.
-  The palette previews the draft gradient live; Apply commits it to the canvas. See
-  [P2.4 implementation](docs/platform/MACOS_UI.md#native-windows-p24).
-  - Status: the owner accepted P2.4 on 2026-10-27 after manual macOS checks of
-    Go to Coordinates, Edit Palette with the system color panel, Help, native
-    alerts, full screen, light and dark appearance, Increase Contrast, Reduce
-    Transparency, VoiceOver, and native windows and context menus on a second
-    display with mixed DPI and a negative origin. Acceptance found two Minor
-    display defects (an inexact new palette stop position and an overlong zoom
-    in the Go to Coordinates hint), fixed in PR #35. A context menu opened
-    within a few points of a bottom corner of a window that fills a display
-    adjacent to a taller display is placed off that display by AppKit itself;
-    this was accepted as a platform limitation. Independent review and
-    verification were not run as separate stages for this acceptance. Windows,
-    Linux and Intel Mac are covered only by the portable CI suite. See
-    [manual acceptance](docs/platform/MACOS_UI.md#p24-acceptance).
-- [x] **P2.5.** Optimize Julia subnormal deltas in 7.7 only after profiling confirms that
-  exact fallback is a material user-visible cost.
-  - Status: profiling confirmed the cost (a 640x400 frame at span `1e-310` took
-    113 s on the exact fallback). Scaled subnormal deltas complete it in about
-    1.5 s with no change for normal deltas. Control and candidate PNG output is
-    byte-identical for 96x64 frames at `1e-310` and `1e-400` and for the
-    640x400 frame at `1e-310`. Independent review was clean and verification
-    passed on macOS (Apple Silicon), including manual Deep Zoom, export, deep
-    antialiasing and navigation checks at `1e-310`. Windows and Linux are
-    covered only by the portable CI suite. See
-    [subnormal deltas](docs/development/JULIA_DEEP_ZOOM_PERFORMANCE.md#subnormal-deltas-p25).
-- [x] **P2.6.** Add separate render settings and a user-selected antialiasing mode
-  for standard and deep zoom. Gather Display Quality and Deep Zoom Antialiasing
-  into the Render Settings section of one application Settings window instead of
-  separate Render menu items; the window is the place for future application
-  settings. On macOS it follows the P2.4 native-window rules with the JavaFX
-  fallback. Each setting is a drop-down list with three modes: **Base only** (no
-  antialiasing; new), **Base, then antialiasing** (today's `FAST`), and
-  **Antialiased display** (today's `REFINED`, showing refined tiles only). The
-  deep zoom setting offers the same three modes, replaces the transient Deep Zoom
-  Antialiasing switch, and is editable at any zoom; its default stays Base only.
-  Extend the existing `InteractiveRenderMode`/`AntialiasSettings` rather than
-  adding a parallel setting, so both modes persist through the versioned scene
-  format, session restore, bookmarks and shared presets, with older scenes
-  keeping their current behavior. This does not change the export quality policy.
-  - Acceptance: base-only frames reach `RenderStatus.COMPLETE` without starting
-    refinement, and the badge and loading screen report that correctly. In every
-    mode the badge shows one `Rendering N%` status for the whole frame, including
-    the AA pass, and no separate `Refining…` status.
-    Switching modes during and after a render never shows stale or mixed pixels
-    and reuses compatible samples. Portable and JavaFX regressions cover each
-    standard and deep zoom mode, persistence and old-scene compatibility. A mode
-    change on a completed visible frame changes its presentation in place: it
-    never recalculates base samples and never recalculates or republishes
-    finished AA tiles. The Settings window has Reset to Defaults (Antialiased
-    display for standard zoom, Base only for deep zoom). Manual macOS checks
-    cover the Settings window (focus, Enter, Escape, Cancel, Apply, Reset to
-    Defaults) in light and dark appearance.
-  - Status: the owner accepted P2.6 on 2026-10-27 after manual macOS checks of
-    the Settings window and every mode in light and dark appearance, with
-    Keyboard navigation on and off. Manual acceptance found Settings sheet
-    keyboard-focus defects, fixed in PR #31. Independent verification passed on
-    macOS (Apple Silicon) for `main` at `b9af941`. The owner accepted one
-    limitation: with Histogram Coloring or Orbit Trap, finished AA is lost after
-    a pan made in Base only. Windows, Linux and Intel Mac are covered only by
-    the portable CI suite. See
-    [render settings](docs/platform/MACOS_UI.md#render-settings-p26) and
+- [x] **P2.1.** Complete section 4 iteration/Julia editing and zoom/iteration
+  presentation. Current-source portable, active-desktop JavaFX/native and manual
+  macOS checks passed. Menu-to-frame regressions verify applied iterations/exact Julia samples; restart
+  checks preserve both editors' values.
+  See [acceptance/platform limits](docs/platform/MACOS_UI.md#p21-acceptance).
+- [x] **P2.2.** Build undo/redo, bookmarks and shared viewport presets on versioned
+  scenes. Owner accepted 2026-10-14: Undo/Redo, bookmark persistence/replacement/
+  deletion, valid/invalid clipboard presets. Native name sheet passed developer
+  macOS UI checks; UI docs retain platform limits. Acceptance does not replace
+  current-fix review/delivery.
+  [Scene workflows](docs/architecture/SESSION_FORMAT.md#scene-history-bookmarks-and-shared-presets-p22).
+- [x] **P2.3.** Accept unified tiled, cancellable high-resolution/off-screen export
+  with `FractalScene`/independent `RenderTarget`; section 6 owns requirements.
+  [Export contract](docs/architecture/PNG_EXPORT.md).
+  - Status: owner accepted 2026-10-27 after macOS size sheet/save panel, progress,
+    cancellation, overwrite/write errors, close confirmation, focus, light/dark,
+    fullscreen and all-preset/deep Mandelbrot/Julia exports. Hidden staging-path
+    error fixed in PR #33. No separate independent review/verification stages;
+    Windows/Linux/Intel Mac have portable CI only.
+    [Manual acceptance](docs/architecture/PNG_EXPORT.md#manual-acceptance-2026-10-27).
+- [x] **P2.4.** Native AppKit macOS modal forms/alerts, less modality, JavaFX fallback
+  for unavailable bridge/other platforms; finish multi-display context-menu checks
+  with hardware. Implemented native coordinate/export forms/alerts and nonmodal
+  palette/Help; live draft gradient reaches canvas only on Apply.
+  [Implementation](docs/platform/MACOS_UI.md#native-windows-p24).
+  - Status: owner accepted 2026-10-27: coordinates, palette/system color panel,
+    Help, alerts, fullscreen, light/dark, Increase Contrast, Reduce Transparency,
+    VoiceOver, native windows/context menus on mixed-DPI negative-origin second
+    display. Two Minor defects fixed in PR #35: inexact new-stop position and long
+    coordinate-hint zoom. Accepted AppKit limitation: menu near bottom corner of
+    display-filling window adjacent to taller display can land off that display.
+    No separate independent review/verification; Windows/Linux/Intel Mac portable
+    CI only. [Manual acceptance](docs/platform/MACOS_UI.md#p24-acceptance).
+- [x] **P2.5.** Optimize 7.7 Julia subnormal deltas only after profiling proves
+  material visible exact-fallback cost.
+  - Status: 640x400 at `1e-310`: exact 113 s, scaled about 1.5 s, normal deltas
+    unchanged. Control/candidate PNGs byte-identical at 96x64 (`1e-310`, `1e-400`)
+    and 640x400 (`1e-310`). Independent review clean; Apple Silicon macOS
+    verification passed, including manual Deep Zoom/export/deep AA/navigation
+    at `1e-310`. Windows/Linux portable CI only.
+    [Subnormal deltas](docs/development/JULIA_DEEP_ZOOM_PERFORMANCE.md#subnormal-deltas-p25).
+- [x] **P2.6.** Separate user-selected standard/deep AA modes in one application
+  Settings window's Render Settings section, replacing Display Quality/Deep Zoom
+  Antialiasing menu items and hosting future settings. Follow P2.4 native/fallback
+  rules. Both drop-downs offer **Base only** (new, no AA), **Base, then antialiasing**
+  (`FAST`), **Antialiased display** (`REFINED`, refined tiles only). Deep setting
+  replaces the transient switch, is always editable and defaults to Base only.
+  Extend `InteractiveRenderMode`/`AntialiasSettings`; persist both through scenes,
+  restore, bookmarks/shared presets while preserving older-scene behavior.
+  Export quality is unchanged.
+  - Acceptance: base-only reaches `RenderStatus.COMPLETE` without refinement;
+    badge/loading agree. Every mode reports whole-frame/AA `Rendering N%`, no
+    separate `Refining…`. Switching during/after rendering preserves compatible
+    samples without stale/mixed pixels. Portable/FX cover all standard/deep modes,
+    persistence and compatibility. Completed-frame switches change presentation
+    in place without recalculating base or recalculating/republishing finished AA.
+    Reset defaults: standard Antialiased display, deep Base only. Manual macOS
+    light/dark checks cover focus, Enter, Escape, Cancel, Apply and Reset to Defaults.
+  - Status: owner accepted 2026-10-27 all modes/light/dark and Keyboard navigation
+    on/off; sheet focus defects fixed in PR #31. Independent Apple Silicon macOS
+    verification passed `main` at `b9af941`. Accepted limitation: Histogram Coloring/
+    Orbit Trap loses finished AA after a Base-only pan. Windows/Linux/Intel Mac
+    portable CI only. [Settings](docs/platform/MACOS_UI.md#render-settings-p26),
     [acceptance](docs/platform/MACOS_UI.md#p26-acceptance).
 
 ### P3. Conditional CPU research
@@ -460,12 +382,12 @@ delivery foundation should be completed first.
       failures or errors and one expected resident-GPU skip, the Maven cache
       was saved successfully, and the reports were retained in
       Native GPU Validation run 35393710276 (private archive).
-- [x] Pass the macOS and Windows runtime-artifact workflow and record the
-  clean-machine launch checklist, including the owner's explicit acceptance of
-  the failed default launch on macOS Sonoma in VirtualBuddy. Windows passed;
-  macOS passed only with a software-pipeline override, not the default Finder
-  launch. Packaging, provenance, the exception, and the separate signing/release
-  boundary are documented in `docs/packaging/RUNTIME_PACKAGING.md`.
+- [x] Pass the macOS and Windows runtime-artifact workflow and record the clean-machine
+  launch checklist, including the owner's explicit acceptance of the failed default
+  launch on macOS Sonoma in VirtualBuddy. Windows passed; macOS passed only with a
+  software-pipeline override, not the default Finder launch. Packaging, provenance, the
+  exception, and the separate signing/release boundary are in
+  `docs/packaging/RUNTIME_PACKAGING.md`.
 
 ## 1. Restore a stable green build
 
@@ -491,76 +413,61 @@ delivery foundation should be completed first.
 
 ## 3. Optimize Mandelbrot and Julia calculation
 
-- [x] Establish dedicated Mandelbrot and Julia calculation benchmarks covering throughput, nanoseconds per pixel, iteration distributions, 1080p/HiDPI, and multiple zoom levels.
-- [x] Add Mandelbrot main-cardioid and period-2-bulb interior rejection.
-- [x] Evaluate exact periodicity checking; reject it because benchmark overhead exceeds the benefit for current scenarios.
-- [x] Evaluate other proven interior-point shortcuts; retain only the exact main-cardioid and period-2-bulb tests because higher-period components lack equally cheap exact membership predicates and approximate bulb circles risk false interiors.
-- [x] Evaluate cached orbit squares; reject the manual optimization because the JIT already eliminates the repeated work and Julia regresses.
-- [x] Measure `FractalSample` allocation cost; retain the value-returning API because escape analysis removes most allocations and the remaining cost is negligible in iteration-heavy scenes.
-- [x] Reuse conjugate Mandelbrot rows for empty frames centered around the real axis; verify exact output equivalence and a 1.72-1.88x parallel-render speedup.
-- [x] Compare the scalar kernel with the Java Vector API; retain scalar production code because the current 128-bit/two-double species regresses overview rendering and provides only a small deep-zoom gain.
-- [x] Retune tile size and worker count after optimizing the calculation kernel; retain 32-pixel tiles and `CPU - 1` workers as the best throughput, progressive-latency, and UI-responsiveness balance.
-- [x] Evaluate a specialized direct-to-data Julia pipeline; retain the generic formula pipeline because HotSpot removes its abstraction cost and the measured difference is about 1%.
-- [x] Investigate perturbation/reference-orbit rendering; the early double-only
-  prototype was rejected. The subsequent high-precision production implementation
-  and successful rebasing/BLA work are completed in 7.3–7.6.
+- [x] Benchmark Mandelbrot/Julia throughput, ns/pixel, iteration distributions,
+  1080p/HiDPI and multiple zooms.
+- [x] Add Mandelbrot main-cardioid/period-2-bulb rejection.
+- [x] Reject exact periodicity: current-case overhead exceeds benefit.
+- [x] Evaluate other interiors; retain exact main/period-2 only. Higher periods
+  lack cheap exact predicates; approximate circles risk false interiors.
+- [x] Reject manual orbit-square caching: JIT removes repeats, Julia regresses.
+- [x] Measure `FractalSample`; keep value API because escape analysis removes most
+  allocation and iteration-heavy residual cost is negligible.
+- [x] Reuse conjugate rows on empty real-axis-centered Mandelbrot grids; exact
+  output, 1.72-1.88x parallel speedup.
+- [x] Compare Vector API; keep scalar: 128-bit/two-double regresses overview,
+  gains little deep.
+- [x] Retune post-kernel tiles/workers: 32 pixels/`CPU - 1` balance throughput,
+  first progress and UI headroom.
+- [x] Specialized direct-to-data Julia differs ~1%; HotSpot removes abstraction,
+  retain generic formula.
+- [x] Reject early double-only perturbation; high-precision production/rebasing/BLA
+  completed in 7.3–7.6.
 
 ## 4. Strengthen user interaction
 
 Remaining items in this section follow the cross-section order in section 0.
 
-- [x] Replace the crowded top control row with a global toolbar, left inspector, canvas, and bottom render status area.
+- [x] Replace crowded controls with global toolbar, left inspector, canvas/bottom status.
 - [x] Add Reset View.
-- [x] Display and edit center coordinates where appropriate.
-- [x] Support native macOS trackpad pinch zoom, continuous two-finger panning, and directional swipe panning.
-- [x] Display zoom and iteration count in the viewport badge tooltip, including
-  the effective render budget and compact scientific notation for large values.
-- [x] Add iteration controls and editable Julia parameters. Both editors apply
-  their paired values atomically, retain invalid drafts, support reset/cancel,
-  and persist through session restore. See [P2.1 acceptance](docs/platform/MACOS_UI.md#p21-acceptance).
-- [x] Add keyboard navigation and render progress/status.
-- [x] Show user-facing errors instead of printing stack traces.
-- [x] Add copyable/shareable viewport presets. See P2.2 acceptance above.
-- [x] Replace the macOS canvas context menu with a native AppKit `NSMenu` for
-  system-managed appearance and behavior. Add a small Objective-C/JNI bridge
-  and package its native library, retaining the JavaFX menu on other platforms.
-  Validate command callbacks, main-thread coordination, focus and dismissal,
-  uninterrupted rendering, Retina/multiple-display positioning, and full screen.
-  Implemented with a packaged universal JNI library and JavaFX fallback.
-  Native callbacks, accessibility activation, cancellation/replacement, live
-  rendering and full-screen entry/exit passed on the built-in Retina display;
-  see `docs/platform/MACOS_UI.md` for validation details and reproducible commands.
-- [x] Complete native context-menu positioning validation across multiple displays,
-  including mixed DPI, negative screen origins and display edges. Only one
-  physical display was available for the initial implementation checks.
-  Accepted with P2.4 on 2026-10-27, including the AppKit bottom-corner
-  limitation; see [P2.4 acceptance](docs/platform/MACOS_UI.md#p24-acceptance).
-- [x] First unify JavaFX dialog appearance with macOS: system fonts, light/dark
-  backgrounds, system accent colors, restrained input styling, and consistent
-  spacing. Place the primary action on the right; support Enter to confirm,
-  Escape to cancel, and predictable keyboard focus and validation.
-  Shared appearance now covers coordinate/palette editors, Help and alerts;
-  GUI regressions cover theme changes, exact input, draft validation and focus.
-  See `docs/platform/MACOS_UI.md` for validation details.
-- [x] Reduce unnecessary modality: use a compact owner-associated sheet for
-  Go to Coordinates, a nonmodal palette editor with live preview, and a nonmodal
-  Help window. Show export completion unobtrusively inside the application;
-  reserve modal alerts for errors or decisions requiring user action.
-  Accepted with P2.4 on 2026-10-27.
-- [x] Make all modal windows on macOS native: use AppKit `NSAlert` sheets for
-  actionable messages and custom sheets with native fields and buttons for
-  forms such as Go to Coordinates. Audit every remaining modal entry point,
-  including coordinate/palette editors, Help, export messages and confirmations;
-  either remove unnecessary modality or provide the appropriate native window.
-  Retain JavaFX fallback when the bridge is unavailable and on other platforms.
-  `WINDOW_MODAL` and CSS alone do not provide a native AppKit sheet. Validate
-  ownership, focus restoration, cancellation, input validation, appearance
-  changes, full screen, and callbacks without blocking rendering.
-  Iteration Settings, Julia Parameters, Add Bookmark, Go to Coordinates and Export
-  PNG use shared AppKit `NSPanel` sheets. Errors and close-during-export decisions
-  use `NSAlert`; palette and Help are nonmodal native panels. The palette includes
-  a live draft-gradient preview without changing the canvas until Apply. JavaFX
-  fallback remains available. Accepted with P2.4 on 2026-10-27; see
+- [x] Show/edit center where appropriate.
+- [x] Native macOS pinch, continuous two-finger pan and directional swipes.
+- [x] Badge tooltip zoom/effective iteration budget, compact scientific large values.
+- [x] Iteration/Julia editors atomically apply paired drafts, retain invalid input,
+  reset/cancel/session persist. [P2.1](docs/platform/MACOS_UI.md#p21-acceptance).
+- [x] Keyboard navigation/render progress-status.
+- [x] User errors instead of stack traces.
+- [x] Shared/copyable viewport presets; P2.2 acceptance above.
+- [x] macOS AppKit `NSMenu`, system appearance/behavior, universal packaged
+  Objective-C/JNI/JavaFX fallback elsewhere. Validate callbacks/main-thread/focus/
+  dismissal, uninterrupted rendering, Retina/multi-display/fullscreen. Built-in
+  Retina passed native/accessibility actions, cancel/replace/live render/fullscreen;
+  commands/limits: `docs/platform/MACOS_UI.md`.
+- [x] Multi-display placement/mixed DPI/negative origins/edges; initial checks
+  had one display. P2.4 accepted 2026-10-27 with bottom-corner limitation:
+  [acceptance](docs/platform/MACOS_UI.md#p24-acceptance).
+- [x] First unify FX dialogs: system fonts/light-dark/accent, restrained fields/
+  spacing, primary right, Enter/Escape, predictable focus/validation. Coordinate/
+  palette/Help/alerts share styling; GUI covers theme/exact drafts/focus.
+  `docs/platform/MACOS_UI.md`.
+- [x] Reduce modality: owner coordinate sheet, nonmodal live palette/Help, inline
+  export completion; alerts only errors/actionable decisions. P2.4 accepted 2026-10-27.
+- [x] Audit all modal coordinate/palette/Help/export/confirmation entries: remove
+  excess modality or use native AppKit. Shared `NSPanel` for Iteration Settings,
+  Julia Parameters, Add Bookmark, coordinates/export; `NSAlert` for errors/export
+  close; nonmodal palette/Help. Draft gradient changes canvas only on Apply.
+  `WINDOW_MODAL`/CSS are not native sheets. Retain bridge-failure/other-platform
+  FX fallback. Validate ownership/restored focus/cancel/inputs/appearance/fullscreen/
+  nonblocking callbacks. P2.4 accepted 2026-10-27:
   `docs/platform/MACOS_UI.md#p24-acceptance`.
 
 ## 5. Add history and reproducibility
@@ -568,45 +475,45 @@ Remaining items in this section follow the cross-section order in section 0.
 - [x] Introduce an immutable `FractalScene` containing formula, viewport, iteration settings, and coloring, and pair every completed frame with the exact scene snapshot it represents.
 - [x] Keep transient output dimensions and scheduling priority in a separate immutable `RenderTarget` so window resizes do not alter scene history.
 - [x] Add undo/redo and bookmarks based on `FractalScene` snapshots. See P2.2 acceptance above.
-- [x] Add JSON serialization and last-session restore. The current versioned
-  schema and atomic recovery behavior are documented in `docs/architecture/SESSION_FORMAT.md`.
+- [x] Add JSON serialization and last-session restore. The current versioned schema and
+  atomic recovery behavior are in `docs/architecture/SESSION_FORMAT.md`.
 - Export requirements are consolidated in section 6 (P2.3), using the scene
   snapshot and independent render target defined here.
 
 ## 6. Expand the rendering engine
 
-- [x] Add cubic Multibrot, Burning Ship, and Tricorn presets on reusable formula implementations.
-- [x] Preserve smooth escape-time coloring as the default treatment for palette banding, with a slower seamless ping-pong cycle and perceptually uniform OKLab palette interpolation.
-- [x] Precompute each OKLab gradient into a 65,536-entry lookup table so per-pixel coloring remains a constant-time array lookup.
-- [x] Add basic PNG export of the current render without antialiasing.
-- [x] Add adaptive 2x2–8x8 subpixel sampling to off-screen export, preserving the current output dimensions and averaging colors in linear light.
-- [x] Add weak deterministic export dithering to reduce visible 8-bit gradient quantization without blurring fractal detail.
-- [x] Add cancellable edge-adaptive 4x4 subpixel refinement after the interactive base frame is visible, publishing refined 32x32 tiles progressively, preserving refined overlap across pans, and retaining visible partial results when zoom interrupts an unfinished render.
-- [x] Add deterministic jitter as an optional, reproducible interactive sampling pattern.
-  Later removed together with the Render → Antialiasing Pattern menu item: a local
-  dense-reference comparison found no visible or measurable gain over the regular grid.
-- [x] Add and benchmark exterior distance estimates for Mandelbrot, Julia, and cubic Multibrot; measurements show a 1.4–2x base-pass cost versus roughly 16x for full 4x4 coverage, but exterior estimates alone miss interior-centered boundary pixels.
-- [x] Combine distance candidates with the existing image-space edge detector before using distance estimation to schedule interactive or export supersampling; keep Burning Ship and Tricorn on the current detector because their maps are non-analytic.
-- [x] Treat raw image-space edge filtering as an optional fast display mode; keep the transformed previous frame visible while base tiles arrive, then progressively replace them with refined tiles.
-- [x] Cache palette-independent subpixel samples for AA candidates so palette changes can recolor both the base frame and refined tiles without recalculating the fractal; define memory limits and eviction behavior.
-- [x] Add an optional color-cycling animation that continuously advances the smooth-coloring offset over its seamless period-two loop without recalculating the fractal; pause it during navigation/rendering, use a throttled buffered recolor path, and apply it to refined pixels through the palette-independent AA cache.
-- [x] Add histogram coloring as a separate two-pass tonal-mapping feature; it does not replace geometric antialiasing.
-- [x] Add orbit traps and editable palette stops.
-- [x] Add a memory-bounded LRU render cache for exact reverse-navigation reuse.
-- [x] During zoom out, keep the scale-aware previous-frame reprojection as approximate display coverage, grow newly exposed base and AA tiles outward from its edges, and atomically replace the preview center with exact samples.
-- [x] Reuse exact samples and retained AA across compatible resize/pan grids;
-  expansion calculates exposed borders and cropping retains valid overlap.
-  Preserve unchanged pixel spacing, formula, sample accuracy and iteration
-  limits; cover partial frames and resize-then-drag regressions. Measure its
-  application-level benefit in 9.1 rather than repeating the completed work.
-- [x] Accept the P2.3 high-resolution/off-screen PNG pipeline: choose independent
-  output dimensions, render an immutable scene on tiled CPU backends, retain
-  precise deep zoom, histogram/orbit-trap coloring, adaptive AA and dithering,
-  cancel without publishing stale work, and preserve existing files on failure
-  or cancellation. Implementation uses full-frame storage with a validated
-  memory budget, inline progress with transient outcomes, size guidance, and
-  confirmation before closing during export; accepted on 2026-10-27 (see P2.3). See
-  [contract, limits and validation](docs/architecture/PNG_EXPORT.md).
+- [x] Reusable cubic Multibrot/Burning Ship/Tricorn presets.
+- [x] Default smooth escape coloring against banding: slower seamless ping-pong/OKLab interpolation.
+- [x] Precompute OKLab into 65,536-entry constant-time lookup.
+- [x] Basic current-render PNG without AA.
+- [x] Export adaptive 2x2–8x8, same dimensions/linear-light averaging.
+- [x] Weak deterministic export dither reduces 8-bit banding without blur.
+- [x] Cancellable interactive edge-adaptive 4x4 after visible base, progressive
+  32x32 AA, pan overlap and partial visibility when zoom interrupts.
+- [x] Reproducible optional jitter; later removed with Render → Antialiasing Pattern
+  after dense-reference comparison found no visible/measurable regular-grid gain.
+- [x] Benchmark Mandelbrot/Julia/cubic exterior distances: 1.4–2x base cost versus
+  ~16x full 4x4, but misses interior-centered boundaries.
+- [x] Combine distance/image-edge candidates before export/interactive supersampling;
+  nonanalytic Burning Ship/Tricorn keep current detector.
+- [x] Optional fast image-edge display: transformed old frame while base arrives,
+  then progressive refined replacement.
+- [x] Bounded/evicting palette-independent AA samples recolor base/refined without math.
+- [x] Optional seamless period-two smooth offset animation without recalculation;
+  pause on navigation/render, throttle/buffer recolor, apply through AA cache.
+- [x] Separate two-pass histogram tonal mapping, not geometric AA replacement.
+- [x] Orbit traps/editable stops.
+- [x] Bounded LRU exact reverse reuse.
+- [x] Zoom-out approximate scale-aware reprojection; expose base/AA outward from
+  edges, atomically replace center with exact samples.
+- [x] Exact samples/AA across compatible pan/resize: compute expansion borders,
+  crop overlap. Preserve spacing/formula/accuracy/cap; test partial/resize-drag.
+  Measure app gain in 9.1, do not repeat implementation.
+- [x] P2.3 independent-resolution immutable-scene tiled CPU PNG: precise deep,
+  histogram/traps, adaptive AA/dither, no stale cancel publication, preserve
+  destinations on failure/cancel. Full-frame validated memory budget, inline
+  progress/transient outcomes, size guidance/export-close confirmation.
+  Accepted 2026-10-27 (P2.3). [Contract/validation](docs/architecture/PNG_EXPORT.md).
 
 ## 7. Implement deep zoom
 
@@ -728,9 +635,9 @@ Mac validation in 8.8; preserve portable contracts throughout the GPU work.
   bindings.
 - [x] Define the supported OS/GPU matrix, including the numeric
   capabilities required by each backend mode (`docs/platform/GPU_RUNTIME.md`).
-- [x] Isolate native dependencies and GPU resource ownership behind a dedicated
-  runtime so the render controller and JavaFX surface do not depend on a
-  specific graphics API.
+- [x] Isolate native dependencies and GPU resource ownership behind a dedicated runtime
+  so the render controller and JavaFX surface are independent of a specific graphics
+  API.
 - [x] Implement the macOS runtime: architecture-specific LWJGL/MoltenVK natives,
   Vulkan instance and physical-device discovery, numeric/compute capability
   reporting, and a selected logical device with a compute queue.
@@ -799,8 +706,8 @@ Mac validation in 8.8; preserve portable contracts throughout the GPU work.
 ### 8.5. Optimize certified GPU calculation and repeat the decision gate
 
 Address the costs measured in 8.4 before expanding GPU residency. On the Retina
-overview, host certification/recovery/publication takes about 545 ms and the
-interval kernel about 139 ms; these costs overlap. CPU remains the default.
+overview, host certification/recovery/publication takes about 545 ms and the interval
+kernel about 139 ms; these costs overlap. CPU stays the default.
 
 - [x] Parallelize certificate checks, sample conversion and rejected-sample CPU
   recovery with bounded workers and staging memory. Preserve cancellation,

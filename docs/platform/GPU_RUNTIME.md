@@ -1,13 +1,10 @@
 # GPU runtime boundary
 
-The macOS runtime now loads MoltenVK, creates a headless Vulkan instance,
-enumerates physical devices and numeric/compute features, selects a GPU, and
-owns a logical device and compute queue. A ready runtime reports `AVAILABLE`.
-CPU calculation remains the default. An opt-in Mandelbrot base pass now certifies
-FP32 samples and recovers rejected pixels on CPU. The optional Vulkan palette kernel
-recolors compact base and AA smooth phases and returns ARGB pixels through the
-existing JavaFX buffer. CPU recoloring remains the default: measured GPU gains
-depend on AA workload and transfer/presentation cost.
+macOS MoltenVK runtime owns headless Vulkan instance, device discovery/numeric-
+compute reporting, selected logical device/queue; ready → `AVAILABLE`. CPU calculation/
+recoloring stay default. Opt-in Mandelbrot certifies FP32 and recovers rejects on
+CPU; optional palette kernel recolors compact base/AA phases, returning ARGB via
+JavaFX. GPU gains depend on AA and transfer/presentation costs.
 
 ## Platform and numeric requirements
 
@@ -29,41 +26,33 @@ selected. The CPU backends remain usable if native initialization fails.
 | Direct-double equivalent arithmetic | Explicit `shaderFloat64` support, enabled at device creation | Direct-double CPU; feature support alone is not a conformance guarantee |
 | Deep zoom | A separate precision-preserving implementation | CPU Mandelbrot perturbation; no GPU deep-zoom mode |
 
-Reports include all enumerated devices and the selected device, Vulkan version,
-vendor/device IDs, queue-family index, maximum workgroup invocations, and maximum
-storage-buffer size. Only the **selected** device's capabilities gate execution.
-`FLOAT32` denotes the Vulkan core arithmetic capability; `FLOAT64` is reported
-only when the queried `shaderFloat64` feature is supported and is enabled on the
-logical device. Exact kernel dimensions and precision must still be checked by
-each future backend.
+Report all/selected devices, Vulkan version, vendor/device IDs, queue family,
+max workgroup invocations/storage buffer. Only **selected** capabilities gate work.
+`FLOAT32` is core Vulkan; `FLOAT64` requires supported/enabled logical-device
+`shaderFloat64`. Future backends must still check kernel dimensions/precision.
 
 ## Ownership and fallback
 
-`FractalRenderService` owns `GpuRuntime`; neither the controller nor JavaFX uses
-Vulkan handles. Native calls are confined to `MacosMoltenVkSession`,
-`VulkanPaletteKernel`, `VulkanMandelbrotKernel` and `VulkanLibraryLease`. The loader is reference-counted so closing one runtime
-cannot invalidate another. An externally initialized loader is borrowed.
-Initialization rolls back partially created native resources. Normal shutdown
-waits for the device, destroys the logical device and instance, then releases
-the loader. A known lost device is destroyed without waiting for it to recover.
+`FractalRenderService` owns `GpuRuntime`, hiding Vulkan from controller/JavaFX.
+Native calls: `MacosMoltenVkSession`, `VulkanPaletteKernel`, `VulkanMandelbrotKernel`,
+`VulkanLibraryLease`. Refcounted loader keeps runtimes independent; borrow external
+loaders. Initialization rolls back partial resources. Shutdown waits for device,
+destroys logical device/instance, releases loader; known-lost devices destroy
+without recovery wait.
 
-`runOrFallback(required, gpuWork, cpuWork)` serializes native work against
-shutdown. An unavailable runtime or insufficient numeric capability selects the
-CPU operation. A typed `GpuException` disables native work and cleans up before
-retrying on CPU; a device-loss error latches `DEVICE_LOST`. There is no automatic
-retry of a lost device. Cancellation and programming errors propagate.
+`runOrFallback(required, gpuWork, cpuWork)` serializes native work/shutdown.
+Unavailable/insufficient capability → CPU. `GpuException` disables/cleans native
+before CPU retry; device loss latches `DEVICE_LOST`, never auto-retries.
+Cancellation/programming errors propagate.
 
-The caller supplies the CPU operation matching its task: palette recoloring or
-the existing `PrecisionSelectingRenderBackend` for calculation. GPU work must
-complete all native accesses before returning/throwing, avoid publishing partial
-results that make retry unsafe, and report native failures as `GpuException`.
-It must not re-enter lifecycle/health/execution methods. Palette work is synchronous
-on the recolor worker, with one submission in flight. Cancellation before submission
-aborts immediately; cancellation after submission drains the fence before resources
-can be reused or destroyed. The controller rejects stale epochs at publication.
-Calculation uses this synchronous native boundary on a dedicated worker;
-readback is asynchronous to the coordinator and overlaps CPU recovery of the
-preceding batch. No submission outlives its runtime lease.
+Caller supplies matching CPU work (palette or `PrecisionSelectingRenderBackend`).
+GPU work must finish native access before return/throw, avoid retry-unsafe partial
+publication, use `GpuException` for native failures and never re-enter lifecycle/
+health/execution. Palette runs synchronously on recolor worker, one submission;
+pre-submit cancellation aborts, post-submit drains fence before reuse/destruction.
+Controller rejects stale epochs. Calculation uses dedicated synchronous-native
+worker, asynchronous coordinator readback overlapping preceding CPU recovery.
+No submission outlives its runtime lease.
 
 ## Mandelbrot base-pass integration
 
@@ -76,73 +65,56 @@ backend with `GpuMandelbrotRenderBackend` only when this property is enabled.
 Explicitly injected backends keep their policy. GPU palette recoloring remains
 independently controlled by `fractal.gpu.palette.enabled`.
 
-GPU calculation requires Mandelbrot without orbit traps, 1–1000 iterations,
-adequate double-grid precision and `RenderJob.sampleAccuracy() == CERTIFIED_FP32`.
-The controller permits this accuracy for opted-in smooth coloring; histogram
-coloring requests `CPU_REFERENCE`. Legacy/default jobs and off-screen exports
-retain CPU-reference accuracy. Frame cache and pan reuse require matching accuracy,
-preventing tolerant GPU results from entering a CPU-reference request. The actual
-inherited pan grid is used for certification and recovery.
+Requires Mandelbrot/no traps, 1–1000 iterations, safe double grid,
+`RenderJob.sampleAccuracy() == CERTIFIED_FP32`. Controller permits opt-in smooth
+coloring; histogram uses `CPU_REFERENCE`. Default/legacy/export jobs stay CPU-reference.
+Cache/pan reuse must match accuracy, excluding tolerant results from CPU-reference
+requests. Certify/recover on the inherited pan grid.
 
-The grid must pass the 1/16-pixel error and distinct-neighbor checks. Unsupported
-jobs retain the existing CPU selection, including deep-zoom perturbation.
-Accepted samples need the interval certificate in `benchmarks/GPU_FP32_NATIVE.md`; rejected
-samples are recomputed with the original CPU-double coordinates. Raw uncertified
-values are never marked ready or admitted into caches.
+Grid requires 1/16-pixel accuracy/distinct neighbors. Unsupported jobs keep CPU
+selection/deep perturbation. Accept only `benchmarks/GPU_FP32_NATIVE.md` interval
+certificates; recover rejects at original double coordinates. Never mark/cache
+uncertified raw values ready.
 
-Regions are 192x192 in the shared priority/zoom-out order. Ready pan overlap is
-skipped. Two reusable Java batches, one GPU worker with one queue slot, and at
-most ten host workers bound asynchronous work. The next readback can run while
-the host pool certifies and recovers the current region. Native work is serialized
-with palette dispatch and shutdown by `ManagedGpuRuntime`. The kernel uses two
-fixed mapped buffers (2.8125 MiB logical storage, 4 MiB allocation ceiling);
-Java request arrays use about 5.91 MiB and reusable primitive staging adds about
-0.91 MiB. Cancelled native and host work is drained before its batch can be
-reused, and no partial region is published.
+192x192 regions follow shared priority/zoom-out order, skipping ready pan overlap.
+Bounds: two reusable Java batches, one GPU worker/queue slot, at most ten host
+workers. Readback overlaps current certification/recovery; `ManagedGpuRuntime`
+serializes native/palette/shutdown. Two fixed mapped buffers: 2.8125 MiB logical,
+4 MiB allocation ceiling; Java arrays about 5.91 MiB, staging 0.91 MiB.
+Drain cancelled native/host work before reuse; publish whole regions only.
 
-All missing samples in a region are staged before publication. Cancellation
-checks guard preparation, submission/readback, CPU recovery and progress. The
-render service independently rejects stale generation callbacks. Native failures
-clean up the runtime and send the original frame's remaining pixels to CPU;
-previously certified regions and reused overlap remain valid. No failed-batch
-sample is published, and lost devices are not retried.
+Stage all missing regional samples before publication; check cancellation during
+preparation, submit/readback, recovery/progress. Service independently rejects stale
+generations. Native failure cleans runtime, sends original frame's remaining work
+to CPU, retaining certified regions/reused overlap. Publish no failed-batch samples;
+never retry lost devices.
 
-CPU coloring, AA sampling/cache, histogram mapping and export remain in their
-existing services. Certification does not imply bit-identical colors to a full
-CPU render for arbitrary palettes. The palette kernel was checked against CPU
-recoloring of the same certified/recovered samples. Roadmap 8.5 records the
-optimized repeat of the numeric/performance gate on M3 Pro. Retina base overview
-improves from 592.52 to 238.67 ms on GPU, but remains behind its paired 71.93 ms
-CPU baseline; Refined + AA is 1534.89 versus 1378.67 ms. CPU remains the default
-and GPU residency expansion is still deferred. See
-[GPU_RENDER_BENCHMARK_8_5_RESULTS.md](../../benchmarks/GPU_RENDER_BENCHMARK_8_5_RESULTS.md) for
-raw runs, host/kernel profiles, memory accounting and display limitations; the
-original 8.4 result remains archived separately.
+CPU coloring, AA/cache, histogram/export stay in their services. Certificates
+are not arbitrary-palette bit equality; palette conformance compares identical
+certified/recovered samples. M3 Pro roadmap 8.5 repeat: GPU Retina overview
+592.52 → 238.67 ms versus CPU 71.93 ms; Refined + AA 1534.89 versus 1378.67 ms.
+CPU stays default/residency deferred. [8.5 report](../../benchmarks/GPU_RENDER_BENCHMARK_8_5_RESULTS.md):
+raw runs, host/kernel/memory/display limits; 8.4 stays separately archived.
 
 `GpuMandelbrotRenderBackend.lastStats()` reports dispatched/certified/recovered
 pixel counts and job-level CPU fallback. Region timings include host wait and
 recovery; they are not GPU timestamp measurements.
 
-For opt-in diagnostic runs, `fractal.gpu.mandelbrot.profile=true` enables bounded
-Vulkan timestamp queries and `GpuMandelbrotRenderBackend.lastProfile()` component
-sums, including separate certification, recovery and publication wall times.
-The runtime owns and destroys the query pool with the kernel. Unsupported queue
-timestamps return -1, not a zero-time kernel. Upload, dispatch/fence and readback
-are host timings; the kernel query is device time. Host work overlaps native work,
-so those sums are not additive. Normal rendering does not allocate a query pool.
-`fractal.gpu.mandelbrot.hostWorkers` and `.regionSize` allow bounded diagnostic
-tuning (defaults 10-or-processors-minus-2 and 192; region bounds are 32..192).
-`mvn -Pgpu-render-benchmark javafx:run` runs paired production CPU/GPU pipelines
-with full-frame numeric checks; see the report for options.
+Opt-in `fractal.gpu.mandelbrot.profile=true` enables bounded device timestamp
+queries and `GpuMandelbrotRenderBackend.lastProfile()` host certification/recovery/
+publication sums. Runtime owns query pool with kernel; unsupported timestamps
+return -1, never zero. Upload/dispatch-fence/readback are host wall time; kernel
+query is device time. Overlap makes sums nonadditive; normal runs allocate no pool.
+Diagnostic `fractal.gpu.mandelbrot.hostWorkers`/`.regionSize` defaults:
+10-or-processors-minus-2/192, region bounds 32..192.
+`mvn -Pgpu-render-benchmark javafx:run` pairs production CPU/GPU with full-frame
+numeric checks; options in report.
 
-Roadmap 8.6 also profiles the first proposed residency increment without
-enabling it. `fractal.aa.profile=true` records AA wall time, base-color
-preparation, summed worker time for candidate detection, sampling and cache/color
-work, the candidate time accumulated by the busiest worker, and pixel/sample
-counts. Per-pixel timestamps exist only in this diagnostic mode. The M3 Pro gate
-found that even free candidate detection would not close the current GPU
-base-frame deficit, so AA remains on CPU. See
-[GPU_RESIDENCY_8_6_DECISION.md](../../benchmarks/GPU_RESIDENCY_8_6_DECISION.md).
+Roadmap 8.6 first-residency diagnostic does not activate it.
+`fractal.aa.profile=true` records AA wall/base-color time, summed detection/sampling/
+cache-color worker time, busiest-worker detection and pixel/sample counts;
+per-pixel timestamps exist only here. M3 Pro still loses even with free detection:
+keep CPU AA. [Decision](../../benchmarks/GPU_RESIDENCY_8_6_DECISION.md).
 
 The follow-up 8.6 whole-frame residency spike is also isolated from production
 backend selection. It keeps a palette-independent four-word sample record per
@@ -155,42 +127,31 @@ JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true' \
   mvn -Pgpu-resident-benchmark javafx:run
 ```
 
-`fractal.residentBenchmark.sizes`, `.scenes`, `.warmup`, `.samples`, and
-`.output` configure the run; `fractal.gpu.resident.maxBytes` bounds its native
-allocation (384 MiB by default). `fractal.residentBenchmark.allowMismatch=true`
-is diagnostic-only: it records outlier counts for a known-bad experiment instead
-of stopping at the first conformance failure. The M3 Pro gate found meaningful wins for
-Retina overview and exterior, but a correction-heavy seahorse view remained
-24.1% slower than CPU. This fails the required 15% win in every representative
-scene, so the spike remains an opt-in experiment. See
-[GPU_RESIDENT_SPIKE_RESULTS.md](../../benchmarks/GPU_RESIDENT_SPIKE_RESULTS.md).
+Run settings: `fractal.residentBenchmark.sizes`, `.scenes`, `.warmup`, `.samples`,
+`.output`; native bound `fractal.gpu.resident.maxBytes` defaults 384 MiB.
+Diagnostic-only `fractal.residentBenchmark.allowMismatch=true` counts known-bad
+outliers instead of stopping on first mismatch. M3 Pro Retina overview/exterior
+win, but correction-heavy seahorse is 24.1% slower: fails 15% every-scene target,
+remains opt-in. [Results](../../benchmarks/GPU_RESIDENT_SPIKE_RESULTS.md).
 
-The rejection buffer also carries bounded diagnostic counters. The follow-up
-Retina seahorse profile attributes 51.16% of rejected pixels to an uncertain
-escape interval and 48.84% to a smooth-value interval wider than the accepted
-error contract; every other category is zero. This rules out palette-phase and
-iteration-matching tweaks as useful next work. A further calculation experiment
-must apply a higher-precision certificate only to rejected pixels. The raw
-profile is in
-GPU_RESIDENT_REJECTION_PROFILE.csv (private archive: `benchmarks/GPU_RESIDENT_REJECTION_PROFILE.csv`).
+Bounded rejection counters: Retina seahorse 51.16% uncertain escape, 48.84%
+smooth interval too wide, all others zero. Palette-phase/iteration tweaks cannot
+help; next calculation experiment needs higher-precision reject certification.
+GPU_RESIDENT_REJECTION_PROFILE.csv (private archive:
+`benchmarks/GPU_RESIDENT_REJECTION_PROFILE.csv`).
 
-A follow-up centered-error FP32 certificate was tested only on first-stage
-rejections. It preserved conformance but certified zero additional pixels at
-both benchmark sizes and all three native smoke scenes. On Retina seahorse its
-extra arithmetic raised median GPU calculation from 27.06 to 46.65 ms. The
-second pass was removed; its measurements remain in
-GPU_RESIDENT_SECOND_STAGE_PROFILE.csv (private archive: `benchmarks/GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`).
-Any later certificate experiment must use a genuinely higher-precision numeric
-representation rather than reshaping the same FP32 bounds.
+Reject-only centered-error FP32 preserved conformance but certified zero extra
+pixels at both sizes/all three smoke scenes. Retina seahorse calculation median:
+27.06 → 46.65 ms. Second pass removed; higher-precision representation, not another
+FP32 bound shape, is required. GPU_RESIDENT_SECOND_STAGE_PROFILE.csv
+(private archive: `benchmarks/GPU_RESIDENT_SECOND_STAGE_PROFILE.csv`).
 
-Double-single arithmetic (two floats, approximately 48 significant bits) was
-then measured as an optimistic ceiling by accepting every FP32 rejection on the
-GPU, before adding the still-missing rigorous stability certificate. Even with
-zero CPU recovery it fails the performance gate: Retina seahorse is 37.3% slower
-than CPU and Retina overview is only 4.3% faster. It also fails conformance, with
-54 Retina seahorse outliers and a maximum channel error of 189. The emulation
-path was removed. Raw results are in
-GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv (private archive: `benchmarks/GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`).
+Optimistic double-single ceiling (two floats, about 48 significant bits) accepted
+all rejects before the missing rigorous stability certificate. Even with zero CPU
+recovery, Retina seahorse is 37.3% slower/overview only 4.3% faster. Conformance
+also fails: 54 seahorse outliers, max channel error 189. Emulation removed.
+GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv (private archive:
+`benchmarks/GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`).
 
 ## Palette recoloring integration
 
@@ -206,57 +167,44 @@ Enable the experimental kernel in the application:
 JAVA_TOOL_OPTIONS=-Dfractal.gpu.palette.enabled=true mvn javafx:run
 ```
 
-The GPU path supports smooth `GradientPalette` coloring, including edited stops.
-One immutable base generation, one immutable AA snapshot, and the offset-independent
-palette remain resident. Phase pairs are packed into uint words; escape flags use
-bitsets. Updating AA uploads only its changed snapshot; changing palette uploads
-only the table; changing color scale or frame invalidates the base generation.
-Stable offset frames upload zero buffer bytes and change only 32 bytes of push
-constants. No 16-bit storage extension, FP64 or per-frame LUT rebuild is required.
+Smooth `GradientPalette`, edited stops included: immutable base generation/AA
+snapshot/offset-independent palette stay resident. Pack phase pairs into uints,
+escape flags into bitsets. AA changes upload snapshot only, palette changes table
+only; scale/frame invalidates base. Stable offsets upload zero bytes, changing
+32-byte push constants only. No 16-bit storage, FP64 or per-frame LUT rebuild.
 
-`PaletteOffset` maps the triangular palette wave using integer phase arithmetic
-and rounding thresholds computed with the CPU expression. Base colors and alpha
-match exactly; FP32 linear-light AA accumulation is checked within one RGB channel
-level (0–255). Unsupported coloring/offsets use CPU. Histogram/orbit-trap coloring
-and fractal calculation are not moved to the GPU.
+`PaletteOffset` uses integer triangular-wave phases and CPU-derived rounding
+thresholds. Base/alpha exact; FP32 linear-light AA within one RGB level (0–255).
+Unsupported coloring/offsets use CPU; histogram/traps/calculation stay off this
+GPU palette path.
 
-Four persistently mapped storage buffers use host-visible memory, preferring
-coherent memory. The fallback heap path flushes host writes and invalidates host
-reads. Dispatches use a base-to-AA write barrier and a compute-to-host read
-barrier plus a fence, following the
-[Khronos compute-to-host synchronization example](https://docs.vulkan.org/guide/latest/synchronization_examples.html).
-On Apple Silicon, upload/readback are copies into/out of shared mapped memory,
-not discrete PCIe transfer measurements. Residency is bounded by
-`fractal.gpu.palette.maxBytes` (256 MiB by default), storage and dispatch limits.
-Allocation, compilation and native-library failures disable this runtime's GPU
-path and retry the whole operation on CPU; a new runtime is needed to retry GPU.
+Four persistent mapped buffers prefer coherent host-visible memory; fallback
+flushes writes/invalidates reads. Base-to-AA and compute-to-host barriers plus fence
+follow [Khronos synchronization](https://docs.vulkan.org/guide/latest/synchronization_examples.html).
+Apple Silicon upload/readback copies shared memory, not discrete PCIe transfers.
+Residency obeys `fractal.gpu.palette.maxBytes` (256 MiB default), storage/dispatch
+limits. Allocation/compile/native-load failures disable this runtime's GPU and
+retry whole work on CPU; retry GPU requires a new runtime.
 
-`PaletteRecolorTiming` separates preparation (including lookup/setup), buffer
-upload, dispatch, readback, FX queue delay and publication. Dispatch is host wall
-time for command encoding, submission and fence wait, not a GPU timestamp query.
-Total recolor time includes all orchestration and fallback overhead. Publication
-measures the shared `SurfaceBuffer.publish` array copy and PixelBuffer update;
-it does not claim to measure display scanout. See `benchmarks/PALETTE_BENCHMARK_RESULTS.md`
-for the reproducible JavaFX benchmark and its limitations.
+`PaletteRecolorTiming`: preparation/lookup/setup, upload, dispatch, readback,
+FX queue/publication. Dispatch is host encoding/submit/fence wait, not device query.
+Total includes orchestration/fallback. Publication covers `SurfaceBuffer.publish`
+array copy/PixelBuffer update, not scanout.
+`benchmarks/PALETTE_BENCHMARK_RESULTS.md` defines reproduction/limits.
 
 ## Packaging and diagnostics
 
-Java binding JARs are common dependencies; native JARs are selected only by the
-macOS Maven profile. The classifier follows the JVM architecture: `aarch64` and
-`arm64` use `natives-macos-arm64`, while an x64 JVM uses `natives-macos` (including
-under Rosetta). LWJGL core, Vulkan/MoltenVK and shaderc natives are included.
-The GLSL resource is compiled to SPIR-V once per runtime on first palette use.
-The JavaFX launcher resolves the native resource modules and
-enables native access for LWJGL. Disabling `gpu-macos` leaves the CPU build usable.
+Java bindings are shared dependencies; macOS profile alone selects natives by
+JVM architecture: `aarch64`/`arm64` → `natives-macos-arm64`, x64/Rosetta →
+`natives-macos`. Includes LWJGL core, Vulkan/MoltenVK/shaderc. First palette use
+compiles GLSL to SPIR-V once per runtime. JavaFX resolves native modules/enables
+LWJGL native access; disabling `gpu-macos` preserves CPU builds.
 
-On the project's Java 25+ baseline, the loader selects LWJGL's `ffm` memory
-backend before `VK`/`MemoryUtil` initialization. This uses `java.lang.foreign`
-instead of deprecated `sun.misc.Unsafe`, removing the JDK 24+ startup warning.
-The setting is applied in code, so it also covers IDE/headless launches; an
-explicit `org.lwjgl.system.memoryBackend` override is respected. See
-[LWJGL FFM support](https://github.com/LWJGL/lwjgl3/blob/3.4.2/doc/FFM.md).
-The test JVM runs with `--sun-misc-unsafe-memory-access=deny`, including the
-native GPU gate, so an Unsafe regression fails instead of being hidden.
+Java 25+ loader selects LWJGL `ffm` before `VK`/`MemoryUtil` in code, covering
+IDE/headless; explicit `org.lwjgl.system.memoryBackend` wins. `java.lang.foreign`
+replaces `sun.misc.Unsafe`, removing JDK 24+ warnings.
+[LWJGL FFM](https://github.com/LWJGL/lwjgl3/blob/3.4.2/doc/FFM.md).
+Tests/native gate use `--sun-misc-unsafe-memory-access=deny` so regressions fail.
 
 LWJGL supports a bundled MoltenVK implementation or an explicit
 `-Dorg.lwjgl.vulkan.libname=/absolute/path/to/libvulkan.1.dylib` override for a
@@ -292,14 +240,11 @@ Run the required hardware gate on a Mac with access to Metal:
 mvn -Pgpu-smoke test
 ```
 
-This gate fails, rather than skips, when no GPU is available. It verifies two
-simultaneous runtimes, independent teardown, complete teardown/reopen, the
-simulated device-loss path, and CPU rendering at ordinary and deep coordinates.
-It also checks integrated Mandelbrot dispatch, CPU recovery, pan reuse, shared
-palette ownership, simulated loss, reopen and default-service opt-in selection.
-It runs actual palette dispatches across all presets and offset wrap
-boundaries, checks exact base output / one-level AA tolerance, zero repeated
-uploads, AA/scale/size/palette invalidation, cleanup, and reopening after dispatch.
+No GPU fails this gate, never skips. Covers two runtimes/independent teardown,
+full reopen, simulated loss, ordinary/deep CPU; integrated Mandelbrot dispatch,
+recovery/pan reuse, shared palette, default-service opt-in/loss/reopen; actual
+palette kernels across presets/wraps, exact base/one-level AA, zero repeat uploads,
+AA/scale/size/palette invalidation and dispatch cleanup/reopen.
 
 Run failure-path checks in fresh JVMs:
 
@@ -331,14 +276,14 @@ Unsafe warnings.
 
 The palette benchmark was repeated on 2026-09-03 with LWJGL 3.4.2 / FFM: an
 original-length 12/40 run and a 30/120 confirmation run both passed per-frame
-conformance without GPU fallback or Unsafe warnings. GPU won only the large-AA
-workload (3% and 16% lower time through the JavaFX buffer, respectively); CPU
-remains the default. `benchmarks/PALETTE_BENCHMARK_RESULTS.md` reports the current samples
-and retains the older data separately. The initial CPU-only FP32 study is in
-`benchmarks/GPU_FP32_PRECISION.md`. Actual Mandelbrot shader validation and the per-pixel
-interval acceptance contract are in `benchmarks/GPU_FP32_NATIVE.md`. The optional production
-backend and standalone diagnostic now share the validated kernel and gate. The
-production path uses the existing runtime owner.
+conformance without GPU fallback or Unsafe warnings. GPU won only the large-AA workload
+(3% and 16% lower time through the JavaFX buffer, respectively); CPU stays the default.
+`benchmarks/PALETTE_BENCHMARK_RESULTS.md` reports the current samples and retains the
+older data separately. The initial CPU-only FP32 study is in
+`benchmarks/GPU_FP32_PRECISION.md`. Actual Mandelbrot shader validation and the
+per-pixel interval acceptance contract are in `benchmarks/GPU_FP32_NATIVE.md`. The
+optional production backend and standalone diagnostic now share the validated kernel and
+gate. The production path uses the existing runtime owner.
 
 After integration on 2026-09-03, `mvn clean test` passed (316 tests, four native
 skips). A combined hardware run passed the runtime, palette, integrated backend

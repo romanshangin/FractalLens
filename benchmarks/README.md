@@ -1,10 +1,8 @@
 # Benchmark protocols and selected evidence
 
-This directory retains a compact set of historical reports and evidence.
-Original measurements and decisions are unchanged. Most raw observations,
-logs and exploratory working files remain private; see
-[provenance and replay limits](../docs/development/PUBLICATION.md). This selection does not
-claim that every historical analysis can be rerun from the published files.
+Selected historical protocols/evidence preserve measurements/decisions. Most raw
+observations/logs/exploration stay private; not every analysis replays publicly.
+[Provenance/replay limits](../docs/development/PUBLICATION.md).
 
 ## Protocols for fresh measurements
 
@@ -23,45 +21,32 @@ claim that every historical analysis can be rerun from the published files.
   [rejected worker preparation experiment](PRISM_PIPELINE_RESULTS.md#bounded-worker-preparation-experiment-2026-10-29) and
   [Spaces presentation validation](SPACE_SWITCH_VALIDATION.md).
 
-Use the current drivers under `scripts/benchmarks/` with a fresh output directory.
-See [the scripts index](../scripts/README.md) for functional groups and validation commands.
-Recorded measurement paths and source hashes remain historical.
-Policies under `policies/` include historical rejected candidates as well as
-final gates; select a policy intentionally rather than treating every policy
-as an accepted optimization. Local raw output is needed for analysis but is
-not automatically eligible for publication.
+Fresh outputs/current `scripts/benchmarks/` drivers:
+[scripts/validation](../scripts/README.md). Recorded paths/hashes stay historical.
+Select `policies/` intentionally: rejected candidates coexist with final gates;
+none implies accepted optimization. Required raw analysis output is not automatically
+publishable.
 
 ## Graphics startup for new runs
 
-The `palette-benchmark`, `interaction-latency` and `gpu-render-benchmark`
-profiles use plain-Java main classes that call the same pre-toolkit bootstrap
-as production. On macOS, an absent `prism.order` now requests `mtl,es2,sw`;
-explicit values, including empty ones, remain unchanged. Other platforms keep
-the JavaFX default. The cold-startup driver also uses this bootstrap. The
-resident GPU benchmark is offscreen and does not initialize JavaFX. The current
-cold-startup probe subclasses `FractalFxApplication`; its shared compiled probe
-requires both frozen builds to contain that lifecycle class. Comparing across
-the older `FractalApplication` lifecycle split requires a version-compatible
-probe and a separately declared campaign, rather than reusing current bytecode
-against an older build.
+`palette-benchmark`, `interaction-latency`, `gpu-render-benchmark` and cold startup
+share production pre-toolkit bootstrap: macOS absent `prism.order` →`mtl,es2,sw`;
+explicit/empty overrides win, other OSs keep defaults. Resident GPU is offscreen,
+no FX. Current cold probe subclasses `FractalFxApplication`: both frozen builds
+must contain it. Across old `FractalApplication` split use compatible probe/new
+campaign, never current bytecode against incompatible build.
 
-For new cold-startup campaigns, `definition.json` records every
-`ColdStartupBenchmark.class` / `ColdStartupBenchmark$*.class` file in
-`probe_files`, with paths relative to the probe directory and individual SHA-256
-hashes. `probe_hash_scope=class-family-v1` identifies this scheme;
-`probe_sha256` is the SHA-256 of the UTF-8, key-sorted JSON file map
-(`json.dumps(probe_files, sort_keys=True)`). The runner checks the entire map
-after the campaign, rejecting changed bytes and added or deleted probe classes
-before writing a summary. Historical definitions retain their original
-single-class hash semantics and are not relabeled or rehashed.
+New `definition.json` records relative `ColdStartupBenchmark.class`/
+`ColdStartupBenchmark$*.class` SHA-256 map `probe_files`.
+`probe_hash_scope=class-family-v1`; `probe_sha256` hashes UTF-8 sorted-key JSON
+(`json.dumps(probe_files, sort_keys=True)`). Check complete map before summary;
+reject changed/added/deleted classes. Historical single-class hashes are never
+relabeled/recomputed.
 
-For comparisons with historical ES2 runs, set `-Dprism.order=es2` explicitly.
-For paired Prism measurements, continue selecting each pipeline explicitly;
-record `prism.verbose` output to establish the actual initialized pipeline.
-A requested order or CSV metadata alone does not establish which fallback ran.
-Standalone tests and specialized probes that start JavaFX directly still
-require explicit selection. Existing measurements have not been rerun or
-reclassified by this startup change. See [startup policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism-selection).
+Historical ES2 comparisons require `-Dprism.order=es2`; paired Prism explicitly
+selects both. `prism.verbose` proves actual initialization; requests/CSV do not.
+Direct-FX tests/probes also select explicitly. Startup change reran/reclassified
+no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism-selection).
 
 ## Final decisions and selected campaigns
 
@@ -73,10 +58,9 @@ reclassified by this startup change. See [startup policy](../docs/platform/MACOS
 | P1.4 allocation attribution; no optimization promoted | [Profile](ALLOCATION_PROFILE_9_4.md) | [Summary](p1-4-allocation-profile-20260924/summary.json), [allocation groups](p1-4-allocation-profile-20260924/allocations.json) |
 | P1.5 retained CPU AA accepted with recorded first-tile exception | [Assessment](P1_5_PROMOTION_VALIDATION.md) | [Sustained summary](p1-5-aa-sustained-20260924/summary.json), [headless](p1-5-retained-vs-pre-headless-20260927/analysis.json), [JavaFX](p1-5-retained-vs-pre-fx-retry-20260927/analysis.json), [base confirmation](p1-5-retained-vs-pre-fx-base-confirm-20260928/analysis.json), [AC cold startup](p1-5-retained-vs-pre-cold-ac-20260928/summary.json) |
 
-Each selected campaign directory contains only its retained summaries and
-provenance files. A summary's references to omitted raw inputs do not mean those
-inputs are present. Earlier failures, abandoned candidates and incomplete
-platform gates remain documented in the historical reports.
+Selected campaigns contain retained summaries/provenance only; omitted-input
+references do not imply availability. Historical failures/rejected candidates/
+incomplete platform gates remain recorded.
 
 ## Other retained numerical evidence
 
@@ -92,8 +76,8 @@ platform gates remain documented in the historical reports.
 
 ## Retained file inventory
 
-The following inventory lists the 121 selected evidence/protocol files, excluding
-this index. No raw log file is included.
+The inventory lists the 121 selected evidence/protocol files, excluding this index. No
+raw log file is included.
 
 - [ALLOCATION_PROFILE_9_4.md](ALLOCATION_PROFILE_9_4.md)
 - [BASELINE_BENCHMARK.md](BASELINE_BENCHMARK.md)

@@ -1,99 +1,70 @@
 # Qodana acceptance baseline
 
-The baseline contains 51 reviewed findings from source commit
-`90ee4bef187f985980c87f2f74dfc52468fa3039`, analyzed with Qodana Community
-2026.2.3 (QDJVM-262.11550). It is a sanitized derivative: source-relative
-locations and matching fingerprints are retained; machine identifiers,
-absolute paths, invocation metadata, and diagnostic logs are omitted.
+Baseline: 51 reviewed findings, source `90ee4bef187f985980c87f2f74dfc52468fa3039`,
+Qodana Community 2026.2.3 (QDJVM-262.11550). Sanitized derivative retains relative
+locations/fingerprints, omits machine IDs, absolute paths, invocation metadata/logs.
 
-The review classified 33 owner/stack-managed resource findings,
-five explicitly supported JavaFX reflection accesses,
-four Optional API contracts, three bounded benchmark polling loops, three
-record-validation assignments, two exact divisions by two, and one short-write
-loop. These are accepted
-contracts, not a claim that all inspection warnings are false positives.
+Accepted contracts: 33 owner/stack-managed resources, five supported JavaFX
+reflection accesses, four Optional APIs, three bounded polls, three record
+validation assignments, two exact divisions by two, one short-write loop.
+This does not classify all inspection warnings as false positives.
 
 ## Reviewed module-model migration
 
-The original baseline contained 116 findings from source commit
-`2859b0c5155252f35618c8d1abd73b5da3216a93`. The saved analysis of
-`ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2` reported 51 of those findings,
-all matching their original fingerprints. The candidate analysis reported
-the same 51 findings, but the imported production module changed from
-`fractal-lens` to `fractal-lens.main`, alongside a separate
-`fractal-lens.test` module. All 51 fingerprints changed.
+Original baseline: 116 findings at `2859b0c5155252f35618c8d1abd73b5da3216a93`.
+Saved `ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2` analysis found 51 original
+fingerprints. Candidate found the same 51 with changed fingerprints after
+`fractal-lens` became `fractal-lens.main` plus `fractal-lens.test`.
 
-The migration matched each candidate finding one-to-one against both the
-saved main analysis and the original baseline by rule, message, source path,
-line, and column. Physical locations, including offsets and source snippets,
-were identical between the two analyses, and every affected production file
-was byte-identical between the source revisions and analyzed copies. Only
-the fingerprints of these previously reviewed findings were replaced.
+One-to-one migration matches candidate against saved main/original baseline by
+rule/message/path/line/column. Physical offsets/snippets match; affected production
+files are byte-identical across revisions/analyzed copies. Replace only these
+reviewed fingerprints.
 
-The 65 historical entries absent from both saved analyses were removed:
-62 `ClassEscapesItsScope`, two `Java9ReflectionClassVisibility`, and one
-`ConstantValue`. Their absence is not evidence of newly implemented fixes.
-No newly reported source contract was accepted.
+Remove 65 entries absent from both analyses: 62 `ClassEscapesItsScope`, two
+`Java9ReflectionClassVisibility`, one `ConstantValue`. Absence proves no new fixes;
+no new source contract was accepted.
 
-The saved candidate invocation completed analysis but exited with code 255
-because all 51 findings were classified as new against the old baseline.
-The saved failing invocation must continue to be rejected by
-`check_qodana.py`.
+Saved candidate analysis completed but exited 255: old baseline classified all
+51 as new. `check_qodana.py` must continue rejecting that execution.
 
-On 2026-10-29, a fresh disposable clone of the candidate, with the migrated
-baseline, was analyzed from the host terminal using the image digest pinned
-in the Qodana workflow. The analyzed tracked files matched the candidate,
-except for developer IDE metadata and migration documentation; the baseline,
-source, build settings, and analysis configuration were byte-identical.
-The fresh analysis reported 51 `unchanged` findings and zero `new` findings,
-with `executionSuccessful: true` and exit code 0. The current
-`scripts/quality/check_qodana.py` independently accepted the saved results
-and reproduced the exported 51-finding report. This verifies the local
-baseline migration, not execution of the GitHub workflow or other platforms.
+2026-10-29 host-terminal rerun used disposable candidate clone/migrated baseline
+and workflow-pinned image. Tracked contents matched except IDE metadata/migration
+docs; baseline/source/build/analysis configuration were byte-identical. Result:
+51 `unchanged`, zero `new`, `executionSuccessful: true`, exit 0.
+`scripts/quality/check_qodana.py` independently accepted results/reproduced 51-entry
+export. Local migration proof only, not GitHub/platform execution.
 
 ## Reviewed Metal bootstrap migration
 
-PR #47's source commit `216a08a13de9973927515bf5eab2b00e92b5749e`
-reported 48 unchanged findings and three new `BusyWait` fingerprints. These
-are the same three bounded polling loops already reviewed in this baseline,
-at lines 192, 207 and 303 of `InteractionLatencyBenchmark.java`. The bootstrap
-refactor removed the outer class's `Application` superclass and introduced a
-nested lifecycle adapter; the containing `run` and `awaitIdle` methods are
-byte-identical to `main` at `ba05a0ce5017c9de888fc1e5e1411fb0b6c95fa2`.
+PR #47, `216a08a13de9973927515bf5eab2b00e92b5749e`: 48 unchanged plus three
+new `BusyWait` fingerprints, the same bounded polls at 192/207/303 in
+`InteractionLatencyBenchmark.java`. Bootstrap removed outer `Application` and added
+nested lifecycle; `run`/`awaitIdle` are byte-identical to `main` at
+`ba05a0ce5017c9de888fc1e5e1411fb0b6c95fa2`.
 
-A local analysis with the pinned image reproduced all three new fingerprints.
-Each was matched one-to-one to its prior baseline entry by rule, message,
-source path, column and the one-line location shift. The surrounding source
-snippets also matched the saved successful pre-refactor analysis exactly.
-Only those three locations and fingerprint pairs were updated; the other
-48 entries, accepted contracts, analysis profile and zero-new-finding gate
-are unchanged. No additional polling contract is accepted by this migration.
-The reproduced analysis exited with code 255 and remains invalid execution
-evidence even with the updated baseline.
+Pinned-image local analysis reproduced all three; match prior rule/message/path/
+column, one-line shift and exact saved successful snippets. Update only those
+locations/fingerprints; other 48 entries/contracts/profile/zero-new gate stay.
+No new polling contract accepted. Reproduction exited 255, remaining invalid
+execution evidence even after migration.
 
-A fresh local analysis on 2026-10-29 used a disposable clone of that source
-commit with only the migrated baseline substituted, the pinned image and
-the unchanged preparation/configuration scripts. It reported 51 unchanged
-findings, zero new findings, `executionSuccessful: true` and exit code 0.
-`scripts/quality/check_qodana.py` independently accepted all 51 findings;
-its nine report-acceptance tests passed. This is a local baseline validation,
-not a claim that the failed GitHub invocation passed. Raw reports and logs
-remain private.
+2026-10-29 fresh local disposable source clone, migrated baseline only, pinned
+image/unchanged preparation: 51 unchanged, zero new, `executionSuccessful: true`,
+exit 0. `scripts/quality/check_qodana.py` accepted all 51; nine acceptance tests
+passed. This does not pass the failed GitHub invocation. Raw logs/reports stay private.
 
 ## Acceptance and report handling
 
-CI performs a fresh Maven import without developer IDE metadata, compiles
-production and test sources with dependencies in the analyzer's repository,
-and rejects new findings, failed preparation, unresolved dependency roots,
-and sanity findings. Resolved baseline findings are allowed. Do not refresh
-the baseline automatically or add unreviewed findings to obtain a green run.
+CI freshly imports Maven without IDE metadata, compiles production/tests with
+analyzer dependencies, rejects new/sanity findings, preparation failures and
+unresolved dependencies. Resolved baseline findings are allowed. Never auto-refresh
+baseline or accept unreviewed findings for green CI.
 
-Use a disposable source copy mounted at `/data/project` when running the
-pinned image locally with `--baseline .qodana/baseline.sarif.json`. The bootstrap
-moves IDE metadata into private results and writes compilation diagnostics
-there. Never mount your working checkout for this preparation.
+Run pinned image with `--baseline .qodana/baseline.sarif.json` on a disposable
+`/data/project` copy only. Bootstrap moves IDE metadata/compilation diagnostics
+to private results; never mount the working checkout.
 
-Only the allowlisted findings JSON is eligible for the seven-day CI artifact,
-after personal-data and secret checks. Raw SARIF, logs, caches, and the HTML
-report remain private. The GitHub token has read-only repository access;
-analysis needs no cloud token, comments, annotations, or fix pushes.
+Only allowlisted findings JSON may upload as seven-day artifact after personal-
+data/secret checks. Raw SARIF/logs/caches/HTML stay private. Read-only GitHub token;
+no cloud token/comments/annotations/fix pushes needed.

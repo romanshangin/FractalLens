@@ -1,19 +1,12 @@
 # Roadmap 9.1 paired protocol calibration — 2026-09-09
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
-This step adds a reproducible comparison mechanism, not a renderer optimization.
-Both A and B use the same compiled snapshot of
+Comparison infrastructure, not renderer optimization: A/B share compiled
 `1a33e6f5f2e19213a4a980d4ede61a406293b83e`, identity
 `03204a7d9dbcbbf4754756c0e4746ce171404d328e05499435602bdc43352a75`.
-The [protocol](BASELINE_PAIRS_BENCHMARK.md) keeps policies, build manifests, raw
-matching samples, process order and uncertainty together. Numerical production
-code is unchanged in this step.
+[Protocol](BASELINE_PAIRS_BENCHMARK.md) retains policies/manifests/matched samples/
+order/uncertainty. Numerical production code unchanged.
 
 ## Environment and design
 
@@ -47,13 +40,10 @@ the Apple M3 Pro renderer. Output scale was 1.0x1.0.
 | Julia AA FAST | 26.641 | 26.728 | 0.972 | 0.909–1.117 |
 | Julia AA REFINED | 25.514 | 27.366 | 1.067 | 0.999–1.100 |
 
-Short publication intervals vary substantially across fresh processes on the
-same binary. For example, Seahorse FAST per-process median ratios are 0.644,
-0.966 and 1.093. The overall A and B medians alone would give a misleading
-impression of improvement. Neither declared target establishes a 10% gain.
-First-publication timings, p95 values and all per-process ratios are retained
-in the analysis. These small fixtures validate the FX path; they do not qualify
-as the eventual large-frame ValidityMask publication gate.
+Same-binary fresh JVMs vary: Seahorse FAST process median ratios 0.644, 0.966,
+1.093; aggregate medians alone mislead. Neither target proves 10% gain. Analysis
+retains first-publication/p95/process ratios. Small cases validate FX, not eventual
+large ValidityMask publication gate.
 
 ## Large-frame headless calibration
 
@@ -78,25 +68,17 @@ The combined JVM wall time was 1,634.44 seconds (27.24 minutes).
 | Pan: returned ARGB | 47.276 | 50.857 | 1.110 | 0.850–1.295 |
 | Cancellation after first region: tail | 0.360 | 0.359 | 1.097 | 0.830–3.064 |
 
-The retained reverse frame reuses all 5,939,136 pixels and creates zero new
-backend regions. Its roughly 6.5-second backend cost is stable enough here to
-serve as the principal slow target. This run has no scheduling instrumentation;
-the attribution to mask scanning comes from the separate
-[scheduling diagnostic](BASELINE_SCHEDULING_VALIDATION.md).
+Reverse retains 5,939,136 pixels/zero new regions; stable ~6.5-second backend
+is main slow target. No scheduling instrumentation here; attribution comes from
+[separate diagnostic](BASELINE_SCHEDULING_VALIDATION.md).
 
-Several controls remain noisy. Julia AA operation differs by 8.2% in the paired
-estimate even though the binaries are identical, and short first-tile/cancel
-timings have broad intervals. This calibration therefore does **not** establish
-5% control equivalence. A candidate with inconclusive controls needs a new,
-larger predeclared campaign, especially more fresh process pairs; it must not
-drop these controls or relax their thresholds after observing results.
+Identical-binary Julia AA differs 8.2%; short first-tile/cancel intervals are wide:
+**not** 5% equivalence. Inconclusive controls need a larger predeclared campaign,
+especially fresh JVMs; never drop controls/relax limits after results.
 
-Both campaigns ran on battery: 82% throughout the short FX campaign and 82% to
-74% across the large-frame campaign. All 24 before/after thermal observations
-were `nominal`. Peak process RSS was 864,043,008 bytes for FX and 4,038,737,920
-bytes for headless. These peaks include each entire JVM and cannot be assigned
-to a single timer scope. No claim of continuous thermal stability or improved
-memory use follows from these observations.
+Battery: FX 82%; large campaign 82% → 74%. All 24 bracketing thermal readings
+`nominal`. Full-JVM peak RSS: FX 864,043,008 bytes, headless 4,038,737,920;
+not per-scope, continuous thermal or memory-improvement evidence.
 
 ## Verification and decision boundary
 
@@ -113,15 +95,11 @@ held its lease. This validates the parent campaign lock independently of the
 per-JVM private lock. Programs using unrelated lock paths remain outside that
 coordination.
 
-Both campaign policies are explicitly `calibration`. Their result must remain
-`calibration_only`, with `production_promotion=not_evaluated`. The final roadmap
-9.1 decision item remains open until a real candidate is compared and passes its
-correctness and scope-matched performance checks.
+Both policies are `calibration`; keep `calibration_only`,
+`production_promotion=not_evaluated`. 9.1 stays open until a real candidate passes
+correctness/matched performance.
 
-Next implementation: bound `ValidityMask.missingRowSpans` scanning and make
-planning cancellation responsive. Preserve exact reuse semantics and test the
-reported complete-mask/cancellation cases. Compare the committed candidate with
-the retained baseline through a new, predeclared candidate policy. The existing
-post-first-region cancellation timing is a control, not a measurement of
-cancellation during planning. Input/publication and sustained-memory evidence
-must accompany any claim about the full application.
+Next: bound `ValidityMask.missingRowSpans`/responsive planning cancellation,
+preserve exact reuse and test full-mask/cancel. Use new predeclared candidate
+policy against retained baseline. Post-first-region cancel is a control, not
+planning latency. Full-app claims need input/publication/sustained-memory evidence.

@@ -13,14 +13,10 @@ Ratios are B/A, Metal over ES2; the control limit is 1.05 for every metric.
 
 ## Decision
 
-Both campaigns end `inconclusive`: 66 of 103 groups pass the 1.05 limit and
-none fail, but the remaining 37 groups do not exclude a Metal slowdown beyond
-5% at the declared sample sizes. Non-inferiority of Metal is therefore not
-established. No group shows Metal slower beyond the limit, most screen-latency
-groups favor Metal, and the render thread spends about five times less time
-per pulse under Metal (diagnostic). The evidence does not block an evaluation
-of Metal on macOS; a switch still needs the visible checks and the portable
-suite listed in the protocol, and it would apply only to the measured Mac.
+Both `inconclusive`: 66/103 pass 1.05, none fail, 37 cannot exclude >5% loss.
+Non-inferiority unproven; no definite over-limit slowdown. Most screen groups
+favor Metal; diagnostic pulse render work ~fivefold lower. Evaluation remains
+reasonable, activation still needs protocol visible/portable gates, measured Mac only.
 
 ## Publication pairs
 
@@ -123,13 +119,10 @@ Verdict: `fail`, 19 of 28 groups pass, 8 are inconclusive and 1 fails.
 | 3024x1964 | pan-25 | Fast | full post-layout | 50.84 | 45.91 | 0.957 | 0.931–0.985 | pass |
 | 3024x1964 | pan-25 | Refined | full post-layout | 50.85 | 45.37 | 0.957 | 0.921–0.979 | pass |
 
-The table lists all 9 non-passing groups and the two largest improvements; the
-other 17 groups pass. The failing group reproduces the first campaign's
-3024x1964 Refined outlier with a larger budget: per-process median ratios range
-from 0.15 to 9.76, above 1 in 36 and above 2 in 19 of 60 process pairs, so the slow Metal
-first visible publish is frequent rather than an occasional pair. The 1512x982
-pan step remains about 0.3–0.4 ms slower under Metal. These metrics end on the
-FX thread and do not show where the delay originates.
+Table: 9 nonpasses/two biggest gains; 17 others pass. 3024x1964 Refined
+failure repeats at larger budget: process medians 0.15–9.76, >1 in 36/>2 in
+19 of 60 pairs, not rare. 1512x982 pan still ~0.3–0.4 ms slower. FX endpoints
+do not locate delay.
 
 ### Screen latency pairs
 
@@ -141,11 +134,9 @@ before any pair completed, and is kept privately as invalid evidence.
 
 ### Decision
 
-The publication campaign has a failing group. Under the predeclared rule this
-rejects default Metal activation under the performance gate, independent of the
-screen-latency result. This is a timing result for one Mac; it does not change
-the Space-switching motivation, and any activation despite it would need a new
-owner decision that records the trade-off without relabeling the result.
+Publication failure rejects default under timing rule regardless of screen
+result. One-Mac timing preserves Spaces motivation; activation needs owner
+trade-off decision, never relabeling.
 
 ### Failing group diagnosis (diagnostic)
 
@@ -164,27 +155,18 @@ delay before the backend starts:
 | First visible publish | 6.61 | 11.25 |
 | Backend render | 39.10 | 38.53 |
 
-First backend region to first visible publish takes about 0.1–0.2 ms under
-both pipelines. For this fixture `plan_ms` covers only the allocation of a
-fresh `RenderFrame` on the FX thread; no Prism code runs in it. It is bimodal,
-about 2 ms or 7–16 ms, and the slow mode follows heap occupancy before the
-sample: below about 400 MiB it stays near 1.9 ms under both pipelines, above
-800 MiB it is 8.5 ms (ES2) and 11.4 ms (Metal). Heap occupancy before the
-sample is higher under Metal (median 980 → 1226 MiB in Refined, 794 → 1021 MiB
-in Fast). Slow allocations occur mostly in samples without a GC: in ES2 Fast,
-111 of 141 samples without a GC and 6 of 39 with a GC are slower than 4 ms.
+Backend→visible ~0.1–0.2 ms both. Here `plan_ms` is fresh FX `RenderFrame`
+allocation, no Prism: bimodal ~2 or 7–16 ms. Pre-sample heap <400 MiB →~1.9 ms;
+>800 →ES2 8.5/Metal 11.4 ms. Metal heap higher: Refined 980 →1226 MiB,
+Fast 794 →1021 MiB. Most slow allocations have no GC: ES2 Fast >4 ms in
+111/141 no-GC versus 6/39 GC samples.
 
-Six JFR JVMs per pipeline (`settings=profile`, alternating order) show the same
-Java allocation profile under both pipelines (`int[]` about 34%, `double[]`
-24%, `FractalSample` 24–26%, the same per-thread split) and similar GC pause
-medians (about 0.9 ms for humongous-allocation pauses). Metal JVMs had fewer
-humongous-allocation collections (504 against 612). On the FX thread, 45 ES2
-and 44 Metal execution samples fall inside `RenderFrame.create`. Of these, 43
-ES2 and 42 Metal samples are in `Arrays.fill` called from the `FractalData`
-constructor, which fills the full-size orbit-trap distance array with `NaN`;
-the remaining two per pipeline are in `RenderGrid` construction, including
-`BigDecimal` operations. Sampling cannot separate the
-fill itself from page faults on newly committed memory that the fill touches.
+Six alternating JFR JVMs/pipeline (`settings=profile`): same allocations/thread
+split (`int[]` ~34%, `double[]` 24%, `FractalSample` 24–26%), humongous GC
+median ~0.9 ms. Metal 504 collections versus ES2 612. FX samples in
+`RenderFrame.create`: ES2 45/Metal 44; 43/42 in `Arrays.fill`/`FractalData`
+full trap array `NaN`, two each in `RenderGrid`/`BigDecimal`. Sampling cannot
+separate fill from first-touch page faults.
 
 The campaign JVMs use the default initial heap, 8 MiB, which grows to its
 4 GiB limit in 9–25 capacity steps per JVM, with no systematic difference
@@ -202,28 +184,18 @@ A fixed heap size alone removes the Refined difference and its slow tail;
 pre-touching adds no measurable Refined change. Fast frame planning stays at
 5–7 ms with wide spread in both controls and does not favor ES2.
 
-The failing group is therefore localized to frame preparation on the FX
-thread, the allocation and `NaN` fill of a fresh full-size frame, and depends
-on the JVM heap-sizing state rather than on the Prism publication path. The
-mechanism is not established: first-touch cost of memory committed during heap
-growth is consistent with these runs but remains a hypothesis, as does the
-reason the heap state differs under Metal. The controls are diagnostics, not a
-protocol change. The product path also prepares a fresh frame on the FX
-thread, so preparing it off the FX thread is a candidate change that would
-need its own measurement, including cancellation, generation and memory
-checks.
+Delay localizes to FX fresh-frame allocation/`NaN` fill and heap-sizing state,
+not Prism publication. First-touch during heap growth and differing Metal heap
+state remain hypotheses. Diagnostic controls do not alter protocol. Production
+also allocates on FX; worker preparation needs separate measurement/cancel/
+generation/memory gates.
 
 ### Frame preparation change (diagnostic, 2026-10-28)
 
-`FractalData` now allocates the orbit-trap distance plane only when the
-frame's formula has an orbit trap or is a custom formula without that
-guarantee; built-in presets without a trap report `NaN` without the
-full-size `NaN`-filled array. At 3024x1964 this removes about 47 MB of
-allocation and the `Arrays.fill` from every fresh frame prepared on the FX
-thread. A first variant that allocated the plane lazily on the first finite
-distance made FX-thread coloring about 16 ms slower per frame because every
-pixel read checked a volatile field; it was replaced by the construction-time
-decision recorded here.
+`FractalData` allocates trap plane for traps/custom formulas without no-trap
+guarantee only; built-ins otherwise return `NaN` without array. At 3024x1964,
+~47 MB/`Arrays.fill` removed per FX frame. Lazy first-finite variant added ~16 ms
+coloring via per-pixel volatile reads; replaced by construction-time decision.
 
 Six alternating JVMs per variant with the campaign launch commands and
 default heap, comparing the frozen `f8895b6` build with the changed working
@@ -237,13 +209,10 @@ tree (18 samples per group; diagnostic, not a protocol verdict):
 | Fast | first visible publish, median ms | 4.64 | 11.22 | 3.15 | 5.96 |
 | Refined | full publish, median ms | 56.26 | 70.73 | 50.00 | 51.92 |
 
-FX-thread coloring work is unchanged (about 24–25 ms for the overview,
-1.5 ms for the pan step), and ARGB hashes match across all four variants in
-all 16 measured groups. The heap-dependent slow mode of the failing group is
-much rarer, but frame planning still varies with heap state because the
-remaining sample arrays are allocated per frame, and Fast first visible
-publish remains slower under Metal in this small run. Whether the timing gate
-now passes needs a new predeclared paired campaign; the `fail` above stands.
+Color work unchanged (~24–25 ms overview/1.5 ms pan); ARGB matches four variants/
+16 groups. Heap slow mode rarer, remaining per-frame arrays still vary planning;
+Fast first-visible still slower Metal in small run. New predeclared campaign
+needed; historical `fail` stands.
 
 ### Post-change publication campaign (P1.7, 2026-10-28)
 
@@ -267,22 +236,15 @@ Verdict: `fail`, 25 of 28 groups pass, 2 are inconclusive and 1 fails.
 | 1512x982 | overview | Fast | first visible publish | 2.08 | 2.25 | 0.894 | 0.834–0.960 | pass |
 | 3024x1964 | aa-regular | Fast | first AA tile | 5.76 | 5.33 | 0.925 | 0.890–0.971 | pass |
 
-The table lists all 3 non-passing groups and the two lowest ratios. The group
-that failed the confirmation campaign is now inconclusive, with both medians
-about 2.3 ms instead of 6.6 and 11.3 ms. Of the eight groups that were
-inconclusive there, seven now pass (the 1512x982 first AA tile, both
-1512x982 pan first post-layout steps and all four 3024x1964 overview
-full-publication groups), and 3024x1964 Fast first visible publish stays
-inconclusive. A different group now fails: 1512x982
-Refined first visible publish, a difference of about 0.1 ms on a sub-1.5 ms
-metric, which passed in the confirmation campaign.
+Table: all 3 nonpasses/two lowest ratios. Former failure now inconclusive,
+medians ~2.3 ms versus 6.6/11.3. Seven of eight prior inconclusives pass:
+1512x982 first AA, both 1512x982 pan first post-layout, four 3024x1964 full
+publication. 3024x1964 Fast first remains inconclusive. New failure: 1512x982
+Refined first, ~0.1 ms on <1.5 ms, previously passing.
 
-Decision: the campaign has a failing group, so under the predeclared rule it
-again rejects default Metal activation under the performance gate,
-independent of the screen-latency result. The frame-preparation change
-removed the large heap-dependent delay, but the gate, as declared, is not
-passed. Any activation despite it needs an explicit owner decision that keeps
-this result labeled `fail`.
+Again `fail`: default activation rejected under declared performance rule,
+independent of screen result. Large heap delay removed, gate still not passed;
+owner exception must retain `fail` label.
 
 ### Post-change failing group diagnosis (diagnostic)
 
@@ -303,16 +265,10 @@ publish:
 | First backend region to first visible publish | 0.111 | 0.142 |
 | First visible publish | 1.031 | 1.130 |
 
-The difference sits mainly in the frame-planning tail. The per-sample GC
-counter covers the whole measured operation, including the pixel snapshot
-taken after the timed interval, so it shows that a collection happened during
-the sample, not when. ES2 recorded a GC during 113 samples with unchanged
-planning (median 0.227 ms); Metal recorded a GC during 87 samples, and their
-planning median rose to 0.825 ms. Planning
-exceeded 0.5 ms in 59 Metal and 7 ES2 samples. Without those slow samples,
-first visible publish is 1.027 ms (ES2) and 1.057 ms (Metal). In the Fast
-overview group, which runs first, slow planning occurred in 116 ES2 and 119
-Metal samples.
+Tail is mostly planning. Whole-operation GC includes post-timing snapshot,
+proving collection but not placement. ES2 113 GC samples/0.227 ms planning;
+Metal 87/0.825 ms. >0.5 ms planning: Metal 59/ES2 7; without these, first
+visible 1.027/1.057 ms. Earlier Fast overview: slow planning ES2 116/Metal 119.
 
 Six alternating JVMs per pipeline on the frozen `2a19472` build, with the
 campaign launch commands plus GC logging and JFR recording of outside-TLAB
@@ -328,54 +284,35 @@ pauses were attributed):
 | `SurfaceBuffer` (FX) | 19 | 29 | 0.82 / 0.86 ms |
 | Metal render-target texture (render thread) | — | 4 | — / 0.97 ms |
 
-Under both pipelines, the most frequent attributed site of these pauses of
-about 0.85–0.9 ms is the frame's sample arrays allocated on the FX thread,
-which is consistent with the added planning time. Metal also allocates about 30 MB of
-render-target arrays per JVM on the render thread, against about 10.7 GB
-allocated outside TLABs by the FX thread; this may shift when collections
-fall, but that and the link of individual pauses to individual samples of the
-failing group remain inferred, because the benchmark records no timestamps.
-Benchmark verification snapshots also allocate large arrays on the FX thread
-outside the timed interval and shape the heap state for the next sample.
+Both attribute ~0.85–0.9 ms pauses most often to FX sample arrays. Metal render
+targets add ~30 MB/JVM on render thread versus ~10.7 GB outside TLAB on FX;
+GC placement/link to failing samples is inferred without timestamps. Untimed FX
+verification arrays also shape later heaps.
 
-The most likely explanation of the remaining failure is therefore a GC pause
-during FX-thread frame allocation rather than slower Metal publication. It is
-not proven: confirming it would require correlating the timed interval of each
-sample with pause timestamps, which the benchmark does not record. If it holds,
-removing the failure would require not allocating full-size frame storage on
-the FX thread for each render, a larger change with its own cancellation,
-generation and memory checks.
+Likely FX-allocation GC, not slower publication, but unproven without sample/pause
+timestamps. If confirmed, moving per-render full-frame allocation needs separate
+cancel/generation/memory validation.
 
 ### Sample-to-GC diagnostic instrumentation (2026-10-29)
 
-The [diagnostic protocol](PRISM_PIPELINE_BENCHMARK.md#sample-to-gc-correlation-diagnostics-p17)
-now provides per-request JFR boundaries, a bracketed monotonic/JFR clock bridge,
-and an analyzer that joins those events to the matching successful benchmark
-CSV before reporting overlaps with outer stop-the-world GC pauses. Snapshot
-copy intervals are separate from request-to-first-visible intervals.
+[Diagnostic protocol](PRISM_PIPELINE_BENCHMARK.md#sample-to-gc-correlation-diagnostics-p17)
+adds request JFR, bracketed monotonic bridge and matching-successful-CSV joins to
+outer STW pauses; snapshot/first-visible intervals remain separate.
 
-The initial restricted-shell attempt at the planned three-pair graphical
-diagnostic run did not collect measurements: the first ES2 JVM loaded its native library but `MacGLFactory` failed to
-initialize, ending with `No toolkit found` before any sample. The restricted
-execution environment did not provide a working ES2 context; desktop Terminal
-access was also unavailable through the automation tool. This is invalid
-execution evidence, not a pipeline timing result or a demonstrated defect in
-the new diagnostic instrumentation. Raw startup logs remain private.
+Restricted first three-pair attempt collected nothing: ES2 native loaded,
+`MacGLFactory` initialization failed/`No toolkit found` before samples. No working
+restricted ES2 context; desktop Terminal automation unavailable. Invalid evidence,
+not timing/instrumentation-defect proof. Startup logs private.
 
-That attempt left the allocation/GC explanation `inconclusive`. No production
-optimization or default-pipeline change was introduced and no historical result
-was relabelled. The separate desktop run below subsequently collected real-frame
-correlations; it does not turn the failed shell attempt into valid evidence.
+That attempt leaves cause `inconclusive`; no production/default change or relabeled
+history. Later desktop correlations do not validate the failed shell execution.
 
 ### Desktop sample-to-GC correlation (diagnostic, 2026-10-29)
 
-Executed the predeclared three-pair budget in IntelliJ IDEA's active macOS
-desktop terminal, with `caffeinate -d -i -u --`. ES2 and Metal initialized
-successfully there, establishing an execution-environment boundary for the
-restricted-shell startup failure above. Order: ES2/Metal, Metal/ES2, ES2/Metal.
-The build was frozen for all six JVMs; every compiled-file hash matched before
-and after the run. Measured candidate identity (including the diagnostic source
-changes, not reproducible from the base revision alone):
+Three predeclared pairs in IDEA active macOS terminal/`caffeinate -d -i -u --`:
+ES2/Metal, Metal/ES2, ES2/Metal. Both initialize, locating shell failure to environment.
+Six frozen JVMs, before/after hashes match. Identity includes working diagnostic
+changes, not reconstructible from base alone:
 
 ```yaml
 baseRevision: ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2
@@ -391,13 +328,9 @@ each cold sequence. All 12 before/after observations reported AC power and
 nominal thermal pressure. No competing build or test was launched during the
 series; unrelated desktop activity was not independently monitored.
 
-Each JVM recorded 112 requests including cold/warmup work and 48 measured
-requests. All six completed the same-grid CPU sample/ARGB conformance checks;
-all paired sample/ARGB fingerprints matched exactly for every request. The
-analyzer matched every JFR request to its CSV identity and timing boundaries;
-no missing requests. It correlated 288 measured requests in total. The maximum
-clock-anchor bracket among measured requests was 2.916 microseconds. There
-were no planning intervals with possible-but-not-definite GC overlap.
+Per JVM 112 requests/48 measured; all six exact same-grid CPU/paired ARGB pass.
+JFR/CSV IDs/boundaries fully matched, 288 measured total, max anchor bracket
+2.916 microseconds; no possible-only planning GC overlap.
 
 The table reports every overview group, nine measured samples per row across
 three JVMs. Times are descriptive pooled medians in milliseconds; no confidence
@@ -415,37 +348,22 @@ GC counts mean samples with at least one definite outer `GCPhasePause` overlap.
 | 3024x1964 | Refined | ES2 | 0.633 | 1.983 | 1/9 | 0/9 |
 | 3024x1964 | Refined | Metal | 2.340 | 4.166 | 1/9 | 0/9 |
 
-For the historically failing 1512x982 Refined group, no measured request under
-either pipeline had even a possible GC pause overlap before first visible
-publication. Two ES2 planning samples exceeded 0.5 ms (0.959 and 0.701 ms),
-with no GC overlap; no Metal planning sample exceeded 0.5 ms. Each pipeline
-instead had two GC-overlapping snapshots after timing had ended. Thus this run
-does not reproduce the historical failure or confirm its proposed GC cause.
-The untimed snapshot GC pauses must not be attributed to first-visible latency.
+Historical 1512x982 Refined: no possible pre-first-visible GC either pipeline.
+ES2 planning 0.959/0.701 ms exceed 0.5 without GC; Metal none >0.5. Each pipeline
+has two post-timing GC snapshots. Failure/cause not reproduced; snapshots cannot
+explain measured first-visible.
 
-The larger frame demonstrates that GC can fall inside planning without
-accounting for the whole delay. For 3024x1964 Refined, the single GC-overlapping
-planning sample was 7.661 ms on ES2 with 1.786 ms of overlapping pause, and
-6.214 ms on Metal with 1.424 ms of overlapping pause. For the eight samples
-without planning GC overlap, median planning was still 0.620 ms (ES2) and
-2.337 ms (Metal). Excluding samples is a diagnostic partition only; it does not
-produce a corrected performance verdict. The remaining time is not attributed
-to a particular allocator, zeroing, scheduling or concurrent-GC mechanism by
-these measurements.
+3024x1964 Refined GC-overlap sample: ES2 planning 7.661 ms/pause 1.786;
+Metal 6.214/1.424. Eight no-overlap samples still median 0.620/2.337 ms.
+Partition is diagnosis, not corrected verdict; residual allocator/zeroing/scheduling/
+concurrent-GC cause unassigned.
 
-Decision: sample-to-pause correlation is now exercised on real frames, but the
-GC explanation for the historical failing group remains `inconclusive`. A GC
-pause alone does not explain every slow planning sample. Do not start a broad
-frame-storage optimization on the assumption that this cause has been proven.
-A further investigation should distinguish allocation/initialization work from
-other stalls inside planning, using a separately declared diagnostic budget.
-The three-pair budget is complete and is not extended to obtain a different
-outcome. Both historical publication `fail` results and all outstanding timing,
-Spaces, packaging and platform gates remain unchanged. Raw recordings, CSVs,
-launch records, compiled-file hashes and the working analysis remain private;
-only this sanitized summary is selected here, so a public checkout cannot
-replay its raw correlations.
-
+Real-frame correlation works, historical GC cause remains `inconclusive`; not
+all planning stalls are GC. No broad storage optimization on presumed cause.
+New separate budget should isolate allocation/initialization from other waits.
+Three-pair budget complete, no outcome-driven extension. Both historical publication
+`fail`, outstanding timing/Spaces/packaging/platform gates unchanged. Raw JFR/CSV/
+launches/hashes/analysis private; only sanitized summary public, not replayable raw.
 
 ### Fresh-frame planning decomposition (diagnostic, 2026-10-29)
 
@@ -466,28 +384,19 @@ mergeBase: ffeb29e62debc0ac3cf4bbf1b57afe6802a4fdc2
 contentId: sha256:d85cb89a29b9ef816bfb08ad4ada1890e03ac23d64ced2fa9a0f18af1b9252c5
 ```
 
-The private JFR configuration was generated from this JDK's `profile.jfc` with
-the protocol's constructor, allocation and safepoint settings. Its SHA-256 is
-`6e3807cb2e317f8737ff1e3c7824a580c0822ad662b2c6aa89b844b2ca4275dc`. Both it and every
-compiled-file hash were unchanged across the six JVMs. This configuration
-instruments constructor execution and changes allocation/timing; the samples
-must not be treated as unprofiled pipeline-performance measurements.
+Private JFR from JDK `profile.jfc` plus constructor/allocation/safepoint settings,
+SHA-256 `6e3807cb2e317f8737ff1e3c7824a580c0822ad662b2c6aa89b844b2ca4275dc`.
+Config/classes unchanged across six JVMs. Constructor profiling alters timing/
+allocations; not unprofiled pipeline evidence.
 
-All actual pipelines, 112 request identities per JVM, same-grid CPU conformance
-and paired sample/ARGB fingerprints passed. Of 288 measured requests, 216
-created fresh frames and provided the new subintervals. Every such interval
-matched exactly one `FractalData` and one `ValidityMask` constructor trace on
-the recorded constructing thread. Reuse requests remained on their original
-path and are not represented as zero-cost creations. Thread CPU accounting was
-available. The largest clock-anchor bracket among fresh measured samples was
-2.250 microseconds.
+Actual pipelines/112 IDs per JVM/exact CPU/paired hashes pass. Of 288 measured,
+216 fresh frames provide subintervals, each matching one `FractalData`/`ValidityMask`
+trace on constructing thread. Reuse stays original, not zero-cost creation.
+CPU timer available; max fresh anchor bracket 2.250 microseconds.
 
-Each recording contained two unmatched safepoint beginnings. The early one
-preceded the first frame and was bounded by the next safepoint beginning,
-also before the first frame; the late one followed the last frame. Their
-possible intervals miss every fresh-frame window, including cold/warmup work.
-Other begin/end events were paired by ID. Safepoint envelopes are not added to
-GC overlap, which can describe the same stop.
+Two unmatched safepoint starts/recording: early bounded by next start, both
+before first frame; late after last. Possible intervals miss all fresh/cold/warm
+frames. Pair others by ID; never add safepoint and overlapping GC stops.
 
 All overview groups are shown below. Each row pools nine measured samples
 across three JVMs; columns are independent descriptive medians in milliseconds,
@@ -514,45 +423,27 @@ The 3024x1964 Refined `FractalData` constructor medians by process pair were:
 | 1 | 0.517 | 0.539 |
 | 2 | 0.641 | 3.480 |
 
-The last Metal process contained two slow creations: frame wall times of
-3.496 and 3.895 ms, with FX-thread CPU times of 3.494 and 3.894 ms. Their
-`FractalData` traces were 3.480 and 3.878 ms; grid creation was 0.026 and
-0.034 ms and the mask was about 0.008 ms. Neither creation had even a possible
-GC or safepoint-envelope overlap. These samples localize the time to CPU work
-inside the sample-storage constructor, rather than a stopped or descheduled
-FX thread, grid mathematics, or validity-mask construction. This is evidence
-for these profiled samples, not proof of the cause of a historical unprofiled
-failure or a claim that all scheduling delay is measurable with these counters.
+Last Metal has two slow frames: wall 3.496/3.895 ms, FX CPU 3.494/3.894,
+`FractalData` 3.480/3.878, grid 0.026/0.034, mask ~0.008. No possible GC/
+safepoint overlap: CPU work in storage, not stopped/descheduled FX/grid/mask.
+Profiled samples only, not historical-cause proof or complete scheduling accounting.
 
-For every overview frame, outside-TLAB allocation events on the same thread
-identified the three primitive sample arrays at the `FractalData` constructor:
-19,302,240 bytes at 1512x982 and 77,208,816 bytes at 3024x1964, including array
-headers/alignment. No orbit-trap distance plane was allocated for these
-fixtures. The constructor's remaining source work is scalar initialization;
-allocation/initialization is therefore the identified CPU-work path. The
-point events do not split allocator time, implicit array clearing, native
-memory/page-fault work or instrumentation cost. Their timestamps must not be
-reported as individual allocation durations. Mask arrays may fit inside a
-TLAB, so absence of an outside-TLAB mask event is not absence of allocation.
+Every overview: same-thread outside-TLAB events identify three `FractalData`
+arrays, 19,302,240 bytes at 1512x982/77,208,816 at 3024x1964 including headers/
+alignment; no trap plane. Remaining constructor work scalar: allocation/initialization
+is identified path. Completion events do not split allocator/clearing/faults/
+instrumentation or time individual allocations. Missing outside-TLAB mask events
+can mean TLAB allocation, not no allocation.
 
-GC still explains some other creation outliers in this run. For example, a
-3024x1964 Refined ES2 sample took 1.487 ms with 0.615 ms of FX CPU time and a
-0.830 ms overlapping GC pause. The CPU-heavy Metal samples above demonstrate
-that this is not the only mechanism. No independent medians were subtracted to
-claim a GC-corrected performance result.
+GC explains other outliers: 3024x1964 Refined ES2 wall 1.487 ms, CPU 0.615,
+overlap 0.830. Metal CPU-heavy cases show another mechanism. No independent-median
+subtraction/GC-corrected verdict.
 
-Decision: the profiled slow path is localized to `FractalData` sample-array
-allocation/initialization. This supports designing a bounded, cancellable
-experiment to prepare fresh storage outside the FX thread; no such production
-change is included or promoted here. The exact allocator/clearing/page-fault
-cause and the historical performance-gate failure remain `inconclusive`.
-Do not infer a speedup from constructor tracing, pool these samples with the
-previous series, or extend the completed budget to obtain a preferred result.
-Both historical publication failures, the pending screen-latency confirmation
-and every remaining migration gate stay unchanged. Raw recordings, generated
-configuration, source patch, launch records, hashes and analysis remain private;
-only this sanitized summary is selected for the public tree.
-
+Localized profiled path: `FractalData` arrays. Justifies designing bounded
+cancellable worker-storage experiment, not production promotion. Exact allocator/
+zeroing/fault/historical failure cause stays `inconclusive`. No tracing-based speedup,
+series pooling/outcome-driven extension. Both failures/pending screen/other gates
+unchanged. Raw JFR/config/patch/launches/hashes/analysis private; sanitized summary only.
 
 ### Bounded worker preparation experiment (2026-10-29)
 
@@ -587,12 +478,9 @@ calculation were disabled. Execution used the active desktop terminal with
 pressure. No competing task-owned build/test/measurement ran; unrelated desktop
 activity was not independently monitored.
 
-All 12 JVMs exited successfully. Each contained 144 requests including
-cold/warmup work and 80 measured requests, for 960 measured requests overall.
-Every paired request identity and sample/ARGB fingerprint matched; last-sequence
-same-grid CPU conformance passed in every fixture/mode. The dedicated analyzer
-validated every declared timing group with 30 matched observations across six
-process pairs, without profiling, missing samples or fallback pipelines.
+12 JVMs exit: each 144 requests/80 measured, total 960. IDs/sample/ARGB match;
+all final same-grid controls pass. Dedicated analyzer validates all groups/30
+matched observations/six pairs, no profiling/missing samples/fallback pipelines.
 
 **Decision: `reject`.** Timing alone was `inconclusive` (46 of 84 groups pass,
 38 inconclusive, none fail), and the separately predeclared RSS cap failed.
@@ -608,14 +496,11 @@ The complete timing-group breakdown is:
 | `full_post_layout_ms` / control | 16 | 13 | 3 | 0 |
 | `first_aa_tile_ms` / control | 4 | 2 | 2 | 0 |
 
-Every fresh-frame target requires an upper 95% ratio bound <= 0.90; every
-control requires <= 1.05. The sole inconclusive fresh-frame target was
-3024x1964 overview Refined. The table below shows every overview FX-work target
-and every overview first-visible control. Times are descriptive medians in ms;
-ratios are medians of matched B/A samples, not ratios of these pooled medians.
-Confidence intervals use the predeclared 5,000 seeded hierarchical resamples.
-The full 84-group working analysis remains private; no group is removed from
-the breakdown or decision above.
+95% upper targets <=0.90, controls <=1.05. Only fresh target inconclusive:
+3024x1964 overview Refined. Table includes every overview FX target/first-visible
+control. Descriptive median ms; matched median B/A, not pooled-median ratios.
+Predeclared 5,000 seeded hierarchical resamples. All 84 groups remain in private
+analysis/decision.
 
 | Size | Requested mode | Metric | FX ms | Worker ms | B/A | 95% CI | Verdict |
 | --- | --- | --- | ---: | ---: | ---: | --- | --- |
@@ -628,11 +513,9 @@ the breakdown or decision above.
 | 3024x1964 | Refined | `first_visible_publish_ms` | 5.107 | 6.396 | 1.114 | 0.466–3.008 | inconclusive |
 | 3024x1964 | Refined | `fx_setup_ms` | 4.681 | 1.543 | 0.443 | 0.098–1.278 | inconclusive |
 
-The memory rule was an observed per-pair cap: every B/A peak RSS ratio <= 1.05.
-Peak RSS comes from `wait4` for the entire child JVM, including setup, cold and
-warmup work, rendering and conformance. It is not live-frame bytes or a memory
-leak measurement. Every pair is shown, including the initially lower worker
-peaks and both cap violations:
+Observed per-pair RSS cap <=1.05 from whole-child `wait4`, including setup/cold/
+warm/render/controls, not live bytes/leaks. Show every pair, lower worker peaks
+and both violations:
 
 | Pair / order | FX peak MiB | Worker peak MiB | B/A | Cap verdict |
 | --- | ---: | ---: | ---: | --- |
@@ -643,53 +526,33 @@ peaks and both cap violations:
 | 4 / AB | 1818.1 | 1991.8 | 1.0956 | fail |
 | 5 / BA | 1829.2 | 1907.8 | 1.0429 | pass |
 
-Pairs 3 and 4 exceeded the observed RSS budget by showing increases of about
-5.2% and 9.6%. There is no recorded basis here for attributing the higher peak
-to a particular GC/heap-commit or native-memory mechanism, and no claim that
-this is a persistent leak. It nevertheless fails the declared experiment cap;
-the valid run is not reclassified as an environment failure or rerun to obtain
-a preferable ratio. All groups and pairs remain in the result.
+Pairs 3/4 peak RSS increases 5.2%/9.6% fail cap. GC/commit/native mechanism unassigned,
+no persistent-leak claim. Valid run stays valid, never environment-reclassified/
+rerun for preferred ratios. Keep all pairs/groups.
 
-Developer correctness checks separately passed eight deterministic preparation
-lifecycle tests, 12 JavaFX driver tests on Metal and the same 12 on ES2, plus
-an all-fixture worker smoke at 96x66 in FAST/REFINED modes. They cover actual
-allocation drain on cancel, latest-request coalescing under blocked allocation,
-ready-slot replacement with delayed delivery, close before publication,
-exception handling, FX queue responsiveness and exact fresh/reused pixel
-output. The small smoke does not establish realistic-size latency; the paired
-campaign above supplies that scoped evidence. Application-level generation,
-resize/scene-transition, cache/AA and platform acceptance are not claimed by a
-benchmark-only implementation.
+Separate correctness: eight deterministic lifecycle tests, 12 FX on Metal/same
+12 ES2, all-fixture 96x66 FAST/REFINED worker smoke. Cover actual allocation
+drain, latest coalescing while blocked, delayed-ready replacement, pre-publish
+close/errors/FX responsiveness/exact fresh-reuse pixels. The small smoke does not establish realistic-size latency; the paired campaign
+provides that evidence within its declared scope. Benchmark does not accept
+app generations/resize/scenes/cache-AA/platforms.
 
-Keep the FX control as the default. The worker implementation is retained only
-as an explicit test-source experiment for reproducibility and regression tests;
-it is not wired into production and is not an accepted optimization. Lower FX
-setup work in most groups did not satisfy the joint latency/memory contract.
-No benchmark limit is relaxed and no extra process pairs are appended. Any
-future candidate needs a new declared budget and its own correctness, gesture
-latency and memory checks. P1.7's historical pipeline failures, pending screen
-latency campaign and remaining migration gates are unchanged. Raw logs, CSVs,
-launch/resource records, frozen inputs and the full analysis remain private;
-only this sanitized summary and the explicit policy are selected for publication.
+Keep FX default. Worker stays explicit test-source experiment for replay/regressions,
+not production/accepted optimization. Lower FX in most groups fails joint latency/
+memory; no relaxed limits/appended pairs. Future candidates need new budget/
+correctness/gesture latency/memory. P1.7 failures/pending screen/other gates unchanged.
+Raw logs/CSV/launch-resource/frozen inputs/full analysis private; summary/policy public.
 
+Post-review tooling, no new timings: analyzer validates full fixture×size×step/
+action against manifest. Tests delete same fixture-size across all JVMs and a
+pan step, requiring rejection. Original replay confirms 84 groups/2,520 matched
+metrics/six RSS pairs; statistics/policy/source/`reject` unchanged.
 
-Post-review tooling correction (no new timing campaign): the analyzer now checks
-the full declared fixture/size/step product against the canonical manifest,
-including step actions. A regression removes one fixture/size from every JVM's
-manifest and samples and requires rejection; an additional check covers a
-missing pan step. Revalidating the preserved original campaign confirms all
-84 groups, 2,520 matched metric observations and six RSS pairs. Its statistics,
-policy/source identities and `reject` decision above remain unchanged.
-
-A public [preparation runner](../scripts/benchmarks/run_frame_preparation.py)
-now produces the analyzer's build-before/build-after snapshots, launch/resource
-records and completion marker. Its complete orchestration is tested against
-the real analyzer using synthetic child outputs; its headless preflight was
-also exercised against the preserved byte-identical experiment binaries. The
-historical campaign used the private working runner, not this later public
-implementation. No new measured campaign was run with the public runner in
-this correction. Fresh-run and preflight commands are in the protocol; the
-historical raw archive remains private.
+Public [preparation runner](../scripts/benchmarks/run_frame_preparation.py) now
+writes before-after builds/launch-resource/completion. Synthetic children test
+full orchestration against real analyzer; headless preflight exercised preserved
+byte-identical binaries. Historical private runner was different; no new public-
+runner measured campaign. Protocol has fresh/preflight commands; raw archive private.
 
 ## Limits
 

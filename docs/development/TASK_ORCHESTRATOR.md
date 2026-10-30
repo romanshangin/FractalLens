@@ -1,9 +1,8 @@
 # Task orchestrator v1
 
-The local TypeScript runner selects workflow stages with a deterministic state
-machine. It uses no manager model, runtime dependencies, parallel agents, automatic
-merge, or automatic recovery from unknown results. Stages run through the Codex
-CLI (default) or Claude Code (`--executor claude`).
+Local TypeScript deterministic state machine, executed by Codex CLI (default)
+or Claude Code (`--executor claude`). No manager model, runtime dependencies,
+parallel agents, automatic merge or unknown-result recovery.
 
 ## Requirements and launch
 
@@ -59,33 +58,25 @@ Execute the same workflow with Claude Code stage executors:
 node scripts/orchestration/task-orchestrator.ts --executor claude --task "P2.3 - Task description"
 ```
 
-The state machine, handoffs, repair budget, candidate identity, check harness,
-resume and delivery gates are shared; only the stage executor, role models and
-the skill binding line of the prompt differ. One run uses one executor for all
-stages.
+Both executors share state machine, handoffs, repair budget, candidate identity,
+check harness, resume/delivery gates. Only executor, role models and prompt skill
+binding differ; each run uses one executor throughout.
 
-Use `--repo` for another FractalLens checkout, and `--codex` or `--claude` for
-an explicit CLI executable. Arguments are passed without a shell. On Windows,
-use the native executable rather than a `.cmd` wrapper. Model IDs are passed
-exactly as listed below; availability depends on the configured account. There
-is no silent model substitution.
-Use `--base` to select the intended remote-tracking PR-base ref (default: `origin/main`).
-Remote-tracking refs such as `origin/release-2` or
-`refs/remotes/origin/release-2` are refreshed from their configured remote before
-model execution. Every role receives the original ref, normalized PR branch
-(`release-2`), and frozen base SHA. Local branches (`main`, `refs/heads/main`),
-commit IDs and tags are rejected before any role starts: they cannot establish
-freshness of the remote PR base. Use `origin/main`, `origin/release-2`, or
-`upstream/main` instead.
-An unavailable base or failed refresh stops before model execution. Dry-run
-performs no fetch or other mutation.
+Options: `--repo` selects another checkout; `--codex`/`--claude` selects the CLI.
+Arguments bypass shells; Windows needs native executables, not `.cmd` wrappers.
+Model IDs are passed exactly as listed, subject to account availability; no silent
+substitution. `--base` selects the remote-tracking PR base (default `origin/main`).
+Refresh `origin/release-2`/`refs/remotes/origin/release-2` from their configured remote
+before models; roles receive original ref, normalized PR branch (`release-2`) and
+frozen SHA. Local branches (`main`, `refs/heads/main`), commits and tags are rejected
+before stages: they cannot prove remote freshness. Use `origin/main`,
+`origin/release-2` or `upstream/main`. Missing base/failed refresh stops before models.
+Dry-run neither fetches nor mutates.
 
-The comparison base SHA stays fixed through implementation, review and
-verification. Immediately before DELIVER, the runner refreshes the remote base
-again and requires the same SHA. A changed or unavailable base stops as
-`INCOMPLETE` before the delivery executor starts. Refresh commands have a
-30-second timeout. This is a pre-publication check, not a lock on the remote
-branch; it can still advance after the check.
+Freeze base SHA through implementation/review/verification. Before DELIVER,
+refresh again; changed/unavailable SHA stops `INCOMPLETE` before executor launch.
+Refresh timeout: 30 seconds. This pre-publication check does not lock the remote,
+which can advance afterward.
 
 ## Roles and transitions
 
@@ -96,50 +87,37 @@ branch; it can still advance after the check.
 | VERIFY | `verify-task` | `gpt-6-luna` | `claude-sonnet-5-5` | medium | workspace-write | never |
 | DELIVER | `deliver-task` | `gpt-6-luna` | `claude-sonnet-5-5` | low | workspace-write | allowed |
 
-Every executor is bound to the shared skill file
-`.agents/skills/<skill>/SKILL.md`. Codex prompts use its `$skill` mention;
-Claude Code prompts tell the model to read that file in full, because the
-`.claude/skills` wrappers for `verify-task` and `deliver-task` disable model
-invocation and Claude Code stages run with skills and slash commands disabled.
+Executors bind `.agents/skills/<skill>/SKILL.md`: Codex via `$skill`, Claude via
+explicit full-file reading. Claude disables skills/slash commands; `.claude/skills`
+`verify-task`/`deliver-task` wrappers disable model invocation.
 
 ### Codex permissions
 
-REVIEW and VERIFY receive their explicit `--sandbox` setting and
-`approval_policy="never"`, without `--approve-for-me`. IMPLEMENT,
-IMPLEMENT_FIXES and DELIVER use `--approve-for-me` to allow approval review.
-VERIFY may create normal build, test and diagnostic artifacts in ignored build
-directories or outside the repository. It must not modify candidate source,
-tests, build configuration, dependencies, documentation or other content that
-affects validation. The orchestrator checks candidate identity after VERIFY;
-nonignored untracked artifacts also change identity and stop the run.
-Checks needing unavailable network, desktop or other access remain `INCOMPLETE`;
-VERIFY cannot escalate. Sandbox policies govern local commands; external MCP
-servers and connectors have separate controls.
+REVIEW/VERIFY use explicit `--sandbox`, `approval_policy="never"`, no
+`--approve-for-me`; IMPLEMENT/IMPLEMENT_FIXES/DELIVER use approval review via
+`--approve-for-me`. VERIFY may write build/test/diagnostic output only in ignored
+build paths or outside the repository, never candidate source, tests, build settings,
+dependencies, docs or validation-affecting content. Post-VERIFY identity checks
+stop on mutations, including nonignored untracked artifacts. Unavailable network/
+desktop/access leaves checks `INCOMPLETE`; VERIFY cannot escalate. Sandbox governs
+local commands; external MCP/connectors have separate controls.
 
 ### Claude Code permissions
 
-Every Claude Code stage runs `claude --print --output-format stream-json --verbose` with the
-role's `--model` and `--effort`, `--no-session-persistence`,
-`--permission-prompts none` (anything that would prompt is denied),
-`--disable-slash-commands`, `--disallowedTools Agent` (no subagents) and
-`--settings` with `autoMemoryEnabled=false`, so stages neither read nor write
-saved Claude Code memories.
+All Claude stages use `claude --print --output-format stream-json --verbose`,
+role `--model`/`--effort`, `--no-session-persistence`, `--permission-prompts none`
+(deny prompts), `--disable-slash-commands`, `--disallowedTools Agent` (no subagents),
+`--settings` with `autoMemoryEnabled=false` (no saved-memory reads/writes).
 
-- IMPLEMENT, IMPLEMENT_FIXES and DELIVER use `--permission-mode auto`: the
-  auto-mode classifier reviews tool calls instead of a person, the equivalent
-  of Codex `--approve-for-me`. The user's own sandbox, permission and MCP
-  settings apply.
-- REVIEW and VERIFY use `--permission-mode dontAsk` with only the `Bash`,
-  `Read`, `Grep` and `Glob` tools (no `Edit`, `Write`, `NotebookEdit`, `Agent`
-  or web tools) and `--strict-mcp-config`, which loads no MCP servers. Bash runs
-  in the Claude Code sandbox with `failIfUnavailable=true` and
-  `allowUnsandboxedCommands=false`: a missing sandbox stops the stage instead
-  of running unsandboxed, and commands cannot request an unsandboxed retry.
-  REVIEW denies sandboxed writes to the repository and the private run
-  directory; VERIFY keeps the default write scope (the repository) and may
-  also write the private run directory, which holds the check registry and
-  logs. Sandboxed network access is limited to configured domains, so checks
-  needing other network access remain `INCOMPLETE`, as with Codex.
+- IMPLEMENT/IMPLEMENT_FIXES/DELIVER: `--permission-mode auto`, classifier review
+  equivalent to Codex `--approve-for-me`; user sandbox/permission/MCP settings apply.
+- REVIEW/VERIFY: `--permission-mode dontAsk`; only `Bash`, `Read`, `Grep`, `Glob`,
+  no `Edit`, `Write`, `NotebookEdit`, `Agent` or web. `--strict-mcp-config` loads
+  no MCP. Bash sandbox requires `failIfUnavailable=true`,
+  `allowUnsandboxedCommands=false`: no missing-sandbox bypass/unsandboxed retry.
+  REVIEW cannot write repository/private run directory; VERIFY may write default
+  repository scope and private run registry/logs. Network is limited to configured
+  domains; other required access leaves checks `INCOMPLETE`, like Codex.
 
 The Claude Code sandbox is available on macOS, Linux and WSL; on other
 platforms REVIEW and VERIFY stop as `INCOMPLETE`. Flag settings combine with
@@ -148,15 +126,12 @@ managed policies from those files still apply and are trusted local
 configuration. Like the Codex sandbox, this governs local commands, not an
 attestation that a stage behaved as instructed.
 
-Each invocation starts a fresh ephemeral CLI session with the task and only the
-latest relevant handoffs. The Codex runner reads the final message file; the
-Claude Code runner reads only the `result` field of the last `type=result`
-stream-json event on stdout and requires `subtype=success` and `is_error=false`.
-Only trailing `command_lifecycle` events may follow that result; any other
-trailing event, or a non-JSON line, means the stage did not complete. CLI
-progress, stderr and diagnostic output cannot select a state. The first
-nonempty line of the report must be a bare role status, such as `CLEAN`,
-without Markdown decoration or other text.
+Each invocation is ephemeral with task/latest relevant handoffs only. Codex reads
+its final-message file; Claude reads the last stdout `type=result` event's `result`,
+requiring `subtype=success`, `is_error=false`. Only `command_lifecycle` may follow;
+other trailing events/non-JSON lines mean incomplete execution. Progress/stderr/
+diagnostics never select state. First nonempty report line must be a bare role
+status such as `CLEAN`, without Markdown or extra text.
 
 Handoffs contain only the evidence needed by the next role:
 
@@ -169,10 +144,9 @@ Handoffs contain only the evidence needed by the next role:
 | VERIFY | Latest implementation and current `CLEAN` review |
 | DELIVER | Current REV/VER statuses and compact candidate/check summaries; no DEV report or full REV/VER text |
 
-Re-review must inspect the complete current diff and explicitly check closure
-of previous findings/failures. Historical evidence cannot serve as a new
-`CLEAN` or `PASS`. Older repair rounds are archived privately, not accumulated
-in prompts. The configured repair limit is passed to every invocation.
+Re-review covers the complete current diff and closure of prior findings/failures.
+Historical evidence is no new `CLEAN`/`PASS`. Older repairs stay privately archived,
+not accumulated in prompts; every invocation receives the configured repair limit.
 
 Passing REV/VER reports must include exactly one fenced `delivery-handoff`
 JSON block, in addition to their normal report:
@@ -181,16 +155,12 @@ JSON block, in addition to their normal report:
 {"checks":["<concise command/result/coverage>"],"limitations":[]}
 ```
 
-The model reports only checks and limitations; candidate fields are rejected.
-The block is limited to 6,000 characters and each array to 16 nonempty strings
-of at most 512 characters. `checks` must not
-be empty; `limitations` may be empty. Do not place raw logs or full reasoning
-inside this block. The runner finds the block only by its exact
-`delivery-handoff` fence info string, so a block fenced as `json` counts as
-missing; the stage prompts state the fence name and show a literal example.
-Missing, malformed, duplicate, oversized, or inconsistent
-evidence stops the runner as `INCOMPLETE` before DELIVER. With VER skipped,
-only REV evidence is required. Full reports remain in private run artifacts.
+Model supplies checks/limitations only; candidate fields are rejected. Limits:
+6,000 characters, each array ≤16 nonempty strings ≤512 characters. `checks` must
+be nonempty; `limitations` may be empty. No raw logs/full reasoning. Only exact
+`delivery-handoff` fence counts (`json` means missing); prompts name/show it.
+Missing/malformed/duplicate/oversized/inconsistent evidence stops `INCOMPLETE`
+before DELIVER. Skipped VER needs REV evidence only. Full reports stay private.
 
 Every stage report also ends with one fenced `stage-summary` JSON block, which
 the runner prints to the console after the stage finishes:
@@ -202,14 +172,11 @@ the runner prints to the console after the stage finishes:
 | VERIFY | `{"problems":[{"kind":"failure\|unverified\|environment","summary":"..."}]}` | Status, problem count per kind and each problem, or `no problems found` |
 | DELIVER | `{"pr":"<URL or null>","problems":[{"kind":"blocker\|incomplete\|ci","summary":"..."}]}` | Status, problems, PR link |
 
-The block uses the same size limits as `delivery-handoff`, with kinds of at
-most 32 characters. It is informational only: a missing, duplicate or malformed
-block, including one fenced as `json` instead of `stage-summary`, prints the
-status, the expected fence and a pointer to `report.md`, and never changes the
-stage result or the workflow. When DELIVER omits `pr`, the first GitHub pull
-request URL in its report is shown instead. Control characters in model text
-are replaced before printing. A stage whose execution fails prints the failure
-message instead.
+Same limits as `delivery-handoff`; kinds ≤32 characters. Informational only:
+missing/duplicate/malformed `stage-summary` (including a `json` fence) prints status,
+expected fence and `report.md` pointer without changing results/workflow. Missing
+DELIVER `pr` falls back to its first GitHub PR URL. Replace model control characters
+before printing; failed execution prints its failure message instead.
 
 | Stage result | Next step |
 | --- | --- |
@@ -230,15 +197,12 @@ values above three are rejected. Exceeding the limit returns `BLOCKED` with a
 review or verification repair-limit reason. Repairs invalidate old handoffs;
 a prior `CLEAN` or `PASS` cannot bypass fresh review after a fix.
 
-`READY_FOR_REVIEW` means implementation is complete and required developer
-self-validation passed; it is not full task acceptance. Independent verification
-or manual UI acceptance that cannot be performed during implementation is
-reported as a verification gap and does not by itself block IMPLEMENT or
-IMPLEMENT_FIXES, unless `AGENTS.md` or the task explicitly makes that check an
-implementation-stage gate. Required developer self-validation remains mandatory.
-`verificationRequired` selects only the transition after REVIEW `CLEAN`: VERIFY
-or DELIVER. When VERIFY cannot perform a required acceptance check, it reports
-`INCOMPLETE` and the workflow stops before delivery.
+`READY_FOR_REVIEW`: implementation and required developer self-validation complete,
+not full acceptance. Unavailable independent verification/manual UI acceptance is
+a gap, not an IMPLEMENT/IMPLEMENT_FIXES blocker unless `AGENTS.md`/task explicitly
+makes it an implementation gate. Developer checks remain mandatory.
+`verificationRequired` only routes REVIEW `CLEAN` to VERIFY or DELIVER. Missing
+required VERIFY acceptance yields `INCOMPLETE`, stopping delivery.
 
 Independent verification is required by default. Only explicit caller policy
 may skip the stage:
@@ -266,105 +230,80 @@ node scripts/orchestration/check.ts --context "${CHECK_CONTEXT}" --check scene-h
   -- ./mvnw --batch-mode --no-transfer-progress -Dtest=SceneHistoryTest test
 ```
 
-`portable-suite` always runs `./mvnw --batch-mode --no-transfer-progress test`
-through the checked-in Maven Wrapper from the repository root, and the
-environment probe records `./mvnw --version`.
-`orchestrator-tests` runs both TypeScript test files using the current Node
-executable. `git-diff-check` runs `git diff --check`. Reserved IDs reject command
-overrides. On Windows the built-in Maven command explicitly invokes `mvnw.cmd`
-through `cmd.exe` with fixed arguments. Other IDs require an executable and
-argument array after `--`; choose
-descriptive IDs that identify coverage. Arguments, selectors, profiles and JVM
-flags enter the definition hash. Commands run without a shell. On Windows use
-native executables (or an explicit interpreter for command scripts); implicit
-`.cmd` shell execution for custom commands is not supported.
+`portable-suite`: repository-root checked-in Wrapper
+`./mvnw --batch-mode --no-transfer-progress test`; environment probe `./mvnw --version`.
+`orchestrator-tests`: both TypeScript test files, current Node. `git-diff-check`:
+`git diff --check`. Reserved IDs reject overrides. Windows built-in Maven uses
+`mvnw.cmd` through `cmd.exe` with fixed arguments. Other IDs need descriptive
+coverage names and executable/argument array after `--`; arguments, selectors,
+profiles/JVM flags enter definition hash. No shell: Windows custom commands need
+native executables or explicit script interpreters, never implicit `.cmd` execution.
 
-The harness computes candidate identity before and after execution, captures the
-command's exit status and stdout/stderr, and atomically appends an execution record
-to `evidence/checks.json` under the private run directory. Each record includes
-`checkId`, `candidate`, `checkDefinitionHash`, argument-array `command`,
-`environment`, original `stage`, UTC `timestamp`, `result`, `exitCode`, `reusable`,
-`summary`, relative `log` path and `logHash`. Logs are private, not injected into
-prompts. Maven's final test-count summary retains skipped counts; Node test runs
-use the outer reporter totals rather than counts printed by nested diagnostics.
-Other commands report exit status and require log inspection for coverage.
-An exit-zero check can contain skipped tests; it does not establish that those
-tests passed.
+Harness checks identity before/after execution, captures exit/stdout/stderr and
+atomically appends private `evidence/checks.json`. Fields: `checkId`, `candidate`,
+`checkDefinitionHash`, argument-array `command`, `environment`, original `stage`,
+UTC `timestamp`, `result`, `exitCode`, `reusable`, `summary`, relative `log`,
+`logHash`. Logs stay private/out of prompts. Maven totals retain skips; Node uses
+outer reporter totals, not nested diagnostics. Other commands need log coverage
+inspection. Exit zero with skips does not pass skipped tests.
 
-A second identical invocation returns `CACHED PASS` and does not execute the
-command when the latest matching record is reusable PASS, its log is intact,
-and candidate, definition and environment still match. Only actual executions
-create records; a cache hit keeps its original stage and time. Changes to base,
-merge base, tracked/nonignored candidate content or executable definition
-invalidate reuse. Staging or committing identical content and ignored build
-output preserve it. Old records remain for diagnosis after fixes but are not
-supplied as current evidence. A later failure for the same key blocks an older
-PASS. FAIL and INCOMPLETE never skip execution.
+Identical calls return `CACHED PASS` without execution only for the latest matching
+reusable PASS, intact log and unchanged candidate/definition/environment. Only
+execution creates records; cache hits retain stage/time. Base/merge-base/content
+(tracked or nonignored)/executable-definition changes invalidate reuse; staging/
+committing identical content and ignored outputs do not. Old records remain for
+diagnosis, not current evidence. Later same-key failure supersedes PASS;
+FAIL/INCOMPLETE never skip execution.
 
-Environment comparison is deliberately strict: OS/release, architecture, Node
-version/path, Java and Maven version-probe output, command executable bytes and
-selected tool/runtime variables are hashed. The variable set covers PATH/PATHEXT,
-JAVA/JDK/MAVEN/MVN settings, CLASSPATH, NODE settings, LD/DYLD settings, locale,
-timezone and display identifiers. Values and raw version-probe output remain
-inside a private digest. Unrelated per-role Codex or Claude Code identifiers do not invalidate
-reuse. Environment mismatches cause fresh execution, even for portable checks.
+Strict environment hash: OS/release, architecture, Node version/path, Java/Maven
+probe output, executable bytes, PATH/PATHEXT, JAVA/JDK/MAVEN/MVN, CLASSPATH, NODE,
+LD/DYLD, locale, timezone/display identifiers. Values/raw probe output stay inside
+a private digest. Unrelated role-specific Codex/Claude IDs do not invalidate reuse;
+any compared environment mismatch reruns even portable checks.
 
-This v1 is a local automated-test cache, not an attestation service. It cannot
-infer changing external services, arbitrary environment variables, GPU/driver
-state, desktop focus/appearance, benchmark power conditions or dependencies
-outside the candidate. Use `--no-reuse` for such checks; the record is retained
-but cannot satisfy future runs by cache hit. Manual acceptance continues through
-`--human-evidence` and independent assessment, never an automatic cached PASS.
-Do not use custom check commands whose meaning depends on untracked external
-scripts or mutable ignored inputs unless reuse is disabled. `--fresh` forces a
-new execution for suspicious evidence or a concrete diagnostic reason; explain
-that reason in the stage report. `--timeout-seconds` accepts 1 through 86,400
-(default 1,800). Missing executables, timeout/signal or candidate identity changes
-produce INCOMPLETE, never PASS. A nonzero command exit produces FAIL; VERIFY must
-still distinguish environment failure from a product defect. Process timeout
-does not guarantee that every descendant has stopped; inspect remaining work.
+v1 is a local test cache, not attestation. External services, arbitrary variables,
+GPU/driver state, desktop focus/appearance, benchmark power and external dependencies
+need `--no-reuse`: retain execution, forbid future cache hits. Manual acceptance
+uses `--human-evidence` plus independent assessment, never cached PASS. Disable
+reuse for custom commands depending on untracked external scripts/mutable ignored
+inputs. `--fresh` reruns suspicious evidence or concrete diagnostics; explain why
+in the report. `--timeout-seconds`: 1–86,400, default 1,800. Missing executables,
+timeout/signal/identity mutation yield INCOMPLETE, never PASS; nonzero exit yields
+FAIL, still requiring VERIFY to distinguish environment/product causes. Timeout
+may leave descendants running; inspect them.
 
 The stages keep distinct responsibilities:
 
-- IMPLEMENT/IMPLEMENT_FIXES run targeted regression checks while developing and
-  the required portable/subsystem checks on the final candidate before handoff.
-  Edits after a check invalidate it, including documentation or test edits.
-- REVIEW reads code, tests and shared execution evidence. It does not repeat a
-  valid PASS for general confidence. Narrow diagnostics for a concrete suspected
-  finding remain allowed under its existing read-only permissions; their results
-  belong in the review report. REVIEW cannot write harness records.
-- VERIFY independently maps required acceptance criteria to sufficient current
-  execution evidence, executes missing checks and replaces suspicious/insufficient
-  evidence. Report reused and freshly executed checks separately. Required UI,
-  native/platform or manual gaps still mean INCOMPLETE.
-- DELIVER receives the existing compact review/verification handoffs and shared
-  check summary; execution evidence cannot replace CLEAN/PASS gates.
+- IMPLEMENT/IMPLEMENT_FIXES: targeted development checks plus required final
+  portable/subsystem checks. Later edits, including docs/tests, invalidate evidence.
+- REVIEW: inspect code/tests/shared evidence; do not repeat valid PASS for confidence.
+  Read-only diagnostics for concrete suspected findings are allowed; report them.
+  REVIEW cannot write harness records.
+- VERIFY: independently map acceptance to current evidence, run missing checks,
+  replace suspicious/insufficient evidence; separately report reused/new checks.
+  Required UI/native/platform/manual gaps still yield INCOMPLETE.
+- DELIVER: use compact review/verification handoffs and check summary; execution
+  evidence never replaces CLEAN/PASS gates.
 
-The full registry and referenced check logs are explicitly shared between roles;
-private role prompts/execution logs remain out of scope. Prompts include at most
-16 check summaries of 1,024 characters each; inspect the registry for the rest.
-Malformed registries fail closed. Missing/corrupt logs cannot supply reusable
-evidence. Concurrent harness writers fail closed using `evidence/active.lock`;
-inspect interrupted processes before removing a leftover lock. Evidence is
-not supplied to a subsequent stage while a harness execution lock remains active.
-Artifacts are created outside the candidate checkout with private permissions and must not be
-committed or uploaded. Check contexts/registries are trusted local inputs, not
-signed proof against a malicious local writer. Commands executed directly,
-outside this harness, are not automatically imported from prose or Maven output.
+Roles share the full registry/check logs, not private prompts/execution logs.
+Prompts contain ≤16 summaries, each ≤1,024 characters; inspect registry for more.
+Malformed registries, corrupt/missing logs and concurrent `evidence/active.lock`
+writers fail closed. Inspect interrupted processes before stale-lock removal;
+no evidence passes to later stages with an active lock. Artifacts live outside
+candidate with private permissions; never commit/upload. Contexts/registries are
+trusted local inputs, not signed proof against malicious writers. Direct commands
+outside the harness are not imported from prose/Maven output.
 
-Resume uses the same private evidence directory after the existing branch/base/
-candidate checkpoint guards pass. It does not rerun earlier stages or their
-matching automated checks. The existing state format and delivery gates are
-unchanged; old checkpoints without a registry have no reusable execution evidence.
+Resume reuses the private evidence directory after branch/base/candidate guards,
+without rerunning earlier stages/matching checks. State format/delivery gates are
+unchanged; older checkpoints without registries have no reusable evidence.
 
 ## Candidate identity
 
-The orchestrator computes `{baseRevision, mergeBase, contentId}` after each
-successful DEV stage and supplies that identity to REV, VER and DELIVER. It
-recomputes repository state before and after each independent stage, including
-before DELIVER even when VER is skipped. A mismatch or calculation failure
-stops as `INCOMPLETE`; mutations already made by delivery are not undone.
-Only matching, code-stamped REV/VER evidence can reach delivery.
+After successful DEV, compute `{baseRevision, mergeBase, contentId}` for REV/VER/
+DELIVER. Recheck before/after independent stages and before DELIVER even if VER is
+skipped. Mismatch/calculation failure stops `INCOMPLETE`; delivery mutations are
+not undone. Only matching code-stamped REV/VER evidence reaches delivery.
 
 One deterministic algorithm covers tracked paths changed against the frozen base
 and nonignored untracked paths:
@@ -389,77 +328,54 @@ paths, submodules, unsupported file types, non-UTF-8 paths,
 assume-unchanged/skip-worktree flags, and paths escaping the repository fail
 closed. The calculator does not mutate the index or write Git objects.
 
-The candidate includes all changes from the frozen base to the checkout. Keep
-unrelated user edits out of the candidate branch and stage only intended task
-changes. The guard detects local content/base changes; it does not prove that
-all intended task files were committed, that model-reported checks passed, or
-that a remote PR exists. The delivery role must check intended staging,
-local/remote task SHA, and PR head/base. The guard is not an atomic repository
-lock.
+Candidate includes every change from frozen base. Exclude unrelated user edits
+from its branch; stage intended task files only. Guard detects local content/base
+changes, not complete staging, real test execution or remote PR existence.
+DELIVER must verify staging, local/remote task SHA and PR head/base. No atomic
+repository lock is provided.
 
 ### Standalone stages
 
-Workflow stages run without the orchestrator use the same
-`computeCandidateIdentity` implementation from
-`scripts/orchestration/task-orchestrator.ts`, so identities from standalone and
-orchestrated stages are directly comparable. Resolve the comparison base to a
-commit SHA once, when the first stage records the candidate identity, and pass
-that frozen SHA unchanged to every later calculation for the candidate. Later
-stages take the SHA from the earlier handoff's `baseRevision` instead of
-resolving the base ref again. Run from the repository root with Node.js 24 or
-later; the same command line works in POSIX shells and PowerShell once the base
-variable is set:
+Standalone stages share `computeCandidateIdentity` in
+`scripts/orchestration/task-orchestrator.ts`, yielding comparable identities.
+Resolve base once at first identity; later calculations reuse the handoff's frozen
+`baseRevision`, never re-resolve its ref. Run from repository root with Node.js 24+;
+after setting base, the command works in POSIX and PowerShell:
 
 ```sh
 BASE_REVISION="$(git rev-parse --verify 'main^{commit}')"
 node --input-type=module -e "const { computeCandidateIdentity } = await import('./scripts/orchestration/task-orchestrator.ts'); console.log(JSON.stringify(computeCandidateIdentity(process.cwd(), process.argv[1])));" "$BASE_REVISION"
 ```
 
-Use the explicitly named base instead of `main` when the task names one. The
-command only imports the module; it does not start a workflow, mutate the
-index or write Git objects. It prints `{baseRevision, mergeBase, contentId}`;
-report all three fields. A Git tree ID, `git stash create` output, HEAD SHA,
-branch name, or self-computed SHA-256 of files or diffs is not a substitute,
-because later stages cannot compare it with this identity. If the calculation
-fails, the identity is unavailable: report the stage as `INCOMPLETE` instead of
-falling back to another fingerprint. Orchestrated stages do not run this
-command; they use the identity supplied and checked by the orchestrator.
+Use the task's explicit base instead of `main`. Importing this command starts no
+workflow, changes no index and writes no Git objects; report all
+`{baseRevision, mergeBase, contentId}` fields. Tree IDs, `git stash create`, HEAD,
+branch names or custom file/diff SHA-256 are not comparable substitutes. Calculation
+failure means unavailable identity/`INCOMPLETE`, never another fingerprint.
+Orchestrated stages use the supplied/checked identity, not this command.
 
 ## Stop behavior and private artifacts
 
-The default timeout is 30 minutes per executor. Adjust it with
-`--stage-timeout-minutes` (a whole number of minutes, 1 through 1,440). A
-timeout stops the workflow without retrying. The result reason reports
-`Codex stage timed out after <n> minutes` or
-`Claude Code stage timed out after <n> minutes`. On macOS and Linux the
-timeout stops the executor's whole process tree, including tool commands that
-run in their own process groups (Claude Code starts each Bash tool command in
-one), and then kills those processes and their groups; on Windows it uses
-`taskkill /t`. A tool process that already detached from the tree before the
-timeout can still survive; inspect remaining work before restarting.
-Commands run through `check.ts` have their own `--timeout-seconds` limit
-(default 1,800); a stage that runs a longer check needs both a larger stage
-timeout and a larger check timeout.
-A new `--task` run starts at IMPLEMENT. Only a valid, identity-checked
-`VERIFY=INCOMPLETE` result creates a resumable checkpoint. Executor errors,
-timeouts, candidate mutations, incomplete review, and any delivery result do
-not create one; inspect private artifacts before deciding how to proceed.
+Executor timeout defaults to 30 minutes; `--stage-timeout-minutes` accepts whole
+minutes 1–1,440. No retry; reasons are `Codex stage timed out after <n> minutes`
+or `Claude Code stage timed out after <n> minutes`. macOS/Linux stop then kill the
+whole executor tree and groups, including separate Bash tool groups; Windows uses
+`taskkill /t`. Already-detached tools can survive: inspect before restart.
+`check.ts` has independent `--timeout-seconds` (default 1,800); long checks require
+both limits increased. New `--task` starts IMPLEMENT. Only valid identity-checked
+`VERIFY=INCOMPLETE` creates a checkpoint; executor errors/timeouts/mutations,
+incomplete review or any delivery result do not. Inspect private artifacts first.
 
-Each live run creates a private `fractallens-task-*` directory under the system
-temporary directory. Each invocation has a separate numbered directory with
-`prompt.txt`, `execution.log`, `report.md`, and an error file when applicable.
-For Claude Code stages `execution.log` receives the stdout stream-json events
-as they are produced, so a timed-out or crashed stage still shows its progress
-and tool activity; stderr goes to `stderr.log`. The final `result` event,
-including usage and cost fields, is also copied to `output.json`.
-The run root contains `result.json` and atomically replaced `state.json`. No artifact directory is granted through
-`--add-dir`; the Codex CLI host writes its own final-message file and the
-Claude Code runner writes `report.md` from the final stdout event. Prompts prohibit
-inspection of other roles' private prompts/logs. This limits supplied context,
-but is not a hard read-isolation boundary for processes under the same user.
-These files may contain private
-task, machine, or diagnostic data. Keep them private; do not commit or upload
-them as public evidence. No run artifacts are written into the repository.
+Runs create private system-temp `fractallens-task-*`, with numbered invocation
+folders: `prompt.txt`, `execution.log`, `report.md`, applicable error file. Claude
+streams stdout JSON into `execution.log`, retaining crash/timeout progress/tools;
+stderr → `stderr.log`; final `result` (usage/cost included) → `output.json`.
+Root has `result.json` and atomically replaced `state.json`. No `--add-dir` artifact
+grant: Codex host writes final-message file; Claude runner derives `report.md`
+from final stdout. Prompts forbid reading other roles' private logs/prompts; this
+limits context, not same-user read access. Artifacts may contain private task,
+machine/diagnostic data: keep private, never commit/upload as evidence. None are
+written inside the repository.
 
 Exit code `0` means requested delivery completed, including when reported CI is
 pending or failed. It does not mean CI passed or acceptance is complete. Exit
@@ -492,31 +408,25 @@ node scripts/orchestration/task-orchestrator.ts --resume "${TEMP_DIR}/fractallen
   --human-evidence "${TEMP_DIR}/manual-acceptance.md"
 ```
 
-`--resume` alone retries VERIFY without new manual evidence. The evidence file
-must be nonempty and at most 65,536 characters. The verifier receives the current
-implementation, matching CLEAN review, previous incomplete verification report,
-and any saved/new human evidence. It assesses coverage and remaining gaps;
-manual evidence does not directly authorize PASS or skip VERIFY. PASS allows
-DELIVER, FAIL uses the remaining repair budget and requires fresh review, and
-INCOMPLETE saves another checkpoint. Fixes invalidate prior human evidence.
-Earlier IMPLEMENT/REVIEW stages are not repeated unless resumed VERIFY finds a
-failure requiring fixes.
+`--resume` alone retries VERIFY without new human evidence. Evidence must be
+nonempty, ≤65,536 characters. Verifier receives current implementation, matching
+CLEAN review, prior incomplete report and saved/new human evidence, then assesses
+coverage/gaps; human evidence neither directly grants PASS nor skips VERIFY.
+PASS → DELIVER; FAIL → remaining repair budget/fresh review; INCOMPLETE → another
+checkpoint. Fixes invalidate human evidence. IMPLEMENT/REVIEW repeat only if
+resumed VERIFY finds a failure needing fixes.
 
-Resume refreshes the remote base and requires the same base SHA, named branch,
-and candidate fingerprint before invoking any model. Changes require fresh
-review and verification. Task, repository, base, executor, verification policy
-and repair limit cannot be overridden on resume; CLI executable and timeout may
-be changed. States written before executor selection resume with Codex.
-`--dry-run` displays the resumed plan without fetching, consuming the checkpoint
-or invoking models. It does not establish current candidate/base freshness.
+Before models, resume refreshes/requires unchanged remote base SHA, named branch
+and fingerprint; changes need fresh review/verification. Task/repository/base/
+executor/verification policy/repair limit cannot change; CLI executable/timeout
+may. Pre-executor-selection states resume on Codex. `--dry-run` only displays plan,
+without fetch/checkpoint consumption/models; it does not establish current base or candidate freshness.
 
-Runs use an exclusive `active.lock` directory and consume the old checkpoint
-before model execution. Completed delivery, executor errors or unexpected
-results cannot replay from that checkpoint. A crash leaves the lock and a
-potentially nonresumable state: inspect running processes, repository and
-private artifacts before removing the stale lock. Do not edit `state.json` to
-bypass a gate. Checkpoints and human evidence are local trusted inputs, not
-signed attestations or proof that reported checks actually ran. Keep them private.
+Exclusive `active.lock` prevents concurrent runs; consume checkpoint before models.
+Delivery completion, executor errors or unexpected results cannot replay it.
+Crash may leave lock/nonresumable state: inspect processes/repository/artifacts
+before removal. Never edit `state.json` around gates. Checkpoints/human evidence
+are private trusted local inputs, not signed attestations/proof of execution.
 
 ## Local validation
 
@@ -525,25 +435,20 @@ node --test scripts/orchestration/test_task_orchestrator.ts
 node --test scripts/orchestration/test_validation_evidence.ts
 ```
 
-Tests use synthetic handoffs and fake CLI processes. They check routing, shared
-repair limits, historical finding preservation, compact handoffs, candidate
-code-owned identity, per-invocation artifact directories, role/model/effort and
-sandbox/approval arguments for both executors, Claude Code stream-json result parsing,
-strict status parsing (trailing whitespace on the
-status line is accepted; decorations are not), exception messages, timeout (including
-Claude Code tool commands in separate process groups), and dry-run
-behavior. Temporary Git fixtures check hashing, ignored outputs, staging/commit
-invariance, file modes, symlinks, unrelated work preservation, remote base refresh,
-frozen comparisons and stopping before delivery when the base moves or is unavailable.
-Resume tests cover persisted history/budget, manual evidence assessment, repeated
-pauses, checkpoint consumption, stale source/branch/base rejection and run locks.
-Execution-evidence tests run real synthetic commands and check cache hits across
-stages/resume, candidate/definition/environment invalidation, failure supersession,
-log integrity, unavailable execution, timeout, mutation and read-only boundaries.
-They spend no model tokens and
-perform no Git delivery. They do not establish live model availability,
-authentication, real role behavior, PR creation, CI results, or desktop access.
-This test command is separate from Maven and is not currently wired into CI.
+Synthetic handoffs/fake CLIs test routing, shared repair limits, prior findings,
+compact handoffs, code-owned identities, invocation artifacts, both executors'
+role/model/effort/sandbox/approval arguments, Claude stream-json parsing, bare
+statuses (trailing whitespace accepted, decorations rejected), exceptions,
+timeouts including separate Bash groups and dry-run. Temporary Git fixtures cover
+hashing, ignored outputs, staging/commit invariance, modes/symlinks, user-work
+preservation, remote refresh/frozen comparisons and pre-delivery base movement/
+unavailability. Resume covers history/budget, human evidence, repeated pauses,
+checkpoint consumption, stale source/branch/base and locks. Real synthetic-command
+evidence tests cover cross-stage/resume hits, candidate/definition/environment
+invalidation, failure supersession, log integrity, unavailable execution, timeout,
+mutation/read-only bounds. No model tokens/Git delivery; no proof of live model
+availability, authentication, real role behavior, PR/CI or desktop access.
+Tests are separate from Maven and currently not in CI.
 
 The Codex adapter follows the official
 [non-interactive Codex documentation](https://developers.openai.com/codex/noninteractive)

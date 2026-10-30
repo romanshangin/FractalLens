@@ -1,18 +1,14 @@
 # Roadmap 9.1 production input validation
 
-> Historical evidence: results and “current source” below refer to the dated
-> experiment, not a new validation of this checkout. Only the
-> [selected evidence](README.md) is included; entries marked “private archive”
-> are unavailable in this repository. Original SHA values and recorded commands
-> describe the original run and may require private revisions or inputs. See
-> [provenance and replay limits](../docs/development/PUBLICATION.md).
+> Historical evidence: results and “current source” describe the dated experiment, not validation of this checkout. Only [selected evidence](README.md) is included; “private archive” entries are unavailable here. Original SHAs/commands may require private revisions or inputs. See [provenance and replay limits](../docs/development/PUBLICATION.md).
 
-Validation spans 2026-09-07–08 local; dataset names use the UTC run date 2026-09-08. Base commit `a8ecdabb`, branch
-`codex/roadmap-9-1-input-matrix`. Saved environments identify a working-tree run;
-the final dataset includes source SHA-256 hashes. Saved log trailing whitespace
-and summary line endings are normalized for Git; numeric data are unchanged. These are scope/conformance
-checks, with a first sequence and one measured repetition per case, no warmups.
-They do not establish an optimization gain or pass the 30-pair performance gate.
+Validation spans 2026-09-07–08 local; dataset names use the UTC run date 2026-09-08.
+Base commit `a8ecdabb`, branch `codex/roadmap-9-1-input-matrix`. Saved environments
+identify a working-tree run; the final dataset includes source SHA-256 hashes. Saved log
+trailing whitespace and summary line endings are normalized for Git; numeric data are
+unchanged. These are scope/conformance checks, with a first sequence and one measured
+repetition per case, no warmups. They do not prove an optimization gain or pass the
+30-pair performance gate.
 
 ## Runtime and reproducible inputs
 
@@ -74,34 +70,28 @@ use wheel/pinch; the other fixtures keep their navigation/replacement scripts.
 Both requested modes and first/measured sequences are included. Resize targets
 are respectively 1640x1054 and 3152x2036 physical pixels.
 
-The strict summarizer accepts all 80 trials. The small run's 37 canonical
-manifest rows and this run's 22 rows exactly match entries in the pinned
-`BASELINE_FIXTURES.csv`; actual jobs remain separately recorded. Together the
-final runs contain **524 validated trials**: 444 completed navigation renders
-and 80 explicitly unchanged views. Large-size coverage is the six selected
-fixtures, not a claim that all 28 fixtures were timed at both larger sizes.
-There is one measured repetition per case, so the summary's median/p95/max are
-single observations and do not establish statistical tails or an optimization win.
+The strict summarizer accepts all 80 trials. The small run's 37 canonical manifest rows
+and this run's 22 rows exactly match entries in the pinned `BASELINE_FIXTURES.csv`;
+actual jobs remain separately recorded. Together the final runs contain **524 validated
+trials**: 444 completed navigation renders and 80 explicitly unchanged views. Large-size
+coverage is the six selected fixtures, not evidence that all 28 fixtures were timed at
+both larger sizes. There is one measured repetition per case, so the summary's
+median/p95/max are single observations and do not prove statistical tails or an
+optimization win.
 
 ## Failure found through the real handlers
 
-The scaled-exponent fixture starts at `(2,0)` with scale `1e-400`. A trackpad or
-drag pan clamps the camera into its fitted home bounds, producing a pixel-grid
-displacement far larger than `int` or `long`. `Viewport.snapToPixelGrid` rounded
-the displacement and called `intValueExact`, raising `ArithmeticException:
-Overflow`. Component-only render requests never exercised this path.
+At `(2,0)`/`1e-400`, drag/trackpad home clamping displaces pixels beyond `int`/
+`long`. `Viewport.snapToPixelGrid` rounding plus `intValueExact` raised
+`ArithmeticException: Overflow`; component-only requests missed it.
 
-The new standalone regression reproduced the exception before the fix. Grid
-alignment now retains the rounded integer displacement in `BigDecimal`; the
-reuse planner still decides whether a bounded overlap exists. Regressions check
-positive/negative shifts beyond `long`, preservation of ordinary integer-shift
-coordinates, and successful trackpad/drag completion at the actual camera job.
+Regression reproduced pre-fix failure. Keep rounded displacement in `BigDecimal`;
+reuse planner still decides bounded overlap. Tests cover ±beyond-`long`, ordinary
+integer-shift coordinates and actual-job trackpad/drag completion.
 
-A delayed trackpad exception also exposed a harness issue: JavaFX's default
-exception handler logged the error while the old completed frame remained
-available. The early runner could mistake it for a no-change gesture. The final
-runner captures asynchronous FX failures and requires the idle frame to agree
-with the camera. Its regression injects a timer failure and requires rejection.
+Delayed trackpad error was logged by default FX handler while old frame remained,
+allowing false no-change classification. Final driver captures async failures and
+requires idle frame/camera agreement; injected timer-error regression must reject.
 
 Two partial development datasets remain in the private archive and were
 excluded from the accepted summaries:
@@ -116,8 +106,8 @@ excluded from the accepted summaries:
 
 ## Regression checks
 
-- `mvn clean test`: **386 tests**, zero failures/errors, 37 opt-in skips.
-  Full log (private archive: `baseline-9-1-input-final-20260908/clean-test.log`).
+- `mvn clean test`: **386 tests**, no failures/errors, 37 opt-in skips. Full log
+  (private archive: `baseline-9-1-input-final-20260908/clean-test.log`).
 - `BaselineInputBenchmarkTest` with graphical access: **16 tests**, no failures
   or skips. Summary (private archive: `baseline-9-1-input-final-20260908/fx-regressions.txt`),
   log (private archive: `baseline-9-1-input-final-20260908/fx-regressions.log`). The
@@ -139,34 +129,24 @@ FX failures. A deliberately corrupted ARGB pixel is rejected by the control.
 
 ## Interpretation and remaining work
 
-This step measures entry into installed production handlers through approximate
-preview, target publication, full completion and generation-bound software
-post-layout observations. It does not measure device/OS input delivery,
-compositor capture, GPU completion, panel scanout or photons. For large buffers,
-part of the unmanaged view can be outside the visible window.
+Measures installed-handler entry → approximate preview/target/full/post-layout
+with generation IDs. No device/OS delivery, compositor/GPU completion, panel scanout/
+photons. Large unmanaged views may extend outside window.
 
-Canonical and actual jobs can differ. In particular, a double pinch factor can
-miss the canonical exact reverse-cache hit; entering deep from a direct seed
-leaves the transient deep-AA toggle off; and direct base-only component seeds
-receive the UI's normal AA. Neither fixture names nor requested Refined labels
-alone establish equivalent algorithms or workloads.
+Actual jobs can differ: double pinch misses exact reverse reuse; direct-to-deep
+keeps transient deep AA off; direct base-only seeds get UI AA. Names/requested
+Refined alone cannot prove equal algorithms/workloads.
 
-Allocation attribution, internal task scheduling, worker cancellation tails at
-additional phases, sustained native-memory/thermal behavior and alternating
-30-pair/multiple-start performance decisions remain open in roadmap 9.1. The
-new runner and grid-alignment fix are not claims that those gates have passed.
+9.1 allocation/scheduling/additional cancel tails/sustained native-memory/thermal
+and alternating 30-pair/multi-start decisions remain open; driver/grid fix passes
+none of those gates.
 
 ## 2026-09-21 test-contract correction
 
-The opt-in `resizeThenDragKeepsPhysicalGridAndIterationBudget` regression failed
-on pristine `506ac1f` after `Viewport.withCalculatedValues` began carrying a
-bounded arithmetic context across gestures. Its old assertion demanded exact
-equality with a canonical fixture that reconstructs a fresh context and retains
-additional guard digits. The actual and expected scales, dimensions and
-iteration limits matched; their center difference was in decimal digits far
-below one render pixel. The test now requires exact scale and center agreement
-within `10^-25` of one pixel step on each axis, while its existing independent
-sample/pixel verification remains unchanged. The versioned fixture CSV and
-historical measurements were not altered. The isolated regression and the
-43-test graphical resize/publication/input suite pass after this correction;
-the suite has two separately gated full-screen skips.
+`resizeThenDragKeepsPhysicalGridAndIterationBudget` failed pristine `506ac1f`
+after `Viewport.withCalculatedValues` retained bounded context across gestures.
+Old assertion compared a fresh-context canonical fixture with extra guard digits:
+scale/size/cap matched, centers differed far below a pixel. Require exact scale,
+center within `10^-25` pixel step per axis; independent sample/pixel checks stay.
+Fixture CSV/history unchanged. Isolated regression and 43-test graphical resize/
+publication/input suite pass; two separately gated fullscreen skips remain.
