@@ -44,6 +44,8 @@
   "benchmarks/SERIES_APPROXIMATION_RESULTS.md",
   "benchmarks/SPACE_SWITCH_VALIDATION.md",
   "benchmarks/VALIDITY_MASK_OPTIMIZATION.md",
+  "benchmarks/VIEWPORT_PRECISION_RESULTS.md",
+  "benchmarks/VIEWPORT_PRECISION_SUMMARY.csv",
   "benchmarks/baseline-9-1-fx-fixed-20260907/summary.csv",
   "benchmarks/baseline-9-1-validation/manifest.csv",
   "benchmarks/baseline-9-1-validation/summary.csv",
@@ -121,5 +123,6 @@
   "benchmarks/policies/prism-pipeline-fx-confirm.json",
   "benchmarks/policies/prism-pipeline-fx.json",
   "benchmarks/policies/prism-pipeline-latency-confirm.json",
-  "benchmarks/policies/prism-pipeline-latency.json"
+  "benchmarks/policies/prism-pipeline-latency.json",
+  "benchmarks/policies/viewport-precision-pr51.json"
 ]

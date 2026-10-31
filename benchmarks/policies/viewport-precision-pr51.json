@@ -1,0 +1,38 @@
+{
+  "purpose": "candidate",
+  "experiment": "viewport-precision-pr51",
+  "control": "bc26acd (main before PR #51)",
+  "candidate": "91b22cf (merge of PR #51; PR #52 after it changes only UI formatting/Go to handling, so it is excluded)",
+  "runner": "headless ViewportPrecisionBenchmark (identical test-classes in both builds)",
+  "size": "1512x982",
+  "workloads": "mandelbrot-nav-1e-30,mandelbrot-nav-1e-80,mandelbrot-nav-1e-150,julia-nav-1e-30,julia-nav-1e-80,mandelbrot-zoomout-1e-80,mandelbrot-restored-k80,julia-restored-k80,julia-reported-x,mandelbrot-cycled-80x1e-30,julia-cycled-80x1e-30",
+  "inputs_sha256": "347de8fe98ffd46703bde206552c217bdb82e201968c3452e97381ff2432708a",
+  "warmups": 3,
+  "samples": 5,
+  "process_pairs": 10,
+  "timeout_seconds": 1800,
+  "heap": "-Xmx4g",
+  "groups": {
+    "q1_navigated": {
+      "workloads": ["mandelbrot-nav-1e-30", "mandelbrot-nav-1e-80", "mandelbrot-nav-1e-150", "julia-nav-1e-30", "julia-nav-1e-80", "mandelbrot-zoomout-1e-80"],
+      "metrics": {"backend_ms": "control", "first_region_ms": "control", "reference_ms": "control"},
+      "max_ratio": 1.05,
+      "decision": "retain GUARD_DIGITS=30 if every backend_ms and first_region_ms upper 95% bound <= 1.05; reject if any backend_ms lower bound > 1.05; otherwise inconclusive. reference_ms is reported with its absolute delta and does not decide alone."
+    },
+    "q2_restored_shared": {
+      "workloads": ["mandelbrot-restored-k80", "julia-restored-k80", "julia-reported-x"],
+      "metrics": {"backend_ms": "control", "first_region_ms": "control", "reference_ms": "control", "grid_ms": "control", "wheel_zoom_ms": "control", "pan_ms": "control", "copy_ms": "control", "go_to_ms": "control", "restore_ms": "control", "pan_reuse_plan_ms": "control"},
+      "max_ratio": 1.05,
+      "decision": "hypothesis 'same inflated input costs the same on both builds' is confirmed for a metric if its 95% interval lies within [0.95, 1.05]."
+    },
+    "q2_cycled_own": {
+      "workloads": ["mandelbrot-cycled-80x1e-30", "julia-cycled-80x1e-30"],
+      "metrics": {"grid_ms": "target", "wheel_zoom_ms": "target", "pan_ms": "target", "copy_ms": "target", "go_to_ms": "target", "restore_ms": "target", "pan_reuse_plan_ms": "target", "backend_ms": "control", "first_region_ms": "control", "reference_ms": "control"},
+      "target_max_ratio": 0.90,
+      "control_max_ratio": 1.05,
+      "decision": "camera/UI arithmetic improvement is established for a metric if its upper bound <= 0.90; render metrics follow the control rule (upper <= 1.05 pass, lower > 1.05 fail). Hypothesis 'render barely changes' is confirmed if render intervals lie within [0.95, 1.05]."
+    }
+  },
+  "statistics": "B/A ratio of matching sample index within each process pair; median of ratios; seeded hierarchical bootstrap (5000 resamples, process pairs then samples), as in summarize_baseline_pairs.paired_statistics",
+  "notes": "Policy fixed before the measured campaign. Exploratory single-sample runs were used only to size the campaign."
+}

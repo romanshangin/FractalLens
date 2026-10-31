@@ -53,10 +53,11 @@ benchmarks/**/tmp/fractallens-baseline-benchmark.lock
 .env
 .env.*
 /benchmarks/*/
-# Allow only the newly selected preparation policy; other new benchmark data stays private.
+# Allow only newly selected policies; other new benchmark data stays private.
 !/benchmarks/policies/
 /benchmarks/policies/*
 !/benchmarks/policies/p17-fresh-frame-preparation.json
+!/benchmarks/policies/viewport-precision-pr51.json
 
 ### Claude Code ###
 .claude/settings.*.json

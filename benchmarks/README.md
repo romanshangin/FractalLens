@@ -57,6 +57,7 @@ no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism
 | P1.3 queued publication rejected | [Decision](FX_PUBLICATION_P1_3.md) | [Analysis](p1-3-publication-20260924/coalescing-pairs/analysis.json), [probe 1](p1-3-publication-20260924/probe-1.csv), [probe 2](p1-3-publication-20260924/probe-2.csv), [probe 3](p1-3-publication-20260924/probe-3.csv) |
 | P1.4 allocation attribution; no optimization promoted | [Profile](ALLOCATION_PROFILE_9_4.md) | [Summary](p1-4-allocation-profile-20260924/summary.json), [allocation groups](p1-4-allocation-profile-20260924/allocations.json) |
 | P1.5 retained CPU AA accepted with recorded first-tile exception | [Assessment](P1_5_PROMOTION_VALIDATION.md) | [Sustained summary](p1-5-aa-sustained-20260924/summary.json), [headless](p1-5-retained-vs-pre-headless-20260927/analysis.json), [JavaFX](p1-5-retained-vs-pre-fx-retry-20260927/analysis.json), [base confirmation](p1-5-retained-vs-pre-fx-base-confirm-20260928/analysis.json), [AC cold startup](p1-5-retained-vs-pre-cold-ac-20260928/summary.json) |
+| PR #51 viewport working-precision fix: no render speedup; camera arithmetic stops growing with session history; guard cost inconclusive | [Results](VIEWPORT_PRECISION_RESULTS.md) | [Paired summary](VIEWPORT_PRECISION_SUMMARY.csv), [policy](policies/viewport-precision-pr51.json) |
 
 Selected campaigns contain retained summaries/provenance only; omitted-input
 references do not imply availability. Historical failures/rejected candidates/
@@ -76,7 +77,7 @@ incomplete platform gates remain recorded.
 
 ## Retained file inventory
 
-The inventory lists the 121 selected evidence/protocol files, excluding this index. No
+The inventory lists the 124 selected evidence/protocol files, excluding this index. No
 raw log file is included.
 
 - [ALLOCATION_PROFILE_9_4.md](ALLOCATION_PROFILE_9_4.md)
@@ -123,6 +124,8 @@ raw log file is included.
 - [SERIES_APPROXIMATION_RESULTS.md](SERIES_APPROXIMATION_RESULTS.md)
 - [SPACE_SWITCH_VALIDATION.md](SPACE_SWITCH_VALIDATION.md)
 - [VALIDITY_MASK_OPTIMIZATION.md](VALIDITY_MASK_OPTIMIZATION.md)
+- [VIEWPORT_PRECISION_RESULTS.md](VIEWPORT_PRECISION_RESULTS.md)
+- [VIEWPORT_PRECISION_SUMMARY.csv](VIEWPORT_PRECISION_SUMMARY.csv)
 - [baseline-9-1-fx-fixed-20260907/summary.csv](baseline-9-1-fx-fixed-20260907/summary.csv)
 - [baseline-9-1-validation/manifest.csv](baseline-9-1-validation/manifest.csv)
 - [baseline-9-1-validation/summary.csv](baseline-9-1-validation/summary.csv)
@@ -201,3 +204,4 @@ raw log file is included.
 - [policies/prism-pipeline-fx.json](policies/prism-pipeline-fx.json)
 - [policies/prism-pipeline-latency-confirm.json](policies/prism-pipeline-latency-confirm.json)
 - [policies/prism-pipeline-latency.json](policies/prism-pipeline-latency.json)
+- [policies/viewport-precision-pr51.json](policies/viewport-precision-pr51.json)
