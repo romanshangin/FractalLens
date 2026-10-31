@@ -148,6 +148,24 @@ class FractalCameraTest {
     }
 
     @Test
+    void repeatedGoToWithTheCurrentZoomDoesNotGrowPrecision() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(1000, 700);
+        Viewport home = camera.defaultViewport(1000, 700);
+        Viewport viewport = camera.destination(
+                new PreciseComplex("-0.743643887037151", "0.13182590420533"), new BigDecimal("1.8121147956826947E10"),
+                1000, 700);
+        int first = viewport.mathContext().getPrecision();
+        for (int cycle = 0; cycle < 10; cycle++) {
+            // Same derivation as Copy Coordinates and Zoom.
+            BigDecimal zoom = home.scaleExact().divide(viewport.scaleExact(), viewport.mathContext());
+            viewport = camera.destination(viewport.center(), zoom, 1000, 700);
+        }
+        assertEquals(first, viewport.mathContext().getPrecision());
+        assertTrue(first < 64, "A 1e10 zoom needs no more than the minimum budget plus guards");
+    }
+
+    @Test
     void destinationWithoutZoomKeepsCurrentScaleExactly() {
         FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
         camera.resize(1000, 700);

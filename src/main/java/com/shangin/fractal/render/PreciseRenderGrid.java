@@ -40,7 +40,9 @@ public record PreciseRenderGrid(
         int dimensionDigits = Integer.toString(Math.max(width, height)).length();
         MathContext context = new MathContext(Math.max(34, depth + integerDigits + dimensionDigits + 24),
                 java.math.RoundingMode.HALF_EVEN);
-        if (viewport.mathContext().getPrecision() <= context.getPrecision() + 32) {
+        int viewportPrecision = viewport.mathContext().getPrecision();
+        // Reuse the viewport's own values only when its precision covers the pixel-depth budget.
+        if (viewportPrecision >= context.getPrecision() && viewportPrecision <= context.getPrecision() + 32) {
             return new PreciseRenderGrid(viewport.minRealExact(width, height), viewport.maxImaginaryExact(),
                     viewport.realUnitsPerPixelExact(width, height), viewport.imaginaryUnitsPerPixelExact(height),
                     0, 0, viewport.center().imaginary().signum() == 0 ? height : 0, viewport.mathContext());

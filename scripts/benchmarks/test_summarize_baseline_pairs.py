@@ -82,8 +82,12 @@ class PairValidationTest(unittest.TestCase):
         self.set_matrix("9.1-v2")
         validate_campaign(self.root)
 
-    def test_rejects_unknown_matrix(self):
+    def test_accepts_matrix_with_shortened_derived_coordinates(self):
         self.set_matrix("9.1-v3")
+        validate_campaign(self.root)
+
+    def test_rejects_unknown_matrix(self):
+        self.set_matrix("9.1-v4")
         with self.assertRaisesRegex(ValueError, "Unknown fixture matrix"):
             validate_campaign(self.root)
 

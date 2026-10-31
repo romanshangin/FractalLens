@@ -194,4 +194,17 @@ public class RenderGridTest {
             );
         }
     }
+
+    @Test
+    void preciseGridNeverUsesAViewportContextBelowItsPixelDepthBudget() {
+        // Seven dimension digits exceed the viewport guard budget, so the grid must raise precision.
+        Viewport viewport = new Viewport("0.1", "0", "1e-80");
+        int width = 1_000_000;
+        var grid = PreciseRenderGrid.from(viewport, width, 2);
+        int budget = 80 + 1 + Integer.toString(width).length() + 24;
+
+        assertTrue(viewport.mathContext().getPrecision() < budget, "Fixture must start below the grid budget");
+        assertTrue(grid.mathContext().getPrecision() >= budget,
+                "Grid arithmetic at pixel depth must not inherit a smaller viewport context");
+    }
 }

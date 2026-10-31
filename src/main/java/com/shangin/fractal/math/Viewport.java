@@ -12,7 +12,9 @@ import java.util.Objects;
  */
 public final class Viewport {
 
-    private static final int GUARD_DIGITS = 20;
+    // Covers PreciseRenderGrid's pixel-depth budget (24 guards plus up to six dimension
+    // digits), so navigated views keep one render context and reference-orbit key.
+    private static final int GUARD_DIGITS = 30;
     private static final int MINIMUM_PRECISION = 34;
     private static final BigDecimal TWO = BigDecimal.valueOf(2);
 
@@ -67,9 +69,10 @@ public final class Viewport {
         int retainedDigits = Math.max(
                 Math.max(center.real().precision(), center.imaginary().precision()),
                 scale.precision());
+        // Retained digits keep exact inputs; guards are for depth only, so values
+        // computed in a guarded context do not gain another budget when re-wrapped.
         int precision = Math.max(MINIMUM_PRECISION,
-                Math.max(integerDigits + scaleDepth + GUARD_DIGITS,
-                        retainedDigits + GUARD_DIGITS));
+                Math.max(integerDigits + scaleDepth + GUARD_DIGITS, retainedDigits));
         return new MathContext(precision, RoundingMode.HALF_EVEN);
     }
 

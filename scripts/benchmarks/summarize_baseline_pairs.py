@@ -15,8 +15,9 @@ from summarize_baseline import SCOPES as HEADLESS_SCOPES
 from summarize_baseline_fx import SCOPES as FX_SCOPES, summarize as validate_fx
 
 KEY = ("fixture", "step", "width", "height")
-# 9.1-v2 removed the deterministic-jitter AA fixtures; frozen 9.1-v1 builds remain valid inputs.
-MATRICES = {"9.1-v1", "9.1-v2"}
+# 9.1-v2 removed the deterministic-jitter AA fixtures; 9.1-v3 shortened derived coordinate
+# digits after the viewport precision fix. Frozen builds of earlier versions remain valid inputs.
+MATRICES = {"9.1-v1", "9.1-v2", "9.1-v3"}
 # A configuration campaign compares one frozen build under two declared JVM settings.
 CONFIGURATION_OPTION = re.compile(r"-Dprism\.order=(es2|mtl|sw)")
 PIPELINE = re.compile(r"Initialized prism pipeline: com\.sun\.prism\.(\w+)\.\w+Pipeline")

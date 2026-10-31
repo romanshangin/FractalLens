@@ -2,13 +2,18 @@
 
 > Publication: use a new output directory for fresh runs. Keep raw logs/diagnostics private; publish only reviewed summaries and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
-Matrix version: `9.1-v2`. The reviewed [manifest](BASELINE_FIXTURES.csv)
+Matrix version: `9.1-v3`. The reviewed [manifest](BASELINE_FIXTURES.csv)
 contains 26 sequences / 35 steps at each of 480x270, 1512x982 and 3024x1964.
 `9.1-v2` differs from `9.1-v1` only by removing the two deterministic-jitter AA
 fixtures and the `pattern` column after the application dropped that sampling
-pattern; all other rows are identical apart from the matrix label. Evidence
-recorded with `9.1-v1` keeps that label. The paired analyzer accepts frozen
-builds of either version, but both sides of a campaign must share one manifest.
+pattern; all other rows are identical apart from the matrix label. `9.1-v3`
+differs from `9.1-v2` only in the decimal digits of derived pan, reverse, resize
+and drag coordinates (16 rows): views rebuilt from computed values no longer gain
+another guard-digit budget, so those values are shorter. The changes are far below
+one pixel; fixture identities, dimensions, caps and features are unchanged.
+Evidence recorded with `9.1-v1` or `9.1-v2` keeps that label. The paired analyzer
+accepts frozen builds of any of these versions, but both sides of a campaign must
+share one manifest.
 Dimensions are **render pixels**, not logical window dimensions. Resize adds
 128x72 render pixels. This is a reproducibility foundation; it does not close
 the allocation/scheduling or sustained thermal baseline.

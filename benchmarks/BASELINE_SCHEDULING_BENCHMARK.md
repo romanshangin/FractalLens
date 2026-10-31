@@ -52,7 +52,7 @@ backends, not AA worker drain, GPU synchronization or physical presentation.
 
 ## Shared matrix and real input
 
-`BaselineSchedulingBenchmark` runs canonical `9.1-v2` jobs through the production
+`BaselineSchedulingBenchmark` runs canonical `9.1-v3` jobs through the production
 render service. It retains the shared fixture selectors, dimensions, source
 reuse policy and cross-process baseline lock. It measures base calculation only,
 even for fixtures whose manifest specifies AA. CPU controls run outside the
