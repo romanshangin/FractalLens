@@ -5,7 +5,6 @@ import com.shangin.fractal.scene.InteractiveRenderMode;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -21,37 +20,58 @@ class FractalDialogsTest {
                 + "High-precision deep zoom is active.", FractalDialogs.coordinateHint(true));
     }
 
+    private static final CoordinateText SHOWN = new CoordinateText("-0.75", "0.1", "1.5");
+
     @Test
-    void coordinateTargetKeepsExactCurrentScaleWhenZoomIsUnchanged() {
-        BigDecimal current = new BigDecimal("0.96504383940932216428241608952468830960");
-        String text = CoordinateTarget.zoomText(current);
-        assertEquals("0.9650438394093221642824160895246883096", text);
+    void untouchedFieldsAreComparedAsTrimmedTextAndKeepLiveValues() {
+        CoordinateTarget unchanged = CoordinateTarget.parse(SHOWN, " -0.75 ", "0.1\t", " 1.5 ");
+        assertTrue(unchanged.unchanged());
+        var live = new PreciseComplex("-0.7500000000000000000000000000001", "0.0999999999999999999999");
+        assertEquals(live, unchanged.center(live));
 
-        CoordinateTarget unchanged = CoordinateTarget.parse(" -0.75 ", "0.1", " " + text + " ", current);
-        assertEquals(new PreciseComplex("-0.75", "0.1"), unchanged.center());
-        assertNull(unchanged.zoom());
-
-        CoordinateTarget zoomed = CoordinateTarget.parse("-0.75", "0.1", "1.5e30", current);
-        assertEquals(0, new BigDecimal("1.5E30").compareTo(zoomed.zoom()));
-        assertEquals("1000000000000000000000000000000", CoordinateTarget.zoomText(new BigDecimal("1E+30")));
+        // Equal numbers with different text are edits.
+        CoordinateTarget zoom = CoordinateTarget.parse(SHOWN, "-0.75", "0.1", "1.50");
+        assertNull(zoom.real());
+        assertNull(zoom.imaginary());
+        assertEquals(new BigDecimal("1.50"), zoom.zoom());
+        assertEquals(live, zoom.center(live));
     }
 
     @Test
-    void coordinateValidationNamesTheFieldToCorrect() {
-        Predicate<CoordinateTarget> any = target -> true;
-        BigDecimal current = new BigDecimal("2");
-        assertEquals(0, FractalDialogs.invalidCoordinateField("-0.75", "0", "1e30", current, any));
-        assertEquals(1, FractalDialogs.invalidCoordinateField("NaN", "0", "1", current, any));
-        assertEquals(2, FractalDialogs.invalidCoordinateField("0", "", "1", current, any));
+    void eachFieldAndCombinationChangesOnlyWhatWasEdited() {
+        var live = new PreciseComplex("-0.75000000000000000000001", "0.10000000000000000000002");
+        CoordinateTarget real = CoordinateTarget.parse(SHOWN, "-1e-3", "0.1", "1.5");
+        assertEquals(new PreciseComplex(new BigDecimal("-0.001"), live.imaginary()), real.center(live));
+        assertNull(real.zoom());
+
+        CoordinateTarget imaginary = CoordinateTarget.parse(SHOWN, "-0.75", "0", "1.5");
+        assertEquals(new PreciseComplex(live.real(), BigDecimal.ZERO), imaginary.center(live));
+        assertNull(imaginary.zoom());
+
+        CoordinateTarget all = CoordinateTarget.parse(SHOWN, "0.25", "-0.5", "2.5e35");
+        assertEquals(new PreciseComplex("0.25", "-0.5"), all.center(live));
+        assertEquals(0, new BigDecimal("2.5e35").compareTo(all.zoom()));
+
+        CoordinateTarget centerAndZoom = CoordinateTarget.parse(SHOWN, "0.25", "0.1", "3");
+        assertEquals(new PreciseComplex(new BigDecimal("0.25"), live.imaginary()), centerAndZoom.center(live));
+        assertEquals(new BigDecimal("3"), centerAndZoom.zoom());
+    }
+
+    @Test
+    void coordinateValidationChecksOnlyChangedFields() {
+        assertEquals(0, CoordinateTarget.invalidField(SHOWN, "-0.75", "0.1", "1.5"));
+        assertEquals(0, CoordinateTarget.invalidField(SHOWN, "-0.75", "0", "1e30"));
+        assertEquals(1, CoordinateTarget.invalidField(SHOWN, "NaN", "0", "1"));
+        assertEquals(2, CoordinateTarget.invalidField(SHOWN, "0", "", "1"));
         for (String zoom : new String[] {"", "zoom", "0.5", "0", "-3"}) {
-            assertEquals(3, FractalDialogs.invalidCoordinateField("0", "0", zoom, current, any), zoom);
+            assertEquals(3, CoordinateTarget.invalidField(SHOWN, "0", "0", zoom), zoom);
         }
-        // A current zoom below 1 after a resize stays acceptable while unchanged.
-        assertEquals(0, FractalDialogs.invalidCoordinateField("0", "0", "0.9", new BigDecimal("0.90"), any));
-        assertEquals(3, FractalDialogs.invalidCoordinateField("0", "0", "1e30", current,
-                target -> target.zoom() == null));
-        assertEquals(0, FractalDialogs.invalidCoordinateField("0.1", "0", "2.0", current,
-                target -> target.zoom() == null));
+        // An untouched zoom below 1, as after restore or resize, is not revalidated.
+        var belowOne = new CoordinateText("0", "0", "0.9");
+        assertEquals(0, CoordinateTarget.invalidField(belowOne, "0", "0", " 0.9 "));
+        assertTrue(CoordinateTarget.parse(belowOne, "0", "0", "0.9").unchanged());
+        assertEquals(0, CoordinateTarget.invalidField(belowOne, "0.5", "0", "0.9"));
+        assertEquals(3, CoordinateTarget.invalidField(belowOne, "0", "0", "0.90"));
     }
 
     @Test

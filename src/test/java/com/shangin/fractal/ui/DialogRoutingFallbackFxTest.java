@@ -1,8 +1,6 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColorStop;
-import com.shangin.fractal.math.PreciseComplex;
-import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.RenderTarget;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -60,18 +58,34 @@ class DialogRoutingFallbackFxTest {
     }
 
     @Test void coordinateAndExportCallbacksPreserveExactValues() throws Exception {
-        var center = new CompletableFuture<CoordinateTarget>();
-        Platform.runLater(() -> FractalDialogs.coordinates(owner,
-                new Viewport(new PreciseComplex("0", "0"), BigDecimal.ONE),
-                BigDecimal.ONE, false, target -> true, center::complete));
+        var editor = new RecordingCoordinateEditor(target -> true);
+        var closed = new CompletableFuture<Void>();
+        Platform.runLater(() -> {
+            FractalDialogs.coordinates(owner, new CoordinateText("0", "0", "1"), false, editor);
+            closed.complete(null);
+        });
         fx(() -> {
             var dialog = pane("Go to Coordinates");
+            var zoom = (TextField) dialog.lookup("#coordinate-zoom");
+            zoom.setText("0.5");
+            primary(dialog);
+            assertTrue(dialog.getScene().getWindow().isShowing(), "A failed Go keeps the draft open");
+            assertEquals("0.5", zoom.getText());
+            assertTrue(editor.applied.isEmpty());
+            zoom.setText("1");
             ((TextField) dialog.lookup("#coordinate-real")).setText("-0.743643887037151000000000001");
             primary(dialog);
+            // Go applied before the dialog closed.
+            assertEquals(List.of(new CoordinateTarget(new BigDecimal("-0.743643887037151000000000001"), null, null)),
+                    editor.applied);
             return null;
         });
-        assertEquals(new CoordinateTarget(new PreciseComplex("-0.743643887037151000000000001", "0"), null),
-                center.get(10, TimeUnit.SECONDS));
+        closed.get(10, TimeUnit.SECONDS);
+        fx(() -> {
+            assertEquals(1, editor.applied.size(), "Closing must not apply a second time");
+            assertFalse(editor.submittedOffFxThread);
+            return null;
+        });
         var size = new CompletableFuture<RenderTarget>();
         Platform.runLater(() -> FractalDialogs.exportSize(owner, new RenderTarget(640, 440), size::complete));
         fx(() -> {

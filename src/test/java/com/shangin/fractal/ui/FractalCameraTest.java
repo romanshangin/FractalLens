@@ -166,6 +166,85 @@ class FractalCameraTest {
     }
 
     @Test
+    void copiedTextGoesBackWithinAThousandthOfARenderPixelAndFiveTimesTenToTheMinusTwelveZoom() {
+        var cases = new Viewport[] {
+                new Viewport("-0.75", "0", "2"),
+                new Viewport("0", "-0.0000000000000000000000000000004", "1.5"),
+                new Viewport("-0.743643887037151234567890123456789012345678901", "0.131825904205330987654321098765",
+                        "3.1415926535897932384626433832795E-12"),
+                new Viewport(new PreciseComplex("-1.7685736562998748386395147208736447271957906", "-0.0000000000123"),
+                        new BigDecimal("2.718281828459045235360287471352662E-80"))};
+        int width = 1000;
+        int height = 700;
+        for (Viewport source : cases) {
+            for (int renderScale : new int[] {1, 2, 3}) {
+                int renderWidth = width * renderScale;
+                int renderHeight = height * renderScale;
+                FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT, source);
+                camera.resize(width, height);
+                Viewport home = camera.defaultViewport(width, height);
+                BigDecimal zoom = home.scaleExact().divide(source.scaleExact(), source.mathContext());
+                CoordinateText text = CoordinateText.of(source, renderWidth, renderHeight, zoom);
+                // Another view re-enters every field, as after pasting the copied text.
+                CoordinateTarget target = CoordinateTarget.parse(new CoordinateText("", "", ""),
+                        text.real(), text.imaginary(), text.zoom());
+                Viewport destination = camera.destination(
+                        target.center(home.center()), target.zoom(), width, height);
+
+                BigDecimal step = source.imaginaryUnitsPerPixelExact(renderHeight);
+                var pixels = java.math.MathContext.DECIMAL64;
+                assertTrue(destination.center().real().subtract(source.center().real()).abs()
+                        .divide(step, pixels).compareTo(new BigDecimal("0.001")) < 0, text::real);
+                assertTrue(destination.center().imaginary().subtract(source.center().imaginary()).abs()
+                        .divide(step, pixels).compareTo(new BigDecimal("0.001")) < 0, text::imaginary);
+                // The scale comes back through home / zoom, so the bound includes that division.
+                BigDecimal scaleError = destination.scaleExact().subtract(source.scaleExact()).abs()
+                        .divide(source.scaleExact(), pixels);
+                assertTrue(scaleError.compareTo(new BigDecimal("5.00000001E-12")) <= 0, text::zoom);
+                assertFalse(text.real().contains("E") || text.imaginary().contains("E"), text::toString);
+            }
+        }
+    }
+
+    @Test
+    void coordinateTextUsesTheFinerRenderGridAndKeepsFewerDigitsAtLowerDensity() {
+        Viewport viewport = new Viewport("-0.743643887037151234567", "0.131825904205330987654", "0.0001");
+        CoordinateText standard = CoordinateText.of(viewport, 1000, 700, BigDecimal.TEN);
+        CoordinateText retina = CoordinateText.of(viewport, 2000, 1400, BigDecimal.TEN);
+        // 0.001 of 1.43e-7 rounds to 1e-10; on the doubled grid, to 1e-11.
+        assertEquals("-0.743643887", standard.real());
+        assertEquals("-0.74364388704", retina.real());
+        assertEquals("Real: -0.743643887\nImaginary: 0.1318259042\nZoom: 10", standard.clipboard());
+    }
+
+    @Test
+    void repeatedGoToAndSceneJsonCyclesDoNotGrowPrecision() {
+        int width = 1000;
+        int height = 700;
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(width, height);
+        Viewport home = camera.defaultViewport(width, height);
+        var scene = com.shangin.fractal.scene.FractalScene.create(
+                FractalPreset.MANDELBROT, com.shangin.fractal.coloring.PalettePreset.ICE)
+                .withViewport(camera.destination(new PreciseComplex("-0.743643887037151", "0.13182590420533"),
+                        new BigDecimal("2.5E45"), width, height));
+        int first = -1;
+        for (int cycle = 0; cycle < 10; cycle++) {
+            Viewport viewport = scene.viewport();
+            BigDecimal zoom = home.scaleExact().divide(viewport.scaleExact(), viewport.mathContext());
+            CoordinateText text = CoordinateText.of(viewport, 2 * width, 2 * height, zoom);
+            CoordinateTarget target = CoordinateTarget.parse(new CoordinateText("", "", ""),
+                    text.real(), text.imaginary(), text.zoom());
+            scene = com.shangin.fractal.scene.FractalSceneJson.read(com.shangin.fractal.scene.FractalSceneJson.write(
+                    scene.withViewport(camera.destination(target.center(viewport.center()), target.zoom(),
+                            width, height))));
+            int precision = scene.viewport().mathContext().getPrecision();
+            if (first < 0) first = precision;
+            assertEquals(first, precision, "cycle " + cycle);
+        }
+    }
+
+    @Test
     void destinationWithoutZoomKeepsCurrentScaleExactly() {
         FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
         camera.resize(1000, 700);

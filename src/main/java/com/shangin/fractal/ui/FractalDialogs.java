@@ -5,7 +5,6 @@ import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.export.AdaptivePngExportService;
 
 import com.shangin.fractal.coloring.ColorStop;
-import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
@@ -28,12 +27,10 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.Map;
 import java.util.IdentityHashMap;
 import javafx.stage.Modality;
@@ -68,35 +65,20 @@ final class FractalDialogs {
     private static final String ZOOM_PRECISION_ERROR = "This fractal cannot render this zoom precisely. "
             + "Enter a smaller zoom; deep zoom is available for Mandelbrot and Julia.";
 
+    /**
+     * Go to Coordinates. Both editors apply through {@link CoordinateEditor#submit} while
+     * still open, so a failed Go keeps the draft and a successful one applies exactly once.
+     */
     @SuppressWarnings("resource") // ACTIVE owns the asynchronous sheet until completion or owner closure.
-    static void coordinates(Window owner, Viewport viewport, BigDecimal zoom, boolean deepZoom,
-                            Predicate<CoordinateTarget> reachable, Consumer<CoordinateTarget> apply) {
+    static void coordinates(Window owner, CoordinateText shown, boolean deepZoom, CoordinateEditor editor) {
         if (MacParameterSheet.hasOpenSheet(owner)) return;
-        if (!nativeDialog(() -> MacFormSheet.coordinates(owner, viewport.center(), zoom,
-                coordinateHint(deepZoom), reachable, apply)))
-            coordinateDialog(owner, viewport, zoom, deepZoom, reachable).showAndWait().ifPresent(apply);
+        if (!nativeDialog(() -> MacFormSheet.coordinates(owner, shown, coordinateHint(deepZoom), editor)))
+            coordinateDialog(owner, shown, deepZoom, editor).showAndWait();
     }
 
     static String coordinateHint(boolean deepZoom) {
         return "Enter the center and the zoom relative to the initial view."
                 + (deepZoom ? " High-precision deep zoom is active." : "");
-    }
-
-    /**
-     * Shared native and JavaFX validation: zero when the drafts are valid, otherwise the
-     * one-based index of the field to correct (1 real, 2 imaginary, 3 zoom).
-     */
-    static int invalidCoordinateField(String real, String imaginary, String zoom, BigDecimal currentZoom,
-                                      Predicate<CoordinateTarget> reachable) {
-        if (!isCoordinate(real)) return 1;
-        if (!isCoordinate(imaginary)) return 2;
-        CoordinateTarget target;
-        try {
-            target = CoordinateTarget.parse(real, imaginary, zoom, currentZoom);
-        } catch (IllegalArgumentException invalid) {
-            return 3;
-        }
-        return reachable.test(target) ? 0 : 3;
     }
 
     static void palette(Window owner, List<ColorStop> stops, Consumer<List<ColorStop>> apply) {
@@ -211,13 +193,14 @@ final class FractalDialogs {
         }
     }
 
-    static Dialog<CoordinateTarget> coordinateDialog(Window owner, Viewport viewport, BigDecimal zoom,
-                                                     boolean deepZoom, Predicate<CoordinateTarget> reachable) {
-        Dialog<CoordinateTarget> dialog = new Dialog<>();
+    /** The JavaFX Go to Coordinates editor; its result is Go after an applied or no-op Go, else empty. */
+    static Dialog<ButtonType> coordinateDialog(Window owner, CoordinateText shown, boolean deepZoom,
+                                               CoordinateEditor editor) {
+        Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Go to Coordinates");
-        TextField real = new TextField(viewport.center().real().toString());
-        TextField imaginary = new TextField(viewport.center().imaginary().toString());
-        TextField scale = new TextField(CoordinateTarget.zoomText(zoom));
+        TextField real = new TextField(shown.real());
+        TextField imaginary = new TextField(shown.imaginary());
+        TextField scale = new TextField(shown.zoom());
         real.setId("coordinate-real");
         imaginary.setId("coordinate-imaginary");
         scale.setId("coordinate-zoom");
@@ -243,17 +226,20 @@ final class FractalDialogs {
         ButtonType go = new ButtonType("Go", ButtonData.OK_DONE);
         DialogAppearance.install(dialog, owner, () -> real);
         Button confirm = DialogAppearance.buttons(dialog, go, ButtonType.CANCEL);
+        // Go applies here, before the dialog closes; a failure keeps it open with the draft.
         confirm.addEventFilter(ActionEvent.ACTION, event -> {
-            if (!validateCoordinates(dialog, inputs, zoom, reachable, error, true)) event.consume();
+            int invalid = editor.submit(shown, real.getText(), imaginary.getText(), scale.getText());
+            if (!showCoordinateValidation(dialog, inputs, invalid, error, true)) event.consume();
         });
         for (TextField field : inputs) {
             field.setOnAction(event -> { confirm.fire(); event.consume(); });
             field.textProperty().addListener(ignored -> {
-                if (error.isVisible()) validateCoordinates(dialog, inputs, zoom, reachable, error, false);
+                if (error.isVisible()) showCoordinateValidation(dialog, inputs,
+                        editor.invalidField(shown, real.getText(), imaginary.getText(), scale.getText()),
+                        error, false);
             });
         }
-        dialog.setResultConverter(button -> button == go
-                ? CoordinateTarget.parse(real.getText(), imaginary.getText(), scale.getText(), zoom) : null);
+        dialog.setResultConverter(button -> button == go ? go : null);
         return dialog;
     }
 
@@ -625,10 +611,8 @@ final class FractalDialogs {
         return error;
     }
 
-    private static boolean validateCoordinates(Dialog<?> dialog, List<TextField> fields, BigDecimal zoom,
-                                               Predicate<CoordinateTarget> reachable, Label error, boolean focus) {
-        int invalidIndex = invalidCoordinateField(fields.get(0).getText(), fields.get(1).getText(),
-                fields.get(2).getText(), zoom, reachable);
+    private static boolean showCoordinateValidation(Dialog<?> dialog, List<TextField> fields, int invalidIndex,
+                                                    Label error, boolean focus) {
         for (int i = 0; i < fields.size(); i++) {
             boolean invalid = i + 1 == invalidIndex;
             fields.get(i).pseudoClassStateChanged(PseudoClass.getPseudoClass("invalid"), invalid);
@@ -641,19 +625,10 @@ final class FractalDialogs {
             return true;
         }
         showError(dialog, error, invalidIndex < 3 ? COORDINATE_NUMBER_ERROR
-                : isZoom(fields.get(2).getText(), zoom) ? ZOOM_PRECISION_ERROR : ZOOM_NUMBER_ERROR);
+                : CoordinateTarget.isZoom(fields.get(2).getText()) ? ZOOM_PRECISION_ERROR : ZOOM_NUMBER_ERROR);
         TextField firstInvalid = fields.get(invalidIndex - 1);
         if (focus) { firstInvalid.requestFocus(); firstInvalid.selectAll(); }
         return false;
-    }
-
-    private static boolean isZoom(String text, BigDecimal currentZoom) {
-        try {
-            CoordinateTarget.parse("0", "0", text, currentZoom);
-            return true;
-        } catch (IllegalArgumentException invalid) {
-            return false;
-        }
     }
 
     private static boolean validateJuliaParameters(Dialog<?> dialog, TextField real, TextField imaginary,
@@ -733,15 +708,6 @@ final class FractalDialogs {
         Label label = new Label(text);
         label.setLabelFor(field);
         return label;
-    }
-
-    private static boolean isCoordinate(String text) {
-        try {
-            new BigDecimal(text.trim());
-            return true;
-        } catch (NumberFormatException exception) {
-            return false;
-        }
     }
 
     private static boolean isPositiveInteger(String text) {

@@ -39,6 +39,14 @@ already carry them, so repeated save/restore and Go to cycles do not grow it.
 Precision reached at depth is kept after zooming out. Older scenes that already
 stored inflated digit counts load unchanged and are not shortened automatically.
 
+Copy Coordinates and Zoom and Go to Coordinates show compact text instead: the
+center rounded to within 0.0005 of the source render-grid pixel step, and the zoom
+(relative to the fitted initial view, so dependent on window aspect) to 12
+significant digits. That text is never stored. Go to replaces only fields whose
+text was edited; untouched fields keep the live exact values, so opening and
+confirming without edits changes neither the scene nor the undo history. Scenes,
+bookmarks, shared presets and undo always keep the exact viewport.
+
 Interactive AA always uses a regular subpixel grid. Write `antialiasing.samplingPattern`
 as `REGULAR` for pre-jitter-removal version 2 readers. Reading is optional:
 `DETERMINISTIC_JITTER` also maps to regular; all other values are rejected.

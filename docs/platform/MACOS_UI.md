@@ -136,8 +136,8 @@ rendering is idle. Edit Julia Parameters is enabled only for Julia. See
 Other platforms use their shortcut modifier instead of Command. Focused-canvas
 arrows pan after zooming; Page Up/Down zoom centrally, Home resets. Pointer-centered
 scroll, drag and trackpad remain; menu/key zoom preserves center. Right-click
-**Copy Coordinates and Zoom** copies exact decimal real/imaginary center and zoom
-as shareable plain text. Renderer-independent `FractalContextMenu` owns commands/
+**Copy Coordinates and Zoom** copies the real/imaginary center and zoom as shareable,
+re-enterable plain decimals (see Go to Coordinates for rounding). Renderer-independent `FractalContextMenu` owns commands/
 lifecycle. macOS uses AppKit `NSMenu` via Objective-C/JNI
 `src/main/macos/FractalContextMenu.m`: native appearance, highlighting, keyboard
 navigation/tracking, no CSS/custom styling. Styled JavaFX fallback covers other
@@ -182,13 +182,32 @@ See [AppKit popup positioning](https://developer.apple.com/documentation/appkit/
 and [native tracking cancellation](https://developer.apple.com/documentation/appkit/nsmenu/canceltrackingwithoutanimation()).
 
 Coordinates use an owner sheet with Go/Cancel, exact invalid-draft feedback and
-deep-zoom status. Real, Imaginary and Zoom are editable; Zoom is relative to the
-fitted initial view, as in the badge, and starts as the exact value that Copy
-Coordinates and Zoom copies. An unchanged zoom keeps the current scale exactly
-and only moves the center; a new zoom must be at least 1 and, for fractals
-without deep zoom, within their double-precision limit, otherwise the draft
-stays open for correction. A new zoom replaces the view like a bookmark and is
-undoable. Palette uses a nonmodal live-gradient draft
+deep-zoom status. Real, Imaginary and Zoom are editable and start as the same
+compact text that Copy Coordinates and Zoom copies. The center is rounded half-even
+to a power of ten no larger than 0.001 of the current render-grid pixel step
+(render pixels, so Retina shows more digits; before the first render, the grid the
+window will render), in plain notation: re-entering it lands within 0.0005 render
+pixel of the source grid's center. Zoom is relative to the fitted initial view, so
+it depends on the window aspect; it has 12 significant digits (relative error at
+most 5e-12), plain below 1e12 after rounding and scientific from 1e12 (for example
+`2.71828182846E+80`); a zoom below 1 after restore or resize is never shown as 1.
+Go compares each field's trimmed text with the text shown: an untouched field
+takes the live exact value when Go runs (after a resize, the current one), not a
+snapshot from opening, and `1.5` → `1.50` counts as an edit. All fields untouched
+is a no-op: no new viewport, render or undo entry. A changed center with an
+untouched zoom keeps the current exact scale and only moves the center; a changed
+zoom takes the current center for untouched coordinates and replaces the view like
+a bookmark. A changed zoom must be at least 1 and, for fractals without deep zoom,
+the destination must stay within their double-precision limit; otherwise nothing
+changes and the draft stays open with the field focused. Go resolves, validates and
+applies in one FX-thread step before the editor closes: native Apply/Enter calls
+Java synchronously (the AppKit main thread is the FX thread on macOS) and the sheet
+closes only on success or no-op; the JavaFX fallback applies from its Go button.
+Live validation while typing never applies. Native editor panels handle Command+X/C/V/A/Z
+and Shift+Command+Z in their own fields (by key position on non-Latin layouts, such as
+Russian): the JavaFX Edit menu edits only JavaFX text controls, and its Undo must not
+change the scene behind a modal editor. Undo, sessions, bookmarks and presets
+keep the exact values. Every applied Go is undoable. Palette uses a nonmodal live-gradient draft
 editor with Apply/Cancel: only Apply changes the palette. Editing a preset clears
 its checkmark to indicate a custom gradient.
 
@@ -342,9 +361,10 @@ Native/JavaFX Help share text; both scroll.
 
 Badge shows exact ready-pixel base progress (including reuse), refinement state
 and latest viewport duration without hover. Tooltip contains only `Zoom: …` and
-`Iterations: …` (effective limit), not mode descriptions/duration. Below one
-million: integers; larger: three significant digits in powers of ten, approximation
-mark if rounded. Cancel/failure is never a completed duration; render/recolor
+`Iterations: …` (effective limit), not mode descriptions/duration. Zoom uses the
+Go to Coordinates text (12 significant digits). Iterations below one million are
+integers; larger limits use three significant digits in powers of ten, with an
+approximation mark if rounded. Cancel/failure is never a completed duration; render/recolor
 failures use application errors. Post-completion deep AA adds refinement time,
 excluding idle; palette animation/export never replace viewport timing.
 

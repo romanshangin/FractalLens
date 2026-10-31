@@ -271,8 +271,7 @@ public class FractalView extends StackPane {
         int height = (int) getHeight();
         if (width < 2 || height < 2) return;
         history.record(sceneSnapshot());
-        camera.goTo(destination, width, height,
-                Math.max(2, fractalSurface.renderWidth()), Math.max(2, fractalSurface.renderHeight()));
+        camera.goTo(destination, width, height, renderGridWidth(), renderGridHeight());
         dismissContextMenu();
         stopColorCyclingForSceneChange();
         cancelSceneInteraction();
@@ -283,25 +282,71 @@ public class FractalView extends StackPane {
         recalculate();
     }
 
-    /** Go to Coordinates: an unchanged zoom only moves the center; a new zoom replaces the view. */
-    void goTo(CoordinateTarget target) {
-        if (target.zoom() == null) {
-            setCenter(target.center().real(), target.center().imaginary());
-            return;
-        }
-        int width = (int) getWidth();
-        int height = (int) getHeight();
-        if (width < 2 || height < 2) return;
-        goTo(camera.destination(target.center(), target.zoom(), width, height));
+    /** Go to Coordinates text for the live view, rounded against its actual render grid. */
+    CoordinateText coordinateText() {
+        Viewport viewport = camera.viewport();
+        BigDecimal zoom = camera.defaultViewport(Math.max(2, (int) getWidth()), Math.max(2, (int) getHeight()))
+                .scaleExact().divide(viewport.scaleExact(), viewport.mathContext());
+        return CoordinateText.of(viewport, renderGridWidth(), renderGridHeight(), zoom);
     }
 
-    /** Whether Go to Coordinates can reach a target within this fractal's precision limit. */
-    boolean canGoTo(CoordinateTarget target) {
-        int width = (int) getWidth();
-        int height = (int) getHeight();
-        if (width < 2 || height < 2) return true;
-        return camera.canGoTo(camera.destination(target.center(), target.zoom(), width, height),
-                Math.max(2, fractalSurface.renderWidth()), Math.max(2, fractalSurface.renderHeight()));
+    /** Go to Coordinates against the live view; see {@link CoordinateEditor}. */
+    CoordinateEditor coordinateEditor() {
+        return new CoordinateEditor() {
+            @Override public int invalidField(CoordinateText shown, String real, String imaginary, String zoom) {
+                return resolveCoordinates(shown, real, imaginary, zoom).invalidField();
+            }
+
+            @Override public int submit(CoordinateText shown, String real, String imaginary, String zoom) {
+                var resolved = resolveCoordinates(shown, real, imaginary, zoom);
+                if (resolved.destination() != null) {
+                    // An untouched zoom keeps the exact scale and only moves the center;
+                    // a new zoom replaces the view like a bookmark.
+                    Viewport destination = resolved.destination();
+                    if (resolved.target().zoom() == null)
+                        setCenter(destination.center().real(), destination.center().imaginary());
+                    else goTo(destination);
+                }
+                return resolved.invalidField();
+            }
+        };
+    }
+
+    /** A resolved Go to request: a destination to apply, none for a no-op, or an invalid field. */
+    private record ResolvedCoordinates(int invalidField, CoordinateTarget target, Viewport destination) {
+        static ResolvedCoordinates invalid(int field) { return new ResolvedCoordinates(field, null, null); }
+    }
+
+    // Everything that can fail runs here, before any scene mutation.
+    private ResolvedCoordinates resolveCoordinates(CoordinateText shown, String real, String imaginary, String zoom) {
+        int invalid = CoordinateTarget.invalidField(shown, real, imaginary, zoom);
+        if (invalid != 0) return ResolvedCoordinates.invalid(invalid);
+        try {
+            CoordinateTarget target = CoordinateTarget.parse(shown, real, imaginary, zoom);
+            int width = (int) getWidth();
+            int height = (int) getHeight();
+            if (target.unchanged() || width < 2 || height < 2) return new ResolvedCoordinates(0, target, null);
+            Viewport destination = camera.destination(
+                    target.center(camera.viewport().center()), target.zoom(), width, height);
+            if (!camera.canGoTo(destination, renderGridWidth(), renderGridHeight()))
+                return ResolvedCoordinates.invalid(3);
+            return new ResolvedCoordinates(0, target, destination);
+        } catch (RuntimeException error) {
+            System.getLogger(FractalView.class.getName())
+                    .log(System.Logger.Level.WARNING, "Cannot resolve Go to Coordinates", error);
+            return ResolvedCoordinates.invalid(3);
+        }
+    }
+
+    // The actual render grid; before the first render, the grid this window will render.
+    private int renderGridWidth() {
+        int rendered = fractalSurface.renderWidth();
+        return rendered >= 2 ? rendered : fractalSurface.renderWidthFor(Math.max(2, (int) getWidth()));
+    }
+
+    private int renderGridHeight() {
+        int rendered = fractalSurface.renderHeight();
+        return rendered >= 2 ? rendered : fractalSurface.renderHeightFor(Math.max(2, (int) getHeight()));
     }
 
     private void dismissContextMenu() {
@@ -309,14 +354,8 @@ public class FractalView extends StackPane {
     }
 
     private void copyCoordinatesAndZoom() {
-        Viewport viewport = camera.viewport();
-        BigDecimal zoom = camera.defaultViewport(
-                        Math.max(2, (int) getWidth()), Math.max(2, (int) getHeight()))
-                .scaleExact().divide(viewport.scaleExact(), viewport.mathContext());
         ClipboardContent content = new ClipboardContent();
-        content.putString("Real: " + viewport.center().real().stripTrailingZeros().toPlainString()
-                + "\nImaginary: " + viewport.center().imaginary().stripTrailingZeros().toPlainString()
-                + "\nZoom: " + zoom.stripTrailingZeros().toPlainString());
+        content.putString(coordinateText().clipboard());
         Clipboard.getSystemClipboard().setContent(content);
     }
 

@@ -1,21 +1,21 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.export.AdaptivePngExportService;
-import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.render.RenderTarget;
 import javafx.stage.Window;
 
-import java.math.BigDecimal;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.function.ToIntBiFunction;
+import java.util.function.ToIntFunction;
 
 /** Form editors retaining Java parsing and exact decimal coordinates. */
 final class MacFormSheet<T> extends MacParameterSheet<T> {
     private final BiFunction<String, String, T> parser;
     private final ToIntBiFunction<String, String> validator;
     private final boolean dimensions;
+    private ToIntBiFunction<String, String> submitter;
+    private boolean submitted;
 
     private MacFormSheet(Window owner, Consumer<T> apply, BiFunction<String, String, T> parser,
                          ToIntBiFunction<String, String> validator, boolean dimensions) {
@@ -25,25 +25,26 @@ final class MacFormSheet<T> extends MacParameterSheet<T> {
         this.dimensions = dimensions;
     }
 
-    /** Real, imaginary and zoom; the imaginary and zoom drafts arrive packed in the second draft. */
-    static MacFormSheet<CoordinateTarget> coordinates(Window owner, PreciseComplex center, BigDecimal zoom,
-                                                      String hint, Predicate<CoordinateTarget> reachable,
-                                                      Consumer<CoordinateTarget> apply) {
-        BiFunction<String, String, CoordinateTarget> parser = (real, packed) -> {
-            String[] drafts = packed.split(THIRD_DRAFT_SEPARATOR, 2);
-            if (drafts.length != 2) throw new IllegalArgumentException("Missing zoom draft");
-            return CoordinateTarget.parse(real, drafts[0], drafts[1], zoom);
-        };
-        var sheet = new MacFormSheet<>(owner, apply, parser, (real, packed) -> {
-            String[] drafts = packed.split(THIRD_DRAFT_SEPARATOR, 2);
-            return FractalDialogs.invalidCoordinateField(real, drafts[0],
-                    drafts.length == 2 ? drafts[1] : "", zoom, reachable);
-        }, false);
+    /**
+     * Real, imaginary and zoom; the imaginary and zoom drafts arrive packed in the second draft.
+     * Native Apply runs {@link CoordinateEditor#submit} synchronously on the FX thread: the sheet
+     * closes only after a successful Go or a no-op, and completion only ends the session.
+     */
+    static MacFormSheet<Void> coordinates(Window owner, CoordinateText shown, String hint, CoordinateEditor editor) {
+        var sheet = new MacFormSheet<Void>(owner, ignored -> {}, (real, packed) -> null,
+                (real, packed) -> coordinateDrafts(real, packed, drafts ->
+                        editor.invalidField(shown, real, drafts[0], drafts[1])), false);
+        sheet.submitter = (real, packed) -> coordinateDrafts(real, packed, drafts ->
+                editor.submit(shown, real, drafts[0], drafts[1]));
         sheet.showFormNative("Go to Coordinates", hint, "Real", "Imaginary", "Zoom",
                 "coordinate-real", "coordinate-imaginary", "coordinate-zoom",
-                center.realText(), center.imaginaryText(), CoordinateTarget.zoomText(zoom),
-                FractalDialogs.COORDINATE_ERROR, "Go");
+                shown.real(), shown.imaginary(), shown.zoom(), FractalDialogs.COORDINATE_ERROR, "Go");
         return sheet;
+    }
+
+    private static int coordinateDrafts(String real, String packed, ToIntFunction<String[]> action) {
+        String[] drafts = packed.split(THIRD_DRAFT_SEPARATOR, 2);
+        return drafts.length == 2 ? action.applyAsInt(drafts) : 3;
     }
 
     static MacFormSheet<RenderTarget> export(Window owner, RenderTarget target, Consumer<RenderTarget> apply) {
@@ -64,7 +65,19 @@ final class MacFormSheet<T> extends MacParameterSheet<T> {
         return target;
     }
 
+    @Override int submit(String first, String second) {
+        if (submitter == null) return super.submit(first, second);
+        requireFxThread();
+        int invalid = submitter.applyAsInt(first, second);
+        submitted = invalid == 0;
+        return invalid;
+    }
+
+    @Override boolean appliesOnSubmit() { return submitter != null; }
+
     @Override int invalidField(String first, String second) {
+        // The completion handler revalidates; a submitted Go is final and needs no second check.
+        if (submitted) return 0;
         if (validator != null) return validator.applyAsInt(first, second);
         try { parser.apply(first, second); return 0; }
         catch (IllegalArgumentException invalid) {
