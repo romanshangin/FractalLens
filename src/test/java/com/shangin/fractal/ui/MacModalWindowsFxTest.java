@@ -1,7 +1,6 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColorStop;
-import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
@@ -50,20 +49,26 @@ class MacModalWindowsFxTest {
         fx(() -> { FractalDialogs.close(owner); owner.close(); return null; });
     }
 
-    @Test void coordinatesRetainExactDraftsAndApplyOnFxThread() throws Exception {
-        var result = new CompletableFuture<CoordinateTarget>();
-        var sheet = fx(() -> MacFormSheet.coordinates(owner, new PreciseComplex("0", "0"), new BigDecimal("1E30"),
-                FractalDialogs.coordinateHint(true),
-                target -> target.zoom() == null || target.zoom().compareTo(new BigDecimal("1E40")) <= 0,
-                value -> { assertTrue(Platform.isFxApplicationThread()); result.complete(value); }));
+    @Test void coordinatesApplySynchronouslyOnceAndKeepFailedDrafts() throws Exception {
+        var editor = new RecordingCoordinateEditor(
+                target -> target.zoom() == null || target.zoom().compareTo(new BigDecimal("1E40")) <= 0);
+        var closed = new CompletableFuture<Void>();
+        var sheet = fx(() -> {
+            var opened = MacFormSheet.coordinates(owner, new CoordinateText("0", "0", "1E+30"),
+                    FractalDialogs.coordinateHint(true), editor);
+            opened.onClosed(() -> closed.complete(null));
+            return opened;
+        });
+        String real = "-0.743643887037151000000000000000001";
+        String imaginary = "0.131825904205330000000000000000002";
         fx(() -> {
-            assertEquals("1000000000000000000000000000000", AppKitParameterProbe.text(sheet, "third"));
+            assertEquals("1E+30", AppKitParameterProbe.text(sheet, "third"));
             AppKitParameterProbe.text(sheet, "first", "NaN");
             AppKitParameterProbe.action(sheet, "apply");
             assertEquals("NaN", AppKitParameterProbe.text(sheet, "first"));
             assertTrue(AppKitParameterProbe.showing(sheet));
-            AppKitParameterProbe.text(sheet, "first", "-0.743643887037151000000000000000001");
-            AppKitParameterProbe.text(sheet, "second", "0.131825904205330000000000000000002");
+            AppKitParameterProbe.text(sheet, "first", real);
+            AppKitParameterProbe.text(sheet, "second", imaginary);
             for (String invalid : List.of("0.5", "zoom", "1e41")) {
                 AppKitParameterProbe.text(sheet, "third", invalid);
                 AppKitParameterProbe.action(sheet, "apply");
@@ -71,12 +76,73 @@ class MacModalWindowsFxTest {
                 assertEquals(invalid, AppKitParameterProbe.text(sheet, "third"));
                 assertEquals(FractalDialogs.COORDINATE_ERROR, AppKitParameterProbe.text(sheet, "error"));
             }
+            assertTrue(editor.applied.isEmpty(), "A failed Go must not apply");
             AppKitParameterProbe.text(sheet, "third", "2.5e35");
+            AppKitParameterProbe.action(sheet, "apply");
+            // Native Apply returns only after Java applied the change on this thread.
+            assertEquals(List.of(new CoordinateTarget(new BigDecimal(real), new BigDecimal(imaginary),
+                    new BigDecimal("2.5e35"))), editor.applied);
+            return null;
+        });
+        closed.get(10, TimeUnit.SECONDS);
+        fx(() -> {
+            assertFalse(sheet.isOpen());
+            assertEquals(1, editor.applied.size(), "Completion must not apply again");
+            assertFalse(editor.submittedOffFxThread);
+            return null;
+        });
+    }
+
+    @Test void unchangedCoordinatesCloseWithoutApplying() throws Exception {
+        var editor = new RecordingCoordinateEditor(target -> false);
+        var closed = new CompletableFuture<Void>();
+        fx(() -> {
+            var sheet = MacFormSheet.coordinates(owner, new CoordinateText("-0.75", "0", "0.965043839409"),
+                    FractalDialogs.coordinateHint(false), editor);
+            sheet.onClosed(() -> closed.complete(null));
             AppKitParameterProbe.action(sheet, "apply");
             return null;
         });
-        assertEquals(new CoordinateTarget(new PreciseComplex("-0.743643887037151000000000000000001",
-                "0.131825904205330000000000000000002"), new BigDecimal("2.5e35")), result.get(10, TimeUnit.SECONDS));
+        closed.get(10, TimeUnit.SECONDS);
+        fx(() -> {
+            assertEquals(1, editor.submits);
+            assertTrue(editor.applied.isEmpty());
+            return null;
+        });
+    }
+
+    @Test void nativeFieldsOwnStandardEditingShortcutsOnAnyLayout() throws Exception {
+        long command = 1L << 20;
+        long shift = 1L << 17;
+        var editor = new RecordingCoordinateEditor(target -> true);
+        fx(() -> {
+            var sheet = MacFormSheet.coordinates(owner, new CoordinateText("-0.75", "0", "1"),
+                    FractalDialogs.coordinateHint(false), editor);
+            var copied = new javafx.scene.input.ClipboardContent();
+            copied.putString("-0.743643887037151");
+            javafx.scene.input.Clipboard.getSystemClipboard().setContent(copied);
+            AppKitMenuProbe.message(AppKitParameterProbe.field(sheet, "first"), "selectText:", null,
+                    new java.lang.foreign.MemoryLayout[]{ADDRESS}, java.lang.foreign.MemorySegment.NULL);
+            // The JavaFX Edit menu must not receive these: it cannot edit AppKit fields.
+            assertTrue(AppKitParameterProbe.keyEquivalent(sheet, "v", (short) 9, command));
+            assertEquals("-0.743643887037151", AppKitParameterProbe.text(sheet, "first"));
+            assertTrue(AppKitParameterProbe.keyEquivalent(sheet, "z", (short) 6, command));
+            assertEquals("-0.75", AppKitParameterProbe.text(sheet, "first"));
+            assertTrue(AppKitParameterProbe.keyEquivalent(sheet, "z", (short) 6, command | shift));
+            assertEquals("-0.743643887037151", AppKitParameterProbe.text(sheet, "first"));
+            // Russian layout: Command+Ф selects all and Command+М pastes, by key position.
+            copied.putString("0.25");
+            javafx.scene.input.Clipboard.getSystemClipboard().setContent(copied);
+            assertTrue(AppKitParameterProbe.keyEquivalent(sheet, "ф", (short) 0, command));
+            assertTrue(AppKitParameterProbe.keyEquivalent(sheet, "м", (short) 9, command));
+            assertEquals("0.25", AppKitParameterProbe.text(sheet, "first"));
+            // Other shortcuts keep their normal route.
+            assertFalse(AppKitParameterProbe.keyEquivalent(sheet, "q", (short) 12, command | shift));
+            assertTrue(AppKitParameterProbe.showing(sheet));
+            assertTrue(editor.applied.isEmpty());
+            sheet.close();
+            return null;
+        });
     }
 
     @Test void exportValidatesDraftsAndDiscardsResultAfterOwnerClosure() throws Exception {

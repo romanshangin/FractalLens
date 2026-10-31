@@ -103,9 +103,10 @@ class FractalDialogsFxTest {
     }
 
     @Test void coordinatesThemeFocusOrderValidationAndExactResult() throws Exception {
-        var dialog = fx(() -> FractalDialogs.coordinateDialog(owner, FractalPreset.MANDELBROT.defaultViewport(),
-                new BigDecimal("1.25"), false, target -> target.zoom() == null
-                        || target.zoom().compareTo(new BigDecimal("1E12")) <= 0));
+        var editor = new RecordingCoordinateEditor(target -> target.zoom() == null
+                || target.zoom().compareTo(new BigDecimal("1E12")) <= 0);
+        var dialog = fx(() -> FractalDialogs.coordinateDialog(owner, new CoordinateText("-0.75", "0", "1.25"),
+                false, editor));
         try {
             fx(() -> { dialog.show(); return null; });
             fx(() -> {
@@ -162,11 +163,11 @@ class FractalDialogsFxTest {
                 }
                 zoom.setText("1e12");
                 assertFalse(pane.lookup("#dialog-validation-error").isVisible());
+                assertTrue(editor.applied.isEmpty(), "Failed or live validation must not apply");
                 imaginary.fireEvent(new ActionEvent());
                 assertFalse(dialog.isShowing());
-                assertEquals(new BigDecimal(real.getText()), dialog.getResult().center().real());
-                assertEquals(new BigDecimal(imaginary.getText()), dialog.getResult().center().imaginary());
-                assertEquals(0, new BigDecimal("1e12").compareTo(dialog.getResult().zoom()));
+                assertEquals(List.of(new CoordinateTarget(new BigDecimal(real.getText()),
+                        new BigDecimal(imaginary.getText()), new BigDecimal("1e12"))), editor.applied);
                 return null;
             });
             fx(() -> { assertSame(ownerField, owner.getScene().getFocusOwner()); return null; });
@@ -457,8 +458,9 @@ class FractalDialogsFxTest {
     }
 
     @Test void escapeCancelsInvalidDraftAndHelpAndMessagesShareTheme() throws Exception {
-        var coordinate = fx(() -> FractalDialogs.coordinateDialog(owner, FractalPreset.MANDELBROT.defaultViewport(),
-                BigDecimal.ONE, false, target -> true));
+        var coordinates = new RecordingCoordinateEditor(target -> true);
+        var coordinate = fx(() -> FractalDialogs.coordinateDialog(owner, new CoordinateText("-0.75", "0", "1"),
+                false, coordinates));
         fx(() -> { coordinate.show(); return null; });
         fx(() -> {
             field(coordinate, "coordinate-real").setText("invalid");
@@ -466,6 +468,7 @@ class FractalDialogsFxTest {
             escape(coordinate);
             assertFalse(coordinate.isShowing());
             assertNull(coordinate.getResult());
+            assertTrue(coordinates.applied.isEmpty());
             return null;
         });
         for (var type : Alert.AlertType.values()) {

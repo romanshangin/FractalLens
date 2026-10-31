@@ -6,7 +6,6 @@ import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalDestination;
-import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.FractalScene;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
@@ -29,7 +28,6 @@ import javafx.scene.input.KeyCombination;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -66,8 +64,6 @@ final class MainMenuBar extends MenuBar {
     private final ToggleGroup orbitTraps = new ToggleGroup();
     private List<ColorStop> paletteStops;
     private OrbitTrap orbitTrap;
-    private Viewport viewport;
-    private BigDecimal zoom = BigDecimal.ONE;
     private boolean deepZoom;
     private boolean exporting;
     private boolean rendering = true;
@@ -97,7 +93,6 @@ final class MainMenuBar extends MenuBar {
         PalettePreset initialPalette = initialScene.coloring().palette();
         this.paletteStops = initialScene.coloring().paletteStops();
         this.orbitTrap = initialScene.coloring().orbitTrap();
-        this.viewport = initialScene.viewport();
         setUseSystemMenuBar(true);
         export = command("Export PNG…", shortcut(KeyCode.E, KeyCombination.SHIFT_DOWN), onExport);
         export.setDisable(true);
@@ -177,8 +172,6 @@ final class MainMenuBar extends MenuBar {
                 scene.getAccelerators().put(shortcut(KeyCode.SUBTRACT), () -> fractalView.zoom(false));
             }
         });
-        fractalView.setOnZoomChanged(value -> zoom = value);
-        fractalView.setOnViewportChanged(value -> viewport = value);
         fractalView.setOnDeepZoomChanged(active -> {
             deepZoom = active;
             updateAvailability();
@@ -291,7 +284,7 @@ final class MainMenuBar extends MenuBar {
     }
 
     private void showCoordinates() {
-        FractalDialogs.coordinates(stage, viewport, zoom, deepZoom, fractalView::canGoTo, fractalView::goTo);
+        FractalDialogs.coordinates(stage, fractalView.coordinateText(), deepZoom, fractalView.coordinateEditor());
     }
 
     private void resetColors() {
@@ -380,7 +373,6 @@ final class MainMenuBar extends MenuBar {
 
     private void syncScene(FractalScene scene) {
         currentFractal = scene.fractal();
-        viewport = scene.viewport();
         paletteStops = scene.coloring().paletteStops();
         orbitTrap = scene.coloring().orbitTrap();
         fractals.selectToggle(fractals.getToggles().get(scene.fractal().ordinal()));

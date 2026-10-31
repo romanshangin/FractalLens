@@ -130,6 +130,15 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
 
     abstract T parse(String first, String second);
 
+    /**
+     * Native Apply and Enter: zero lets the sheet close, otherwise the one-based field to
+     * correct stays open with its draft. Forms that apply only on completion just validate.
+     */
+    int submit(String first, String second) { return invalidField(first, second); }
+
+    /** Whether {@link #submit} already applied, so completion only ends the session. */
+    boolean appliesOnSubmit() { return false; }
+
     boolean isOpen() { return !closed; }
 
     void cancelled() {}
@@ -143,7 +152,7 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
         Platform.runLater(() -> {
             if (closed) return;
             close();
-            if (owner.isShowing()) {
+            if (owner.isShowing() && !appliesOnSubmit()) {
                 if (accepted) apply.accept(parse(first, second));
                 else cancelled();
             }
@@ -170,7 +179,7 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
         });
     }
 
-    private static void requireFxThread() {
+    static void requireFxThread() {
         if (!Platform.isFxApplicationThread()) throw new IllegalStateException("FX thread required");
     }
 

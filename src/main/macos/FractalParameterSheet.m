@@ -30,14 +30,54 @@
 @property jobject callback;
 @property jmethodID completion;
 @property jmethodID validation;
+@property jmethodID submission;
 @end
 
-/** Modeless panels route Escape through the same cancellation lifecycle as buttons. */
+static SEL editingAction(NSEvent *event, NSEventModifierFlags flags) {
+    BOOL shift = flags == (NSEventModifierFlagCommand | NSEventModifierFlagShift);
+    if (flags != NSEventModifierFlagCommand && !shift) return NULL;
+    NSString *key = event.charactersIgnoringModifiers.lowercaseString;
+    unichar character = key.length == 1 ? [key characterAtIndex:0] : 0;
+    // Non-Latin layouts (for example Russian) report other characters; use the ANSI key position.
+    if (character < 'a' || character > 'z') {
+        switch (event.keyCode) {
+            case 0: character = 'a'; break;
+            case 6: character = 'z'; break;
+            case 7: character = 'x'; break;
+            case 8: character = 'c'; break;
+            case 9: character = 'v'; break;
+            default: return NULL;
+        }
+    }
+    if (shift) return character == 'z' ? @selector(redo:) : NULL;
+    switch (character) {
+        case 'x': return @selector(cut:);
+        case 'c': return @selector(copy:);
+        case 'v': return @selector(paste:);
+        case 'a': return @selector(selectAll:);
+        case 'z': return @selector(undo:);
+        default: return NULL;
+    }
+}
+
+/** Panels route Escape through the same cancellation lifecycle as buttons and own their editing shortcuts. */
 @interface FractalPanel : NSPanel
 @end
 @implementation FractalPanel
 - (void)cancelOperation:(id)sender {
     [(FractalParameterSession *)self.delegate cancel:sender];
+}
+
+// The JavaFX menu bar's Edit commands act only on JavaFX text controls, and its Undo would
+// change the scene behind this modal editor. Standard editing shortcuts therefore go to the
+// panel's own responder chain (the field editor) and never reach the main menu.
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
+    NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask
+            & ~(NSEventModifierFlagCapsLock | NSEventModifierFlagNumericPad | NSEventModifierFlagFunction);
+    SEL action = editingAction(event, flags);
+    if (!action) return [super performKeyEquivalent:event];
+    if (![self.firstResponder tryToPerform:action with:self]) NSBeep();
+    return YES;
 }
 @end
 
@@ -138,7 +178,7 @@ static void complete(FractalParameterSession *session, BOOL accepted) {
 }
 
 // Parsing stays in Java so the native and fallback editors accept identical values.
-static jint invalidField(FractalParameterSession *session) {
+static jint callWithDrafts(FractalParameterSession *session, jmethodID method) {
     BOOL attached;
     JNIEnv *env = sheetEnvironment(session.vm, &attached);
     if (!env) return 1;
@@ -146,7 +186,7 @@ static jint invalidField(FractalParameterSession *session) {
     jstring second = javaString(env, secondDraft(session));
     jint result = 1;
     if (first && second && !(*env)->ExceptionCheck(env))
-        result = (*env)->CallIntMethod(env, session.callback, session.validation, first, second);
+        result = (*env)->CallIntMethod(env, session.callback, method, first, second);
     if ((*env)->ExceptionCheck(env)) {
         (*env)->ExceptionDescribe(env);
         (*env)->ExceptionClear(env);
@@ -156,6 +196,10 @@ static jint invalidField(FractalParameterSession *session) {
     if (second) (*env)->DeleteLocalRef(env, second);
     if (attached) (*session.vm)->DetachCurrentThread(session.vm);
     return result;
+}
+
+static jint invalidField(FractalParameterSession *session) {
+    return callWithDrafts(session, session.validation);
 }
 
 @implementation FractalParameterSession
@@ -218,7 +262,9 @@ static jint invalidField(FractalParameterSession *session) {
 }
 - (void)apply:(id)sender {
     (void)sender;
-    jint invalidIndex = invalidField(self);
+    // Java submit runs synchronously on this main thread (the FX thread on macOS), so a
+    // form that applies on submit has done so before the sheet starts closing.
+    jint invalidIndex = callWithDrafts(self, self.submission ? self.submission : self.validation);
     if (invalidIndex != 0) {
         self.error.stringValue = self.validationError;
         NSTextField *invalid = self.positions ? self.positions[MIN((NSUInteger)invalidIndex - 1, self.positions.count - 1)]
@@ -386,6 +432,9 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_open
     session.validation = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, callback),
             "invalidField", "(Ljava/lang/String;Ljava/lang/String;)I");
     if (!session.validation) return 0;
+    session.submission = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, callback),
+            "submit", "(Ljava/lang/String;Ljava/lang/String;)I");
+    if (!session.submission) return 0;
     session.callback = (*env)->NewGlobalRef(env, callback);
     if (!session.callback) return 0;
     session.owner = owner;

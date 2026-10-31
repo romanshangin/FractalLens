@@ -30,6 +30,27 @@ final class AppKitParameterProbe {
         }
     }
 
+    /** Sends a key equivalent such as Command+V to the sheet panel; true when the panel handled it. */
+    static boolean keyEquivalent(MacParameterSheet<?> sheet, String characters, short keyCode, long modifiers)
+            throws Exception {
+        try (Arena arena = Arena.ofConfined()) {
+            var panel = field(sheet, "panel");
+            var string = (MemorySegment) AppKitMenuProbe.message(objcClass("NSString", arena),
+                    "stringWithUTF8String:", ADDRESS,
+                    new java.lang.foreign.MemoryLayout[]{ADDRESS}, arena.allocateFrom(characters));
+            var point = java.lang.foreign.MemoryLayout.structLayout(JAVA_DOUBLE, JAVA_DOUBLE);
+            var event = (MemorySegment) AppKitMenuProbe.message(objcClass("NSEvent", arena),
+                    "keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:",
+                    ADDRESS, new java.lang.foreign.MemoryLayout[]{JAVA_LONG, point, JAVA_LONG, JAVA_DOUBLE,
+                            JAVA_LONG, ADDRESS, ADDRESS, ADDRESS, JAVA_BYTE, JAVA_SHORT},
+                    10L, arena.allocate(point), modifiers, 0.0,
+                    (long) AppKitMenuProbe.message(panel, "windowNumber", JAVA_LONG), MemorySegment.NULL,
+                    string, string, (byte) 0, keyCode);
+            return (byte) AppKitMenuProbe.message(panel, "performKeyEquivalent:", JAVA_BYTE,
+                    new java.lang.foreign.MemoryLayout[]{ADDRESS}, event) != 0;
+        }
+    }
+
     static MacParameterSheet<?> activeSheet(javafx.stage.Window owner) throws Exception {
         var field = MacParameterSheet.class.getDeclaredField("ACTIVE");
         field.setAccessible(true);

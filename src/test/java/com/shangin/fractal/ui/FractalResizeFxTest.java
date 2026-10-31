@@ -86,7 +86,12 @@ class FractalResizeFxTest {
             badge.setZoom(new java.math.BigDecimal("1234567"));
             badge.setIterations(1_234_567);
             // Hover shows only the values; mode descriptions belong in Help.
-            assertEquals("Zoom: ≈1.23 × 10^6\nIterations: ≈1.23 × 10^6", badge.getTooltip().getText());
+            assertEquals("Zoom: 1234567\nIterations: ≈1.23 × 10^6", badge.getTooltip().getText());
+            // The tooltip zoom is the re-enterable Go to text; a zoom below 1 is not shown as 1.
+            badge.setZoom(new java.math.BigDecimal("0.96504383940932216"));
+            assertEquals("Zoom: 0.965043839409\nIterations: ≈1.23 × 10^6", badge.getTooltip().getText());
+            badge.setZoom(new java.math.BigDecimal("2.718281828459045235360287E80"));
+            assertTrue(badge.getTooltip().getText().startsWith("Zoom: 2.71828182846E+80\n"));
             badge.setProgress(0.0);
             badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
             assertTrue(badge.getText().contains("Rendering 0%"));
@@ -133,7 +138,7 @@ class FractalResizeFxTest {
                 RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
                 String tooltip = badge.getTooltip().getText();
                 int effectiveIterations = surface.completedRender().frame().request().maxIterations();
-                assertTrue(tooltip.contains("Zoom: 2"));
+                assertTrue(tooltip.contains("Zoom: 1.5625\n"), tooltip);
                 assertTrue(tooltip.contains("Iterations: " + RenderValueFormat.iterations(effectiveIterations)));
                 assertFalse(tooltip.contains("Render time"));
                 return null;
@@ -519,11 +524,9 @@ class FractalResizeFxTest {
     }
 
     @Test
-    void goToCoordinatesWithZoomPublishesTheExactDestinationAndUndoes() throws Exception {
+    void goToCoordinatesAppliesOnlyEditedFieldsAgainstTheLiveViewAndUndoes() throws Exception {
         FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE, true));
         FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
-        var center = new com.shangin.fractal.math.PreciseComplex(
-                "-0.743643887037151000000000000000001", "0.131825904205330000000000000000002");
         var zoom = new java.math.BigDecimal("1E20");
         try {
             changeView(view, surface, () -> {
@@ -531,22 +534,134 @@ class FractalResizeFxTest {
                 view.layout();
             });
             Viewport home = fx(view::sceneSnapshot).viewport();
-            Viewport expected = new FractalCamera(FractalPreset.MANDELBROT).destination(center, zoom, 320, 240);
-            changeView(view, surface, () -> {
-                assertTrue(view.canGoTo(new CoordinateTarget(center, zoom)));
-                view.goTo(new CoordinateTarget(center, zoom));
-            }, 30);
+            CoordinateEditor editor = fx(view::coordinateEditor);
+            CoordinateText shown = fx(view::coordinateText);
+            assertEquals(new CoordinateText("-0.75", "0", "1"), shown);
+
+            int[] renders = {0};
             fx(() -> {
-                assertEquals(expected, view.sceneSnapshot().viewport());
-                assertEquals(expected, surface.completedRender().frame().job().viewport());
+                view.setOnRenderingChanged(active -> { if (active) renders[0]++; });
+                // Unchanged drafts are a full no-op; invalid ones change nothing either.
+                assertEquals(0, editor.submit(shown, " -0.75 ", "0", "1"));
+                assertEquals(1, editor.submit(shown, "x", "0", "1e20"));
+                assertEquals(3, editor.submit(shown, "0.25", "0", "0.5"));
+                assertSame(home, view.sceneSnapshot().viewport());
+                assertFalse(view.canUndo());
                 return null;
             });
+            pauseFx(300);
+            assertEquals(0, fx(() -> renders[0]), "A no-op or failed Go to must not start a render");
+
+            // Only the zoom changed: the exact live center stays.
+            Viewport deep = new FractalCamera(FractalPreset.MANDELBROT).destination(home.center(), zoom, 320, 240);
+            changeView(view, surface, () -> assertEquals(0, editor.submit(shown, "-0.75", "0", "1e20")), 30);
+            fx(() -> {
+                assertEquals(deep, view.sceneSnapshot().viewport());
+                assertEquals(deep, surface.completedRender().frame().job().viewport());
+                return null;
+            });
+
+            // Only the real coordinate changed: imaginary and scale stay exact.
+            CoordinateText deepShown = fx(view::coordinateText);
+            assertEquals("1E+20", deepShown.zoom());
+            String real = "-0.743643887037151000000000000000001";
+            changeView(view, surface, () -> assertEquals(0,
+                    editor.submit(deepShown, real, deepShown.imaginary(), deepShown.zoom())), 30);
+            fx(() -> {
+                Viewport moved = view.sceneSnapshot().viewport();
+                assertEquals(new java.math.BigDecimal(real), moved.center().real());
+                assertEquals(deep.center().imaginary(), moved.center().imaginary());
+                assertEquals(deep.scaleExact(), moved.scaleExact());
+                return null;
+            });
+
+            changeView(view, surface, view::undoScene, 30);
+            assertEquals(deep, fx(view::sceneSnapshot).viewport());
             changeView(view, surface, view::undoScene);
             assertEquals(home, fx(view::sceneSnapshot).viewport());
 
             changeView(view, surface, () -> view.setFractal(FractalPreset.TRICORN));
-            assertFalse(fx(() -> view.canGoTo(new CoordinateTarget(center, zoom))));
-            assertTrue(fx(() -> view.canGoTo(new CoordinateTarget(center, java.math.BigDecimal.TEN))));
+            // Away from the origin, where doubles cannot resolve a 1e20 zoom.
+            CoordinateText tricorn = fx(view::coordinateText);
+            assertEquals(3, (int) fx(() -> editor.invalidField(tricorn, "-0.75", tricorn.imaginary(), "1e20")));
+            assertEquals(0, (int) fx(() -> editor.invalidField(tricorn, "-0.75", tricorn.imaginary(), "10")));
+            assertEquals(3, (int) fx(() -> editor.submit(tricorn, "-0.75", tricorn.imaginary(), "1e20")));
+            assertEquals(FractalPreset.TRICORN, fx(view::sceneSnapshot).fractal());
+            assertEquals(new CoordinateText("0", "0", "1"), fx(view::coordinateText));
+        } finally {
+            fx(() -> { view.close(); return null; });
+        }
+    }
+
+    @Test
+    void goToCoordinatesUsesLiveValuesAfterResizeAndKeepsAZoomBelowOneUntouched() throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE, true));
+        FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+        try {
+            changeView(view, surface, () -> {
+                view.resize(320, 240);
+                view.layout();
+            });
+            Viewport home = fx(view::sceneSnapshot).viewport();
+            // A restored or resized view can be wider than the initial view.
+            Viewport wide = new Viewport(new com.shangin.fractal.math.PreciseComplex("-0.5", "0.25"),
+                    new java.math.BigDecimal("5"));
+            changeView(view, surface, () -> view.goTo(wide));
+            CoordinateEditor editor = fx(view::coordinateEditor);
+            CoordinateText shown = fx(view::coordinateText);
+            assertTrue(new java.math.BigDecimal(shown.zoom()).compareTo(java.math.BigDecimal.ONE) < 0, shown::zoom);
+            int[] renders = {0};
+            fx(() -> {
+                view.setOnRenderingChanged(active -> { if (active) renders[0]++; });
+                assertEquals(0, editor.submit(shown, shown.real(), shown.imaginary(), shown.zoom()));
+                assertEquals(wide, view.sceneSnapshot().viewport());
+                return null;
+            });
+            pauseFx(300);
+            assertEquals(0, fx(() -> renders[0]));
+
+            // The window changes while the editor is open; Go uses the live scale.
+            changeView(view, surface, () -> {
+                view.resize(400, 300);
+                view.layout();
+            });
+            Viewport resized = fx(view::sceneSnapshot).viewport();
+            assertNotEquals(wide.scaleExact(), resized.scaleExact());
+            changeView(view, surface, () -> assertEquals(0,
+                    editor.submit(shown, "0.1", shown.imaginary(), shown.zoom())));
+            fx(() -> {
+                Viewport moved = view.sceneSnapshot().viewport();
+                assertEquals(new com.shangin.fractal.math.PreciseComplex(
+                        new java.math.BigDecimal("0.1"), resized.center().imaginary()), moved.center());
+                assertEquals(resized.scaleExact(), moved.scaleExact());
+                return null;
+            });
+
+            // The unchanged Go recorded no undo entry.
+            changeView(view, surface, view::undoScene);
+            changeView(view, surface, view::undoScene);
+            Viewport undone = fx(view::sceneSnapshot).viewport();
+            assertEquals(home.center(), undone.center(), undone::toString);
+        } finally {
+            fx(() -> { view.close(); return null; });
+        }
+    }
+
+    @Test
+    void copiedCoordinatesBeforeTheFirstRenderUseTheWindowRenderGrid() throws Exception {
+        FractalView view = fx(() -> new FractalView(FractalPreset.MANDELBROT, PalettePreset.ICE, true));
+        FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
+        try {
+            fx(() -> {
+                view.resize(1000, 700);
+                assertTrue(surface.renderWidth() < 2, "No render grid exists yet");
+                Viewport viewport = view.sceneSnapshot().viewport();
+                var zoom = new FractalCamera(FractalPreset.MANDELBROT).defaultViewport(1000, 700).scaleExact()
+                        .divide(viewport.scaleExact(), viewport.mathContext());
+                assertEquals(CoordinateText.of(viewport, surface.renderWidthFor(1000), surface.renderHeightFor(700),
+                        zoom), view.coordinateText());
+                return null;
+            });
         } finally {
             fx(() -> { view.close(); return null; });
         }
