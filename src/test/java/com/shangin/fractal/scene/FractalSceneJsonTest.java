@@ -16,6 +16,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FractalSceneJsonTest {
 
+    @Test
+    void repeatedSaveAndRestoreOfANavigatedSceneKeepsItsPrecision() {
+        Viewport viewport = new Viewport("-0.743643887037151", "0.13182590420533", "3");
+        for (int n = 0; n < 150; n++) viewport = viewport.zoomAt(421, 271, 1000, 700, 0.8);
+        FractalScene scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE).withViewport(viewport);
+        int precision = scene.viewport().mathContext().getPrecision();
+        for (int cycle = 0; cycle < 10; cycle++) {
+            FractalScene restored = FractalSceneJson.read(FractalSceneJson.write(scene));
+            assertEquals(scene.viewport(), restored.viewport());
+            scene = restored.withViewport(restored.viewport().zoomAt(500, 350, 1000, 700, 1.0));
+        }
+        assertEquals(precision, scene.viewport().mathContext().getPrecision());
+    }
+
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(PalettePreset.class)
     void roundTripsEveryPalettePresetAndItsStops(PalettePreset preset) {

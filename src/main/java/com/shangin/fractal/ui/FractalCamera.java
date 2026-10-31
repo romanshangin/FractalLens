@@ -71,9 +71,10 @@ public final class FractalCamera {
         if (zoom == null) return new Viewport(center, viewport.scaleExact());
         if (zoom.signum() <= 0) throw new IllegalArgumentException("Zoom must be positive");
         Viewport home = defaultViewport(width, height);
-        // Quotient digits are relative, so the zoom's own digits plus guards keep the scale exact enough.
+        // Quotient digits are relative, so the home precision already bounds the scale error;
+        // keeping at least the zoom's own digits must not add to them on every Go to.
         MathContext context = new MathContext(Math.max(home.mathContext().getPrecision(),
-                zoom.precision() + home.mathContext().getPrecision()), home.mathContext().getRoundingMode());
+                zoom.precision()), home.mathContext().getRoundingMode());
         return new Viewport(center, home.scaleExact().divide(zoom, context));
     }
 

@@ -353,9 +353,9 @@ class MandelbrotPerturbationRenderBackendTest {
         RenderJob deep = new RenderJob(formula,
                 new Viewport("-0.8317528516858322713653476366999",
                         "0.207813754242134522471317257011028", "1e-30"), 17, 13, 2_700);
+        // Zooming out keeps the navigated working precision, so the orbit key still matches.
         RenderJob wider = new RenderJob(formula,
-                new Viewport("-0.8317528516858322713653476366999",
-                        "0.207813754242134522471317257011028", "1.6e-13"), 17, 13, 2_700);
+                deep.viewport().zoom(new BigDecimal("1.6e17")), 17, 13, 2_700);
         AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
         try (MandelbrotPerturbationRenderBackend backend =
                      new MandelbrotPerturbationRenderBackend(1, diagnostics::set)) {

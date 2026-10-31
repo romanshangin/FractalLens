@@ -23,6 +23,35 @@ public class ViewportTest {
     }
 
     @Test
+    void rewrappingComputedValuesDoesNotAddAnotherGuardBudget() {
+        Viewport viewport = new Viewport("-0.743643887037151", "0.13182590420533", "3");
+        for (int n = 0; n < 120; n++) {
+            viewport = viewport.zoomAt(421, 271, 1000, 700, 0.8);
+        }
+        int navigated = viewport.mathContext().getPrecision();
+        // Session restore, bookmarks and history rebuild views from stored decimal text.
+        for (int cycle = 0; cycle < 10; cycle++) {
+            viewport = new Viewport(viewport.center().real().toPlainString(),
+                    viewport.center().imaginary().toPlainString(), viewport.scaleExact().toPlainString());
+            viewport = viewport.zoomAt(500, 350, 1000, 700, 1.0);
+        }
+        assertEquals(navigated, viewport.mathContext().getPrecision(),
+                "Restoring computed coordinates must not grow the working precision");
+    }
+
+    @Test
+    void longExactInputsKeepEveryDigitAndAtLeastTheirPrecision() {
+        String real = "-0.7436438870371510000000000000000000000000000000000000000000000000000000000000000001";
+        Viewport viewport = new Viewport(real, "0.25", "2.4");
+
+        assertEquals(new BigDecimal(real), viewport.center().real());
+        assertTrue(viewport.mathContext().getPrecision() >= new BigDecimal(real).precision());
+        assertEquals(new BigDecimal(real).add(new BigDecimal("0.01")),
+                viewport.pan(new BigDecimal("0.01"), BigDecimal.ZERO).center().real(),
+                "A pan must keep the last input digit exact");
+    }
+
+    @Test
     void leftPixelShouldMapToMinReal() {
         Viewport viewport = new Viewport(0.0, 0.0, 2.4);
 

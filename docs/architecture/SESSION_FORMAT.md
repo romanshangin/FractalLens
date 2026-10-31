@@ -32,6 +32,13 @@ platform location with both apps closed. Schema is unchanged.
 - interactive antialiasing render modes for standard zoom (`renderMode`) and
   deep zoom (`deepZoomRenderMode`): `BASE_ONLY`, `FAST` or `REFINED`.
 
+Viewport strings are stored and restored without rounding. On restore the working
+precision is the larger of the depth budget (integer digits, scale depth and guard
+digits) and the stored digit count; guard digits are not added again to values that
+already carry them, so repeated save/restore and Go to cycles do not grow it.
+Precision reached at depth is kept after zooming out. Older scenes that already
+stored inflated digit counts load unchanged and are not shortened automatically.
+
 Interactive AA always uses a regular subpixel grid. Write `antialiasing.samplingPattern`
 as `REGULAR` for pre-jitter-removal version 2 readers. Reading is optional:
 `DETERMINISTIC_JITTER` also maps to regular; all other values are rejected.

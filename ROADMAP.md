@@ -611,6 +611,9 @@ This phase should remain separate from the current pan-reuse optimization.
   decimal coordinates in `src/test/resources/julia/reported-pixelation.txt`.
 - [x] Stop accumulating guard digits on every navigation operation; bound
   render arithmetic to pixel depth while preserving authoritative input values.
+  Re-wrapped views (session restore, bookmarks, history, Go to) also keep their
+  precision instead of adding guard digits to retained digits; viewport guards
+  cover the render-grid budget, and grids never use a viewport context below it.
 - [x] Extend the perturbation fast path to deltas below the normal-double range
   through scaled deltas with an explicit subnormal error bound (P2.5).
 
@@ -827,8 +830,8 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   direct/deep transitions, glitch-heavy and BLA-friendly scenes, scaled-exponent
   zoom, pan overlap, reverse navigation, resize-then-drag and cancellation.
   The versioned [matrix and headless runner](benchmarks/BASELINE_BENCHMARK.md) contain
-  28 sequences / 37 steps at three render sizes (26 / 35 in `9.1-v2`, which
-  drops the deterministic-jitter AA fixtures), with a pinned exact manifest
+  28 sequences / 37 steps at three render sizes (26 / 35 in `9.1-v2` and
+  `9.1-v3`, which drop the deterministic-jitter AA fixtures), with a pinned exact manifest
   and behavioral regressions. See [validation](benchmarks/BASELINE_VALIDATION.md).
 - [x] Measure formula/backend, returned-ARGB, JavaFX base/AA publication and
   input-to-visible-update scopes separately. Record first useful region,

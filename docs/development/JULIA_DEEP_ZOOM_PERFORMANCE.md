@@ -41,6 +41,11 @@ digits and exact per-pixel orbit cost beyond pixel-scale needs.
   input coordinates remain authoritative; excessive render-grid precision is bounded by
   pixel depth plus guard digits. Ordinary existing grids and the canonical 9.1-v1
   manifest are unchanged.
+- Re-wrapping computed values (restore, history, Go to) keeps their precision without
+  another guard budget. A render grid never uses a viewport context below its own
+  pixel-depth budget; viewport guards (30) cover that budget, so navigation keeps one
+  grid context and Mandelbrot reference-orbit key. Matrix `9.1-v3` records the shorter
+  derived fixture coordinates.
 
 ## Evidence
 

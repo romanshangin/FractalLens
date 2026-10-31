@@ -10,7 +10,7 @@ import java.util.*;
 
 /** Versioned, decimal-authoritative workloads shared by the manifest and runner. */
 final class BaselineFixtures {
-    static final String VERSION = "9.1-v2";
+    static final String VERSION = "9.1-v3";
     static final String HEADER = "matrix,fixture,step,action,formula,parameters,center_real,center_imaginary,scale,width,height,iteration_policy,base_iterations,iterations_per_zoom,actual_cap,trap,coloring,palette,palette_offset,aa,aa_grid,accuracy,base_cache,aa_cache,cancel_trigger";
     private static final String DEEP_REAL = "-0.8317528516858322713653476366999";
     private static final String DEEP_IMAGINARY = "0.207813754242134522471317257011028";
