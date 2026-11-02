@@ -11,6 +11,7 @@ import platform
 import plistlib
 import re
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -394,6 +395,22 @@ def parse_args():
     return parser.parse_args()
 
 
+def remove_package_output():
+    """Remove prior jpackage output, including Windows read-only launchers."""
+    if not TARGET.exists():
+        return
+    if os.name == "nt":
+        for directory, _, files in os.walk(TARGET, followlinks=False):
+            for name in files:
+                path = Path(directory) / name
+                info = path.lstat()
+                if (stat.S_ISREG(info.st_mode)
+                        and info.st_file_attributes & stat.FILE_ATTRIBUTE_READONLY):
+                    path.chmod(info.st_mode | stat.S_IWRITE)
+    # Sharing violations and other permission errors must stop the build.
+    shutil.rmtree(TARGET)
+
+
 def main():
     args = parse_args()
     if not (sys.platform == "darwin" or os.name == "nt"):
@@ -404,7 +421,7 @@ def main():
 
     jpackage = java_tool("jpackage")
     jpackage_version = require_jdk_25(jpackage)
-    shutil.rmtree(TARGET, ignore_errors=True)
+    remove_package_output()
     classpath_file = ROOT / "target" / "runtime-classpath.txt"
     build_project(classpath_file)
     classpath = [Path(entry) for entry in classpath_file.read_text().strip().split(os.pathsep)]

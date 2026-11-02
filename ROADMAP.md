@@ -261,6 +261,10 @@ delivery foundations are ready; it does not cancel it.
     - [x] Execute the previously skipped fullscreen scenarios on the available
       desktop display with Metal: native menu tracking, reported trackpad case
       and both fullscreen-zoom parameter cases passed (four cases, no skips).
+    - Windows follow-up repairs cover initial rendering and scene replacements
+      on every platform, and remove read-only jpackage output before repeat builds. These
+      implementation changes do not close the remaining physical dialog, mixed-DPI,
+      clean-machine installer, Linux or additional-Mac acceptance gaps.
     - [ ] Record supported-platform execution for Windows/Linux and additional
       Mac configurations; local macOS arm64 results do not establish support
       on Intel/AMD Macs or other operating systems.

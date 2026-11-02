@@ -106,7 +106,7 @@ public class FractalView extends StackPane {
             PalettePreset initialPalette
     ) {
         this(FractalScene.create(initialFractal, initialPalette),
-                System.getProperty("os.name", "").startsWith("Mac"), false);
+                true, false);
     }
 
     FractalView(FractalPreset initialFractal, PalettePreset initialPalette, boolean loadingScreenEnabled) {
@@ -114,21 +114,21 @@ public class FractalView extends StackPane {
     }
 
     public FractalView(FractalScene restoredScene) {
-        this(restoredScene, System.getProperty("os.name", "").startsWith("Mac"), true);
+        this(restoredScene, true, true);
     }
 
     FractalView(FractalScene initialScene, boolean restored) {
-        this(initialScene, System.getProperty("os.name", "").startsWith("Mac"), restored);
+        this(initialScene, true, restored);
     }
 
     FractalView(FractalScene initialScene, boolean restored, FractalRenderService renderService) {
-        this(initialScene, System.getProperty("os.name", "").startsWith("Mac"),
+        this(initialScene, true,
                 restored, renderService);
     }
 
     FractalView(FractalScene initialScene, boolean restored, FractalRenderService renderService,
                 FractalRenderController.RecolorOperation recolorOperation) {
-        this(initialScene, System.getProperty("os.name", "").startsWith("Mac"),
+        this(initialScene, true,
                 restored, renderService, recolorOperation);
     }
 
@@ -197,7 +197,7 @@ public class FractalView extends StackPane {
         StackPane.setMargin(modeIndicator, new javafx.geometry.Insets(12));
         // The status stays visible above the loading screen, which can last long in deep zoom.
         modeIndicator.setViewOrder(-1);
-        showLoadingScreen();
+        showLoadingScreen(false);
         renderController.setOnRenderStatusChanged(status -> {
             modeIndicator.setRenderStatus(status);
             if (loadingScreen != null && (status.state() == RenderStatus.State.COMPLETE
@@ -222,8 +222,8 @@ public class FractalView extends StackPane {
         colorCycleTimer.start();
     }
 
-    private void showLoadingScreen() {
-        if (loadingScreenEnabled && loadingScreen == null) {
+    private void showLoadingScreen(boolean sceneReplacement) {
+        if ((loadingScreenEnabled || sceneReplacement) && loadingScreen == null) {
             loadingScreen = new LoadingScreen(modeIndicator::raiseNative);
             // Keep the surface managed so layout and rendering proceed at the real window size.
             fractalSurface.setVisible(false);
@@ -258,7 +258,7 @@ public class FractalView extends StackPane {
         stopColorCyclingForSceneChange();
         cancelSceneInteraction();
         renderController.cancelCurrent();
-        showLoadingScreen();
+        showLoadingScreen(true);
         camera.setPreset(preset, width, height);
         scene = scene.withFractal(preset, camera.viewport());
         resetPriority();
@@ -276,7 +276,7 @@ public class FractalView extends StackPane {
         stopColorCyclingForSceneChange();
         cancelSceneInteraction();
         renderController.cancelCurrent();
-        showLoadingScreen();
+        showLoadingScreen(true);
         scene = scene.withViewport(camera.viewport());
         resetPriority();
         recalculate();
@@ -372,7 +372,7 @@ public class FractalView extends StackPane {
         stopColorCyclingForSceneChange();
         cancelSceneInteraction();
         renderController.cancelCurrent();
-        showLoadingScreen();
+        showLoadingScreen(true);
         camera.reset(width, height);
         scene = scene.withViewport(camera.viewport());
         resetPriority();
@@ -1063,7 +1063,7 @@ public class FractalView extends StackPane {
         resizeRender.stop();
         resizePending = false;
         fractalSurface.resizeBuffer((int) getWidth(), (int) getHeight());
-        if (scene.fractal() != replacement.fractal()) showLoadingScreen();
+        if (scene.fractal() != replacement.fractal()) showLoadingScreen(true);
         scene = replacement;
         camera.restore(scene.fractal(), scene.viewport(), (int) getWidth(), (int) getHeight());
         colorCycleOffset = scene.coloring().offset();
