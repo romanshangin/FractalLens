@@ -19,7 +19,7 @@ import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK11.VK_API_VERSION_1_1;
 
 /** Headless compute session. No surfaces, swapchains, or JavaFX native handles. */
-final class MacosMoltenVkSession implements GpuSession {
+final class VulkanComputeSession implements GpuSession {
     private VulkanLibraryLease library;
     private VkInstance instance;
     private VkDevice device;
@@ -31,11 +31,11 @@ final class MacosMoltenVkSession implements GpuSession {
     private List<GpuDevice> devices = List.of();
     private GpuDevice selectedDevice;
 
-    private MacosMoltenVkSession() {
+    private VulkanComputeSession() {
     }
 
     static GpuSession open() {
-        MacosMoltenVkSession session = new MacosMoltenVkSession();
+        VulkanComputeSession session = new VulkanComputeSession();
         try {
             session.initialize();
             return session;

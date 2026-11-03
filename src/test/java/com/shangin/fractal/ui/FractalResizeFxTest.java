@@ -678,12 +678,26 @@ class FractalResizeFxTest {
         FractalSurface surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
         Viewport destination = com.shangin.fractal.render.ReportedJuliaFixture.viewport();
         try {
-            changeView(view, surface, () -> {
+            CountDownLatch completed = new CountDownLatch(1);
+            fx(() -> {
+                view.setOnRenderingChanged(active -> {
+                    if (!active && surface.hasCompletedFrame()) completed.countDown();
+                });
                 view.resize(1200, 780);
                 view.layout();
                 view.goTo(destination);
                 assertFalse(surface.isVisible());
-            }, 30);
+                return null;
+            });
+            // This is a completion/visibility contract, not a machine-speed benchmark.
+            // Require observable progress before allowing the window-size render budget.
+            awaitCondition(() -> fx(() -> surface.hasCompletedFrame()
+                    || view.getChildrenUnmodifiable().stream()
+                            .filter(RenderModeIndicator.class::isInstance)
+                            .map(RenderModeIndicator.class::cast)
+                            .anyMatch(badge -> badge.getText().matches(".*Rendering ([1-9][0-9]?|100)%.*"))), 15);
+            assertTrue(completed.await(90, TimeUnit.SECONDS),
+                    "Deep Julia must complete after publishing progress");
             fx(() -> {
                 assertTrue(surface.hasCompletedFrame());
                 assertTrue(surface.isVisible(), "Completed Julia must be visible after the loading layer closes");
