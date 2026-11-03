@@ -31,6 +31,26 @@ class PackageRuntimeContractTest(unittest.TestCase):
                 archive.writestr(entry, contents)
         return path
 
+    @unittest.skipUnless(os.name == "nt", "Windows read-only deletion semantics")
+    def test_package_cleanup_removes_read_only_launcher_before_next_build(self):
+        output = self.root / "runtime-package"
+        launcher = output / "images" / "FractalLens" / "FractalLens.exe"
+        launcher.parent.mkdir(parents=True)
+        launcher.write_bytes(b"previous generated launcher")
+        launcher.chmod(0o444)
+        with mock.patch.object(package_runtime, "TARGET", output):
+            package_runtime.remove_package_output()
+            self.assertFalse(output.exists())
+            package_runtime.remove_package_output()
+
+    def test_package_cleanup_propagates_failure_instead_of_ignoring_it(self):
+        output = self.root / "runtime-package"
+        output.mkdir()
+        with mock.patch.object(package_runtime, "TARGET", output), \
+                mock.patch.object(package_runtime.shutil, "rmtree", side_effect=PermissionError("locked")):
+            with self.assertRaises(PermissionError):
+                package_runtime.remove_package_output()
+
     def test_public_application_name_reaches_native_package_and_launchers(self):
         options = package_runtime.jpackage_common(
             "jpackage", "1.0", "modules", "input", "icon")

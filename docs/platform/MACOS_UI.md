@@ -907,3 +907,16 @@ other AppKit windows.
 
 Independent review and verification were not separate workflow stages for this
 acceptance. Windows, Linux and Intel Mac are covered only by the portable CI suite.
+
+### Cross-platform startup and scene replacement coverage
+
+Formula selection, curated destinations and Reset View cover the previous frame
+until the replacement reaches full `RenderStatus.COMPLETE`, or finishes with
+`FAILED`. Restoring a scene with a different formula uses the same cover. This
+applies on Windows and Linux as well as macOS. The application icon also covers
+the first render on every platform, both for a fresh scene and a restored
+session. Startup resize or request replacement keeps the cover until full
+completion; a failed render dismisses it so the error remains accessible.
+Pan, zoom and ordinary later resize remain progressive; the status indicator
+stays above the cover. This prevents new formula tiles from
+being composited over pixels of the previous formula.

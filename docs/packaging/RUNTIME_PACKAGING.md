@@ -181,6 +181,12 @@ Clean Maven package → minimal modular runtime/app image → launcher/JavaFX/Ap
 (macOS)/CPU fallback/complete small render smoke → installer. Use
 `--app-image-only` during iteration without installer.
 
+Before Maven's clean build, packaging removes its previous output. On Windows,
+it clears the read-only attribute on generated regular files (including the
+jpackage launcher) before removal. Other cleanup errors, including files held
+open by a running app, stop the build instead of being ignored. Close the
+packaged application before rebuilding.
+
 Outputs are under `target/runtime-package`:
 
 - `artifacts/FractalLens-<version>.dmg` or the Windows EXE installer;
