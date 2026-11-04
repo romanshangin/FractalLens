@@ -833,8 +833,9 @@ class FractalResizeFxTest {
         }
     }
 
-    @Test
-    void refinedResizeKeepsCalculatedBaseEdgesVisibleDuringAntialiasing() throws Exception {
+    @ParameterizedTest
+    @EnumSource(InteractiveRenderMode.class)
+    void resizePublishesOnlyTheSelectedPresentation(InteractiveRenderMode mode) throws Exception {
         FractalSurface surface = fx(FractalSurface::new);
         fx(() -> {
             var source = com.shangin.fractal.render.RenderFrame.create(new com.shangin.fractal.render.RenderRequest(
@@ -847,17 +848,36 @@ class FractalResizeFxTest {
             target.validity().markReady(wholeFrame);
             surface.resize(8, 8);
             surface.resizeBuffer(8, 8);
-            surface.beginProgressiveRender(target, source, InteractiveRenderMode.REFINED);
+            surface.beginProgressiveRender(target, source, mode);
+            var center = new RenderRegion(2, 2, 4, 4);
+            int[] antialiased = new int[16];
+            java.util.Arrays.fill(antialiased, 0xff123456);
+            if (mode.antialiases()) {
+                surface.displayRefinedTile(target, center, antialiased);
+            }
             surface.displayProgress(new com.shangin.fractal.render.RenderProgressBatch(
                             target, java.util.List.of(wholeFrame)),
-                    new com.shangin.fractal.coloring.SmoothPaletteColoring(PalettePreset.ICE.palette()),
-                    InteractiveRenderMode.REFINED);
+                    new com.shangin.fractal.coloring.SmoothPaletteColoring(PalettePreset.ICE.palette()), mode);
             var progressive = (ImageView) surface.getChildrenUnmodifiable().get(2);
-            assertNotNull(progressive.getImage(), "Resize edges must appear during the base pass");
-            assertEquals(255, progressive.getImage().getPixelReader().getArgb(0, 0) >>> 24);
-            surface.beginRefinedRender(target);
-            assertEquals(255, progressive.getImage().getPixelReader().getArgb(0, 0) >>> 24,
-                    "Starting AA must not clear already calculated resize edges");
+            if (mode == InteractiveRenderMode.REFINED) {
+                assertNull(progressive.getImage(), "Resize must hide the base pass in Antialiased display");
+                surface.beginRefinedRender(target);
+                assertNotNull(progressive.getImage());
+                assertEquals(0, progressive.getImage().getPixelReader().getArgb(0, 0),
+                        "New resize borders must stay transparent until their AA tiles arrive");
+                assertEquals(0xff123456, progressive.getImage().getPixelReader().getArgb(2, 2),
+                        "Starting AA must preserve reused refined center pixels");
+                surface.displayRefinedTile(target, new RenderRegion(0, 0, 1, 1), new int[]{0xffabcdef});
+                assertEquals(0xffabcdef, progressive.getImage().getPixelReader().getArgb(0, 0),
+                        "Finished AA tiles must appear progressively");
+            } else {
+                assertNotNull(progressive.getImage(), "Base modes must show calculated resize borders");
+                assertEquals(255, progressive.getImage().getPixelReader().getArgb(0, 0) >>> 24);
+                if (mode.antialiases()) {
+                    assertEquals(0xff123456, progressive.getImage().getPixelReader().getArgb(2, 2),
+                            "Base progress must preserve reused AA pixels");
+                }
+            }
             return null;
         });
     }
@@ -1043,7 +1063,14 @@ class FractalResizeFxTest {
             render(surface, controller, camera, 80, 60, false, mode);
             int[] windowPixels = pixels(surface);
             int iterations = surface.completedRender().frame().request().maxIterations();
+            fx(() -> { surface.latency().arm(ignored -> {}); return null; });
             render(surface, controller, camera, 120, 100, true, mode);
+            var published = fx(() -> surface.latency().stop()).stream().map(InteractionLatency.Event::stage).toList();
+            if (mode == InteractiveRenderMode.REFINED) {
+                assertFalse(published.contains("base_publish"), "Resize must hide base tiles: " + published);
+            }
+            assertEquals(mode.antialiases(), published.contains("aa_publish"),
+                    "Resize must antialias only when the selected mode requires it: " + published);
             int[] fullscreenPixels = pixels(surface);
             assertEquals(iterations, surface.completedRender().frame().request().maxIterations());
             for (int y = 0; y < 60; y++) {

@@ -108,8 +108,11 @@ Fullscreen/window resize share behavior. At initial view, stretch the completed
 image immediately; after 75 ms stable size, render the fitted frame and replace
 preview atomically. Hide intermediate tiles to prevent mixed-aspect side bands/
 split contours. Zoomed resize preserves center/render-pixel spacing: expansion
-reuses center/AA and computes exposed borders; shrinking a complete frame crops
-without rendering. Subsequent pan retains the resized iteration limit and computes
+reuses center/AA and computes exposed borders using the selected standard/deep
+render mode, as pan does. Base only shows base tiles without AA; Base, then
+antialiasing shows base tiles before refining them; Antialiased display keeps
+new borders hidden until finished AA tiles arrive, preserving reused AA pixels.
+Shrinking a complete frame crops without rendering. Subsequent pan retains the resized iteration limit and computes
 only exposed strips. Equal dimension parity keeps centered copies on integer
 pixels. Interrupted AA publication completes missing display tiles even with
 cached samples.
