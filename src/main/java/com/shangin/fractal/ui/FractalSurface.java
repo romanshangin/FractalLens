@@ -55,7 +55,6 @@ public final class FractalSurface extends Region {
     private Viewport displayedViewport;
     private Viewport previewTargetViewport;
     private boolean initialResizePreview;
-    private boolean stagingShowsBaseProgress;
 
     private Runnable renderScaleChangedHandler = () -> {};
     private Window observedWindow;
@@ -124,13 +123,8 @@ public final class FractalSurface extends Region {
 
         stagingRenderFrame = renderFrame;
         progressivePreviewTransform.setToIdentity();
-        stagingShowsBaseProgress = !initialResizePreview && plannerSourceFrame != null
-                && (plannerSourceFrame.request().width() != renderFrame.request().width()
-                || plannerSourceFrame.request().height() != renderFrame.request().height());
-
         progressiveImageView.setImage(
-                !initialResizePreview && (stagingShowsBaseProgress
-                        || InteractiveRenderPresentation.showsBaseProgress(renderMode))
+                !initialResizePreview && InteractiveRenderPresentation.showsBaseProgress(renderMode)
                         ? stagingFrame.image()
                         : null
         );
@@ -188,8 +182,7 @@ public final class FractalSurface extends Region {
     ) {
         Objects.requireNonNull(renderMode);
 
-        if (!stagingShowsBaseProgress
-                && !InteractiveRenderPresentation.showsBaseProgress(renderMode)) {
+        if (!InteractiveRenderPresentation.showsBaseProgress(renderMode)) {
             return;
         }
 
@@ -279,12 +272,7 @@ public final class FractalSurface extends Region {
         if (stagingFrame == null || stagingRenderFrame != frame) {
             return;
         }
-        // During resize, keep newly calculated base colors visible at the edges;
-        // AA tiles replace them in place. Other refined renders retain the
-        // established quality-only presentation.
-        if (!stagingShowsBaseProgress) {
-            stagingFrame.clearExcept(stagingRefinementValidity);
-        }
+        stagingFrame.clearExcept(stagingRefinementValidity);
         progressivePreviewTransform.setToIdentity();
         progressiveImageView.setImage(initialResizePreview ? null : stagingFrame.image());
     }
@@ -309,7 +297,6 @@ public final class FractalSurface extends Region {
         displayedScene = Objects.requireNonNull(scene);
         displayedViewport = scene.viewport();
         stagingRenderFrame = null;
-        stagingShowsBaseProgress = false;
 
         baseImageView.setImage(
                 displayedFrame.image()
