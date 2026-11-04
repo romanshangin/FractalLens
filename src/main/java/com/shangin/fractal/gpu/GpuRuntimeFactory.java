@@ -12,9 +12,7 @@ public final class GpuRuntimeFactory {
         }
         return switch (GpuPlatform.current()) {
             case MACOS -> MacosMoltenVkRuntime.discover();
-            case WINDOWS -> new UnavailableGpuRuntime(
-                    GpuPlatform.WINDOWS,
-                    "Native Vulkan runtime is scheduled after macOS validation.");
+            case WINDOWS -> WindowsVulkanRuntime.discover();
             case UNSUPPORTED -> new UnavailableGpuRuntime(
                     GpuPlatform.UNSUPPORTED,
                     "GPU rendering is supported only on macOS and Windows.");

@@ -13,6 +13,6 @@ final class MacosMoltenVkRuntime {
                 && !arch.equals("x86_64") && !arch.equals("amd64")) {
             return new UnavailableGpuRuntime(GpuPlatform.MACOS, "Unsupported macOS JVM architecture: " + arch);
         }
-        return ManagedGpuRuntime.open(GpuPlatform.MACOS, MacosMoltenVkSession::open);
+        return ManagedGpuRuntime.open(GpuPlatform.MACOS, VulkanComputeSession::open);
     }
 }

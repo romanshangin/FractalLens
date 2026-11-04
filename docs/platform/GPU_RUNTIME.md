@@ -1,6 +1,6 @@
 # GPU runtime boundary
 
-macOS MoltenVK runtime owns headless Vulkan instance, device discovery/numeric-
+The shared Vulkan runtime (macOS MoltenVK and Windows native Vulkan) owns headless Vulkan instance, device discovery/numeric-
 compute reporting, selected logical device/queue; ready → `AVAILABLE`. CPU calculation/
 recoloring stay default. Opt-in Mandelbrot certifies FP32 and recovers rejects on
 CPU; optional palette kernel recolors compact base/AA phases, returning ARGB via
@@ -12,10 +12,10 @@ JavaFX. GPU gains depend on AA and transfer/presentation costs.
 | --- | --- | --- |
 | macOS Apple Silicon, ARM64 JVM | LWJGL 3.4.2 + bundled ARM64 MoltenVK | Tested on Apple M3 Pro, macOS 26.6.2 |
 | macOS Intel/AMD, x64 JVM | LWJGL 3.4.2 + bundled x64 MoltenVK | Packaging configured; hardware validation pending |
-| Windows 10/11 | Native Vulkan through LWJGL (planned) | Runtime disabled; CPU remains available |
+| Windows 10/11, x64 JVM | LWJGL + system Vulkan loader | Runtime implemented; hardware acceptance pending |
 | Other OS/architectures | None | CPU only |
 
-The macOS runtime requires Vulkan 1.1 and a hardware GPU with a compute queue.
+The runtime requires Vulkan 1.1 and a hardware GPU with a compute queue.
 It prefers discrete, then integrated GPUs; software Vulkan CPU devices are not
 selected. The CPU backends remain usable if native initialization fails.
 
@@ -34,7 +34,7 @@ max workgroup invocations/storage buffer. Only **selected** capabilities gate wo
 ## Ownership and fallback
 
 `FractalRenderService` owns `GpuRuntime`, hiding Vulkan from controller/JavaFX.
-Native calls: `MacosMoltenVkSession`, `VulkanPaletteKernel`, `VulkanMandelbrotKernel`,
+Native calls: `VulkanComputeSession`, `VulkanPaletteKernel`, `VulkanMandelbrotKernel`,
 `VulkanLibraryLease`. Refcounted loader keeps runtimes independent; borrow external
 loaders. Initialization rolls back partial resources. Shutdown waits for device,
 destroys logical device/instance, releases loader; known-lost devices destroy
@@ -291,3 +291,143 @@ and full Retina precision gates with Unsafe denied. The integrated 384x256
 overview certified 87,904 pixels and recovered 10,400, with exact escape/iteration
 agreement and smooth error within 0.01. A fresh-JVM missing-shaderc run passed
 exact CPU fallback. These are correctness checks, not performance claims.
+
+## Windows acceptance (roadmap 8.7)
+
+The automatically activated `runtime-windows` Maven profile includes x64 LWJGL
+and shaderc natives. Vulkan itself is supplied by the GPU driver (`vulkan-1.dll`),
+not bundled from a Vulkan SDK. Only `amd64`/`x86_64` JVMs are supported by this
+packaging; other architectures return `UNAVAILABLE` before native loading.
+Missing natives, a missing loader, an incompatible driver, or no eligible compute
+device leave CPU calculation and deep zoom available. Device selection and numeric
+reporting use the same session as macOS; portability extensions remain conditional.
+Runtime discovery does not enable GPU calculation or palette recoloring by default.
+
+Run separately on Windows 10 and Windows 11 with the pinned wrapper:
+
+```powershell
+.\mvnw.cmd clean test
+.\mvnw.cmd -Pgpu-smoke test
+```
+
+`GpuRuntimeNativeTest` checks two concurrent runtimes, close/reopen, injected device
+loss, and direct/deep CPU fallback. Injected loss is not a real driver-reset test.
+In a separate JVM with absent libraries, run the lifecycle gate with
+`-Pgpu-smoke -Dtest=GpuRuntimeNativeTest
+-Dfractal.gpu.expectUnavailable=true`; arrange missing loader/core natives in the
+launch environment without removing installed driver files. The unavailable
+assertion must fail if discovery unexpectedly succeeds.
+
+Only after lifecycle acceptance, run the native calculation/palette gates and
+existing JavaFX invalidation/AA tests in an active graphical desktop session.
+Use `GpuRenderBenchmark` under the established 8.5 paired protocol, retaining
+transfer, first publication, completion and next-pulse timings; record Windows
+OS, GPU/driver, power state, runtime versions and output scale. Keep raw output
+private until publication checks pass. Windows measurements must be new evidence,
+not relabeled macOS results. Neither reported FP64 nor a passing smoke test proves
+full precision or performance acceptance. Windows 10/11 hardware and visible
+acceptance remain open; no default-enablement decision is made here.
+### Historical pre-transfer Windows 11 developer checks (2026-11-03)
+
+These checks ran in the original checkout before transfer, on
+`feature/windows-vulkan-runtime`, based on
+`1312e7f57b68b39d02d96daf5885378b82daf625` plus the uncommitted runtime changes.
+They do not validate the transferred candidate, whose base revision and merge base
+are `63b5c63ac860799a7ea17f383dd444c19f37ced0`. The intervening changes affect
+`FractalView` and `FractalResizeFxTest`. All counts and timings in this historical
+subsection belong to the pre-transfer code; they must not be reused as current
+candidate evidence. In particular, the exploratory benchmark has not been rerun
+on the transferred base.
+Windows 11 build 26200, x64 Java 26.0.1, JavaFX 26.0.2, LWJGL 3.4.2,
+8 logical processors, approximately 2 GiB JVM heap, default Prism pipeline,
+125% output scale. NVIDIA GeForce GTX 1650 with Max-Q Design selected (Vulkan
+1.4.325, compute family 2); Intel UHD Graphics also enumerated. FP64 is reported,
+not calculation-conformance validated. Driver package, power and thermal state
+were not collected; these observations are not a promotion campaign.
+
+Native smoke: five tests passed (calculation, resident spike, lifecycle, palette
+with AA/invalidation). Separate JVM lifecycle runs passed with each of
+`-Dorg.lwjgl.vulkan.libname=fractallens-missing-vulkan-test.dll` and
+`-Dorg.lwjgl.libname=fractallens-missing-lwjgl-test.dll`, together with
+`-Pgpu-smoke -Dtest=GpuRuntimeNativeTest -Dfractal.gpu.expectUnavailable=true`.
+They exercised direct/deep CPU fallback without modifying installed libraries.
+
+Exploratory alternating pairs used `GpuRenderBenchmark`, 1500x980 pixels,
+`overview,overview-aa`, 3 warmups, 3 measured pairs per case and one JVM start.
+Uninstrumented total-frame ranges (milliseconds):
+
+| Case | CPU | GPU |
+| --- | --- | --- |
+| Overview | 39.57–47.33 | 531.87–568.35 |
+| Overview + AA | 172.12–187.15 | 660.87–762.03 |
+
+A separate identical run with `fractal.gpu.mandelbrot.profile=true` recorded
+GPU upload 7.61–8.92 ms, readback/wait 196.91–292.14 ms, kernel 217.98–220.77 ms,
+and JavaFX color/publication 27.13–58.33 ms across both cases. These component
+ranges are instrumented observations, not additive explanations of the
+uninstrumented totals. All pairs passed the benchmark comparison; maximum smooth
+error was 0.00016570704. Raw local CSVs were temporary ignored output in `target/`, removed by the subsequent
+`clean test`; only this exploratory summary is retained, not replayable public evidence. The initial 1512x982 request was rejected by the
+benchmark's integral-logical-dimension guard at 125%; no timings were collected
+for that invalid configuration.
+
+Decision: **inconclusive** for full Windows acceptance; exploratory performance
+is unfavorable. CPU remains default. Missing: Windows 10 execution, other drivers,
+real driver-reset/device-loss acceptance, complete visible gesture/AA acceptance,
+and the full multi-start workload/performance campaign with controlled power and
+thermal conditions. macOS hardware regression was not rerun for the shared-session
+rename. No historical macOS measurements were changed.
+
+JavaFX resize suite: 47 tests, 0 failures/errors, 3 skips (two opt-in fullscreen checks and one POSIX-permission check);
+this does not establish complete Windows GPU visible acceptance.
+Portable `mvnw.cmd clean test`: 660 tests, 0 failures/errors, 140 opt-in skips
+outside the restricted filesystem environment. The first restricted run failed
+with `AccessDeniedException` during temporary-file replacement in bookmark/export
+tests; the unchanged candidate passed outside that environment. Targeted runtime
+checks: 15 tests passed. Compiler deprecation notes and the JavaFX native-access
+warning were observed, not suppressed. These checks are developer self-validation,
+not independent review or full platform acceptance.
+
+### Post-transfer developer revalidation (2026-11-03)
+
+Branch: `feature/windows-vulkan-runtime`. Base revision and merge base:
+`63b5c63ac860799a7ea17f383dd444c19f37ced0`, with the uncommitted Windows runtime
+changes and the evidence-provenance correction. These fresh executions ran in the
+transferred checkout. They replace the historical portable/resize results for
+this base; historical native-smoke and timing observations above are not reused
+as current-candidate evidence. This documentation correction changes the reviewed
+content identity; the review's earlier content ID does not identify this revision.
+
+| Check | Result |
+| --- | --- |
+| `mvnw.cmd test` after removing prior compiler/test output | 661 tests, 0 failures, 0 errors, 141 opt-in skips |
+| `FractalResizeFxTest` with `fractal.fx.tests=true`, a fresh platform-temp JavaFX cache and `reuseForks=false` | 49 tests, 0 failures, 0 errors, 3 skips |
+| `git diff --check` | Passed |
+
+The resize suite ran in the active Windows desktop session. Its three skips are
+two separately opt-in fullscreen checks and one POSIX-permission check. These
+skips are not passes or complete visible GPU acceptance. Compiler deprecation
+notes and the JavaFX native-access warning were observed and not suppressed.
+
+Two attempts at `mvnw.cmd clean test` stopped before test execution because Maven
+could not delete `target/runtime-package/images/FractalLens/FractalLens.exe`.
+No successful full `clean` is claimed. To avoid stale compiled output, the
+`classes`, `test-classes`, `maven-status`, `generated-sources`,
+`generated-test-sources` and `surefire-reports` directories were removed where
+present before running `mvnw.cmd test`; the packaged image was left in place.
+Surefire reports from the fresh portable and resize executions are retained
+privately in `.git/windows-gpu-review-fix/`, outside publication candidates.
+
+Native smoke, missing-library fault injection, timing campaigns, Windows 10 and
+manual visible acceptance were not rerun as part of this documentation fix.
+The historical benchmark remains inconclusive and cannot support promotion of
+the transferred candidate. CPU remains the default; section 8.7 acceptance stays
+open. These are developer self-validation results, not independent verification.
+### Separate deep Julia follow-up
+
+Subsequent standalone verification reported a deep Julia JavaFX completion-deadline
+failure on both this base and the Windows runtime candidate with GPU disabled.
+The fresh developer resize pass above remains an observation, not proof of a
+reliably passing deadline. Investigation is tracked separately in
+[Windows deep Julia frame-completion follow-up](../development/WINDOWS_DEEP_JULIA_FX_FOLLOWUP.md).
+This documentation update does not rerun or replace that independent verification.

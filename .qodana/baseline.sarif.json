@@ -596,7 +596,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "src/main/java/com/shangin/fractal/gpu/MacosMoltenVkSession.java"
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanComputeSession.java"
                 },
                 "region": {
                   "startLine": 97,
@@ -606,8 +606,8 @@
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "8ea2779e7d2c2275",
-            "equalIndicator/v1": "9265529ea97ba4d0dfcbc42bade9b94bdda7b5463a157c9cf59e0a1fea187954"
+            "equalIndicator/v2": "fcf63f3a21db382a",
+            "equalIndicator/v1": "5afd5460c6011a1772163b187df7bbcb0f15d476b23489c33426baf77def6798"
           }
         },
         {

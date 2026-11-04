@@ -790,14 +790,24 @@ this section's failed gates as passed.
 ### 8.7. Implement and validate the Windows GPU runtime
 
 - [x] Select LWJGL 3 with native Vulkan as the Windows GPU stack.
-- [ ] Add Windows native packaging, loader/device/compute-queue initialization,
+- [x] Add Windows x64 native packaging, loader/device/compute-queue initialization,
   and numeric capability reporting behind the existing runtime boundary.
+  Shared Vulkan session implemented; hardware acceptance remains below.
 - [ ] Validate startup, simultaneous runtimes, shutdown/reopen, device loss,
   missing natives, and direct/deep CPU fallback on Windows 10/11.
+  - [x] Windows 11 developer/standalone verification: startup, simultaneous runtimes,
+    close/reopen, injected device loss, missing loader/natives and CPU fallback.
+  - [ ] Windows 10 execution and real driver-reset/device-loss acceptance.
 - [ ] Validate palette recoloring, AA/frame/palette invalidation, and fallback;
   record paired CPU/GPU timings including transfer and JavaFX publication costs.
 - [ ] Run calculation conformance and performance gates for implemented GPU
   modes on Windows hardware before enabling them there.
+  - [x] Windows 11 native smoke conformance on GTX 1650 Max-Q (five tests).
+  - [ ] Full paired performance campaign and remaining platform/visible gates.
+  Exploratory timings are historical pre-transfer observations, not promotion
+  evidence. CPU stays default. See `docs/platform/GPU_RUNTIME.md` for provenance.
+  The pre-existing deep Julia deadline has a separate UI-test correction and
+  open latency follow-up in `docs/development/WINDOWS_DEEP_JULIA_FX_FOLLOWUP.md`.
 
 ### 8.8. Validate the Intel/AMD Mac GPU path
 
