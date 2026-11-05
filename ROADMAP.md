@@ -1149,6 +1149,13 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   DEFAULT: an owner-approved, A/A-calibrated timing acceptance rule and a
   memory v2 pass on both gates. See
   [TE1](benchmarks/WIDE_PREVIEW_VALIDATION.md#follow-up-timing-extension-te1).
+  The owner set the replacement [timing gate v2](benchmarks/TIMING_GATE_V2.md)
+  limits: the overall and per-family averages must have an upper 95% bound
+  <= 1.13, and each group's estimate must be <= 1.25, with a
+  Bonferroni-confirmed excess rejecting. A/A calibration chooses only the number
+  of pairs; the planning estimate is 24. The gate passed independent review and
+  verification, but no campaign has used it yet. The next campaign measures the current tree, using
+  the driver's `wide.preview.settings` switch on a single frozen build.
 - [ ] Give tiled high-resolution export, animation batches and optional
   multi-device/distributed rendering their own amortization and correctness
   gates after the stable interactive path. Include tile seams, storage/encoding,

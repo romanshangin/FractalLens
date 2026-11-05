@@ -14,8 +14,17 @@ import java.util.concurrent.TimeUnit;
 
 import static com.shangin.fractal.render.BaselineFxBenchmark.fx;
 
-/** Same production-handler/conformance harness for both frozen builds; no preview API dependency. */
+/**
+ * Same production-handler/conformance harness for both frozen builds; no preview API dependency.
+ *
+ * <p>{@code wide.preview.settings} selects the {@code WidePreviewSettings} constant applied before each
+ * source think time: {@code CANDIDATE} (default, the historical behavior) or {@code DEFAULT}. Both values
+ * go through the same setter at the same point, so one frozen build can serve as its own control. A
+ * build without the preview API ignores the setting and records it as absent.
+ */
 public final class WidePreviewInputBenchmark {
+    static final String SETTINGS_PROPERTY = "wide.preview.settings";
+
     private WidePreviewInputBenchmark() {}
 
     public static void main(String[] args) throws Exception {
@@ -36,6 +45,8 @@ public final class WidePreviewInputBenchmark {
                     new BaselineFixtures.Step("zoom-out", BaselineFixtures.Action.REUSE, out,
                             source.iterationPolicy(), source.aa(), source.colors()))));
         }
+        String settings = widePreviewSettings(System.getProperty(SETTINGS_PROPERTY, "CANDIDATE"));
+        boolean previewApi = previewApiAvailable();
         String selected = System.getProperty("baseline.fixtures");
         if (selected != null) fixtures.removeIf(f -> !List.of(selected.split(",")).contains(f.id()));
         Path output = Path.of(System.getProperty("baseline.output"));
@@ -57,7 +68,8 @@ public final class WidePreviewInputBenchmark {
                     + "samples=" + runs + "\nwarmups=" + warmups + "\nsource_idle_ms=250\n"
                     + "java=" + System.getProperty("java.runtime.version") + "\njavafx=" + System.getProperty("javafx.runtime.version")
                     + "\nos=" + System.getProperty("os.name") + " " + System.getProperty("os.version")
-                    + "\narch=" + System.getProperty("os.arch") + "\nphysical_scanout=unmeasured\n");
+                    + "\narch=" + System.getProperty("os.arch") + "\nphysical_scanout=unmeasured\n"
+                    + "wide_preview_settings=" + settings + "\nwide_preview_api=" + (previewApi ? "present" : "absent") + "\n");
             samples.println(BaselineInputBenchmark.HEADER);
             events.println(BaselineInputBenchmark.EVENT_HEADER);
             actual.println("trial,role," + BaselineFixtures.HEADER);
@@ -67,10 +79,12 @@ public final class WidePreviewInputBenchmark {
                 for (int run = -warmups - 1; run < runs; run++) {
                     String phase = run == -warmups - 1 ? "first_sequence" : run < 0 ? "warmup" : "sample";
                     ui.seed(fixture.steps().getFirst(), mode);
-                    fx(() -> { enableCandidateIfAvailable(ui); return null; });
+                    fx(() -> { applySettingsIfAvailable(ui, settings); return null; });
                     // Identical, declared think time in both builds; reserve preparation is outside gesture timing.
                     Thread.sleep(250);
                     int[] ready = fx(() -> stock(ui));
+                    if (settings.equals("DEFAULT") && (ready[0] != 0 || ready[1] != 0))
+                        throw new IllegalStateException("DEFAULT wide preview settings left a reserve snapshot");
                     var source = fx(() -> BaselineInputBenchmark.actualStep(ui, fixture.steps().getFirst(), "source"));
                     BaselineInputBenchmark.Result result;
                     try {
@@ -112,15 +126,31 @@ public final class WidePreviewInputBenchmark {
         } catch (NoSuchFieldException absentInControl) { return new int[]{0, 0}; }
     }
 
-    /** Evaluation is explicit after a rejected policy is disabled by default. Control has no such API. */
-    private static void enableCandidateIfAvailable(BaselineInputBenchmark.Ui ui) throws Exception {
+    /** Validates the declared settings constant name; anything else is a configuration error. */
+    static String widePreviewSettings(String value) {
+        if (!value.equals("CANDIDATE") && !value.equals("DEFAULT"))
+            throw new IllegalArgumentException(SETTINGS_PROPERTY + " must be CANDIDATE or DEFAULT: " + value);
+        return value;
+    }
+
+    private static boolean previewApiAvailable() {
+        try {
+            Class.forName("com.shangin.fractal.scene.WidePreviewSettings");
+            return true;
+        } catch (ClassNotFoundException absentInControl) {
+            return false;
+        }
+    }
+
+    /** Evaluation is explicit after a rejected policy is disabled by default. Old controls have no such API. */
+    private static void applySettingsIfAvailable(BaselineInputBenchmark.Ui ui, String name) throws Exception {
         try {
             Class<?> settings = Class.forName("com.shangin.fractal.scene.WidePreviewSettings");
-            Object candidate = settings.getField("CANDIDATE").get(null);
+            Object selected = settings.getField(name).get(null);
             var field = ui.view.getClass().getDeclaredField("renderController");
             field.setAccessible(true);
             Object controller = field.get(ui.view);
-            controller.getClass().getMethod("setWidePreviewSettings", settings).invoke(controller, candidate);
+            controller.getClass().getMethod("setWidePreviewSettings", settings).invoke(controller, selected);
         } catch (ClassNotFoundException absentInControl) {
             // The control predates the reserve; it still uses the same driver and source think time.
         }

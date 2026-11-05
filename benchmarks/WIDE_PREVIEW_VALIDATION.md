@@ -187,8 +187,12 @@ The test-module entry point is
 `baseline.warmups=3`, `baseline.runs=5`, fresh `baseline.output` and
 `javafx.cachedir`, `-Xmx4g`, `-Dprism.order=mtl`, CPU/GPU-dispatch flags as above,
 and the normal native bridge module exports from pom.xml. The current driver
-explicitly enables CANDIDATE after source conformance and before the identical
-250 ms think time; this is a **future evaluation protocol**, not a relabeling of
+applies the `WidePreviewSettings` constant named by `wide.preview.settings`
+(`CANDIDATE` by default, or `DEFAULT`) after source conformance and before the
+identical 250 ms think time. It records the value and whether the preview API
+exists in `environment.txt`, and stops if `DEFAULT` leaves any reserve snapshot. The
+recorded campaigns used the earlier always-CANDIDATE driver, which matches
+`CANDIDATE` here. This is a **future evaluation protocol**, not a relabeling of
 the recorded default-active builds. Alternate six fresh JVM pairs AB/BA without
 competing tests/builds, retain per-process RSS/exit/power/thermal records, and
 validate every input run with `summarize_baseline_input.py`. Apply the previously
@@ -328,6 +332,10 @@ a proof for every N, but adding pairs alone is unlikely to reach retain.
 Promotion needs a timing acceptance rule redesigned and calibrated on A/A data,
 which is an owner decision, and a memory result that passes both v2 gates. TE1 raw records, policy hashes and simulation scripts are
 kept in the private archive.
+
+The owner later set the limits of a replacement timing rule,
+[timing gate v2](TIMING_GATE_V2.md): averages within 13% and individual groups
+within 25%. It does not re-score TE1; TE1 stays inconclusive.
 
 The v2 and TE1 measurements used the 128 MiB AA cache default. That default was
 later [recalculated to 512 MiB](AA_MEMORY_VALIDATION.md#follow-up-default-budget-recalculation),
