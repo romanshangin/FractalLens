@@ -9,6 +9,7 @@ import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
+import com.shangin.fractal.scene.WidePreviewSettings;
 import com.shangin.fractal.ui.FractalSurface;
 import javafx.application.Platform;
 
@@ -34,6 +35,13 @@ import java.util.concurrent.Semaphore;
 public final class FractalRenderController implements AutoCloseable {
 
     private final FractalSurface surface;
+    private final WidePreviewService widePreview = new WidePreviewService(Platform::runLater);
+    private WidePreviewSettings widePreviewSettings = WidePreviewSettings.DEFAULT;
+    private FractalScene previewScene;
+    private RenderJob previewRequest;
+    private boolean visibleBusy;
+    private boolean widePreviewColorCycling;
+    private boolean closed;
     private final FractalRenderService renderService;
     private final InteractiveAntialiasService antialiasService =
             new InteractiveAntialiasService();
@@ -105,6 +113,8 @@ public final class FractalRenderController implements AutoCloseable {
                     .log(System.Logger.Level.ERROR, "Render failed", error);
 
     public void cancelCurrent() {
+        widePreview.cancel();
+        visibleBusy = true;
         recolorEpoch.incrementAndGet();
         renderService.cancelCurrent();
         antialiasService.cancelCurrent();
@@ -124,6 +134,11 @@ public final class FractalRenderController implements AutoCloseable {
     public void recolor(ColoringSettings settings, Runnable onApplied) {
         Objects.requireNonNull(settings);
         Objects.requireNonNull(onApplied);
+        if (previewScene != null && !widePreviewColorCycling) {
+            widePreview.cancel();
+            previewScene = previewScene.withColoring(settings);
+            surface.prepareWidePreview(previewRequest, settings, previewScene.iterations(), widePreviewSettings);
+        }
         RenderFrame frame = activeFrame;
         if (frame == null || !frame.isComplete()) {
             return;
@@ -170,6 +185,7 @@ public final class FractalRenderController implements AutoCloseable {
                                 presentationStarted - queued, System.nanoTime() - presentationStarted));
                         publishedRecolorSequence.set(request);
                         onApplied.run();
+                        if (request == recolorSequence.get()) replenishWidePreview();
                     }
                 } finally {
                     recolorBuffers.offerFirst(ready);
@@ -208,6 +224,9 @@ public final class FractalRenderController implements AutoCloseable {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
+        widePreview.cancel();
+        visibleBusy = true;
+        previewScene = scene;
         surface.latency().renderStarted();
         progressHandler.accept(0.0);
         long renderGeneration = renderActivity.begin();
@@ -264,6 +283,9 @@ public final class FractalRenderController implements AutoCloseable {
                                 && scene.coloring().orbitTrap() == com.shangin.fractal.coloring.OrbitTrap.NONE
                                 ? SampleAccuracy.CERTIFIED_FP32 : SampleAccuracy.CPU_REFERENCE
                 );
+
+        previewRequest = renderRequest;
+        surface.prepareWidePreview(renderRequest, scene.coloring(), scene.iterations(), widePreviewSettings);
 
         if (changesOnlyPresentation(scene, renderRequest)) {
             changePresentation(activeFrame, scene, presentationMode, deepZoom, renderGeneration, frameProgress);
@@ -390,7 +412,7 @@ public final class FractalRenderController implements AutoCloseable {
             surface.completeProgressiveRender(targetFrame, scene);
             frameCache.put(targetFrame);
             initialFramePending = false;
-            renderActivity.finish(renderGeneration);
+            finishRender(renderGeneration);
             return;
         }
 
@@ -445,7 +467,7 @@ public final class FractalRenderController implements AutoCloseable {
                                             scene
                                     );
                                     initialFramePending = false;
-                                    renderActivity.finish(renderGeneration);
+                                    finishRender(renderGeneration);
                                 },
                                 error -> {
                                     surface.displayReadyPixelsPreservingRefinement(
@@ -473,7 +495,7 @@ public final class FractalRenderController implements AutoCloseable {
                     );
 
                     if (baseOnly) {
-                        renderActivity.finish(renderGeneration);
+                        finishRender(renderGeneration);
                         return;
                     }
 
@@ -489,7 +511,7 @@ public final class FractalRenderController implements AutoCloseable {
                                     region,
                                     colors
                             ),
-                            () -> renderActivity.finish(renderGeneration),
+                            () -> finishRender(renderGeneration),
                             error -> {
                                 reportFailure(renderGeneration, error);
                             }
@@ -501,6 +523,51 @@ public final class FractalRenderController implements AutoCloseable {
                     reportFailure(renderGeneration, error);
                 }
         );
+    }
+
+    /** Suspends hidden reserve recoloring while the visible palette is animated. FX-thread only. */
+    public void setColorCycling(boolean cycling, ColoringSettings displayedColoring) {
+        Objects.requireNonNull(displayedColoring);
+        if (closed || widePreviewColorCycling == cycling) return;
+        widePreviewColorCycling = cycling;
+        widePreview.cancel();
+        surface.clearWidePreview();
+        if (!cycling && previewScene != null) {
+            previewScene = previewScene.withColoring(displayedColoring);
+            surface.prepareWidePreview(previewRequest, displayedColoring, previewScene.iterations(), widePreviewSettings);
+            replenishWidePreview();
+        }
+    }
+
+    /** Future Settings integration: invalidates old work and pixels without disturbing exact rendering. */
+    public void setWidePreviewSettings(WidePreviewSettings settings) {
+        Objects.requireNonNull(settings);
+        if (closed || settings.equals(widePreviewSettings)) return;
+        widePreviewSettings = settings;
+        widePreview.cancel();
+        surface.clearWidePreview();
+        if (previewRequest != null) {
+            surface.prepareWidePreview(previewRequest, previewScene.coloring(), previewScene.iterations(), settings);
+            replenishWidePreview();
+        }
+    }
+
+    public WidePreviewSettings widePreviewSettings() { return widePreviewSettings; }
+
+    private void finishRender(long renderGeneration) {
+        if (!renderActivity.isCurrent(renderGeneration)) return;
+        visibleBusy = false;
+        renderActivity.finish(renderGeneration);
+        replenishWidePreview();
+    }
+
+    private void replenishWidePreview() {
+        if (closed || visibleBusy || widePreviewColorCycling || previewRequest == null
+                || !widePreviewSettings.enabled()) return;
+        widePreview.request(previewRequest, previewScene.coloring(), widePreviewSettings,
+                surface::displayWidePreview,
+                error -> System.getLogger(FractalRenderController.class.getName())
+                        .log(System.Logger.Level.WARNING, "Wide preview failed", error));
     }
 
     /** A completed visible frame whose scene differs only in antialiasing needs no new samples. */
@@ -530,7 +597,7 @@ public final class FractalRenderController implements AutoCloseable {
                 hiddenRefinement = new HiddenRefinement(frame, scene.coloring(), shown);
             }
             surface.showBaseColors(frame, coloring, scene);
-            renderActivity.finish(renderGeneration);
+            finishRender(renderGeneration);
             return;
         }
         if (hiddenRefinement != null && hiddenRefinement.frame() == frame
@@ -543,7 +610,7 @@ public final class FractalRenderController implements AutoCloseable {
             // The visible image is already fully antialiased, so both AA modes show it as is.
             frameProgress.refining(refined);
             surface.completePresentationChange(frame, scene);
-            renderActivity.finish(renderGeneration);
+            finishRender(renderGeneration);
             return;
         }
         // The base is already visible, so both AA modes refine the missing tiles in place.
@@ -557,7 +624,7 @@ public final class FractalRenderController implements AutoCloseable {
                 (region, colors) -> surface.applyAntialiasing(frame, region, colors),
                 () -> {
                     surface.completePresentationChange(frame, scene);
-                    renderActivity.finish(renderGeneration);
+                    finishRender(renderGeneration);
                 },
                 error -> reportFailure(renderGeneration, error)
         );
@@ -687,6 +754,10 @@ public final class FractalRenderController implements AutoCloseable {
 
     @Override
     public void close() {
+        if (closed) return;
+        closed = true;
+        widePreview.close();
+        surface.clearWidePreview();
         recolorEpoch.incrementAndGet();
         recolorExecutor.shutdownNow();
         antialiasService.close();

@@ -401,7 +401,7 @@ deep zoom. Both are stored in the scene's `AntialiasSettings` as
 | --- | --- | --- |
 | Base only | `BASE_ONLY` | Progressive base samples; the frame completes without antialiasing |
 | Base, then antialiasing | `FAST` | Progressive base samples, then antialiased tiles in place |
-| Antialiased display | `REFINED` | Only refined antialiased tiles are shown |
+| Antialiased display | `REFINED` | Only refined antialiased target tiles are shown |
 
 Defaults preserve earlier behavior: standard Antialiased display, deep Base only.
 Mandelbrot/Julia requiring precise rendering use the deep setting, all other
@@ -439,6 +439,43 @@ already-visible base to avoid blanking. Pan/zoom/resize use normal frame reuse
 and the selected mode. Both scene modes persist through Undo/Redo, bookmarks,
 shared presets/restore; unlike the old transient Deep Zoom Antialiasing switch,
 leaving deep zoom does not clear its mode. PNG export keeps independent adaptive AA.
+
+### Wide navigation preview
+
+The wide-preview candidate is **disabled by default**. Its original v1 memory
+rejection used a per-pair RSS rule later shown to be invalid; under the
+calibrated follow-ups, timing and the memory tail remain inconclusive. Explicit developer configuration can enable a separate coarse CPU raster
+to fill uncovered areas beneath the existing
+pan/zoom images. It contains actual fractal samples, without AA, and is allowed
+in all three display modes, including Antialiased display. It never covers an
+opaque exact/AA pixel and never contributes samples, validity, progress or pixels
+to export. Areas outside the available reserve still show the palette background.
+
+`WidePreviewSettings` owns the validated extent, physical-pixel step and resource
+limits. The initial request is twice the screen width and height at step eight;
+the sample budget can raise that step on large/HiDPI targets. The controller's
+`setWidePreviewSettings(WidePreviewSettings.CANDIDATE)` enables the candidate;
+passing DEFAULT disables it. Changes cancel old work/publication and replace the reserve
+without interrupting the exact frame. There is no Settings UI or persistence for
+this policy yet. See [the preview contract and measurement policy](../../benchmarks/WIDE_PREVIEW_VALIDATION.md)
+and [the calibrated memory-gate follow-up](../../benchmarks/MEMORY_GATE_V2.md).
+
+Preparation runs only after the visible frame and its AA finish. Navigation
+cancels it without blocking FX; compatible finished coarse samples survive for
+the next idle calculation. During pan/zoom, the previous reserve remains an
+approximation until replaced, including when adaptive iterations change with
+zoom. Explicit iteration-policy, formula/Julia parameter, palette/trap or preview
+configuration changes remove incompatible reserve pixels. The reserve has its
+own capped iteration budget; precise visible rendering and export are unchanged.
+
+While Color Cycling is active, the controller cancels reserve work once, hides
+its raster and suspends all reserve replenishment/recoloring. Visible palette
+animation continues. Stopping the cycle resumes the reserve with the last
+palette actually applied to the visible frame; navigation cancels obsolete work
+through the normal generation boundary. A complete reserve is recolored and
+published once without creating a calculation backend or rebuilding deep orbits.
+The surface reuses one WritableImage and one upload array when the coarse grid
+size is unchanged, including across palette invalidation and cycling pauses.
 
 Known limitation: for Histogram Coloring and Orbit Trap there are no cached AA
 samples, so finished AA colors survive only on the visible frame. A pan made
@@ -923,3 +960,8 @@ completion; a failed render dismisses it so the error remains accessible.
 Pan, zoom and ordinary later resize remain progressive; the status indicator
 stays above the cover. This prevents new formula tiles from
 being composited over pixels of the previous formula.
+
+The AA sample cache admission budget includes conservative retained object, LRU
+table and current snapshot storage, rather than phase payload alone. Reaching
+that budget preserves completed AA pixels and may retain fewer samples for
+subsequent palette animation; the existing base-color fallback applies.

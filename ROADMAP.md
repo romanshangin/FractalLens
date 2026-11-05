@@ -1127,6 +1127,28 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   an explicit approximate display policy. Keep exact sample caches/export
   isolated and converge to the requested precision and iteration budget;
   never preserve a stale cap across a zoom-containing interaction batch.
+  The 2026-11-04 CPU wide-reserve candidate is implemented for explicit
+  evaluation but disabled by default: peak RSS failed the declared 5% control
+  limit in one completed process pair. Timing acceptance remains incomplete;
+  this item is not complete. See [the decision](benchmarks/WIDE_PREVIEW_VALIDATION.md).
+  AA retained-cache accounting was subsequently corrected, and its default
+  budget was recalculated to 512 MiB, which retains every measured
+  3024x1964 AA frame; the separate primitive
+  AA sampling experiment and its distance-only follow-up were rejected on RSS
+  and removed from production. See
+  [AA memory evidence](benchmarks/AA_MEMORY_VALIDATION.md).
+  A calibrated memory gate v2 later passed the wide preview's memory control,
+  while 25 of 56 timing groups stayed inconclusive. The distance-only AA build
+  was inconclusive under v2 and stays out. See
+  [memory gate v2](benchmarks/MEMORY_GATE_V2.md). A declared 24-pair timing
+  extension (TE1) found no failing group (43 pass, 13 inconclusive) and did not
+  reproduce the early zoom-out concern, but stayed inconclusive; its memory v2
+  tail (G2) bound was also inconclusive at 1.0502. An A/A planning simulation
+  estimates that identical builds pass all 56 groups with probability about 0
+  at 24 pairs under the per-group limit. Remaining gates before enabling
+  DEFAULT: an owner-approved, A/A-calibrated timing acceptance rule and a
+  memory v2 pass on both gates. See
+  [TE1](benchmarks/WIDE_PREVIEW_VALIDATION.md#follow-up-timing-extension-te1).
 - [ ] Give tiled high-resolution export, animation batches and optional
   multi-device/distributed rendering their own amortization and correctness
   gates after the stable interactive path. Include tile seams, storage/encoding,

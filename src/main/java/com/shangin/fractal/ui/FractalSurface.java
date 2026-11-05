@@ -7,6 +7,8 @@ import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.ColoringSettings;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.InteractiveRenderMode;
+import com.shangin.fractal.scene.WidePreviewSettings;
+import com.shangin.fractal.scene.IterationSettings;
 import javafx.beans.value.ChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Rectangle2D;
@@ -33,6 +35,16 @@ public final class FractalSurface extends Region {
     private final InteractionLatency latency = new InteractionLatency();
 
     public InteractionLatency latency() { return latency; }
+
+    private final ImageView widePreviewImageView = new ImageView();
+    private final Affine widePreviewTransform = new Affine();
+    private WidePreviewSnapshot widePreviewSnapshot;
+    private javafx.scene.image.WritableImage widePreviewImage;
+    private int[] widePreviewUpload;
+    private RenderJob widePreviewTarget;
+    private ColoringSettings widePreviewColoring;
+    private IterationSettings widePreviewIterations;
+    private WidePreviewSettings widePreviewSettings;
 
     private final Affine previewTransform = new Affine();
     private final Affine retainedPreviewTransform = new Affine();
@@ -73,7 +85,54 @@ public final class FractalSurface extends Region {
         configureImageViews();
         configureClip();
         configureHiDpi();
-        getChildren().addAll(baseImageView, retainedImageView, progressiveImageView);
+        getChildren().addAll(baseImageView, retainedImageView, progressiveImageView, widePreviewImageView);
+    }
+
+    /** Keeps presentation-only reserve pixels only while their formula and colors remain compatible. */
+    public void prepareWidePreview(RenderJob target, ColoringSettings coloring,
+                                   IterationSettings iterations, WidePreviewSettings settings) {
+        if (widePreviewTarget != null && (!widePreviewTarget.formula().equals(target.formula())
+                || !Objects.equals(widePreviewIterations, iterations)
+                || !Objects.equals(widePreviewColoring, coloring)
+                || !Objects.equals(widePreviewSettings, settings))) {
+            clearWidePreview();
+        }
+        widePreviewTarget = target;
+        widePreviewColoring = coloring;
+        widePreviewIterations = iterations;
+        widePreviewSettings = settings;
+        projectWidePreview(target.viewport(), target.width(), target.height());
+    }
+
+    /** Uploads a separate low-resolution raster underneath all exact/AA images. */
+    public void displayWidePreview(WidePreviewSnapshot snapshot) {
+        if (widePreviewTarget == null || !widePreviewSettings.enabled()
+                || !snapshot.plan().settings().equals(widePreviewSettings)) return;
+        RenderJob source = snapshot.plan().job();
+        if (!source.formula().equals(widePreviewTarget.formula())) return;
+        if (widePreviewImage == null || widePreviewImage.getWidth() != source.width()
+                || widePreviewImage.getHeight() != source.height()) {
+            widePreviewImage = new javafx.scene.image.WritableImage(source.width(), source.height());
+            widePreviewUpload = new int[source.width() * source.height()];
+        }
+        snapshot.copyColorsInto(widePreviewUpload);
+        widePreviewImage.getPixelWriter().setPixels(0, 0, source.width(), source.height(),
+                javafx.scene.image.PixelFormat.getIntArgbInstance(), widePreviewUpload, 0, source.width());
+        widePreviewSnapshot = snapshot;
+        widePreviewImageView.setImage(widePreviewImage);
+        projectWidePreview(widePreviewTarget.viewport(), widePreviewTarget.width(), widePreviewTarget.height());
+    }
+
+    public void clearWidePreview() {
+        widePreviewSnapshot = null;
+        widePreviewImageView.setImage(null);
+    }
+
+    private void projectWidePreview(Viewport target, int width, int height) {
+        if (widePreviewSnapshot == null || getWidth() < 2 || getHeight() < 2) return;
+        RenderJob source = widePreviewSnapshot.plan().job();
+        applyPreviewTransform(widePreviewTransform, source.viewport(), target,
+                source.width(), source.height(), width, height, getWidth(), getHeight());
     }
 
     /** Prepares the staging buffer for a new progressive frame. */
@@ -131,6 +190,10 @@ public final class FractalSurface extends Region {
     }
 
     private void configureImageViews() {
+        configureImageView(widePreviewImageView);
+        widePreviewImageView.setMouseTransparent(true);
+        widePreviewImageView.setViewOrder(1);
+        widePreviewImageView.getTransforms().add(widePreviewTransform);
         configureImageView(baseImageView);
         configureImageView(retainedImageView);
         configureImageView(progressiveImageView);
@@ -525,6 +588,7 @@ public final class FractalSurface extends Region {
         }
 
         previewTargetViewport = targetViewport;
+        projectWidePreview(targetViewport, targetWidth, targetHeight);
 
         if (displayedViewport != null) {
             applyPreviewTransform(
