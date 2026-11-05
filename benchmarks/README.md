@@ -16,6 +16,7 @@ observations/logs/exploration stay private; not every analysis replays publicly.
 - [Wide navigation preview policy](WIDE_PREVIEW_VALIDATION.md).
 - [AA retained-memory accounting and rejected sampling experiment](AA_MEMORY_VALIDATION.md).
 - [Calibrated process-memory gate v2](MEMORY_GATE_V2.md).
+- [A/A-calibrated timing gate v2 (owner limits: averages 13%, groups 25%; not yet applied)](TIMING_GATE_V2.md).
 - [Formula benchmarks](FORMULA_BENCHMARK.md) and [basic benchmark entry point](BENCHMARK.md).
 - [Prism pipeline comparison (ES2 and Metal)](PRISM_PIPELINE_BENCHMARK.md);
   [results](PRISM_PIPELINE_RESULTS.md),
