@@ -534,6 +534,7 @@ public class FractalView extends StackPane {
                 || scene.coloring().orbitTrap() != OrbitTrap.NONE)) {
             colorCycling = false;
             renderController.cancelRecolor();
+            renderController.setColorCycling(false, scene.coloring());
             colorCyclingStoppedHandler.run();
             return;
         }
@@ -541,10 +542,12 @@ public class FractalView extends StackPane {
             colorCycling = false;
             lastCycleTick = 0L;
             renderController.cancelRecolor();
+            renderController.setColorCycling(false, scene.coloring());
             colorCycleOffset = scene.coloring().offset();
             return;
         }
         colorCycling = true;
+        renderController.setColorCycling(true, scene.coloring());
         colorCycleOffset = scene.coloring().offset();
         lastCycleTick = 0L;
     }
@@ -573,6 +576,7 @@ public class FractalView extends StackPane {
         colorCycling = false;
         lastCycleTick = 0L;
         renderController.cancelRecolor();
+        renderController.setColorCycling(false, scene.coloring());
         colorCycleOffset = scene.coloring().offset();
         colorCyclingStoppedHandler.run();
     }

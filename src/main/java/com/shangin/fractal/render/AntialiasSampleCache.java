@@ -17,15 +17,26 @@ import java.util.stream.IntStream;
  */
 public final class AntialiasSampleCache {
 
+    // Sized for the conservative graph charge below (about twice the default compressed-reference
+    // layout): retains every AA pixel of the measured 3024x1964 fixtures, including deep zoom.
     public static final long DEFAULT_MAX_BYTES = Long.getLong(
-            "fractal.aaCache.maxBytes", 128L * 1024L * 1024L);
+            "fractal.aaCache.maxBytes", 512L * 1024L * 1024L);
     private static final int SAMPLE_BYTES = Short.BYTES;
+    // Conservative 64-bit layouts, including uncompressed references and 16-byte alignment.
+    // Minimum capacity avoids collision-triggered table growth below the treeification threshold.
+    // Entry overhead includes tree nodes. Prepay one current snapshot's index/reference arrays; externally retained generations
+    // and worker staging belong to their respective request lifecycles.
+    private static final long FIXED_BYTES = 384;
+    private static final long ENTRY_BYTES = 128 + 32 + 32 + 16;
+    private static final int INITIAL_CAPACITY = 64;
+    private static final long ARRAY_HEADER_BYTES = 32;
+    private static final int REFERENCE_BYTES = 8;
     private static final int[] LINEAR_TO_SRGB = createSrgbLookup();
 
     private final long maxBytes;
-    private final LinkedHashMap<Integer, Samples> entries =
-            new LinkedHashMap<>(256, 0.75f, true);
-    private long usedBytes;
+    private LinkedHashMap<Integer, Samples> entries = new LinkedHashMap<>(INITIAL_CAPACITY, 0.75f, true);
+    private int tableCapacity;
+    private long entryBytes;
     private Snapshot recolorSnapshot;
     private double cachedColorScale = Double.NaN;
 
@@ -61,20 +72,33 @@ public final class AntialiasSampleCache {
     private void putEncoded(int pixelIndex, Samples value) {
         long bytes = value.estimatedBytes();
         Samples replaced = entries.remove(pixelIndex);
-        if (replaced != null) {
-            usedBytes -= replaced.estimatedBytes();
-        }
+        if (replaced != null) entryBytes -= replaced.estimatedBytes();
         recolorSnapshot = null;
-        if (bytes > maxBytes) {
-            return;
+        if (retainedBytes(bytes, INITIAL_CAPACITY) > maxBytes) return;
+        int capacity = capacityFor(entries.size() + 1);
+        while (!entries.isEmpty() && retainedBytes(entryBytes + bytes, capacity) > maxBytes) {
+            var iterator = entries.entrySet().iterator();
+            entryBytes -= iterator.next().getValue().estimatedBytes();
+            iterator.remove();
+            capacity = capacityFor(entries.size() + 1);
         }
+        if (retainedBytes(entryBytes + bytes, capacity) > maxBytes) return;
         entries.put(pixelIndex, value);
-        usedBytes += bytes;
-        while (usedBytes > maxBytes) {
-            Map.Entry<Integer, Samples> eldest = entries.entrySet().iterator().next();
-            usedBytes -= eldest.getValue().estimatedBytes();
-            entries.remove(eldest.getKey());
-        }
+        tableCapacity = capacity;
+        entryBytes += bytes;
+    }
+
+    private int capacityFor(int size) {
+        int capacity = tableCapacity == 0 ? INITIAL_CAPACITY : tableCapacity;
+        return capacity < (1 << 30) && size > capacity * 3L / 4 ? capacity * 2 : capacity;
+    }
+
+    private static long retainedBytes(long entriesBytes, int capacity) {
+        return FIXED_BYTES + ARRAY_HEADER_BYTES + (long) capacity * REFERENCE_BYTES + entriesBytes;
+    }
+
+    private static long alignedArrayBytes(int length, int elementBytes) {
+        return (ARRAY_HEADER_BYTES + (long) length * elementBytes + 15) & ~15L;
     }
 
     /** Worker-owned staging, bounded to one 32x32 tile; no cache lock is acquired. */
@@ -117,7 +141,7 @@ public final class AntialiasSampleCache {
             if (merged || size == pixels.length) throw new IllegalStateException("AA batch is full or merged");
             Samples value = Samples.copyOf(source, coloring);
             // Match the uncached color path when one pixel cannot fit in the configured cache.
-            if (value.estimatedBytes() > maxBytes) return null;
+            if (retainedBytes(value.estimatedBytes(), INITIAL_CAPACITY) > maxBytes) return null;
             pixels[size] = pixel;
             samples[size++] = value;
             return value.color(lookup);
@@ -160,8 +184,9 @@ public final class AntialiasSampleCache {
         return entries.size();
     }
 
+    /** Conservative retained cache graph, including table slack and a current snapshot. */
     public synchronized long usedBytes() {
-        return usedBytes;
+        return tableCapacity == 0 ? 0 : retainedBytes(entryBytes, tableCapacity);
     }
 
     public long maxBytes() {
@@ -169,8 +194,9 @@ public final class AntialiasSampleCache {
     }
 
     public synchronized void clear() {
-        entries.clear();
-        usedBytes = 0;
+        entries = new LinkedHashMap<>(INITIAL_CAPACITY, 0.75f, true);
+        tableCapacity = 0;
+        entryBytes = 0;
         recolorSnapshot = null;
         cachedColorScale = Double.NaN;
     }
@@ -181,7 +207,7 @@ public final class AntialiasSampleCache {
     }
 
     public synchronized void shift(int sourceWidth, int width, int height, PixelShift shift) {
-        LinkedHashMap<Integer, Samples> shifted = new LinkedHashMap<>(256, 0.75f, true);
+        LinkedHashMap<Integer, Samples> shifted = new LinkedHashMap<>(INITIAL_CAPACITY, 0.75f, true);
         for (Map.Entry<Integer, Samples> entry : entries.entrySet()) {
             int sourceX = entry.getKey() % sourceWidth;
             int sourceY = entry.getKey() / sourceWidth;
@@ -191,9 +217,10 @@ public final class AntialiasSampleCache {
                 shifted.put(targetY * width + targetX, entry.getValue());
             }
         }
-        entries.clear();
-        entries.putAll(shifted);
-        usedBytes = entries.values().stream().mapToLong(Samples::estimatedBytes).sum();
+        entries = shifted;
+        tableCapacity = entries.isEmpty() ? 0 : INITIAL_CAPACITY;
+        while (entries.size() > tableCapacity * 3L / 4) tableCapacity *= 2;
+        entryBytes = entries.values().stream().mapToLong(Samples::estimatedBytes).sum();
         recolorSnapshot = null;
     }
 
@@ -235,7 +262,7 @@ public final class AntialiasSampleCache {
         }
 
         long estimatedBytes() {
-            return (long) phases.length * SAMPLE_BYTES + Integer.BYTES;
+            return ENTRY_BYTES + alignedArrayBytes(phases.length, SAMPLE_BYTES);
         }
 
         int color(SmoothColorLookup lookup) {

@@ -13,6 +13,9 @@ observations/logs/exploration stay private; not every analysis replays publicly.
   [scheduling](BASELINE_SCHEDULING_BENCHMARK.md).
 - [Paired decision gates](BASELINE_PAIRS_BENCHMARK.md) and
   [allocation/sustained memory](BASELINE_MEMORY_BENCHMARK.md).
+- [Wide navigation preview policy](WIDE_PREVIEW_VALIDATION.md).
+- [AA retained-memory accounting and rejected sampling experiment](AA_MEMORY_VALIDATION.md).
+- [Calibrated process-memory gate v2](MEMORY_GATE_V2.md).
 - [Formula benchmarks](FORMULA_BENCHMARK.md) and [basic benchmark entry point](BENCHMARK.md).
 - [Prism pipeline comparison (ES2 and Metal)](PRISM_PIPELINE_BENCHMARK.md);
   [results](PRISM_PIPELINE_RESULTS.md),
@@ -52,6 +55,10 @@ no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism
 
 | Decision | Report | Selected machine-readable evidence |
 | --- | --- | --- |
+| AA sampling experiment rejected on RSS; retained-graph cache accounting corrected; default budget recalculated to 512 MiB | [Evidence](AA_MEMORY_VALIDATION.md) | Selected numerical tables in report |
+| CPU wide-preview candidate rejected on peak RSS under the v1 per-pair rule (later superseded); disabled by default | [Decision](WIDE_PREVIEW_VALIDATION.md) | [Descriptive summary](WIDE_PREVIEW_SUMMARY.csv) |
+| Memory gate v2: wide preview memory passes, timing inconclusive; AA distance-only inconclusive | [Evidence](MEMORY_GATE_V2.md) | Selected numerical tables in report |
+| Wide-preview timing extension TE1: no failing group; timing and memory tail inconclusive; disabled by default | [Evidence](WIDE_PREVIEW_VALIDATION.md#follow-up-timing-extension-te1) | Selected numerical tables in report |
 | P0.3 bounded validity-mask candidate rejected | [Decision](VALIDITY_MASK_OPTIMIZATION.md) | [Headless analysis](baseline-p0-3-validity-headless-20260921/analysis.json), [JavaFX analysis](baseline-p0-3-validity-fx-desktop-20260921/analysis.json) |
 | P1.2 on-demand snapshot preparation rejected | [Decision](RETAINED_SNAPSHOT_PREPARATION.md) | [Matched samples](RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv) |
 | P1.3 queued publication rejected | [Decision](FX_PUBLICATION_P1_3.md) | [Analysis](p1-3-publication-20260924/coalescing-pairs/analysis.json), [probe 1](p1-3-publication-20260924/probe-1.csv), [probe 2](p1-3-publication-20260924/probe-2.csv), [probe 3](p1-3-publication-20260924/probe-3.csv) |
@@ -77,9 +84,10 @@ incomplete platform gates remain recorded.
 
 ## Retained file inventory
 
-The inventory lists the 124 selected evidence/protocol files, excluding this index. No
+The inventory lists the 128 selected evidence/protocol files, excluding this index. No
 raw log file is included.
 
+- [AA_MEMORY_VALIDATION.md](AA_MEMORY_VALIDATION.md)
 - [ALLOCATION_PROFILE_9_4.md](ALLOCATION_PROFILE_9_4.md)
 - [BASELINE_BENCHMARK.md](BASELINE_BENCHMARK.md)
 - [BASELINE_FIXTURES.csv](BASELINE_FIXTURES.csv)
@@ -115,6 +123,7 @@ raw log file is included.
 - [INTERACTION_LATENCY_SCREEN_SUMMARY.csv](INTERACTION_LATENCY_SCREEN_SUMMARY.csv)
 - [INTERACTION_LATENCY_VALIDITY_SCAN.csv](INTERACTION_LATENCY_VALIDITY_SCAN.csv)
 - [INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv](INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv)
+- [MEMORY_GATE_V2.md](MEMORY_GATE_V2.md)
 - [P1_5_PROMOTION_VALIDATION.md](P1_5_PROMOTION_VALIDATION.md)
 - [PALETTE_BENCHMARK_RESULTS.md](PALETTE_BENCHMARK_RESULTS.md)
 - [PRISM_PIPELINE_BENCHMARK.md](PRISM_PIPELINE_BENCHMARK.md)
@@ -126,6 +135,8 @@ raw log file is included.
 - [VALIDITY_MASK_OPTIMIZATION.md](VALIDITY_MASK_OPTIMIZATION.md)
 - [VIEWPORT_PRECISION_RESULTS.md](VIEWPORT_PRECISION_RESULTS.md)
 - [VIEWPORT_PRECISION_SUMMARY.csv](VIEWPORT_PRECISION_SUMMARY.csv)
+- [WIDE_PREVIEW_SUMMARY.csv](WIDE_PREVIEW_SUMMARY.csv)
+- [WIDE_PREVIEW_VALIDATION.md](WIDE_PREVIEW_VALIDATION.md)
 - [baseline-9-1-fx-fixed-20260907/summary.csv](baseline-9-1-fx-fixed-20260907/summary.csv)
 - [baseline-9-1-validation/manifest.csv](baseline-9-1-validation/manifest.csv)
 - [baseline-9-1-validation/summary.csv](baseline-9-1-validation/summary.csv)

@@ -7,7 +7,7 @@ package com.shangin.fractal.scene;
  * Fast, as established); the Settings window defines its own display order.
  */
 public enum InteractiveRenderMode {
-    /** Shows only refined antialiased tiles. */
+    /** Shows only refined antialiased target tiles over navigation previews. */
     REFINED("Antialiased display"),
     /** Shows progressive base samples, then antialiases them in place. */
     FAST("Base, then antialiasing"),

@@ -1,4 +1,5 @@
 [
+  "benchmarks/AA_MEMORY_VALIDATION.md",
   "benchmarks/ALLOCATION_PROFILE_9_4.md",
   "benchmarks/BASELINE_BENCHMARK.md",
   "benchmarks/BASELINE_FIXTURES.csv",
@@ -34,6 +35,7 @@
   "benchmarks/INTERACTION_LATENCY_SCREEN_SUMMARY.csv",
   "benchmarks/INTERACTION_LATENCY_VALIDITY_SCAN.csv",
   "benchmarks/INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv",
+  "benchmarks/MEMORY_GATE_V2.md",
   "benchmarks/P1_5_PROMOTION_VALIDATION.md",
   "benchmarks/PALETTE_BENCHMARK_RESULTS.md",
   "benchmarks/PRISM_PIPELINE_BENCHMARK.md",
@@ -46,6 +48,8 @@
   "benchmarks/VALIDITY_MASK_OPTIMIZATION.md",
   "benchmarks/VIEWPORT_PRECISION_RESULTS.md",
   "benchmarks/VIEWPORT_PRECISION_SUMMARY.csv",
+  "benchmarks/WIDE_PREVIEW_SUMMARY.csv",
+  "benchmarks/WIDE_PREVIEW_VALIDATION.md",
   "benchmarks/baseline-9-1-fx-fixed-20260907/summary.csv",
   "benchmarks/baseline-9-1-validation/manifest.csv",
   "benchmarks/baseline-9-1-validation/summary.csv",
