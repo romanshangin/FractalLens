@@ -6,7 +6,8 @@ locations/fingerprints, omits machine IDs, absolute paths, invocation metadata/l
 
 Accepted contracts: 33 owner/stack-managed resources, five supported JavaFX
 reflection accesses, four Optional APIs, three bounded polls, three record
-validation assignments, two exact divisions by two, one short-write loop.
+validation assignments, two exact divisions by two (resolved in code, see
+below), one short-write loop.
 This does not classify all inspection warnings as false positives.
 
 ## Reviewed module-model migration
@@ -53,6 +54,15 @@ execution evidence even after migration.
 image/unchanged preparation: 51 unchanged, zero new, `executionSuccessful: true`,
 exit 0. `scripts/quality/check_qodana.py` accepted all 51; nine acceptance tests
 passed. This does not pass the failed GitHub invocation. Raw logs/reports stay private.
+
+## Resolved exact divisions (spare frame storage, 2026-11-07)
+
+The two `BigDecimalMethodWithoutRoundingCalled` entries in `FrameReusePlanner`
+(halving the integer resize difference) were reported as new after unrelated edits
+in that file changed their fingerprints. Instead of migrating them, the divisions now
+pass `MathContext.UNLIMITED`. With precision 0 the JDK performs the same exact
+division, so the results are identical. The two baseline entries stay in the file
+and become resolved (`absent`), which the gate allows; no new contract was accepted.
 
 ## Acceptance and report handling
 

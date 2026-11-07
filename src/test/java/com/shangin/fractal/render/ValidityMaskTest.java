@@ -3,6 +3,7 @@ package com.shangin.fractal.render;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -10,6 +11,56 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ValidityMaskTest {
+
+    @Test
+    void anyReadyFindsOnlyPixelsInsideTheRegion() {
+        RenderRegion region = new RenderRegion(3, 2, 4, 3);
+        assertFalse(new ValidityMask(10, 8).anyReady(region));
+
+        int[][] inside = {{3, 2}, {6, 2}, {3, 4}, {6, 4}, {5, 3}};
+        int[][] outside = {{2, 2}, {7, 2}, {2, 4}, {7, 4}, {4, 1}, {4, 5}, {0, 0}, {9, 7}, {9, 1}, {0, 6}};
+        for (int[] pixel : inside) {
+            assertTrue(maskWith(pixel).anyReady(region), "Inside " + pixel[0] + "," + pixel[1]);
+        }
+        for (int[] pixel : outside) {
+            assertFalse(maskWith(pixel).anyReady(region), "Outside " + pixel[0] + "," + pixel[1]);
+        }
+        // Ready pixels left and right of the region in its rows, and one below it.
+        ValidityMask around = maskWith(outside);
+        assertFalse(around.anyReady(region));
+        around.markReady(new RenderRegion(6, 4, 1, 1));
+        assertTrue(around.anyReady(region));
+        assertTrue(maskWith(new int[] {0, 0}).anyReady(new RenderRegion(0, 0, 1, 1)));
+    }
+
+    @Test
+    void anyReadyMatchesAPixelByPixelSearch() {
+        Random random = new Random(20261107);
+        for (int trial = 0; trial < 2000; trial++) {
+            int width = 1 + random.nextInt(12);
+            int height = 1 + random.nextInt(9);
+            ValidityMask mask = new ValidityMask(width, height);
+            for (int pixels = random.nextInt(5); pixels > 0; pixels--) {
+                mask.markReady(new RenderRegion(random.nextInt(width), random.nextInt(height), 1, 1));
+            }
+            int x = random.nextInt(width);
+            int y = random.nextInt(height);
+            RenderRegion region = new RenderRegion(x, y, 1 + random.nextInt(width - x), 1 + random.nextInt(height - y));
+            boolean expected = false;
+            for (int py = region.y(); py < region.y() + region.height(); py++) {
+                for (int px = region.x(); px < region.x() + region.width(); px++) {
+                    expected |= mask.isReady(px, py);
+                }
+            }
+            assertEquals(expected, mask.anyReady(region), "Trial " + trial);
+        }
+    }
+
+    private static ValidityMask maskWith(int[]... pixels) {
+        ValidityMask mask = new ValidityMask(10, 8);
+        for (int[] pixel : pixels) mask.markReady(new RenderRegion(pixel[0], pixel[1], 1, 1));
+        return mask;
+    }
 
     @Test
     void copyFromReplacesTheMaskWithAnEquallySizedSource() {

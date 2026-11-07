@@ -74,11 +74,31 @@ public final class RenderFrame {
         );
     }
 
+    /**
+     * Creates a frame over storage prepared off the calling thread. The samples and the
+     * mask must be empty and must not be referenced by any other frame.
+     */
+    static RenderFrame create(
+            RenderJob request,
+            RenderGrid grid,
+            FractalData.Storage samples,
+            ValidityMask emptyValidity
+    ) {
+        Objects.requireNonNull(request);
+        Objects.requireNonNull(grid);
+        return new RenderFrame(
+                request,
+                grid,
+                new FractalData(request.maxIterations(), samples),
+                emptyValidity
+        );
+    }
+
     /*
      * Built-in presets report orbit-trap distances only for an orbit-trap formula.
      * A custom formula has no such guarantee, so its frames keep the storage.
      */
-    private static boolean storesOrbitTrapDistances(FormulaDefinition formula) {
+    static boolean storesOrbitTrapDistances(FormulaDefinition formula) {
         return formula.orbitTrap() != OrbitTrap.NONE || formula.preset() == null;
     }
 

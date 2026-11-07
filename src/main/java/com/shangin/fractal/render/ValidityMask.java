@@ -183,6 +183,31 @@ public final class ValidityMask {
         return (BitSet) ready.clone();
     }
 
+    /**
+     * True when any pixel of the region is ready. Each search continues from the row of
+     * the ready pixel it found, so the mask is scanned at most once, however far the
+     * nearest ready pixel lies below the region's first row.
+     */
+    synchronized boolean anyReady(RenderRegion region) {
+        validateRegion(region);
+        int left = region.x();
+        int right = region.x() + region.width();
+        int bottom = region.y() + region.height();
+        int y = region.y();
+        while (y < bottom) {
+            int pixel = ready.nextSetBit(y * width + left);
+            if (pixel < 0) return false;
+            int pixelY = pixel / width;
+            int pixelX = pixel % width;
+            if (pixelY >= bottom) return false;
+            if (pixelX >= left && pixelX < right) return true;
+            // Left of the region: search that row from the region's left edge;
+            // right of it: continue with the next row.
+            y = pixelX < left ? pixelY : pixelY + 1;
+        }
+        return false;
+    }
+
     /** Returns a compact row-major snapshot local to one region. */
     synchronized BitSet readyBitsCopy(RenderRegion region) {
         validateRegion(region);

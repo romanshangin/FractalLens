@@ -64,7 +64,9 @@ public final class FractalRenderController implements AutoCloseable {
     private RenderFrame activeFrame;
     private RenderFrame retainedFrame;
     private boolean initialFramePending = true;
-    private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner();
+    /** Keeps fresh frame allocation off the FX thread between render start and the preview. */
+    private final SpareFrameStorage spareFrameStorage = new SpareFrameStorage();
+    private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner(spareFrameStorage::create);
     private final RenderFrameCache frameCache = new RenderFrameCache();
     private final RenderActivityTracker renderActivity = new RenderActivityTracker();
     private final ExecutorService recolorExecutor = new ThreadPoolExecutor(
@@ -302,23 +304,18 @@ public final class FractalRenderController implements AutoCloseable {
          * --------------------------------
          */
 
+        // Create a target frame only for the source finally chosen.
         FrameReuseSelection reuseSelection =
-                frameReusePlanner.plan(
+                frameReusePlanner.planReuse(
                         previousActiveFrame,
                         retainedFrame,
                         renderRequest
-                );
-
-        if (!reuseSelection.result().reused()) {
-            RenderFrame cachedFrame = frameCache.findExact(renderRequest).orElse(null);
-            if (cachedFrame != null) {
-                reuseSelection = frameReusePlanner.plan(
-                        cachedFrame,
-                        null,
-                        renderRequest
-                );
-            }
-        }
+                ).or(() -> frameCache.findExact(renderRequest)
+                        .flatMap(cachedFrame -> frameReusePlanner.planReuse(
+                                cachedFrame,
+                                null,
+                                renderRequest))
+                ).orElseGet(() -> frameReusePlanner.fresh(renderRequest));
 
         surface.latency().mark("reuse_planned");
         RenderFrame sourceFrame = reuseSelection.sourceFrame();
@@ -557,6 +554,8 @@ public final class FractalRenderController implements AutoCloseable {
     private void finishRender(long renderGeneration) {
         if (!renderActivity.isCurrent(renderGeneration)) return;
         visibleBusy = false;
+        // The next fresh frame of this size, such as a zoom-out, takes this storage.
+        if (activeFrame != null) spareFrameStorage.prepareFor(activeFrame.request());
         renderActivity.finish(renderGeneration);
         replenishWidePreview();
     }
@@ -762,6 +761,7 @@ public final class FractalRenderController implements AutoCloseable {
         recolorExecutor.shutdownNow();
         antialiasService.close();
         renderService.close();
+        spareFrameStorage.close();
         renderActivity.cancel();
     }
 }

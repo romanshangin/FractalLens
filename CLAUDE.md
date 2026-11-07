@@ -41,7 +41,8 @@ src/main/java/com/shangin/fractal/
                progress batching), RenderBackend implementations
                (DirectDouble, MandelbrotPerturbation + BLA, JuliaDeepZoom,
                PrecisionSelecting), frame reuse (FrameReusePlanner,
-               FrameReprojection, PixelShift*), caches, RenderGrid/RenderTarget
+               FrameReprojection, PixelShift*), SpareFrameStorage (fresh-frame
+               storage allocated off the FX thread), caches, RenderGrid/RenderTarget
   controller/  FractalRenderController: bridges UI camera and render service,
                iteration policy, frame reuse, recoloring, RenderStatus
   coloring/    palettes, gradient stops, smooth/histogram/orbit-trap coloring

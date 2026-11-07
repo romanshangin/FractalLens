@@ -3,9 +3,11 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.math.Viewport;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiFunction;
 
 /**
  * Builds render frames for new requests and reuses compatible pixel data from
@@ -15,6 +17,21 @@ public final class FrameReusePlanner {
 
     private static final double INTEGER_SHIFT_EPSILON = 1e-6;
     private static final double MAX_INTEGER_SHIFT_UNCERTAINTY = 0.25;
+
+    private final BiFunction<RenderJob, RenderGrid, RenderFrame> frameFactory;
+
+    /** Creates every target frame with newly allocated storage. */
+    public FrameReusePlanner() {
+        this(RenderFrame::create);
+    }
+
+    /**
+     * Creates target frames through a factory, which must return an empty frame for the
+     * job and grid whose storage no other frame references.
+     */
+    public FrameReusePlanner(BiFunction<RenderJob, RenderGrid, RenderFrame> frameFactory) {
+        this.frameFactory = Objects.requireNonNull(frameFactory);
+    }
 
     /**
      * Creates a frame for the target request, reusing compatible source data
@@ -44,10 +61,11 @@ public final class FrameReusePlanner {
 
         return planCandidate(
                 sourceFrame,
-                targetRequest
+                targetRequest,
+                false
         ).orElseGet(
                 () -> FrameReuseResult.fresh(
-                        RenderFrame.create(targetRequest)
+                        freshFrame(targetRequest)
                 )
         );
     }
@@ -58,33 +76,58 @@ public final class FrameReusePlanner {
             RenderFrame retainedFrame,
             RenderJob targetRequest
     ) {
+        return planReuse(activeFrame, retainedFrame, targetRequest)
+                .orElseGet(() -> fresh(targetRequest));
+    }
+
+    /**
+     * Checks the active frame and then the retained frame for reusable data. Without
+     * reusable data no target frame is created, so a caller can try another source first.
+     */
+    public Optional<FrameReuseSelection> planReuse(
+            RenderFrame activeFrame,
+            RenderFrame retainedFrame,
+            RenderJob targetRequest
+    ) {
         Objects.requireNonNull(targetRequest, "Target request must not be null");
 
         Optional<FrameReuseResult> activeResult =
-                planCandidate(activeFrame, targetRequest)
+                planCandidate(activeFrame, targetRequest, true)
                         .filter(FrameReuseResult::reused);
 
         if (activeResult.isPresent()) {
-            return new FrameReuseSelection(activeFrame, activeResult.get());
+            return Optional.of(new FrameReuseSelection(activeFrame, activeResult.get()));
         }
 
-        Optional<FrameReuseResult> retainedResult =
-                planCandidate(retainedFrame, targetRequest)
-                        .filter(FrameReuseResult::reused);
+        return planCandidate(retainedFrame, targetRequest, true)
+                .filter(FrameReuseResult::reused)
+                .map(result -> new FrameReuseSelection(retainedFrame, result));
+    }
 
-        if (retainedResult.isPresent()) {
-            return new FrameReuseSelection(retainedFrame, retainedResult.get());
-        }
-
+    /** Creates an empty target frame without a reuse source. */
+    public FrameReuseSelection fresh(RenderJob targetRequest) {
+        Objects.requireNonNull(targetRequest, "Target request must not be null");
         return new FrameReuseSelection(
                 null,
-                FrameReuseResult.fresh(RenderFrame.create(targetRequest))
+                FrameReuseResult.fresh(freshFrame(targetRequest))
         );
     }
 
+    private RenderFrame freshFrame(RenderJob targetRequest) {
+        return frameFactory.apply(
+                targetRequest,
+                RenderGrid.from(targetRequest.viewport(), targetRequest.width(), targetRequest.height()));
+    }
+
+    /**
+     * Plans reuse from one source frame. With {@code requireReuse}, a source that has no
+     * ready pixel inside the shifted target yields no result and no target frame, so a
+     * frame factory's spare storage is not spent on a frame that would be discarded.
+     */
     private Optional<FrameReuseResult> planCandidate(
             RenderFrame sourceFrame,
-            RenderJob targetRequest
+            RenderJob targetRequest,
+            boolean requireReuse
     ) {
         if (sourceFrame == null || !canReuse(sourceFrame, targetRequest)) {
             return Optional.empty();
@@ -103,6 +146,10 @@ public final class FrameReusePlanner {
         PixelShift pixelShift =
                 shift.get();
 
+        if (requireReuse && !hasReusablePixels(sourceFrame, targetRequest, pixelShift)) {
+            return Optional.empty();
+        }
+
         /*
          * Extend the source render grid through integer offsets instead of
          * rebuilding it from the target viewport. This preserves bit-for-bit
@@ -115,7 +162,7 @@ public final class FrameReusePlanner {
                         );
 
         RenderFrame targetFrame =
-                RenderFrame.create(
+                frameFactory.apply(
                         targetRequest,
                         targetGrid
                 );
@@ -148,6 +195,27 @@ public final class FrameReusePlanner {
                         reusedPixels
                 )
         );
+    }
+
+    /**
+     * True when the source has a ready pixel inside the shifted target. Ready pixels are
+     * never cleared on a frame, so the copy that follows reuses at least that pixel.
+     */
+    private static boolean hasReusablePixels(
+            RenderFrame sourceFrame,
+            RenderJob targetRequest,
+            PixelShift shift
+    ) {
+        int sourceXFrom = Math.max(0, -shift.dx());
+        int sourceXTo = Math.min(sourceFrame.request().width(), targetRequest.width() - shift.dx());
+        int sourceYFrom = Math.max(0, -shift.dy());
+        int sourceYTo = Math.min(sourceFrame.request().height(), targetRequest.height() - shift.dy());
+        if (sourceXFrom >= sourceXTo || sourceYFrom >= sourceYTo) {
+            return false;
+        }
+        return sourceFrame.isComplete()
+                || sourceFrame.validity().anyReady(new RenderRegion(
+                        sourceXFrom, sourceYFrom, sourceXTo - sourceXFrom, sourceYTo - sourceYFrom));
     }
 
     private int copyReusableRectangle(
@@ -278,10 +346,11 @@ public final class FrameReusePlanner {
         RenderGrid grid =
                 sourceFrame.renderGrid();
 
+        // Half of an integer is exact; an unlimited context makes no rounding possible.
         BigDecimal resizeX = BigDecimal.valueOf(targetRequest.width() - sourceFrame.request().width())
-                .divide(BigDecimal.valueOf(2));
+                .divide(BigDecimal.valueOf(2), MathContext.UNLIMITED);
         BigDecimal resizeY = BigDecimal.valueOf(targetRequest.height() - sourceFrame.request().height())
-                .divide(BigDecimal.valueOf(2));
+                .divide(BigDecimal.valueOf(2), MathContext.UNLIMITED);
         PreciseRenderGrid preciseGrid = grid.preciseGrid();
         if (preciseGrid != null) {
             BigDecimal rawShiftX = sourceViewport.center().real()
