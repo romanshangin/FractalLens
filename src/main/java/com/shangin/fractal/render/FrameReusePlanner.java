@@ -3,6 +3,7 @@ package com.shangin.fractal.render;
 import com.shangin.fractal.math.Viewport;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.Optional;
@@ -345,10 +346,11 @@ public final class FrameReusePlanner {
         RenderGrid grid =
                 sourceFrame.renderGrid();
 
+        // Half of an integer is exact; an unlimited context makes no rounding possible.
         BigDecimal resizeX = BigDecimal.valueOf(targetRequest.width() - sourceFrame.request().width())
-                .divide(BigDecimal.valueOf(2));
+                .divide(BigDecimal.valueOf(2), MathContext.UNLIMITED);
         BigDecimal resizeY = BigDecimal.valueOf(targetRequest.height() - sourceFrame.request().height())
-                .divide(BigDecimal.valueOf(2));
+                .divide(BigDecimal.valueOf(2), MathContext.UNLIMITED);
         PreciseRenderGrid preciseGrid = grid.preciseGrid();
         if (preciseGrid != null) {
             BigDecimal rawShiftX = sourceViewport.center().real()
