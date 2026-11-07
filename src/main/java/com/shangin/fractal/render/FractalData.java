@@ -34,21 +34,59 @@ public class FractalData implements SamplePlane {
             int maxIterations,
             boolean storesOrbitTrapDistances
     ) {
-        this.width = width;
-        this.height = height;
+        this(maxIterations, Storage.allocate(width, height, storesOrbitTrapDistances));
+    }
+
+    /** Wraps storage that no other sample plane references; the caller hands over ownership. */
+    FractalData(int maxIterations, Storage storage) {
+        this.width = storage.width;
+        this.height = storage.height;
         this.maxIterations = maxIterations;
+        this.iterations = storage.iterations;
+        this.smoothIterations = storage.smoothIterations;
+        this.escaped = storage.escaped;
+        this.orbitTrapDistances = storage.orbitTrapDistances;
+    }
 
-        int size = width * height;
+    /**
+     * Newly allocated sample arrays in the state of an empty frame: zero samples and NaN
+     * orbit-trap distances. Allocating them is the expensive part of creating a frame, so
+     * it can run on another thread before one frame takes ownership of them.
+     */
+    static final class Storage {
+        private final int width;
+        private final int height;
+        private final int[] iterations;
+        private final double[] smoothIterations;
+        private final boolean[] escaped;
+        private final double[] orbitTrapDistances;
 
-        this.iterations = new int[size];
-        this.smoothIterations = new double[size];
-        this.escaped = new boolean[size];
-        if (storesOrbitTrapDistances) {
-            this.orbitTrapDistances = new double[size];
-            java.util.Arrays.fill(orbitTrapDistances, Double.NaN);
-        } else {
-            this.orbitTrapDistances = null;
+        private Storage(int width, int height, boolean storesOrbitTrapDistances) {
+            this.width = width;
+            this.height = height;
+            int size = width * height;
+            iterations = new int[size];
+            smoothIterations = new double[size];
+            escaped = new boolean[size];
+            if (storesOrbitTrapDistances) {
+                orbitTrapDistances = new double[size];
+                java.util.Arrays.fill(orbitTrapDistances, Double.NaN);
+            } else {
+                orbitTrapDistances = null;
+            }
         }
+
+        static Storage allocate(int width, int height, boolean storesOrbitTrapDistances) {
+            return new Storage(width, height, storesOrbitTrapDistances);
+        }
+    }
+
+    /** True when both planes write to at least one common array. */
+    boolean sharesStorageWith(FractalData other) {
+        return iterations == other.iterations
+                || smoothIterations == other.smoothIterations
+                || escaped == other.escaped
+                || orbitTrapDistances != null && orbitTrapDistances == other.orbitTrapDistances;
     }
 
     public int width() {

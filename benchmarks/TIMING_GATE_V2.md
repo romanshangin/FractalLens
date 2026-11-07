@@ -1,7 +1,10 @@
 # Timing gate v2 (A/A-calibrated)
 
 **Status: limits set by the owner on 2026-11-05. The analyzer, driver switch
-and this protocol passed independent review and verification. No candidate process has been evaluated under this gate.** The gate becomes
+and this protocol passed independent review and verification. Its first
+application, without the A/A calibration stage and with fixed pair counts, is the
+[spare frame storage campaigns SF1/SF2](SPARE_FRAME_STORAGE_RESULTS.md); no
+wide-preview candidate has been evaluated under it.** The gate becomes
 binding for a campaign only when its protocol is declared and hashed before
 that campaign's first process. All earlier decisions stand, and TE1 stays
 **inconclusive**. Nothing here enables `WidePreviewSettings.DEFAULT`.

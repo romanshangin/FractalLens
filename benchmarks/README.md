@@ -16,7 +16,7 @@ observations/logs/exploration stay private; not every analysis replays publicly.
 - [Wide navigation preview policy](WIDE_PREVIEW_VALIDATION.md).
 - [AA retained-memory accounting and rejected sampling experiment](AA_MEMORY_VALIDATION.md).
 - [Calibrated process-memory gate v2](MEMORY_GATE_V2.md).
-- [A/A-calibrated timing gate v2 (owner limits: averages 13%, groups 25%; not yet applied)](TIMING_GATE_V2.md).
+- [A/A-calibrated timing gate v2 (owner limits: averages 13%, groups 25%)](TIMING_GATE_V2.md).
 - [Formula benchmarks](FORMULA_BENCHMARK.md) and [basic benchmark entry point](BENCHMARK.md).
 - [Prism pipeline comparison (ES2 and Metal)](PRISM_PIPELINE_BENCHMARK.md);
   [results](PRISM_PIPELINE_RESULTS.md),
@@ -65,6 +65,7 @@ no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism
 | P1.3 queued publication rejected | [Decision](FX_PUBLICATION_P1_3.md) | [Analysis](p1-3-publication-20260924/coalescing-pairs/analysis.json), [probe 1](p1-3-publication-20260924/probe-1.csv), [probe 2](p1-3-publication-20260924/probe-2.csv), [probe 3](p1-3-publication-20260924/probe-3.csv) |
 | P1.4 allocation attribution; no optimization promoted | [Profile](ALLOCATION_PROFILE_9_4.md) | [Summary](p1-4-allocation-profile-20260924/summary.json), [allocation groups](p1-4-allocation-profile-20260924/allocations.json) |
 | P1.5 retained CPU AA accepted with recorded first-tile exception | [Assessment](P1_5_PROMOTION_VALIDATION.md) | [Sustained summary](p1-5-aa-sustained-20260924/summary.json), [headless](p1-5-retained-vs-pre-headless-20260927/analysis.json), [JavaFX](p1-5-retained-vs-pre-fx-retry-20260927/analysis.json), [base confirmation](p1-5-retained-vs-pre-fx-base-confirm-20260928/analysis.json), [AC cold startup](p1-5-retained-vs-pre-cold-ac-20260928/summary.json) |
+| Spare frame storage retained: 3024x1964 zoom-out preview after layout about 32% faster; SF1 inconclusive on one pan family, predeclared confirmatory SF2 passes with a ~2–3% pan cost inside the limits; ~77 MB extra live memory while a spare waits | [Results](SPARE_FRAME_STORAGE_RESULTS.md) | Selected numerical tables in report |
 | PR #51 viewport working-precision fix: no render speedup; camera arithmetic stops growing with session history; guard cost inconclusive | [Results](VIEWPORT_PRECISION_RESULTS.md) | [Paired summary](VIEWPORT_PRECISION_SUMMARY.csv), [policy](policies/viewport-precision-pr51.json) |
 
 Selected campaigns contain retained summaries/provenance only; omitted-input

@@ -178,7 +178,11 @@ delivery foundations are ready; it does not cancel it.
     `FractalData`. A [bounded worker preparation experiment](benchmarks/PRISM_PIPELINE_RESULTS.md#bounded-worker-preparation-experiment-2026-10-29)
     was rejected: timing remained inconclusive and two process pairs exceeded
     its peak-RSS budget. It remains benchmark-only; no production optimization
-    or new Prism pipeline timing verdict is recorded.
+    or new Prism pipeline timing verdict is recorded. A later, separate change
+    allocates fresh-frame storage ahead of time off the JavaFX thread and was
+    [retained](benchmarks/SPARE_FRAME_STORAGE_RESULTS.md) under timing gate v2
+    (fixed pair counts, without its A/A calibration stage) and memory gate v2;
+    it records no Prism pipeline verdict.
   - [x] Run the [Spaces presentation validation](benchmarks/SPACE_SWITCH_VALIDATION.md)
     on both pipelines. Result on one Mac with `-Dprism.order`: ES2 reproduced
     the stale mixed frame in all 8 controlled window trials with a verdict and
