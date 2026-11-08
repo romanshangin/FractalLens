@@ -13,6 +13,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LastSessionStoreTest {
 
@@ -29,6 +30,23 @@ class LastSessionStoreTest {
                 assertEquals("last-session.json", path.getFileName().toString());
                 assertEquals(os.equals("Linux") ? "fractallens" : "FractalLens",
                         path.getParent().getFileName().toString());
+            }
+        } finally {
+            if (originalOs == null) System.clearProperty("os.name");
+            else System.setProperty("os.name", originalOs);
+        }
+    }
+
+    @Test
+    void testForksKeepEnvironmentBasedDefaultsInsideTheBuildDirectory() {
+        Path isolated = Path.of("target", "test-application-data").toAbsolutePath();
+        String originalOs = System.getProperty("os.name");
+        try {
+            for (String os : new String[] {"Windows 11", "Linux"}) {
+                System.setProperty("os.name", os);
+                Path path = LastSessionStore.defaultPath();
+                assertTrue(path.startsWith(isolated),
+                        "Tests that start the application must not reach real " + os + " data: " + path);
             }
         } finally {
             if (originalOs == null) System.clearProperty("os.name");

@@ -73,11 +73,6 @@ final class MainMenuBar extends MenuBar {
     private MacSettingsSheet settingsSheet;
     private Consumer<Boolean> widePreviewChanged = enabled -> {};
 
-    MainMenuBar(Stage stage, FractalView fractalView, FractalPreset initialFractal,
-                PalettePreset initialPalette, Runnable onExport) {
-        this(stage, fractalView, FractalScene.create(initialFractal, initialPalette), onExport);
-    }
-
     MainMenuBar(Stage stage, FractalView fractalView, FractalScene initialScene,
                 Runnable onExport) {
         this(stage, fractalView, initialScene, onExport, BookmarkStore.systemDefault());

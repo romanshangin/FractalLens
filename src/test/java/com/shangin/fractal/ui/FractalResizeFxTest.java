@@ -905,7 +905,9 @@ class FractalResizeFxTest {
         var imaginary = new java.math.BigDecimal(values.get(1).split(": ", 2)[1]);
         var zoom = new java.math.BigDecimal(values.get(2).split(": ", 2)[1]);
         var stage = fx(javafx.stage.Stage::new);
-        var main = fx(() -> new MainView(stage));
+        var store = new com.shangin.fractal.app.LastSessionStore(
+                temporaryDirectory.resolve("reported-trackpad-session.json"));
+        var main = fx(() -> new MainView(stage, store));
         var view = fx(() -> fractalView(main));
         var surface = fx(() -> (FractalSurface) view.getChildrenUnmodifiable().getFirst());
         try {
