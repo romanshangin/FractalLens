@@ -1,8 +1,10 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.BookmarkStore;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.formula.*;
 import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.scene.FractalScene;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.control.Menu;
@@ -16,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @EnabledIfSystemProperty(named = "fractal.fx.tests", matches = "true")
 class FractalDestinationsFxTest {
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path temporaryDirectory;
+
     @Test void menuChangesWithFormulaAndNavigatesEveryBookmark() throws Exception {
         var ready = new CountDownLatch(1);
         Platform.startup(() -> { Platform.setImplicitExit(false); ready.countDown(); });
@@ -30,7 +35,8 @@ class FractalDestinationsFxTest {
                 var palette = PalettePreset.values()[0];
                 var view = new FractalView(FractalPreset.MANDELBROT, palette, false);
                 stageRef.set(stage); viewRef.set(view);
-                var menu = new MainMenuBar(stage, view, FractalPreset.MANDELBROT, palette, () -> {});
+                var menu = new MainMenuBar(stage, view, FractalScene.create(FractalPreset.MANDELBROT, palette),
+                        () -> {}, new BookmarkStore(temporaryDirectory.resolve("bookmarks")));
                 menuRef.set(menu);
                 view.setOnRenderingChanged(active -> { if (!active) initialized.countDown(); });
                 var root = new BorderPane(view); root.setTop(menu);

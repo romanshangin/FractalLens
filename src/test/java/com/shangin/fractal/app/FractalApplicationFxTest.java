@@ -35,6 +35,7 @@ class FractalApplicationFxTest {
 
     @Test
     void startupFocusesCanvas() throws Exception {
+        // Isolates macOS; Surefire redirects the environment-based Windows and Linux locations.
         String previousHome = System.getProperty("user.home");
         System.setProperty("user.home", directory.toString());
         Thread launcher = new Thread(() -> {

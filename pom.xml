@@ -88,6 +88,12 @@
                     <systemPropertyVariables>
                         <fractal.gpu.enabled>false</fractal.gpu.enabled>
                     </systemPropertyVariables>
+                    <!-- Keep tests that start the application out of the developer's real
+                         Windows and Linux data; a test JVM cannot override its environment. -->
+                    <environmentVariables>
+                        <LOCALAPPDATA>${project.build.directory}/test-application-data</LOCALAPPDATA>
+                        <XDG_STATE_HOME>${project.build.directory}/test-application-data</XDG_STATE_HOME>
+                    </environmentVariables>
                 </configuration>
             </plugin>
 
