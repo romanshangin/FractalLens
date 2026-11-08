@@ -150,6 +150,70 @@ class WidePreviewFxTest {
         } finally { fx(() -> { ((FractalView) ui[0]).close(); ((Stage) ui[3]).close(); return null; }); }
     }
 
+    @Test void viewSwitchAddsAndRemovesTheReserveWithoutChangingTheExactFrameOrScene() throws Exception {
+        var completed = new CompletableFuture<Void>();
+        Object[] ui = fx(() -> {
+            var scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                    .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY));
+            var view = new FractalView(scene);
+            var surface = (FractalSurface) field(view, "fractalSurface");
+            view.setOnRenderError(completed::completeExceptionally);
+            var stage = new Stage(); stage.setScene(new Scene(view, 320, 240)); stage.show();
+            return new Object[]{view, surface, stage};
+        });
+        try {
+            var view = (FractalView) ui[0];
+            var surface = (FractalSurface) ui[1];
+            var controller = (FractalRenderController) field(view, "renderController");
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+            while (!fx(view::hasCompletedFrame)) {
+                assertTrue(System.nanoTime() < deadline, "The exact frame must complete");
+                assertFalse(completed.isCompletedExceptionally());
+                Thread.onSpinWait();
+                fx(() -> null);
+            }
+            drainPreview(controller);
+            var scene = fx(view::sceneSnapshot);
+            int[] exact = fx(() -> pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()));
+            fx(() -> {
+                assertTrue(view.widePreviewEnabled(), "The view follows the enabled default");
+                view.setWidePreviewEnabled(false);
+                assertNull(reserve(surface).getImage(), "Disabling removes the reserve synchronously");
+                return null;
+            });
+            drainPreview(controller);
+            fx(() -> { assertNull(reserve(surface).getImage()); return null; });
+
+            var preview = new CompletableFuture<Void>();
+            fx(() -> {
+                reserve(surface).imageProperty().addListener((observable, old, image) -> { if (image != null) preview.complete(null); });
+                view.setWidePreviewEnabled(true);
+                assertTrue(view.widePreviewEnabled());
+                assertEquals(WidePreviewSettings.CANDIDATE, controller.widePreviewSettings());
+                return null;
+            });
+            preview.get(20, TimeUnit.SECONDS);
+            drainPreview(controller);
+            fx(() -> {
+                assertNotNull(reserve(surface).getImage(), "Enabling prepares a reserve for the idle frame");
+                assertArrayEquals(exact, pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()),
+                        "Enabling the preview must not change exact pixels");
+                assertEquals(scene, view.sceneSnapshot());
+                view.setWidePreviewEnabled(false);
+                assertFalse(view.widePreviewEnabled());
+                assertNull(reserve(surface).getImage(), "Disabling removes the reserve synchronously");
+                return null;
+            });
+            drainPreview(controller);
+            fx(() -> {
+                assertNull(reserve(surface).getImage(), "No disabled work may publish a reserve later");
+                assertArrayEquals(exact, pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()));
+                assertEquals(scene, view.sceneSnapshot());
+                return null;
+            });
+        } finally { fx(() -> { ((FractalView) ui[0]).close(); ((Stage) ui[2]).close(); return null; }); }
+    }
+
     @ParameterizedTest @EnumSource(InteractiveRenderMode.class)
     void reserveRunsAfterVisibleAndAaCompletionAndNeverEntersExport(InteractiveRenderMode mode) throws Exception {
         var complete = new CompletableFuture<Void>();
@@ -233,7 +297,7 @@ class WidePreviewFxTest {
                 var surface = (FractalSurface) ui[0];
                 var controller = (FractalRenderController) ui[1];
                 reserve(surface).imageProperty().addListener((observable, old, image) -> { if (image != null) replacement.complete(null); });
-                controller.setWidePreviewSettings(new WidePreviewSettings(3, 16, 10000, 500, 300));
+                controller.setWidePreviewSettings(new WidePreviewSettings(3, 16, 10000, 500));
                 assertNull(reserve(surface).getImage());
                 return null;
             });
@@ -356,7 +420,7 @@ class WidePreviewFxTest {
         }
     }
 
-    @Test void rejectedPolicyStaysDisabledUntilExplicitlyConfiguredAndCanBeDisabledAgain() throws Exception {
+    @Test void controllerFollowsTheEnabledDefaultUntilExplicitlyDisabled() throws Exception {
         var completed = new CompletableFuture<Void>();
         var shown = new CompletableFuture<Void>();
         Object[] ui = fx(() -> {
@@ -376,11 +440,9 @@ class WidePreviewFxTest {
         try {
             completed.get(15, TimeUnit.SECONDS);
             fx(() -> {
-                var surface = (FractalSurface) ui[0];
                 var controller = (FractalRenderController) ui[1];
-                assertFalse(controller.widePreviewSettings().enabled());
-                assertNull(reserve(surface).getImage());
-                controller.setWidePreviewSettings(WidePreviewSettings.CANDIDATE);
+                assertSame(WidePreviewSettings.DEFAULT, controller.widePreviewSettings());
+                assertTrue(controller.widePreviewSettings().enabled());
                 return null;
             });
             shown.get(10, TimeUnit.SECONDS);
@@ -388,7 +450,7 @@ class WidePreviewFxTest {
                 var surface = (FractalSurface) ui[0];
                 var controller = (FractalRenderController) ui[1];
                 var exact = surface.completedRender().frame();
-                controller.setWidePreviewSettings(WidePreviewSettings.DEFAULT);
+                controller.setWidePreviewSettings(WidePreviewSettings.DISABLED);
                 assertNull(reserve(surface).getImage());
                 assertSame(exact, surface.completedRender().frame());
                 return null;

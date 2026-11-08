@@ -6,6 +6,7 @@ import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
+import com.shangin.fractal.scene.WidePreviewSettings;
 import javafx.application.ColorScheme;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -325,8 +326,9 @@ class FractalDialogsFxTest {
         } finally { fx(() -> { cancelled.close(); return null; }); }
     }
 
-    @Test void settingsShowRenderSectionWithStandardAndDeepZoomDropdowns() throws Exception {
-        var current = new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.BASE_ONLY);
+    @Test void settingsShowRenderAndNavigationSections() throws Exception {
+        var current = new SettingsWindow.Values(
+                new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.BASE_ONLY), false);
         var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
         try {
             fx(() -> { dialog.show(); return null; });
@@ -335,8 +337,13 @@ class FractalDialogsFxTest {
                 assertEquals("Settings", ((Stage) pane.getScene().getWindow()).getTitle());
                 assertTrue(pane.lookupAll(".dialog-section").stream()
                         .anyMatch(node -> "Render Settings".equals(((Label) node).getText())));
+                assertTrue(pane.lookupAll(".dialog-section").stream()
+                        .anyMatch(node -> "Navigation".equals(((Label) node).getText())));
                 var standard = settingsChoice(pane, SettingsWindow.STANDARD_ID);
                 var deep = settingsChoice(pane, SettingsWindow.DEEP_ID);
+                var wide = settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_ID);
+                assertEquals(List.of("Off", "On"), wide.getItems());
+                assertEquals("Off", wide.getValue());
                 assertSame(standard, pane.getScene().getFocusOwner());
                 var titles = List.of("Base only", "Base, then antialiasing", "Antialiased display");
                 assertEquals(titles, standard.getItems());
@@ -358,9 +365,11 @@ class FractalDialogsFxTest {
                 }
                 standard.getSelectionModel().select("Base only");
                 deep.getSelectionModel().select("Antialiased display");
+                wide.getSelectionModel().select("On");
                 primary(dialog).fire();
                 assertFalse(dialog.isShowing());
-                assertEquals(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED),
+                assertEquals(new SettingsWindow.Values(
+                        new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED), true),
                         dialog.getResult());
                 return null;
             });
@@ -368,7 +377,8 @@ class FractalDialogsFxTest {
     }
 
     @Test void settingsEnterAppliesAndEscapeOrCancelDiscardDraft() throws Exception {
-        var current = new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.BASE_ONLY);
+        var current = new SettingsWindow.Values(
+                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.BASE_ONLY), false);
         for (String dismissal : List.of("escape", "cancel", "enter")) {
             var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
             try {
@@ -377,6 +387,7 @@ class FractalDialogsFxTest {
                     var pane = dialog.getDialogPane();
                     settingsChoice(pane, SettingsWindow.STANDARD_ID).getSelectionModel().select("Antialiased display");
                     settingsChoice(pane, SettingsWindow.DEEP_ID).getSelectionModel().select("Base, then antialiasing");
+                    settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_ID).getSelectionModel().select("On");
                     switch (dismissal) {
                         case "escape" -> escape(dialog);
                         case "cancel" -> ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
@@ -385,7 +396,8 @@ class FractalDialogsFxTest {
                     }
                     assertFalse(dialog.isShowing(), dismissal);
                     assertEquals(dismissal.equals("enter")
-                            ? new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.FAST) : null,
+                            ? new SettingsWindow.Values(new AntialiasSettings(
+                                    InteractiveRenderMode.REFINED, InteractiveRenderMode.FAST), true) : null,
                             dialog.getResult(), dismissal);
                     return null;
                 });
@@ -394,7 +406,9 @@ class FractalDialogsFxTest {
     }
 
     @Test void settingsResetToDefaultsChangesOnlyTheDraft() throws Exception {
-        var current = new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED);
+        var current = new SettingsWindow.Values(
+                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED),
+                !WidePreviewSettings.DEFAULT.enabled());
         var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
         try {
             fx(() -> { dialog.show(); return null; });
@@ -407,9 +421,11 @@ class FractalDialogsFxTest {
                 var standard = settingsChoice(pane, SettingsWindow.STANDARD_ID);
                 assertEquals("Antialiased display", standard.getValue());
                 assertEquals("Base only", settingsChoice(pane, SettingsWindow.DEEP_ID).getValue());
+                assertEquals(WidePreviewSettings.DEFAULT.enabled() ? "On" : "Off",
+                        settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_ID).getValue());
                 assertSame(standard, pane.getScene().getFocusOwner());
                 primary(dialog).fire();
-                assertEquals(new AntialiasSettings(), dialog.getResult());
+                assertEquals(SettingsWindow.Values.defaults(), dialog.getResult());
                 return null;
             });
         } finally { fx(() -> { dialog.close(); return null; }); }

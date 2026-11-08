@@ -10,11 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WidePreviewInputBenchmarkTest {
     @Test
     void acceptsOnlyDeclaredSettingsConstants() throws Exception {
-        for (String name : new String[]{"CANDIDATE", "DEFAULT"}) {
-            assertEquals(name, WidePreviewInputBenchmark.widePreviewSettings(name));
+        var constants = java.util.Map.of("CANDIDATE", WidePreviewSettings.CANDIDATE,
+                "DEFAULT", WidePreviewSettings.DEFAULT, "DISABLED", WidePreviewSettings.DISABLED);
+        for (var entry : constants.entrySet()) {
+            assertEquals(entry.getKey(), WidePreviewInputBenchmark.widePreviewSettings(entry.getKey()));
             // The driver resolves the name reflectively; it must denote the production constant.
-            Object constant = WidePreviewSettings.class.getField(name).get(null);
-            assertSame(name.equals("DEFAULT") ? WidePreviewSettings.DEFAULT : WidePreviewSettings.CANDIDATE, constant);
+            assertSame(entry.getValue(), WidePreviewSettings.class.getField(entry.getKey()).get(null));
         }
         for (String invalid : new String[]{"candidate", "", "OFF", "CANDIDATE "})
             assertThrows(IllegalArgumentException.class, () -> WidePreviewInputBenchmark.widePreviewSettings(invalid));

@@ -64,6 +64,15 @@ pass `MathContext.UNLIMITED`. With precision 0 the JDK performs the same exact
 division, so the results are identical. The two baseline entries stay in the file
 and become resolved (`absent`), which the gate allows; no new contract was accepted.
 
+## Resolved short-write loop (wide preview settings, 2026-11-08)
+
+The `IgnoreResultOfCall` entry for the `FileChannel.write` loop in
+`LastSessionStore.atomicWrite` was reported as new after edits to that method changed
+its fingerprint. Instead of migrating it, the loop now adds up the returned byte
+counts. It still writes until every byte is written. The baseline entry stays in the
+file and becomes resolved (`absent`), which the gate allows; no new contract was
+accepted.
+
 ## Acceptance and report handling
 
 CI freshly imports Maven without IDE metadata, compiles production/tests with

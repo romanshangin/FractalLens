@@ -10,6 +10,7 @@ import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
+import com.shangin.fractal.scene.WidePreviewSettings;
 import com.shangin.fractal.formula.JuliaFormula;
 import com.shangin.fractal.render.FractalCalculator;
 import javafx.animation.AnimationTimer;
@@ -813,6 +814,65 @@ class MainMenuBarFxTest {
         await(() -> surface().completedRender() != null
                 && surface().completedRender().scene().antialiasing().equals(initial.antialiasing())
                 && !command("Render", "Edit Iteration Settings…").isDisable());
+    }
+
+    @Test
+    void settingsSwitchWidePreviewOutsideTheSceneAndReportExplicitChanges() throws Exception {
+        FractalScene initial = fx(view::sceneSnapshot);
+        var reported = new java.util.concurrent.CopyOnWriteArrayList<Boolean>();
+        fx(() -> {
+            menuBar.setOnWidePreviewChanged(reported::add);
+            assertEquals(WidePreviewSettings.DEFAULT.enabled(), view.widePreviewEnabled(),
+                    "The preview follows the application default");
+            return null;
+        });
+        boolean initialPreview = WidePreviewSettings.DEFAULT.enabled();
+        for (boolean enabled : List.of(!initialPreview, initialPreview)) {
+            CompletableFuture<Void> action = fireLater(fx(() -> command("File", SettingsWindow.MENU_TITLE)));
+            int choice = enabled ? 1 : 0;
+            if (MacSettingsSheet.isAvailable()) {
+                action.get(10, TimeUnit.SECONDS);
+                fx(() -> {
+                    var sheet = AppKitParameterProbe.settingsSheet(menuBar);
+                    var wide = AppKitParameterProbe.choice(sheet, 2);
+                    assertEquals(1 - choice, AppKitParameterProbe.selectedIndex(wide));
+                    AppKitParameterProbe.select(wide, choice);
+                    AppKitParameterProbe.action(sheet, "apply");
+                    return null;
+                });
+            } else {
+                DialogPane pane = awaitDialog(SettingsWindow.TITLE);
+                fx(() -> {
+                    @SuppressWarnings("unchecked")
+                    var wide = (javafx.scene.control.ComboBox<String>) pane.lookup("#" + SettingsWindow.WIDE_PREVIEW_ID);
+                    assertEquals(1 - choice, wide.getSelectionModel().getSelectedIndex());
+                    wide.getSelectionModel().select(choice);
+                    confirm(pane);
+                    return null;
+                });
+                action.get(10, TimeUnit.SECONDS);
+            }
+            await(() -> view.widePreviewEnabled() == enabled);
+            fx(() -> {
+                assertEquals(initial, view.sceneSnapshot(), "The preview is not part of the scene");
+                assertTrue(view.hasCompletedFrame(), "Switching the preview keeps the exact frame");
+                assertFalse(view.canUndo(), "Switching the preview records no scene history");
+                return null;
+            });
+        }
+        assertEquals(List.of(!initialPreview, initialPreview), reported);
+        // Applying unchanged Settings is not an explicit preview choice.
+        CompletableFuture<Void> action = fireLater(fx(() -> command("File", SettingsWindow.MENU_TITLE)));
+        if (MacSettingsSheet.isAvailable()) {
+            action.get(10, TimeUnit.SECONDS);
+            fx(() -> { AppKitParameterProbe.action(AppKitParameterProbe.settingsSheet(menuBar), "apply"); return null; });
+        } else {
+            DialogPane pane = awaitDialog(SettingsWindow.TITLE);
+            fx(() -> { confirm(pane); return null; });
+            action.get(10, TimeUnit.SECONDS);
+        }
+        fx(() -> null);
+        assertEquals(List.of(!initialPreview, initialPreview), reported);
     }
 
     @Test

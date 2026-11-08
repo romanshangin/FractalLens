@@ -536,7 +536,7 @@ public final class FractalRenderController implements AutoCloseable {
         }
     }
 
-    /** Future Settings integration: invalidates old work and pixels without disturbing exact rendering. */
+    /** Applies the preview policy: invalidates old work and pixels without disturbing exact rendering. */
     public void setWidePreviewSettings(WidePreviewSettings settings) {
         Objects.requireNonNull(settings);
         if (closed || settings.equals(widePreviewSettings)) return;

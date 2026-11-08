@@ -129,10 +129,10 @@ The native JavaFX regression checks can be run with
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette, Reset Colors to Defaults |
 | Render | Edit Iteration Settings…, Edit Julia Parameters… |
 | Window | Minimize (⌘M), Zoom |
-| Help | FractalLens Help, including pointer and keyboard navigation, the render status badge and Render Settings |
+| Help | FractalLens Help, including pointer and keyboard navigation, the render status badge, Render Settings and Navigation |
 
-Settings… is available at any time, including while a frame renders; applying it
-restarts the render. Edit Iteration Settings is available for every fractal when
+Settings… is available at any time, including while a frame renders; applying a
+changed render mode restarts the render, while the Navigation choice never does. Edit Iteration Settings is available for every fractal when
 rendering is idle. Edit Julia Parameters is enabled only for Julia. See
 [Render settings (P2.6)](#render-settings-p26).
 
@@ -360,6 +360,7 @@ Help → FractalLens Help explains **Render status**: Standard/Deep Zoom and dot
 colors; `Waiting`, whole-frame/AA `Rendering N%`, `Complete`/duration, `Interrupted`,
 `Failed`; PNG progress/outcomes in the badge. **Render Settings** explains File →
 Settings… standard/deep Base only, Base, then antialiasing, Antialiased display.
+**Navigation** explains the Wide preview choice.
 Native/JavaFX Help share text; both scroll.
 
 Badge shows exact ready-pixel base progress (including reuse), refinement state
@@ -381,11 +382,13 @@ performance measurement.
 ### Render settings (P2.6)
 
 File → Settings… (⌘,) replaces Display Quality/Deep Zoom Antialiasing menu items
-with one application window for future settings; currently **Render Settings** only.
+with one application window: **Render Settings** (scene) and **Navigation**
+(application preference, see [Wide navigation preview](#wide-navigation-preview)).
 macOS uses the parameter-sheet bridge's owner AppKit sheet, right-aligned labels/
 hints and `NSPopUpButton` fields. Bridge failure/Windows/Linux use shared JavaFX
 combo boxes. Return/Apply commits; Escape/Cancel discards. Reset to Defaults changes
-only drafts (standard Antialiased display, deep Base only) until Apply. Initial
+only drafts (standard Antialiased display, deep Base only, Wide preview at its
+application default) until Apply. Initial
 focus is Standard zoom; native focus requires macOS Keyboard navigation. With it
 off, AppKit skips pop-ups/buttons like System Settings: no focus/stale ring,
 Return/Escape still work. Native text is unselectable; hints cannot take focus.
@@ -442,11 +445,11 @@ leaving deep zoom does not clear its mode. PNG export keeps independent adaptive
 
 ### Wide navigation preview
 
-The wide-preview candidate is **disabled by default**. Its original v1 memory
-rejection used a per-pair RSS rule later shown to be invalid; under the
-calibrated follow-ups, timing and the memory tail remain inconclusive. Explicit developer configuration can enable a separate coarse CPU raster
-to fill uncovered areas beneath the existing
-pan/zoom images. It contains actual fractal samples, without AA, and is allowed
+The wide preview is **enabled by default** since campaign TG2-4 passed the
+declared timing v2, memory v2, availability, thermal and exact-control gates.
+Earlier campaigns rejected it or were inconclusive. The preview is a separate
+coarse CPU raster that fills uncovered areas beneath the existing pan/zoom
+images. It contains actual fractal samples, without AA, and is allowed
 in all three display modes, including Antialiased display. It never covers an
 opaque exact/AA pixel and never contributes samples, validity, progress or pixels
 to export. Areas outside the available reserve still show the palette background.
@@ -455,9 +458,20 @@ to export. Areas outside the available reserve still show the palette background
 limits. The initial request is twice the screen width and height at step eight;
 the sample budget can raise that step on large/HiDPI targets. The controller's
 `setWidePreviewSettings(WidePreviewSettings.CANDIDATE)` enables the candidate;
-passing DEFAULT disables it. Changes cancel old work/publication and replace the reserve
-without interrupting the exact frame. There is no Settings UI or persistence for
-this policy yet. See [the preview contract and measurement policy](../../benchmarks/WIDE_PREVIEW_VALIDATION.md)
+passing `DISABLED` disables it. Changes cancel old work/publication and replace the reserve
+without interrupting the exact frame.
+
+File → Settings… → **Navigation → Wide preview** (Off/On) is the user switch,
+through `FractalView.setWidePreviewEnabled`. It is an application preference, not
+scene state: it is excluded from scene JSON, undo/redo, bookmarks and export, and
+switching it neither restarts nor changes the exact frame. An explicit change is
+saved at once as `widePreview=on|off` in `preferences.properties`, beside
+`last-session.json`, and restored at startup. Without an explicit choice nothing is
+written and `WidePreviewSettings.DEFAULT` (on) applies, so a later default change reaches
+users who never chose. Applying Settings with an unchanged choice records nothing.
+Unreadable, malformed, oversized (over 64 KiB) or unknown values fall back to the
+default; the next explicit choice replaces the file atomically. See [the preview contract and measurement policy](../../benchmarks/WIDE_PREVIEW_VALIDATION.md),
+[the TG2-4 retain decision](../../benchmarks/WIDE_PREVIEW_VALIDATION.md#follow-up-campaigns-tg2-3-aborted-and-tg2-4-retain)
 and [the calibrated memory-gate follow-up](../../benchmarks/MEMORY_GATE_V2.md).
 
 Preparation runs only after the visible frame and its AA finish. Navigation
@@ -465,8 +479,11 @@ cancels it without blocking FX; compatible finished coarse samples survive for
 the next idle calculation. During pan/zoom, the previous reserve remains an
 approximation until replaced, including when adaptive iterations change with
 zoom. Explicit iteration-policy, formula/Julia parameter, palette/trap or preview
-configuration changes remove incompatible reserve pixels. The reserve has its
-own capped iteration budget; precise visible rendering and export are unchanged.
+configuration changes remove incompatible reserve pixels. The reserve uses the
+visible frame's iteration limit, bounded only by its wall-time budget; cells it
+has not reached stay transparent. An earlier fixed 4096-iteration cap showed
+slowly escaping deep-zoom samples as black interior where the exact frame is
+colored. Precise visible rendering and export are unchanged.
 
 While Color Cycling is active, the controller cancels reserve work once, hides
 its raster and suspends all reserve replenishment/recoloring. Visible palette

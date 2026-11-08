@@ -14,6 +14,12 @@ window dimensions, render priority, pending work and transient animation.
 Save on main-view close. Missing/malformed session tries the previous valid
 generation, then default Mandelbrot; startup remains available.
 
+Application preferences that are not scene state live beside it in
+`preferences.properties` (Java properties, UTF-8): currently only
+`widePreview=on|off`, written atomically when the user changes it in Settings.
+An absent, malformed or unknown value keeps the application default; see
+[Wide navigation preview](../platform/MACOS_UI.md#wide-navigation-preview).
+
 Application data is separate from the earlier private app; old sessions are never
 automatically moved/deleted. To reuse one, copy `last-session.json` to the new
 platform location with both apps closed. Schema is unchanged.

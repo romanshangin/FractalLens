@@ -34,7 +34,8 @@ public record WidePreviewPlan(RenderJob job, WidePreviewSettings settings, long 
                 && previous.request().viewport().scaleExact().compareTo(scale) == 0) {
             coarse = coarse.snapToPixelGrid(previous.request().viewport(), width, height);
         }
+        // A lower cap would show slowly escaping samples as interior: black where the exact frame is colored.
         return new WidePreviewPlan(new RenderJob(visible.formula(), coarse, width, height,
-                Math.min(visible.maxIterations(), settings.iterationLimit())), settings, step);
+                visible.maxIterations()), settings, step);
     }
 }

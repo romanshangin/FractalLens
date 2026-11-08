@@ -6,7 +6,9 @@ The candidate adds a display-only reserve beneath the existing exact images.
 `WidePreviewSettings.CANDIDATE` requests twice the visible width and height with
 one sample per eight **physical** pixels, no AA. At 1512x982 this is 379x247.
 At 3024x1964, step eight would give 757x492, which exceeds the 262,144-sample
-limit, so the step rises to 10 and the reserve is 606x394. The iteration cap is 4096, the
+limit, so the step rises to 10 and the reserve is 606x394. The measured candidate
+capped iterations at 4096 (removed later, see
+[the deep-zoom correction](#correction-deep-zoom-iteration-cap)), the
 maximum decimal working precision is 512 digits, and unsupported coarse jobs
 produce no reserve. Preview samples never enter visible validity, exact caches,
 AA candidate selection, completion status, or export.
@@ -34,14 +36,19 @@ Histogram preview uses the existing smooth progressive palette; exact final
 histogram coloring is unchanged. All three display modes allow this background
 approximation. Antialiased display still publishes only AA target tiles above it.
 
-`WidePreviewSettings.DEFAULT` is disabled after the experiment below. Explicit
-configuration (`CANDIDATE`, or the validated five-argument constructor) enables
-developer evaluation; there is no JVM switch or Settings UI. Setting DEFAULT
-again stops work and clears the raster without changing the exact frame.
+`WidePreviewSettings.DEFAULT` was disabled after the experiment below and has been
+`CANDIDATE` since [TG2-4](#follow-up-campaigns-tg2-3-aborted-and-tg2-4-retain). Explicit
+configuration (`CANDIDATE`, or the validated four-argument constructor) enables
+the preview; there is no JVM switch. Setting `DISABLED` stops work and clears the
+raster without changing the exact frame.
+A later Settings switch (Navigation → Wide preview, an application preference)
+selects exactly `CANDIDATE` or `DISABLED`; it adds no render-path code, and the
+benchmark driver constructs `FractalView` directly, so no saved preference reaches
+a measured process.
 
 The configuration setter cancels pending publication and work, clears old
 display pixels, and schedules replacement after visible work, without changing
-the exact frame. This is the integration boundary for a future Settings UI.
+the exact frame. This is the integration boundary the Settings switch uses.
 
 ### Frozen comparison policy (declared before timing)
 
@@ -188,9 +195,11 @@ The test-module entry point is
 `javafx.cachedir`, `-Xmx4g`, `-Dprism.order=mtl`, CPU/GPU-dispatch flags as above,
 and the normal native bridge module exports from pom.xml. The current driver
 applies the `WidePreviewSettings` constant named by `wide.preview.settings`
-(`CANDIDATE` by default, or `DEFAULT`) after source conformance and before the
-identical 250 ms think time. It records the value and whether the preview API
-exists in `environment.txt`, and stops if `DEFAULT` leaves any reserve snapshot. The
+(`CANDIDATE` by default, `DEFAULT` or `DISABLED`) after source conformance and
+before the identical 250 ms think time. It records the value and whether the preview
+API exists in `environment.txt`, and stops if a switched-off constant leaves any
+reserve snapshot. Since TG2-4 `DEFAULT` equals `CANDIDATE`, so an off control on a
+later build must use `DISABLED`. The
 recorded campaigns used the earlier always-CANDIDATE driver, which matches
 `CANDIDATE` here. This is a **future evaluation protocol**, not a relabeling of
 the recorded default-active builds. Alternate six fresh JVM pairs AB/BA without
@@ -342,3 +351,267 @@ later [recalculated to 512 MiB](AA_MEMORY_VALIDATION.md#follow-up-default-budget
 so these memory and timing results describe build
 `567304500c12af3b7aa1f90308f2d43c6f3643e0a6eb6556a3c55dab338ffa8c`, not the
 current tree. Any future promotion campaign must measure the current budget.
+
+## Follow-up: timing gate v2 campaign TG2-1
+
+TG2-1 was declared on 2026-11-05 before any of its processes ran. Its policy
+and campaign script were hashed first. It applies [timing gate v2](TIMING_GATE_V2.md)
+and memory gate v2 to the current tree, which has the 512 MiB AA cache default and
+the Settings switch. A single frozen build of the working tree is its own control:
+A uses `-Dwide.preview.settings=DEFAULT` (disabled) and B uses `CANDIDATE`. Command
+lines equal the memory v2 wide stage: `-Xmx4g`, Metal Prism, CPU rendering,
+1512x982 and 3024x1964, FAST and REFINED, 3 warmups and 5 samples, with AB/BA
+alternation on AC power.
+
+The declared stages were as follows:
+
+1. A fresh 12-pair A/A stage (`DEFAULT`/`DEFAULT`).
+2. A plan based only on that A/A data. Timing gate v2 picks the smallest N with
+   joint pass ≥ 0.80 and false fail ≤ 0.05. At that N, a memory v2 simulation must
+   reach pass ≥ 0.80 and false fail ≤ 0.05, and the observed A/A memory gate must
+   not fail.
+3. Exactly N candidate pairs, run only if both parts of the plan are runnable.
+
+| A/A stage (12 pairs, 24 processes) | Result |
+| --- | --- |
+| Exact sample/ARGB fingerprints, frozen-build verification | pass in every pair |
+| Thermal pressure at process boundaries | nominal (48 of 48 observations) |
+| Peak RSS range | 3.794–4.210 GB |
+| Observed timing v2 overall B/A | 0.999 (0.978–1.022), pass; 56 groups pass, 0 fail |
+| Observed memory v2 G1 median ratio | 0.978 (0.967–1.003), pass |
+| Observed memory v2 G2 P90 ratio | 0.970 (0.933–0.985), pass |
+
+| Plan at N | Timing joint pass | Timing false fail | Memory v2 pass | Memory v2 false fail |
+| --- | --- | --- | --- | --- |
+| 12 | 0.751 | 0.000 | — | — |
+| **18 (selected by timing)** | **0.915** | **0.000** | **0.671** | **0.000** |
+| 24 | 0.979 | 0.000 | — | — |
+
+**Decision: the plan is not runnable, so the candidate stage did not run.** The
+timing gate became practical: the A/A stage passed every group, and 18 pairs give
+0.915 power. Memory v2 has no false fails, but only a 0.671 pass rate at 18 pairs,
+below the declared 0.80. With identical builds, about a third of 18-pair campaigns
+would end inconclusive on memory alone. Under the declared policy the owner
+decides how to continue. `WidePreviewSettings.DEFAULT` stays disabled, and the
+Settings switch remains an explicit opt-in.
+
+After the plan, a diagnostic was run on the same A/A RSS pairs. It is not part of
+the declared plan, and its seeds differ from the plan's. It gives memory pass rates
+of 0.684 at 18 pairs, 0.689 at 24, 0.777 at 30 and 0.829 at 36. The planning
+requirement would first hold at about 36 pairs, which is roughly 5 hours of
+candidate processes on this machine. Any continuation needs a new declaration
+before its first process. One option chooses N from the joint timing and memory
+power. The other changes the memory planning requirement, which is an owner
+decision. TG2-1 raw records, plan files and the diagnostic stay in the private
+archive.
+
+Not covered: long sessions, GPU, Windows/Linux, Intel/AMD Macs and native
+fullscreen.
+
+## Follow-up: campaign TG2-2 (36 pairs)
+
+The owner chose to continue with 36 pairs. TG2-2 was declared on 2026-11-06 before
+any of its processes ran. Its policy, script and frozen plan files were hashed first.
+It reuses the TG2-1 A/A stage for planning only. Its timing plan is the TG2-1
+simulation with `selected` set to N = 36, which gives 0.999 joint pass and 0.000
+false fail. At N = 36 the memory v2 simulation gives 0.829 pass and 0.000 false
+fail. The build and command lines are the same as in TG2-1: the build's sources
+equal the current tree, and A is `DEFAULT` while B is `CANDIDATE`. The decision
+rule is unchanged. The campaign ran exactly 36 fresh pairs, with no pooling and no
+early stop.
+
+| Component | Result |
+| --- | --- |
+| Exact sample/ARGB fingerprints, frozen-build verification | pass in all 36 pairs |
+| Thermal pressure at process boundaries | nominal (144 of 144 observations) |
+| Reserve ready / complete before gesture | 100% / 100% of measured sequences |
+| Peak RSS range, A / B | 3.768–4.382 GB / 3.662–4.355 GB |
+| Memory v2 G1 median ratio | 0.993 (0.983–1.009), pass |
+| Memory v2 G2 P90 ratio | 1.009 (0.957–1.045), pass |
+| Timing v2 overall B/A | 0.997 (0.965–1.030), pass |
+| Timing v2 families | 7 pass, 1 inconclusive, 0 fail (of 8) |
+| Timing v2 groups | 55 pass, 1 inconclusive, 0 fail (of 56) |
+
+The family and group that did not pass are both zoom-out first input to preview
+after layout:
+
+- The family ratio is 1.072 (1.009–1.135), and its upper bound exceeds the 1.13
+  average limit.
+- 3024x1964 REFINED is the only group above its limit: 1.381 (1.216–1.569)
+  against a control median of 13.3 ms, about +5 ms.
+- That group's Bonferroni-adjusted lower bound is 1.100, which does not exceed
+  the 1.25 group limit, so the excess is not confirmed as a fail.
+- 3024x1964 FAST in the same family passed at 1.094 (0.931–1.285).
+- Both 1512x982 groups were faster: 0.905 (FAST) and 0.964 (REFINED).
+
+Completion latency improved or stayed level. Zoom-out last input to AA was 0.954
+(0.945–0.963), and zoom-out last input to post-layout was 0.999 (0.994–1.004).
+
+**Decision: inconclusive.** Memory v2, availability, thermal state and exact
+controls all pass, and no timing component fails. The point estimate for the
+first Retina REFINED zoom-out preview is above the owner's 25% group limit, so
+more pairs alone would most likely tighten the interval around a value that still
+exceeds the limit. `WidePreviewSettings.DEFAULT` stays disabled, and the Settings
+switch remains an explicit opt-in. Promotion needs an owner decision. One option
+is a change that reduces the candidate's first-preview cost at that size and mode,
+followed by a new declared campaign. TG2-2 raw records, the policy and its hashes
+stay in the private archive.
+
+Not covered: long sessions, GPU, Windows/Linux, Intel/AMD Macs and native
+fullscreen.
+
+## Correction: deep-zoom iteration cap
+
+The reserve capped iterations at `min(visible limit, 4096)`. When a deep-zoom
+frame needs more iterations than that, a reserve sample that has not escaped by
+4096 is not proven interior. It was colored as interior, though, so the reserve
+showed black where the exact frame was colored. Near
+`-0.743643887037158704752191506114774 + 0.131825904205311970493132056385139i` at
+scale `1e-16` with 20,000 iterations:
+
+- The visible frame escapes at every sample.
+- The capped reserve was 100% black.
+
+The reserve now uses the visible frame's iteration limit. The two-second
+cooperative budget, cancellation and transparent unreached cells still bound
+and label the work. `WidePreviewSettings` no longer has an iteration-limit
+component. `WidePreviewTest` checks that the plan keeps the visible limit and
+that reserve colors equal a deep-reference render of the coarse job, and it
+fails with the old cap.
+
+Every fixture of the recorded campaigns has a visible limit below 4096, so
+their measured work is unchanged. Deep scenes above the old cap were never part
+of any timing or memory gate. They now spend more idle CPU time per reserve
+sample, and the larger reference orbit and BLA table are allocated only while the
+reserve is calculated.
+
+
+## Diagnostic: first Retina zoom-out preview after TG2-2
+
+This is a diagnostic, not a gate. It is not declared and does not change TG2-2.
+TG2-2 events separate the excess in the 3024x1964 first zoom-out preview after
+layout. Medians over 180 measured sequences per label:
+
+| Gap (ms) | FAST A | FAST B | REFINED A | REFINED B |
+| --- | --- | --- | --- | --- |
+| render start → reuse planned | 9.7 | 13.2 | 8.1 | 14.1 |
+| reuse planned → surface prepared | 0.9 | 1.1 | 0.5 | 0.7 |
+| surface prepared → preview after layout | 3.2 | 2.9 | 3.1 | 3.0 |
+
+At 1512x982 the planning gap is about 3.1 ms for both labels. The reserve does
+no work at this step: it only cancels, which is a no-op when idle, and updates
+one transform. The preview pulse waits for planning on the FX thread.
+
+Instrumented diagnostic builds of the same sources measured
+`wide-zoom-out` at 3024x1964 in 4 + 4 processes per build:
+
+- **GC.** No collection completed during planning in any of 160 sequences.
+- **Pre-touched heap.** With `-Xms4g -XX:+AlwaysPreTouch` (3 + 3 processes)
+  the planning times stayed spread out (2–30 ms) and B was not faster.
+- **Thread CPU time.** In planning, user time was a stable 1.6–2.1 ms median.
+  The variable part was kernel time: 1.4–9.1 ms median and up to 15.5 ms.
+  Off-CPU time was below 0.1 ms. Zoom-out never reused samples, so planning
+  allocated a fresh 3024x1964 frame of about 77 MB each time.
+
+The cost is therefore page-fault and zero-fill time, spent while the fresh
+visible frame is allocated on the FX thread. It exists without the reserve too,
+up to 17 ms in A. The likely reason the reserve raises it in TG2-2 is the
+process's larger memory footprint, under which more pages of each new frame are
+not resident. These small diagnostic samples did not reproduce the A/B
+difference itself (median REFINED 11.1 vs 11.5 ms). Cutting this cost means not
+allocating a cold full-size frame on the FX thread for every render, for example
+by recycling frame storage or allocating it off the FX thread. That is a
+render-pipeline lifecycle change for both labels and needs its own correctness
+checks and a new declared campaign. The instrumentation was not kept, and the
+diagnostic builds, raw records and scripts stay in the private archive.
+
+That change was later retained as
+[spare frame storage](SPARE_FRAME_STORAGE_RESULTS.md): fresh-frame storage is
+allocated ahead of time off the JavaFX thread.
+[TG2-4](#follow-up-campaigns-tg2-3-aborted-and-tg2-4-retain) later re-measured
+the reserve on a tree that includes it. TG2-2 stays inconclusive.
+
+## Follow-up: campaigns TG2-3 (aborted) and TG2-4 (retain)
+
+Both campaigns measured one frozen build of a tree that includes spare frame
+storage and the visible-limit deep-zoom correction. Its production sources differ
+from the tree that enables the default in three files, none on the measured path:
+
+- the `WidePreviewSettings.DEFAULT` constant, which the driver bypasses by applying
+  the named constant explicitly;
+- `PreferencesStore`, whose later change saves a choice over an unreadable file; it
+  is used only by `MainView`, which the driver does not create;
+- one comment in `FractalRenderController`.
+
+Labels, driver, command lines, fixture matrix and decision rule are
+those of TG2-2. A is `DEFAULT` (then disabled) and B is `CANDIDATE`, and the A/A
+stage uses `DEFAULT` for both labels. Each campaign was declared and hashed
+before its first process. The whole chain ran under `caffeinate -i`, on AC
+power, with no other build running.
+
+Each declaration fixed a joint timing and memory plan: a fresh 12-pair A/A
+stage, then the smallest N in {12, 18, 24, 30, 36} that meets all of:
+
+- timing v2 joint pass ≥ 0.80 and false fail ≤ 0.05;
+- memory v2 pass ≥ 0.80 and false fail ≤ 0.05, from a resampling simulation
+  over the A/A pairs;
+- the observed A/A timing and memory gates do not fail.
+
+If no N qualified, the plan was not runnable and the owner would decide.
+Exactly N candidate pairs then ran, with no early stop.
+
+**TG2-3 (2026-11-06): aborted, no decision.** The A/A stage stopped at its
+fifth pair:
+
+- In a pinch zoom-out step, a mouse drag arrived 1.47 s after the harness pinch
+  and caused no camera change. The harness synthesizes drags only for pan
+  steps, so this was external pointer input to the on-screen benchmark window.
+- The driver's generation-bound completion check stopped the process, which is
+  a declared hard stop.
+- This is environment interference, not a product defect.
+
+No TG2-3 pair is used or pooled. The owner asked for a restart.
+
+**TG2-4 (2026-11-07).** The A/A stage passed timing v2: overall 1.015
+(0.991–1.041) and no failing group. It also passed memory v2. The plan selected
+N = 12, where the simulations give:
+
+- timing joint pass 0.861 with 0.000 false fail;
+- memory pass 1.000 with 0.000 false fail.
+
+The candidate stage then ran 12 fresh pairs.
+
+| Component | Result |
+| --- | --- |
+| Processes, exact sample/ARGB fingerprints, frozen-build verification | pass in all 24 A/A and 24 candidate processes |
+| Thermal pressure at process boundaries | nominal (96 of 96 observations) |
+| Reserve ready / complete before gesture | 100% / 100% of measured sequences |
+| Peak RSS range, A / B | 4.290–4.554 GB / 4.353–4.555 GB |
+| Memory v2 G1 median ratio | 0.996 (0.986–1.008), pass |
+| Memory v2 G2 P90 ratio | 0.990 (0.988–1.006), pass |
+| Timing v2 overall B/A | 0.973 (0.946–0.997), pass |
+| Timing v2 families | 8 pass of 8, upper bounds 0.983–1.046 |
+| Timing v2 groups | 56 pass, 0 inconclusive, 0 fail |
+
+The TG2-2 concern is gone. First zoom-out preview after layout was 0.920
+(0.859–0.983) for the family. Its 3024x1964 REFINED group was 0.923
+(0.824–1.034) against a 12.1 ms control median, where TG2-2 had 1.381. The other
+three groups of that family were 0.910–0.934. The highest group ratio was
+3024x1964 FAST zoom-out last input to first target, a diagnostic metric, at
+1.080 (0.966–1.207), within its 1.25 limit.
+
+**Decision: retain.** Timing v2, memory v2 G1 and G2, availability (100% ≥ 95%),
+thermal state and exact controls all pass. `WidePreviewSettings.DEFAULT` is now
+`CANDIDATE`. Users without an explicit choice get the preview. An explicit
+Settings choice, saved as `widePreview=on|off`, still wins. The driver now also
+accepts `DISABLED`, and checks that any switched-off constant leaves no reserve.
+Its `DEFAULT` label no longer means "off" on builds after this change.
+`timing_gate_v2.py` still labels the control `DEFAULT`, as recorded in
+TG2-1–TG2-4. A later off/on campaign on a build with this default needs a
+declared `DISABLED` control label.
+
+Raw records, the policies and their hashes stay in the private archive.
+
+Not covered: long sessions, GPU, Windows/Linux, Intel/AMD Macs, native fullscreen,
+and deep-zoom scenes above 4096 iterations, where the reserve now spends more
+idle CPU per sample.

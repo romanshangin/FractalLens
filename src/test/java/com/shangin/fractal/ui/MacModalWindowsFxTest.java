@@ -4,6 +4,7 @@ import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
+import com.shangin.fractal.scene.WidePreviewSettings;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.layout.StackPane;
@@ -225,32 +226,37 @@ class MacModalWindowsFxTest {
     }
 
     @Test void settingsSelectStandardAndDeepZoomModesFromPopUpButtons() throws Exception {
-        var result = new CompletableFuture<AntialiasSettings>();
-        var current = new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.BASE_ONLY);
+        var result = new CompletableFuture<SettingsWindow.Values>();
+        var current = new SettingsWindow.Values(
+                new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.BASE_ONLY), false);
         var sheet = fx(() -> MacSettingsSheet.show(owner, current,
                 value -> { assertTrue(Platform.isFxApplicationThread()); result.complete(value); }));
         fx(() -> {
             assertTrue(MacParameterSheet.hasOpenSheet(owner));
             var standard = AppKitParameterProbe.choice(sheet, 0);
             var deep = AppKitParameterProbe.choice(sheet, 1);
+            var wide = AppKitParameterProbe.choice(sheet, 2);
             assertEquals(SettingsWindow.index(InteractiveRenderMode.REFINED), AppKitParameterProbe.selectedIndex(standard));
             assertEquals(SettingsWindow.index(InteractiveRenderMode.BASE_ONLY), AppKitParameterProbe.selectedIndex(deep));
+            assertEquals(0, AppKitParameterProbe.selectedIndex(wide));
             assertTrue(AppKitParameterProbe.enabled(deep), "The deep zoom mode is editable at any zoom");
             for (String appearance : List.of("NSAppearanceNameAqua", "NSAppearanceNameDarkAqua")) {
                 AppKitParameterProbe.appearance(sheet, appearance);
             }
             AppKitParameterProbe.select(standard, SettingsWindow.index(InteractiveRenderMode.BASE_ONLY));
             AppKitParameterProbe.select(deep, SettingsWindow.index(InteractiveRenderMode.REFINED));
+            AppKitParameterProbe.select(wide, 1);
             AppKitParameterProbe.alertKey(sheet, "\r", (short) 36);
             return null;
         });
-        assertEquals(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED),
+        assertEquals(new SettingsWindow.Values(
+                new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED), true),
                 result.get(10, TimeUnit.SECONDS));
         fx(() -> { assertFalse(sheet.isOpen()); return null; });
     }
 
     @Test void settingsTabStopsAreOnlyControls() throws Exception {
-        var sheet = fx(() -> MacSettingsSheet.show(owner, new AntialiasSettings(), ignored -> {}));
+        var sheet = fx(() -> MacSettingsSheet.show(owner, SettingsWindow.Values.defaults(), ignored -> {}));
         fx(() -> {
             // A clicked selectable label keeps keyboard focus, so Tab would select its text instead of moving
             // between the pop-up buttons and buttons.
@@ -261,7 +267,7 @@ class MacModalWindowsFxTest {
     }
 
     @Test void settingsFocusOnlyAKeyboardNavigablePopUpButton() throws Exception {
-        var sheet = fx(() -> MacSettingsSheet.show(owner, new AntialiasSettings(), ignored -> {}));
+        var sheet = fx(() -> MacSettingsSheet.show(owner, SettingsWindow.Values.defaults(), ignored -> {}));
         fx(() -> {
             // Checks the macOS Keyboard navigation setting of this desktop session: when it is off,
             // a focused pop-up button keeps a stale focus ring while clicks select other controls.
@@ -276,9 +282,10 @@ class MacModalWindowsFxTest {
     }
 
     @Test void settingsResetToDefaultsChangesOnlyTheDraft() throws Exception {
-        var result = new CompletableFuture<AntialiasSettings>();
-        var sheet = fx(() -> MacSettingsSheet.show(owner,
-                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED), result::complete));
+        var result = new CompletableFuture<SettingsWindow.Values>();
+        var sheet = fx(() -> MacSettingsSheet.show(owner, new SettingsWindow.Values(
+                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED),
+                !WidePreviewSettings.DEFAULT.enabled()), result::complete));
         fx(() -> {
             AppKitParameterProbe.action(sheet, "resetChoices");
             assertTrue(sheet.isOpen(), "Reset must not close the sheet");
@@ -287,15 +294,18 @@ class MacModalWindowsFxTest {
                     AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 0)));
             assertEquals(SettingsWindow.index(InteractiveRenderMode.BASE_ONLY),
                     AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 1)));
+            assertEquals(WidePreviewSettings.DEFAULT.enabled() ? 1 : 0,
+                    AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 2)));
             AppKitParameterProbe.action(sheet, "apply");
             return null;
         });
-        assertEquals(new AntialiasSettings(), result.get(10, TimeUnit.SECONDS));
+        assertEquals(SettingsWindow.Values.defaults(), result.get(10, TimeUnit.SECONDS));
     }
 
     @Test void settingsEscapeAndCancelDiscardDraft() throws Exception {
         var applied = new AtomicInteger();
-        var current = new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.BASE_ONLY);
+        var current = new SettingsWindow.Values(
+                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.BASE_ONLY), false);
         for (boolean escape : List.of(true, false)) {
             var sheet = fx(() -> MacSettingsSheet.show(owner, current, ignored -> applied.incrementAndGet()));
             fx(() -> {
@@ -313,14 +323,15 @@ class MacModalWindowsFxTest {
                 return null;
             });
         }
-        var result = new CompletableFuture<AntialiasSettings>();
+        var result = new CompletableFuture<SettingsWindow.Values>();
         var sheet = fx(() -> MacSettingsSheet.show(owner, current, result::complete));
         fx(() -> {
             AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 1), SettingsWindow.index(InteractiveRenderMode.FAST));
             AppKitParameterProbe.action(sheet, "apply");
             return null;
         });
-        assertEquals(new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.FAST),
+        assertEquals(new SettingsWindow.Values(
+                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.FAST), false),
                 result.get(10, TimeUnit.SECONDS));
     }
 

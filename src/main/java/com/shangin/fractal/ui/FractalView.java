@@ -21,6 +21,7 @@ import com.shangin.fractal.scene.SceneHistory;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import com.shangin.fractal.scene.AntialiasSettings;
+import com.shangin.fractal.scene.WidePreviewSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.animation.PauseTransition;
 import javafx.animation.AnimationTimer;
@@ -645,6 +646,18 @@ public class FractalView extends StackPane {
         changeScene(scene.withAntialiasing(antialiasing));
         renderController.cancelCurrent();
         recalculate();
+    }
+
+    /**
+     * Switches the display-only wide navigation preview. It is not part of the scene: it
+     * changes no exact pixels, history, completion or export, so it does not restart rendering.
+     */
+    public void setWidePreviewEnabled(boolean enabled) {
+        renderController.setWidePreviewSettings(WidePreviewSettings.of(enabled));
+    }
+
+    public boolean widePreviewEnabled() {
+        return renderController.widePreviewSettings().enabled();
     }
 
     public void setOnRenderingChanged(Consumer<Boolean> handler) {

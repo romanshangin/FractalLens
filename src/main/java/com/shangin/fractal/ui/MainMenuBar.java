@@ -71,6 +71,7 @@ final class MainMenuBar extends MenuBar {
     private MacIterationSheet iterationSheet;
     private MacJuliaSheet juliaSheet;
     private MacSettingsSheet settingsSheet;
+    private Consumer<Boolean> widePreviewChanged = enabled -> {};
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalPreset initialFractal,
                 PalettePreset initialPalette, Runnable onExport) {
@@ -243,19 +244,34 @@ final class MainMenuBar extends MenuBar {
                 .ifPresent(fractalView::setIterations);
     }
 
+    /** Receives explicit wide-preview changes made in Settings, for persistence. */
+    void setOnWidePreviewChanged(Consumer<Boolean> handler) {
+        widePreviewChanged = java.util.Objects.requireNonNull(handler);
+    }
+
     private void showSettings() {
         if (parameterSheetOpen()) return;
-        var current = fractalView.sceneSnapshot().antialiasing();
+        var current = new SettingsWindow.Values(fractalView.sceneSnapshot().antialiasing(),
+                fractalView.widePreviewEnabled());
         if (MacSettingsSheet.isAvailable()) {
             try {
-                settingsSheet = MacSettingsSheet.show(stage, current, fractalView::setAntialiasSettings);
+                settingsSheet = MacSettingsSheet.show(stage, current, this::applySettings);
                 return;
             } catch (LinkageError | RuntimeException error) {
                 System.getLogger(MainMenuBar.class.getName()).log(System.Logger.Level.WARNING,
                         "Native settings sheet unavailable; using JavaFX dialog", error);
             }
         }
-        FractalDialogs.settings(stage, current).ifPresent(fractalView::setAntialiasSettings);
+        FractalDialogs.settings(stage, current).ifPresent(this::applySettings);
+    }
+
+    private void applySettings(SettingsWindow.Values values) {
+        // The preview is display-only; switching it never restarts the exact render.
+        if (values.widePreview() != fractalView.widePreviewEnabled()) {
+            fractalView.setWidePreviewEnabled(values.widePreview());
+            widePreviewChanged.accept(values.widePreview());
+        }
+        fractalView.setAntialiasSettings(values.antialiasing());
     }
 
     private void showJuliaParameters() {

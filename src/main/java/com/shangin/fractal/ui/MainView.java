@@ -1,6 +1,7 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.app.LastSessionStore;
+import com.shangin.fractal.app.PreferencesStore;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.export.AdaptivePngExportService;
@@ -38,6 +39,7 @@ public class MainView extends BorderPane {
     private final FractalView fractalView;
     private final MainMenuBar menuBar;
     private final LastSessionStore sessionStore;
+    private final PreferencesStore preferences;
     private boolean closed;
     private boolean exporting;
     private long exportRequest;
@@ -68,7 +70,10 @@ public class MainView extends BorderPane {
                 ? new FractalView(initialScene, initial.restored(), renderService)
                 : new FractalView(initialScene, initial.restored(), renderService, recolorOperation);
         fractalView.setOnRenderError(this::renderFailed);
+        preferences = PreferencesStore.besides(sessionStore);
+        restoreWidePreview();
         menuBar = new MainMenuBar(stage, fractalView, initialScene, this::exportPng);
+        menuBar.setOnWidePreviewChanged(this::saveWidePreview);
         if (System.getProperty("os.name", "").startsWith("Mac")) {
             // Glass falls back to this menu while no stage is focused, including
             // the activation gap when returning from another macOS Space.
@@ -97,6 +102,23 @@ public class MainView extends BorderPane {
             System.err.println("Could not restore the last FractalLens session: "
                     + exception.getMessage());
             return defaultInitialScene();
+        }
+    }
+
+    /** An explicit saved choice wins; without one the application default applies. */
+    private void restoreWidePreview() {
+        try {
+            preferences.widePreview().ifPresent(fractalView::setWidePreviewEnabled);
+        } catch (IOException exception) {
+            System.err.println("Could not read FractalLens preferences: " + exception.getMessage());
+        }
+    }
+
+    private void saveWidePreview(boolean enabled) {
+        try {
+            preferences.saveWidePreview(enabled);
+        } catch (IOException exception) {
+            System.err.println("Could not save FractalLens preferences: " + exception.getMessage());
         }
     }
 
