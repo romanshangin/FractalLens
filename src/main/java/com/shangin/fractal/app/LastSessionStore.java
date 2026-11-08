@@ -109,7 +109,8 @@ public final class LastSessionStore {
             try (FileChannel channel = FileChannel.open(temporary,
                     StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
                 ByteBuffer buffer = ByteBuffer.wrap(bytes);
-                while (buffer.hasRemaining()) channel.write(buffer);
+                int written = 0;
+                while (written < bytes.length) written += channel.write(buffer);
                 channel.force(true);
             }
             try {

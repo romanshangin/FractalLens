@@ -440,7 +440,6 @@ class WidePreviewFxTest {
         try {
             completed.get(15, TimeUnit.SECONDS);
             fx(() -> {
-                var surface = (FractalSurface) ui[0];
                 var controller = (FractalRenderController) ui[1];
                 assertSame(WidePreviewSettings.DEFAULT, controller.widePreviewSettings());
                 assertTrue(controller.widePreviewSettings().enabled());
