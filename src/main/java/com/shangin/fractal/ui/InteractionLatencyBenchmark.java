@@ -81,7 +81,7 @@ public final class InteractionLatencyBenchmark {
             }
             pendingPulse.clear();
         });
-        stage.setTitle("FractalLens — interaction latency diagnostic");
+        stage.setTitle("FractalLens — Interaction Latency Benchmark");
         stage.setScene(scene);
         stage.setAlwaysOnTop(true);
         stage.show();

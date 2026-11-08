@@ -584,7 +584,7 @@ final class FractalDialogs {
         ButtonType close = new ButtonType("Yes, Close", ButtonData.YES);
         ButtonType stay = new ButtonType("No, Return", ButtonData.CANCEL_CLOSE);
         Alert dialog = new Alert(Alert.AlertType.CONFIRMATION);
-        dialog.setTitle("Export in progress");
+        dialog.setTitle("Close FractalLens?");
         dialog.setHeaderText("Close FractalLens?");
         dialog.setContentText("A PNG export is still in progress. Closing will cancel it.");
         dialog.getDialogPane().setPrefWidth(480);

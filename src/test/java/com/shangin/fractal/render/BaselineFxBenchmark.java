@@ -139,7 +139,7 @@ public final class BaselineFxBenchmark {
                     r.pulsed.complete(null);
                 }
             });
-            stage.setTitle("FractalLens — roadmap 9.1 CPU publication baseline");
+            stage.setTitle("FractalLens — CPU Publication Benchmark");
             stage.setScene(scene);
             reset();
             stage.show();

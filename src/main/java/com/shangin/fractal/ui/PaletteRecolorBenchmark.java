@@ -55,7 +55,7 @@ public final class PaletteRecolorBenchmark {
         view = new ImageView();
         view.setPreserveRatio(true);
         stage.setScene(new Scene(new StackPane(view), 960, 620));
-        stage.setTitle("FractalLens — Palette benchmark");
+        stage.setTitle("FractalLens — Palette Benchmark");
         stage.show();
         outputScale = stage.getOutputScaleX();
         pulseTimer = new AnimationTimer() {

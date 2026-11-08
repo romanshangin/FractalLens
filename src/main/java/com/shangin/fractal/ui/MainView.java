@@ -84,7 +84,7 @@ public class MainView extends BorderPane {
         setCenter(new StackPane(fractalView));
         exportStatusTimeout.setOnFinished(event -> fractalView.setExportStatus(""));
         stage.addEventHandler(WindowEvent.WINDOW_CLOSE_REQUEST, closeRequestHandler);
-        stage.setTitle(initialScene.fractal() + " — FractalLens");
+        stage.setTitle("FractalLens");
     }
 
     /** Directs application focus to the canvas that owns keyboard navigation. */
@@ -153,7 +153,7 @@ public class MainView extends BorderPane {
     private void chooseExportFile(FractalScene snapshot, RenderTarget dimensions) {
         if (closed || !stage.isShowing() || exporting) return;
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Export fractal as PNG");
+        chooser.setTitle("Export PNG");
         chooser.setInitialFileName(fractalView.suggestedExportFileName());
         chooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("PNG image", "*.png")

@@ -389,9 +389,9 @@ class FractalResizeFxTest {
                 assertTrue(stage.isShowing());
                 return null;
             });
-            awaitCondition(() -> fx(() -> alertShowing(stage, "Export in progress")), 10);
+            awaitCondition(() -> fx(() -> alertShowing(stage, "Close FractalLens?")), 10);
             fx(() -> { answerExportClose(stage, false); return null; });
-            awaitCondition(() -> fx(() -> !alertShowing(stage, "Export in progress")), 10);
+            awaitCondition(() -> fx(() -> !alertShowing(stage, "Close FractalLens?")), 10);
             fx(() -> {
                 assertTrue(stage.isShowing(), "Returning from the decision must keep the owner open");
                 var menus = (MainMenuBar) main.getTop();
@@ -401,7 +401,7 @@ class FractalResizeFxTest {
                 assertTrue(stage.isShowing(), "Close must wait for the asynchronous decision");
                 return null;
             });
-            awaitCondition(() -> fx(() -> alertShowing(stage, "Export in progress")), 10);
+            awaitCondition(() -> fx(() -> alertShowing(stage, "Close FractalLens?")), 10);
             fx(() -> { answerExportClose(stage, true); return null; });
             awaitCondition(() -> fx(() -> !stage.isShowing()), 10);
             releaseExport.countDown();
@@ -461,7 +461,7 @@ class FractalResizeFxTest {
             AppKitParameterProbe.clickAlert(sheet, accept);
             return;
         }
-        Stage dialog = fallbackAlert("Export in progress");
+        Stage dialog = fallbackAlert("Close FractalLens?");
         assertNotNull(dialog);
         DialogPane pane = (DialogPane) dialog.getScene().getRoot();
         var stay = pane.getButtonTypes().stream().filter(button -> button.getText().equals("No, Return"))
@@ -492,7 +492,7 @@ class FractalResizeFxTest {
         try {
             var view = fx(() -> fractalView(main));
             assertEquals(restored, fx(view::sceneSnapshot));
-            assertEquals("Julia — FractalLens", fx(stage::getTitle));
+            assertEquals("FractalLens", fx(stage::getTitle));
         } finally {
             fx(() -> {
                 main.close();
