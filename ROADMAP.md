@@ -1158,8 +1158,40 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   <= 1.13, and each group's estimate must be <= 1.25, with a
   Bonferroni-confirmed excess rejecting. A/A calibration chooses only the number
   of pairs; the planning estimate is 24. The gate passed independent review and
-  verification, but no campaign has used it yet. The next campaign measures the current tree, using
-  the driver's `wide.preview.settings` switch on a single frozen build.
+  verification. Its first campaign,
+  [TG2-1](benchmarks/WIDE_PREVIEW_VALIDATION.md#follow-up-timing-gate-v2-campaign-tg2-1),
+  measured the current tree on a single frozen build using the driver's
+  `wide.preview.settings` switch. Its A/A stage passed timing v2 and memory v2, and
+  timing planned 18 pairs at 0.915 power. Memory v2 reached only 0.671 power at that
+  N, so the declared plan was not runnable and no candidate pair ran; DEFAULT stays
+  disabled. A diagnostic run after the plan put the memory requirement at about 36
+  pairs, and the owner chose a new campaign,
+  [TG2-2](benchmarks/WIDE_PREVIEW_VALIDATION.md#follow-up-campaign-tg2-2-36-pairs),
+  with 36 pairs. Memory v2, availability, thermal state and exact controls passed,
+  and no timing component failed. Timing was still inconclusive: the 3024x1964
+  REFINED first zoom-out preview after layout was 1.381 (1.216–1.569) against the
+  1.25 group limit, and that family's upper bound was 1.135. DEFAULT stays
+  disabled. Promotion needs an owner decision, for example a change that reduces
+  this first-preview cost, followed by a new declared campaign. A
+  [diagnostic](benchmarks/WIDE_PREVIEW_VALIDATION.md#diagnostic-first-retina-zoom-out-preview-after-tg2-2)
+  traced that cost to the visible path. Kernel page-fault time grows while a cold
+  77 MB frame is allocated on the FX thread during reuse planning. GC played no
+  part, and the delay exists without the reserve as well. That cost was later
+  addressed by [spare frame storage](benchmarks/SPARE_FRAME_STORAGE_RESULTS.md),
+  and TG2-4, described below, re-measured the reserve on that tree. The reserve now uses the
+  visible iteration limit, which removes black deep-zoom reserves
+  ([correction](benchmarks/WIDE_PREVIEW_VALIDATION.md#correction-deep-zoom-iteration-cap)).
+  File → Settings… → Navigation → Wide preview is an application preference saved
+  beside the last session. After spare frame storage, TG2-3 was aborted by external
+  pointer input in its A/A stage and had no decision. The restart,
+  [TG2-4](benchmarks/WIDE_PREVIEW_VALIDATION.md#follow-up-campaigns-tg2-3-aborted-and-tg2-4-retain),
+  planned 12 pairs from a fresh A/A stage. All 56 timing groups passed, with an
+  overall ratio of 0.973 (0.946–0.997). The 3024x1964 REFINED first zoom-out
+  preview was 0.923. Memory v2 G1 and G2, availability, thermal state and exact
+  controls also passed. The candidate is retained: DEFAULT is now enabled, and an
+  explicit Settings choice still wins. This item stays open for the other preview
+  policies it names (low-iteration and GPU previews), and for platforms and
+  sessions the campaign did not cover.
 - [ ] Give tiled high-resolution export, animation batches and optional
   multi-device/distributed rendering their own amortization and correctness
   gates after the stable interactive path. Include tile seams, storage/encoding,

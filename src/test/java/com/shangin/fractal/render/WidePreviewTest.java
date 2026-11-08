@@ -60,14 +60,21 @@ class WidePreviewTest {
     }
 
     @Test void validatesSettingsBeforeStartingWork() {
-        assertFalse(WidePreviewSettings.DEFAULT.enabled());
+        assertSame(WidePreviewSettings.CANDIDATE, WidePreviewSettings.DEFAULT);
+        assertFalse(WidePreviewSettings.DISABLED.enabled());
         assertTrue(WidePreviewSettings.CANDIDATE.enabled());
+        assertSame(WidePreviewSettings.CANDIDATE, WidePreviewSettings.of(true));
+        assertSame(WidePreviewSettings.DISABLED, WidePreviewSettings.of(false));
+        assertEquals(WidePreviewSettings.CANDIDATE,
+                new WidePreviewSettings(true, WidePreviewSettings.DISABLED.extent(), WidePreviewSettings.DISABLED.pixelStep(),
+                        WidePreviewSettings.DISABLED.sampleLimit(), WidePreviewSettings.DISABLED.workMillis()),
+                "The switch changes only enablement");
         for (double extent : new double[]{0, 0.9, 4.1, Double.NaN, Double.POSITIVE_INFINITY})
-            assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(extent, 8, 100, 100, 300));
-        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 0, 100, 100, 300));
-        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 262_145, 100, 300));
-        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 100, 2001, 300));
-        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 100, 100, 4097));
+            assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(extent, 8, 100, 100));
+        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 0, 100, 100));
+        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 262_145, 100));
+        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 100, 2001));
+        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 100, 0));
     }
 
     @Test void coversBothAxesWithSquarePhysicalCellsAndBoundedStorage() {
@@ -85,7 +92,7 @@ class WidePreviewTest {
             assertEquals(visible.viewport().center(), coarse.viewport().center());
         }
         var huge = WidePreviewPlan.create(job(new Viewport(-0.75, 0, 2.4), Integer.MAX_VALUE, Integer.MAX_VALUE),
-                new WidePreviewSettings(4, 2, 16, 10, 100), null);
+                new WidePreviewSettings(4, 2, 16, 10), null);
         assertTrue((long) huge.job().width() * huge.job().height() <= 16);
     }
 
@@ -153,14 +160,42 @@ class WidePreviewTest {
         }
     }
 
+    @Test void deepReserveUsesTheVisibleIterationLimitInsteadOfPaintingSlowEscapesAsInterior() throws Exception {
+        // Near this point every sample escapes only after more than 4096 iterations.
+        var view = new Viewport("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", "1e-16");
+        var visible = new RenderJob(FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE), view, 80, 60, 20_000);
+        var plan = WidePreviewPlan.create(visible, WidePreviewSettings.CANDIDATE, null);
+        assertEquals(visible.maxIterations(), plan.job().maxIterations());
+        var control = RenderFrame.create(plan.job());
+        try (var deep = new MandelbrotPerturbationRenderBackend(1)) {
+            assertFalse(new DirectDoubleRenderBackend().supports(plan.job()), "The fixture must use the deep path");
+            deep.render(control, () -> false, ignored -> {}, null);
+        }
+        int slow = 0;
+        for (int pixel = 0; pixel < control.samplePlane().size(); pixel++)
+            if (control.fractalData().escaped(pixel) && control.fractalData().iterations(pixel) > 4096) slow++;
+        assertTrue(slow > control.samplePlane().size() / 2, "The fixture must escape after the former 4096 cap");
+        int[] expected = new int[control.samplePlane().size()];
+        var coloring = new ColoringSettings(PalettePreset.ICE);
+        new FractalColorizer().color(control.samplePlane(), java.nio.IntBuffer.wrap(expected), coloring.createStrategy());
+        var ready = new CompletableFuture<WidePreviewSnapshot>();
+        try (var service = new WidePreviewService(Runnable::run)) {
+            service.request(visible, coloring, WidePreviewSettings.CANDIDATE,
+                    snapshot -> { if (snapshot.readySamples() == expected.length) ready.complete(snapshot); },
+                    ready::completeExceptionally);
+            assertArrayEquals(expected, ready.get(20, TimeUnit.SECONDS).copyColors(),
+                    "Reserve colors must equal the deep reference at the visible limit");
+        }
+    }
+
     @Test void workBudgetStopsPartialCalculationAndBoundsQueuedPublications() throws Exception {
         var callbacks = new LinkedBlockingQueue<Runnable>();
         var drained = new CountDownLatch(1);
-        var limited = new WidePreviewSettings(2, 8, 1000, 10, 100);
+        var limited = new WidePreviewSettings(2, 8, 1000, 10);
         var visible = job(new Viewport(-0.75, 0, 2.4), 80, 60);
         try (var service = new WidePreviewService(callbacks::add, () -> new RenderBackend() {
             public RenderFrame render(RenderFrame frame, BooleanSupplier stop, Consumer<RenderRegion> region, Consumer<TileTimingStats> timings) {
-                assertEquals(100, frame.job().maxIterations());
+                assertEquals(300, frame.job().maxIterations(), "The reserve uses the visible iteration limit");
                 var row = new RenderRegion(0, 0, frame.job().width(), 1);
                 frame.validity().markReady(row); region.accept(row);
                 while (!stop.getAsBoolean()) Thread.onSpinWait();
@@ -191,7 +226,7 @@ class WidePreviewTest {
             var ready = new LinkedBlockingQueue<WidePreviewSnapshot>();
             service.request(source, colors, WidePreviewSettings.CANDIDATE, ready::add, error -> fail(error));
             assertNotNull(ready.poll(5, TimeUnit.SECONDS));
-            var changed = new WidePreviewSettings(3, 16, 1000, 100, 300);
+            var changed = new WidePreviewSettings(3, 16, 1000, 100);
             service.request(source, colors, changed, ready::add, error -> fail(error));
             assertNotNull(ready.poll(5, TimeUnit.SECONDS));
             var scene = com.shangin.fractal.scene.FractalScene.create(FractalPreset.JULIA, PalettePreset.ICE);

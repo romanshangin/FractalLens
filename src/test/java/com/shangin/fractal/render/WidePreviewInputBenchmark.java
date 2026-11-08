@@ -18,9 +18,11 @@ import static com.shangin.fractal.render.BaselineFxBenchmark.fx;
  * Same production-handler/conformance harness for both frozen builds; no preview API dependency.
  *
  * <p>{@code wide.preview.settings} selects the {@code WidePreviewSettings} constant applied before each
- * source think time: {@code CANDIDATE} (default, the historical behavior) or {@code DEFAULT}. Both values
- * go through the same setter at the same point, so one frozen build can serve as its own control. A
- * build without the preview API ignores the setting and records it as absent.
+ * source think time: {@code CANDIDATE} (default, the historical behavior), {@code DEFAULT} or
+ * {@code DISABLED}. All values go through the same setter at the same point, so one frozen build can serve
+ * as its own control. A selected constant that is switched off must leave no reserve. A build without the
+ * preview API ignores the setting and records it as absent. Builds before TG2-4 had a disabled
+ * {@code DEFAULT} and no {@code DISABLED}; later builds have {@code DEFAULT} equal to {@code CANDIDATE}.
  */
 public final class WidePreviewInputBenchmark {
     static final String SETTINGS_PROPERTY = "wide.preview.settings";
@@ -79,12 +81,12 @@ public final class WidePreviewInputBenchmark {
                 for (int run = -warmups - 1; run < runs; run++) {
                     String phase = run == -warmups - 1 ? "first_sequence" : run < 0 ? "warmup" : "sample";
                     ui.seed(fixture.steps().getFirst(), mode);
-                    fx(() -> { applySettingsIfAvailable(ui, settings); return null; });
+                    Boolean enabled = fx(() -> applySettingsIfAvailable(ui, settings));
                     // Identical, declared think time in both builds; reserve preparation is outside gesture timing.
                     Thread.sleep(250);
                     int[] ready = fx(() -> stock(ui));
-                    if (settings.equals("DEFAULT") && (ready[0] != 0 || ready[1] != 0))
-                        throw new IllegalStateException("DEFAULT wide preview settings left a reserve snapshot");
+                    if (Boolean.FALSE.equals(enabled) && (ready[0] != 0 || ready[1] != 0))
+                        throw new IllegalStateException(settings + " wide preview settings are off but left a reserve snapshot");
                     var source = fx(() -> BaselineInputBenchmark.actualStep(ui, fixture.steps().getFirst(), "source"));
                     BaselineInputBenchmark.Result result;
                     try {
@@ -128,8 +130,8 @@ public final class WidePreviewInputBenchmark {
 
     /** Validates the declared settings constant name; anything else is a configuration error. */
     static String widePreviewSettings(String value) {
-        if (!value.equals("CANDIDATE") && !value.equals("DEFAULT"))
-            throw new IllegalArgumentException(SETTINGS_PROPERTY + " must be CANDIDATE or DEFAULT: " + value);
+        if (!value.equals("CANDIDATE") && !value.equals("DEFAULT") && !value.equals("DISABLED"))
+            throw new IllegalArgumentException(SETTINGS_PROPERTY + " must be CANDIDATE, DEFAULT or DISABLED: " + value);
         return value;
     }
 
@@ -142,8 +144,11 @@ public final class WidePreviewInputBenchmark {
         }
     }
 
-    /** Evaluation is explicit after a rejected policy is disabled by default. Old controls have no such API. */
-    private static void applySettingsIfAvailable(BaselineInputBenchmark.Ui ui, String name) throws Exception {
+    /**
+     * Applies the named constant explicitly, whatever the build's default is, and returns whether it is
+     * switched on; {@code null} for old controls without the preview API.
+     */
+    private static Boolean applySettingsIfAvailable(BaselineInputBenchmark.Ui ui, String name) throws Exception {
         try {
             Class<?> settings = Class.forName("com.shangin.fractal.scene.WidePreviewSettings");
             Object selected = settings.getField(name).get(null);
@@ -151,8 +156,10 @@ public final class WidePreviewInputBenchmark {
             field.setAccessible(true);
             Object controller = field.get(ui.view);
             controller.getClass().getMethod("setWidePreviewSettings", settings).invoke(controller, selected);
+            return (Boolean) settings.getMethod("enabled").invoke(selected);
         } catch (ClassNotFoundException absentInControl) {
             // The control predates the reserve; it still uses the same driver and source think time.
+            return null;
         }
     }
 }

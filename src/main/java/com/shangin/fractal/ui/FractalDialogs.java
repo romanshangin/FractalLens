@@ -5,7 +5,6 @@ import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.export.AdaptivePngExportService;
 
 import com.shangin.fractal.coloring.ColorStop;
-import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.JuliaParameters;
 import javafx.event.ActionEvent;
@@ -302,12 +301,12 @@ final class FractalDialogs {
         return dialog;
     }
 
-    static Optional<AntialiasSettings> settings(Window owner, AntialiasSettings current) {
+    static Optional<SettingsWindow.Values> settings(Window owner, SettingsWindow.Values current) {
         return settingsDialog(owner, current).showAndWait();
     }
 
-    static Dialog<AntialiasSettings> settingsDialog(Window owner, AntialiasSettings current) {
-        Dialog<AntialiasSettings> dialog = new Dialog<>();
+    static Dialog<SettingsWindow.Values> settingsDialog(Window owner, SettingsWindow.Values current) {
+        Dialog<SettingsWindow.Values> dialog = new Dialog<>();
         dialog.setTitle(SettingsWindow.TITLE);
         Label hint = new Label(SettingsWindow.HINT);
         hint.setWrapText(true);
@@ -498,7 +497,12 @@ final class FractalDialogs {
                 + "Base, then antialiasing: the base render is shown first, "
                 + "then an antialiasing pass smooths it.\n"
                 + "Antialiased display: only finished antialiased tiles are displayed.\n"
-                + "Deep zoom antialiasing is precise and can take much longer than the base render.";
+                + "Deep zoom antialiasing is precise and can take much longer than the base render.\n\n"
+                + "Navigation\n\n"
+                + "Wide preview in File → Settings… fills edges uncovered by panning or zooming out "
+                + "with a coarse preview calculated in the background beyond the window. "
+                + "It uses extra CPU time and memory, is replaced by the final image, and is never exported. "
+                + "This choice applies to the application and is not saved with scenes.";
 
     static void close(Window owner) {
         var help = HELP.remove(owner);

@@ -1,13 +1,16 @@
 # Timing gate v2 (A/A-calibrated)
 
 **Status: limits set by the owner on 2026-11-05. The analyzer, driver switch
-and this protocol passed independent review and verification. Its first
-application, without the A/A calibration stage and with fixed pair counts, is the
-[spare frame storage campaigns SF1/SF2](SPARE_FRAME_STORAGE_RESULTS.md); no
-wide-preview candidate has been evaluated under it.** The gate becomes
+and this protocol passed independent review and verification. With its A/A
+calibration it was applied to the wide preview in
+[TG2-1](#first-application-tg2-1) (plan not runnable), TG2-2 (inconclusive), TG2-3 (aborted in
+its A/A stage) and TG2-4 (retain). Without the A/A
+calibration stage, and with fixed pair counts, it was applied in the
+[spare frame storage campaigns SF1/SF2](SPARE_FRAME_STORAGE_RESULTS.md).** The gate becomes
 binding for a campaign only when its protocol is declared and hashed before
 that campaign's first process. All earlier decisions stand, and TE1 stays
-**inconclusive**. Nothing here enables `WidePreviewSettings.DEFAULT`.
+**inconclusive**. The TG2-4 retain decision, not this protocol, enabled
+`WidePreviewSettings.DEFAULT`.
 
 Owner decision: **an individual regression of up to 25% is accepted, and an
 average must not exceed 13%.**
@@ -195,6 +198,9 @@ also inconclusive.
 
 ## Next campaign for the wide preview
 
+This plan was written while `DEFAULT` was disabled. Since TG2-4 `DEFAULT` equals
+`CANDIDATE`, and the driver's off control is `DISABLED`.
+
 - Measure the current tree: the AA cache default is now 512 MiB.
 - Use one frozen build of the current tree as its own control, rather than the
   historical main+driver control. Label A uses
@@ -210,3 +216,30 @@ also inconclusive.
 Not covered: long sessions, GPU, Windows/Linux, Intel/AMD Macs and native
 fullscreen. Planning scripts, the pool definition and the simulation outputs are
 kept in the private archive.
+
+## First application: TG2-1
+
+[TG2-1](WIDE_PREVIEW_VALIDATION.md#follow-up-timing-gate-v2-campaign-tg2-1)
+followed this plan. Its fresh 12-pair A/A stage passed all 56 groups, with an
+overall ratio of 0.999 (0.978–1.022). The timing plan selected 18 pairs at 0.915
+joint power with no false fails, fewer than the 24-pair planning estimate above.
+The memory v2 simulation at 18 pairs reached only 0.671 power, so the declared
+plan was not runnable and no candidate process ran. Choosing N is now limited by
+memory power, not timing.
+
+[TG2-2](WIDE_PREVIEW_VALIDATION.md#follow-up-campaign-tg2-2-36-pairs) then ran
+36 candidate pairs on the TG2-1 plan with the owner-chosen N. Timing was
+inconclusive: 55 groups passed and none failed. The zoom-out first-preview family
+had an upper bound of 1.135, above 1.13. The 3024x1964 REFINED group was 1.381
+(1.216–1.569), but its Bonferroni-adjusted lower bound of 1.100 did not confirm a
+fail.
+
+[TG2-4](WIDE_PREVIEW_VALIDATION.md#follow-up-campaigns-tg2-3-aborted-and-tg2-4-retain)
+measured a tree with spare frame storage. A preceding campaign, TG2-3, had stopped in
+its A/A stage on external pointer input. Its own fresh 12-pair A/A stage planned
+N = 12 jointly with memory v2: timing 0.861 joint power, memory 1.000 pass, no false
+fails. All 56 groups and all 8 families passed, with an overall ratio of 0.973
+(0.946–0.997). The family that was inconclusive in TG2-2 was 0.920 (0.859–0.983).
+The decision was retain. The analyzer's `DEFAULT` control label describes builds
+where that constant is disabled. An off/on campaign on a later build needs a declared
+`DISABLED` control label.

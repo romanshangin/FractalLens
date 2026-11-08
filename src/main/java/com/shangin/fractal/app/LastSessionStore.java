@@ -28,6 +28,11 @@ public final class LastSessionStore {
         this.backup = this.file.resolveSibling(this.file.getFileName() + ".backup");
     }
 
+    /** The primary file; sibling application data lives in the same directory. */
+    public Path path() {
+        return file;
+    }
+
     public static LastSessionStore systemDefault() {
         return new LastSessionStore(defaultPath());
     }
@@ -94,9 +99,9 @@ public final class LastSessionStore {
         }
     }
 
-    private static void atomicWrite(Path target, String contents) throws IOException {
+    static void atomicWrite(Path target, String contents) throws IOException {
         Path parent = target.getParent();
-        if (parent == null) throw new IOException("Session file requires a parent directory");
+        if (parent == null) throw new IOException("Application data file requires a parent directory");
         Files.createDirectories(parent);
         Path temporary = Files.createTempFile(parent, target.getFileName().toString(), ".tmp");
         try {
@@ -111,7 +116,7 @@ public final class LastSessionStore {
                 Files.move(temporary, target,
                         StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException exception) {
-                throw new IOException("The session directory does not support atomic replacement", exception);
+                throw new IOException("The application data directory does not support atomic replacement", exception);
             }
         } finally {
             Files.deleteIfExists(temporary);

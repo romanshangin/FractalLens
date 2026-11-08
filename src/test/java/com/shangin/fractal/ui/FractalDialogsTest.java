@@ -75,14 +75,15 @@ class FractalDialogsTest {
     }
 
     @Test
-    void helpExplainsTheRenderStatusBadgeAndRenderSettings() {
+    void helpExplainsTheRenderStatusBadgeRenderSettingsAndNavigation() {
         String help = FractalDialogs.HELP_TEXT;
         for (String expected : new String[] {
                 "\n\nRender status\n\n", "\n\nRender Settings\n\n",
                 "Standard (blue dot): standard-precision rendering.",
                 "Deep Zoom (coral dot): high-precision rendering for deep magnification",
                 "Waiting:", "Rendering N%:", "including any antialiasing pass", "Complete and a time:",
-                "Interrupted:", "Failed:", "PNG export", "File → Settings…"}) {
+                "Interrupted:", "Failed:", "PNG export", "File → Settings…",
+                "\n\nNavigation\n\n", "Wide preview", "never exported"}) {
             assertTrue(help.contains(expected), () -> "Help is missing: " + expected);
         }
         for (InteractiveRenderMode mode : InteractiveRenderMode.values()) {
