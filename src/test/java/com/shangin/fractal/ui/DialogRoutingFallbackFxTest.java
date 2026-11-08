@@ -123,7 +123,7 @@ class DialogRoutingFallbackFxTest {
         var result = new CompletableFuture<Boolean>();
         fx(() -> {
             FractalDialogs.confirmExportClose(owner, result::complete);
-            var dialog = pane("Export in progress");
+            var dialog = pane("Close FractalLens?");
             dialog.getButtonTypes().stream().filter(type -> type.getButtonData().isCancelButton())
                     .map(type -> (Button) dialog.lookupButton(type)).findFirst().orElseThrow().fire();
             return null;

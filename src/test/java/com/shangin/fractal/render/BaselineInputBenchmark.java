@@ -138,7 +138,7 @@ public final class BaselineInputBenchmark {
                 if (view != null) for (var event : pending.values()) view.latency().observed(event, "_post_layout");
                 pending.clear();
             });
-            stage.setTitle("FractalLens — roadmap 9.1 production input baseline");
+            stage.setTitle("FractalLens — Input Benchmark");
             stage.setScene(scene); stage.show();
         }
         void size(int width, int height) {

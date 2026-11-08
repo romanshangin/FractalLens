@@ -299,11 +299,14 @@ class MainMenuBarFxTest {
     void sceneUndoRedoRestoresPixelsMenusAndDiscardsNewBranch() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
         int[] pixels = fx(this::displayedPixels);
+        String windowTitle = fx(stage::getTitle);
         fx(() -> { command("Fractal", "Julia").fire(); return null; });
         await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
+        assertEquals(windowTitle, fx(stage::getTitle));
         FractalScene julia = fx(view::sceneSnapshot);
         fx(() -> { command("Edit", "Undo").fire(); return null; });
         await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        assertEquals(windowTitle, fx(stage::getTitle));
         fx(() -> {
             assertEquals(initial, view.sceneSnapshot());
             assertArrayEquals(pixels, displayedPixels());

@@ -117,7 +117,6 @@ final class MainMenuBar extends MenuBar {
             currentFractal = preset;
             fractalView.setFractal(preset);
             updateDestinations(preset);
-            stage.setTitle(preset + " — FractalLens");
         });
         Menu palette = choices("Palette", PalettePreset.values(), initialPalette, palettes, preset -> {
             paletteStops = preset.stops();
@@ -392,7 +391,6 @@ final class MainMenuBar extends MenuBar {
         orbitTraps.selectToggle(orbitTraps.getToggles().get(orbitTrap.ordinal()));
         histogram.setSelected(scene.coloring().histogramColoring());
         updateHistoryAvailability();
-        stage.setTitle(scene.fractal() + " — FractalLens");
         updateDestinations(scene.fractal());
         updateAvailability();
     }
