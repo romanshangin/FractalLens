@@ -7,6 +7,7 @@ import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalDestination;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.WidePreviewSettings;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.beans.value.ChangeListener;
@@ -71,7 +72,7 @@ final class MainMenuBar extends MenuBar {
     private MacIterationSheet iterationSheet;
     private MacJuliaSheet juliaSheet;
     private MacSettingsSheet settingsSheet;
-    private Consumer<Boolean> widePreviewChanged = enabled -> {};
+    private Consumer<WidePreviewSettings> widePreviewChanged = settings -> {};
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalScene initialScene,
                 Runnable onExport) {
@@ -239,14 +240,14 @@ final class MainMenuBar extends MenuBar {
     }
 
     /** Receives explicit wide-preview changes made in Settings, for persistence. */
-    void setOnWidePreviewChanged(Consumer<Boolean> handler) {
+    void setOnWidePreviewChanged(Consumer<WidePreviewSettings> handler) {
         widePreviewChanged = java.util.Objects.requireNonNull(handler);
     }
 
     private void showSettings() {
         if (parameterSheetOpen()) return;
         var current = new SettingsWindow.Values(fractalView.sceneSnapshot().antialiasing(),
-                fractalView.widePreviewEnabled());
+                fractalView.widePreviewSettings());
         if (MacSettingsSheet.isAvailable()) {
             try {
                 settingsSheet = MacSettingsSheet.show(stage, current, this::applySettings);
@@ -261,9 +262,9 @@ final class MainMenuBar extends MenuBar {
 
     private void applySettings(SettingsWindow.Values values) {
         // The preview is display-only; switching it never restarts the exact render.
-        if (values.widePreview() != fractalView.widePreviewEnabled()) {
-            fractalView.setWidePreviewEnabled(values.widePreview());
-            widePreviewChanged.accept(values.widePreview());
+        if (!values.previewSettings().equals(fractalView.widePreviewSettings())) {
+            fractalView.setWidePreviewSettings(values.previewSettings());
+            widePreviewChanged.accept(values.previewSettings());
         }
         fractalView.setAntialiasSettings(values.antialiasing());
     }

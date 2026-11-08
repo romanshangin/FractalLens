@@ -10,6 +10,7 @@ import com.shangin.fractal.render.FractalRenderService;
 import com.shangin.fractal.render.RenderTarget;
 import javafx.event.EventHandler;
 import com.shangin.fractal.scene.FractalScene;
+import com.shangin.fractal.scene.WidePreviewSettings;
 import javafx.application.Platform;
 import javafx.scene.control.MenuBar;
 import javafx.animation.PauseTransition;
@@ -108,15 +109,15 @@ public class MainView extends BorderPane {
     /** An explicit saved choice wins; without one the application default applies. */
     private void restoreWidePreview() {
         try {
-            preferences.widePreview().ifPresent(fractalView::setWidePreviewEnabled);
+            fractalView.setWidePreviewSettings(preferences.widePreviewSettings());
         } catch (IOException exception) {
             System.err.println("Could not read FractalLens preferences: " + exception.getMessage());
         }
     }
 
-    private void saveWidePreview(boolean enabled) {
+    private void saveWidePreview(WidePreviewSettings settings) {
         try {
-            preferences.saveWidePreview(enabled);
+            preferences.saveWidePreview(settings);
         } catch (IOException exception) {
             System.err.println("Could not save FractalLens preferences: " + exception.getMessage());
         }

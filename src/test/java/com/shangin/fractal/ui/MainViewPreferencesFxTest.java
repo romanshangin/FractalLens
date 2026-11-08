@@ -79,6 +79,43 @@ class MainViewPreferencesFxTest {
         }
     }
 
+    @Test
+    void sizeAndQualityApplyWithoutChangingTheSceneAndRestoreAfterRestart() throws Exception {
+        var session = new LastSessionStore(temporaryDirectory.resolve("last-session.json"));
+        var preferences = PreferencesStore.besides(session);
+        var selected = new WidePreviewSettings(false, 3.0, 4, 262_144, 2_000);
+        Stage stage = fx(Stage::new);
+        MainView main = fx(() -> new MainView(stage, session));
+        try {
+            fx(() -> {
+                var view = fractalView(main);
+                var scene = view.sceneSnapshot();
+                var resized = new WidePreviewSettings(view.widePreviewEnabled(), 4.0, 16, 262_144, 2_000);
+                applySettings(main, new SettingsWindow.Values(scene.antialiasing(), resized));
+                assertEquals(resized, view.widePreviewSettings());
+                assertEquals(resized, preferences.widePreviewSettings(), "Size and quality alone are saved");
+                applySettings(main, new SettingsWindow.Values(scene.antialiasing(), selected));
+                assertEquals(selected, view.widePreviewSettings());
+                assertEquals(scene, view.sceneSnapshot());
+                assertFalse(view.canUndo());
+                view.setWidePreviewEnabled(true);
+                assertEquals(3.0, view.widePreviewSettings().extent());
+                assertEquals(4, view.widePreviewSettings().pixelStep());
+                return null;
+            });
+            assertEquals(selected, preferences.widePreviewSettings());
+        } finally {
+            fx(() -> { main.close(); stage.close(); return null; });
+        }
+        Stage restartedStage = fx(Stage::new);
+        MainView restarted = fx(() -> new MainView(restartedStage, session));
+        try {
+            assertEquals(selected, fx(() -> fractalView(restarted).widePreviewSettings()));
+        } finally {
+            fx(() -> { restarted.close(); restartedStage.close(); return null; });
+        }
+    }
+
     /** Settings Apply, without depending on which of the native or JavaFX editors is available. */
     private static void applySettings(MainView main, SettingsWindow.Values values) throws Exception {
         var menuField = MainView.class.getDeclaredField("menuBar");

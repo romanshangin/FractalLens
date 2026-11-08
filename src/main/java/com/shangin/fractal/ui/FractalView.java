@@ -653,7 +653,17 @@ public class FractalView extends StackPane {
      * changes no exact pixels, history, completion or export, so it does not restart rendering.
      */
     public void setWidePreviewEnabled(boolean enabled) {
-        renderController.setWidePreviewSettings(WidePreviewSettings.of(enabled));
+        WidePreviewSettings current = widePreviewSettings();
+        setWidePreviewSettings(new WidePreviewSettings(enabled, current.extent(), current.pixelStep(),
+                current.sampleLimit(), current.workMillis()));
+    }
+
+    public void setWidePreviewSettings(WidePreviewSettings settings) {
+        renderController.setWidePreviewSettings(settings);
+    }
+
+    public WidePreviewSettings widePreviewSettings() {
+        return renderController.widePreviewSettings();
     }
 
     public boolean widePreviewEnabled() {

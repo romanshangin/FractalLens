@@ -199,6 +199,12 @@ class WidePreviewFxTest {
                 assertArrayEquals(exact, pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()),
                         "Enabling the preview must not change exact pixels");
                 assertEquals(scene, view.sceneSnapshot());
+                view.setWidePreviewSettings(new WidePreviewSettings(true, 3.0, 4, 262_144, 2_000));
+                assertNull(reserve(surface).getImage(), "Size and quality changes remove the old reserve synchronously");
+                assertArrayEquals(exact, pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()),
+                        "Changing preview size and quality keeps the exact frame");
+                assertTrue(view.hasCompletedFrame());
+                assertFalse(view.canUndo());
                 view.setWidePreviewEnabled(false);
                 assertFalse(view.widePreviewEnabled());
                 assertNull(reserve(surface).getImage(), "Disabling removes the reserve synchronously");

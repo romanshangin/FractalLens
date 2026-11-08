@@ -1,5 +1,7 @@
 package com.shangin.fractal.app;
 
+import com.shangin.fractal.scene.WidePreviewSettings;
+
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -46,6 +48,40 @@ public final class PreferencesStore {
     public void saveWidePreview(boolean enabled) throws IOException {
         Properties properties = readForReplacement();
         properties.setProperty(WIDE_PREVIEW, enabled ? "on" : "off");
+        StringWriter text = new StringWriter();
+        properties.store(text, "FractalLens preferences");
+        LastSessionStore.atomicWrite(file, text.toString());
+    }
+
+    /** Restores each choice independently; old files retain the current size and quality defaults. */
+    public WidePreviewSettings widePreviewSettings() throws IOException {
+        Properties properties = read();
+        WidePreviewSettings defaults = WidePreviewSettings.DEFAULT;
+        String enabled = properties.getProperty(WIDE_PREVIEW);
+        double extent = defaults.extent();
+        int step = defaults.pixelStep();
+        try {
+            double saved = Double.parseDouble(properties.getProperty("widePreviewExtent", ""));
+            if (saved == 1.5 || saved == 2.0 || saved == 3.0 || saved == 4.0) extent = saved;
+        } catch (NumberFormatException ignored) {
+            // Missing or damaged choices keep the application default.
+        }
+        try {
+            int saved = Integer.parseInt(properties.getProperty("widePreviewPixelStep", ""));
+            if (saved == 16 || saved == 8 || saved == 4 || saved == 2) step = saved;
+        } catch (NumberFormatException ignored) {
+            // Missing or damaged choices keep the application default.
+        }
+        return new WidePreviewSettings("on".equals(enabled) || (!"off".equals(enabled) && defaults.enabled()),
+                extent, step, defaults.sampleLimit(), defaults.workMillis());
+    }
+
+    /** Saves all navigation choices together, including size and quality while disabled. */
+    public void saveWidePreview(WidePreviewSettings settings) throws IOException {
+        Properties properties = readForReplacement();
+        properties.setProperty(WIDE_PREVIEW, settings.enabled() ? "on" : "off");
+        properties.setProperty("widePreviewExtent", Double.toString(settings.extent()));
+        properties.setProperty("widePreviewPixelStep", Integer.toString(settings.pixelStep()));
         StringWriter text = new StringWriter();
         properties.store(text, "FractalLens preferences");
         LastSessionStore.atomicWrite(file, text.toString());

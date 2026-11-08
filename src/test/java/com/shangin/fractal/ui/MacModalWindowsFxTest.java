@@ -246,11 +246,15 @@ class MacModalWindowsFxTest {
             AppKitParameterProbe.select(standard, SettingsWindow.index(InteractiveRenderMode.BASE_ONLY));
             AppKitParameterProbe.select(deep, SettingsWindow.index(InteractiveRenderMode.REFINED));
             AppKitParameterProbe.select(wide, 1);
+            assertEquals(1, AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 3)));
+            assertEquals(1, AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 4)));
+            AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 3), 2);
+            AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 4), 2);
             AppKitParameterProbe.alertKey(sheet, "\r", (short) 36);
             return null;
         });
         assertEquals(new SettingsWindow.Values(
-                new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED), true),
+                new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED), true, 3.0, 4),
                 result.get(10, TimeUnit.SECONDS));
         fx(() -> { assertFalse(sheet.isOpen()); return null; });
     }
@@ -285,7 +289,7 @@ class MacModalWindowsFxTest {
         var result = new CompletableFuture<SettingsWindow.Values>();
         var sheet = fx(() -> MacSettingsSheet.show(owner, new SettingsWindow.Values(
                 new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED),
-                !WidePreviewSettings.DEFAULT.enabled()), result::complete));
+                !WidePreviewSettings.DEFAULT.enabled(), 4.0, 2), result::complete));
         fx(() -> {
             AppKitParameterProbe.action(sheet, "resetChoices");
             assertTrue(sheet.isOpen(), "Reset must not close the sheet");
@@ -311,6 +315,8 @@ class MacModalWindowsFxTest {
             fx(() -> {
                 AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 0), SettingsWindow.index(InteractiveRenderMode.REFINED));
                 AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 1), SettingsWindow.index(InteractiveRenderMode.FAST));
+                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 3), 3);
+                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 4), 0);
                 if (escape) AppKitParameterProbe.alertKey(sheet, "\u001b", (short) 53);
                 else AppKitParameterProbe.action(sheet, "cancel");
                 return null;
