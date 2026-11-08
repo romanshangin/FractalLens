@@ -824,7 +824,7 @@ class MainMenuBarFxTest {
         FractalScene initial = fx(view::sceneSnapshot);
         var reported = new java.util.concurrent.CopyOnWriteArrayList<Boolean>();
         fx(() -> {
-            menuBar.setOnWidePreviewChanged(reported::add);
+            menuBar.setOnWidePreviewChanged(settings -> reported.add(settings.enabled()));
             assertEquals(WidePreviewSettings.DEFAULT.enabled(), view.widePreviewEnabled(),
                     "The preview follows the application default");
             return null;
@@ -840,6 +840,8 @@ class MainMenuBarFxTest {
                     var wide = AppKitParameterProbe.choice(sheet, 2);
                     assertEquals(1 - choice, AppKitParameterProbe.selectedIndex(wide));
                     AppKitParameterProbe.select(wide, choice);
+                    AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 3), enabled == initialPreview ? 1 : 2);
+                    AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 4), enabled == initialPreview ? 1 : 2);
                     AppKitParameterProbe.action(sheet, "apply");
                     return null;
                 });
@@ -850,6 +852,10 @@ class MainMenuBarFxTest {
                     var wide = (javafx.scene.control.ComboBox<String>) pane.lookup("#" + SettingsWindow.WIDE_PREVIEW_ID);
                     assertEquals(1 - choice, wide.getSelectionModel().getSelectedIndex());
                     wide.getSelectionModel().select(choice);
+                    ((javafx.scene.control.ComboBox<?>) pane.lookup("#" + SettingsWindow.WIDE_PREVIEW_EXTENT_ID))
+                            .getSelectionModel().select(enabled == initialPreview ? 1 : 2);
+                    ((javafx.scene.control.ComboBox<?>) pane.lookup("#" + SettingsWindow.WIDE_PREVIEW_QUALITY_ID))
+                            .getSelectionModel().select(enabled == initialPreview ? 1 : 2);
                     confirm(pane);
                     return null;
                 });
@@ -857,6 +863,8 @@ class MainMenuBarFxTest {
             }
             await(() -> view.widePreviewEnabled() == enabled);
             fx(() -> {
+                assertEquals(enabled == initialPreview ? 2.0 : 3.0, view.widePreviewSettings().extent());
+                assertEquals(enabled == initialPreview ? 8 : 4, view.widePreviewSettings().pixelStep());
                 assertEquals(initial, view.sceneSnapshot(), "The preview is not part of the scene");
                 assertTrue(view.hasCompletedFrame(), "Switching the preview keeps the exact frame");
                 assertFalse(view.canUndo(), "Switching the preview records no scene history");

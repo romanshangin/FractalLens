@@ -462,7 +462,7 @@ passing `DISABLED` disables it. Changes cancel old work/publication and replace 
 without interrupting the exact frame.
 
 File → Settings… → **Navigation → Wide preview** (Off/On) is the user switch,
-through `FractalView.setWidePreviewEnabled`. It is an application preference, not
+through `FractalView.setWidePreviewSettings`. It is an application preference, not
 scene state: it is excluded from scene JSON, undo/redo, bookmarks and export, and
 switching it neither restarts nor changes the exact frame. An explicit change is
 saved at once as `widePreview=on|off` in `preferences.properties`, beside
@@ -473,6 +473,19 @@ Unreadable, malformed, oversized (over 64 KiB) or unknown values fall back to th
 default; the next explicit choice replaces the file atomically. See [the preview contract and measurement policy](../../benchmarks/WIDE_PREVIEW_VALIDATION.md),
 [the TG2-4 retain decision](../../benchmarks/WIDE_PREVIEW_VALIDATION.md#follow-up-campaigns-tg2-3-aborted-and-tg2-4-retain)
 and [the calibrated memory-gate follow-up](../../benchmarks/MEMORY_GATE_V2.md).
+
+Navigation also offers **Preview area** (1.5×, 2×, 3× or 4× window width and
+height; default 2×) and **Preview quality** (16, 8, 4 or 2 physical pixels per
+sample; default 8). Smaller steps request finer previews. The existing 262,144
+sample cap and 2-second work budget remain in force, so large windows/areas may
+use a coarser grid or remain partially calculated. Changing either choice cancels
+old preview work and clears its pixels without restarting the exact render.
+Size and quality remain editable and are retained while preview is off.
+Apply saves `widePreviewExtent` and `widePreviewPixelStep` with the switch;
+old files use the current size/quality defaults. Invalid values fall back
+independently. Reset to Defaults resets all five drafts; Cancel discards them.
+Historical performance acceptance applies to the default configuration; the
+additional choices have not been promoted through the benchmark gates.
 
 Preparation runs only after the visible frame and its AA finish. Navigation
 cancels it without blocking FX; compatible finished coarse samples survive for

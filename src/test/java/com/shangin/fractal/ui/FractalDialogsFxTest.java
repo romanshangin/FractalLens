@@ -366,10 +366,12 @@ class FractalDialogsFxTest {
                 standard.getSelectionModel().select("Base only");
                 deep.getSelectionModel().select("Antialiased display");
                 wide.getSelectionModel().select("On");
+                settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_EXTENT_ID).getSelectionModel().select(2);
+                settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_QUALITY_ID).getSelectionModel().select(2);
                 primary(dialog).fire();
                 assertFalse(dialog.isShowing());
                 assertEquals(new SettingsWindow.Values(
-                        new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED), true),
+                        new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED), true, 3.0, 4),
                         dialog.getResult());
                 return null;
             });
@@ -388,6 +390,8 @@ class FractalDialogsFxTest {
                     settingsChoice(pane, SettingsWindow.STANDARD_ID).getSelectionModel().select("Antialiased display");
                     settingsChoice(pane, SettingsWindow.DEEP_ID).getSelectionModel().select("Base, then antialiasing");
                     settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_ID).getSelectionModel().select("On");
+                    settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_EXTENT_ID).getSelectionModel().select(3);
+                    settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_QUALITY_ID).getSelectionModel().select(0);
                     switch (dismissal) {
                         case "escape" -> escape(dialog);
                         case "cancel" -> ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
@@ -397,7 +401,7 @@ class FractalDialogsFxTest {
                     assertFalse(dialog.isShowing(), dismissal);
                     assertEquals(dismissal.equals("enter")
                             ? new SettingsWindow.Values(new AntialiasSettings(
-                                    InteractiveRenderMode.REFINED, InteractiveRenderMode.FAST), true) : null,
+                                    InteractiveRenderMode.REFINED, InteractiveRenderMode.FAST), true, 4.0, 16) : null,
                             dialog.getResult(), dismissal);
                     return null;
                 });
@@ -408,7 +412,7 @@ class FractalDialogsFxTest {
     @Test void settingsResetToDefaultsChangesOnlyTheDraft() throws Exception {
         var current = new SettingsWindow.Values(
                 new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED),
-                !WidePreviewSettings.DEFAULT.enabled());
+                !WidePreviewSettings.DEFAULT.enabled(), 4.0, 2);
         var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
         try {
             fx(() -> { dialog.show(); return null; });

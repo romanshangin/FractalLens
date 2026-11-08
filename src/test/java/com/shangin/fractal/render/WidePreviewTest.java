@@ -96,6 +96,21 @@ class WidePreviewTest {
         assertTrue((long) huge.job().width() * huge.job().height() <= 16);
     }
 
+    @Test void configuredSizeAndQualityControlTheGridWithinTheExistingBudget() {
+        var visible = job(new Viewport(-0.75, 0, 2.4), 640, 480);
+        for (double extent : new double[] {1.5, 2, 3, 4}) {
+            for (int step : new int[] {16, 8, 4, 2}) {
+                var settings = new WidePreviewSettings(true, extent, step, 262_144, 2_000);
+                var plan = WidePreviewPlan.create(visible, settings, null);
+                assertTrue(plan.physicalStep() >= step);
+                assertTrue((long) plan.job().width() * plan.job().height() <= settings.sampleLimit());
+                assertTrue(plan.job().viewport().scale() >= visible.viewport().scale() * extent);
+                if (extent == 1.5 && step >= 4) assertEquals(step, plan.physicalStep());
+                assertEquals(visible.viewport().center(), plan.job().viewport().center());
+            }
+        }
+    }
+
     @Test void preservesDeepDecimalCoordinatesAndSelectsCorrectFormulaBackend() {
         var view = new Viewport("-0.743643887037151000000000000000000000001", "0.131825904205330000000000000000000000002", "1e-80");
         var coarse = WidePreviewPlan.create(job(view, 3024, 1964), WidePreviewSettings.CANDIDATE, null).job();
