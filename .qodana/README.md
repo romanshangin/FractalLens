@@ -55,6 +55,23 @@ image/unchanged preparation: 51 unchanged, zero new, `executionSuccessful: true`
 exit 0. `scripts/quality/check_qodana.py` accepted all 51; nine acceptance tests
 passed. This does not pass the failed GitHub invocation. Raw logs/reports stay private.
 
+## Reviewed window-title migration (2026-11-08)
+
+PR #62, `c4a787b7e441830229cc2ba7a6c0e2c9ef1eeacd`: 45 unchanged plus three new
+`BusyWait` fingerprints, the same bounded polls at 192/207/303 in
+`InteractionLatencyBenchmark.java`. The only edit in that file is the window-title
+string at line 84; the polling code is unchanged.
+
+Pinned-image local analysis on a disposable clone reproduced all three, matching
+rule/message/path/line/column. Only those fingerprints were updated; other
+entries/contracts/profile/zero-new gate stay. No new polling contract accepted.
+The reproduction exited 255, remaining invalid execution evidence.
+
+Fresh local disposable clone, migrated baseline only, pinned image/unchanged
+preparation: 48 unchanged, zero new, exit 0. `scripts/quality/check_qodana.py`
+accepted all 48; nine acceptance tests passed. This does not pass the failed GitHub
+invocation. Raw logs/reports stay private.
+
 ## Resolved exact divisions (spare frame storage, 2026-11-07)
 
 The two `BigDecimalMethodWithoutRoundingCalled` entries in `FrameReusePlanner`
