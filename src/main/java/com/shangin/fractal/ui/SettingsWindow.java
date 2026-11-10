@@ -96,8 +96,9 @@ final class SettingsWindow {
                         List.of("1.5× window", "2× window", "3× window", "4× window"),
                         EXTENTS.indexOf(current.extent())),
                 new ChoiceField(NAVIGATION_SECTION, WIDE_PREVIEW_QUALITY_ID, "Preview quality",
-                        "Physical pixels per sample. Smaller steps give finer previews. The sample and time "
-                                + "budgets can limit the achieved quality and coverage.",
+                        "Target physical pixels per sample. Smaller steps give finer previews. The preview memory "
+                                + "budget may require a coarser step; the badge tooltip shows the effective step. "
+                                + "Partial previews continue calculating while the application is idle.",
                         List.of("Low (16 px)", "Standard (8 px)", "High (4 px)", "Very high (2 px)"),
                         PIXEL_STEPS.indexOf(current.pixelStep())));
     }

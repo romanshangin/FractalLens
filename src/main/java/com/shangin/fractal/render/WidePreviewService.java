@@ -112,6 +112,7 @@ public final class WidePreviewService implements AutoCloseable {
         }
         if (!work.settings.equals(reserveSettings) || reserveIterations != work.visible.maxIterations())
             reserve = null;
+        long started = System.nanoTime();
         WidePreviewPlan plan = WidePreviewPlan.create(work.visible, work.settings, reserve);
         RenderFrame frame = reserve != null && RenderFrameCache.sameCalculatedFrame(reserve.request(), plan.job())
                 ? reserve : new FrameReusePlanner().createFrame(reserve, plan.job());
@@ -121,23 +122,37 @@ public final class WidePreviewService implements AutoCloseable {
         try {
             // Complete reserves only need new colors, never another reference orbit or backend.
             if (frame.isComplete()) {
-                publish(work, plan, frame);
+                publish(work, plan, frame, started);
                 return;
             }
-            long deadline = System.nanoTime() + work.settings.workMillis() * 1_000_000L;
             AtomicLong lastPublication = new AtomicLong();
             try (RenderBackend backend = backendFactory.get()) {
                 if (!backend.supports(plan.job())) return;
-                publish(work, plan, frame);
-                backend.render(frame, () -> obsolete(work) || System.nanoTime() >= deadline,
-                        region -> {
-                            long now = System.nanoTime();
-                            if (now - lastPublication.get() >= WidePreviewSettings.PUBLICATION_INTERVAL_NANOS) {
-                                lastPublication.set(now);
-                                publish(work, plan, frame);
-                            }
-                        }, null);
-                publish(work, plan, frame);
+                publish(work, plan, frame, started);
+                while (!frame.isComplete() && !obsolete(work) && !Thread.currentThread().isInterrupted()) {
+                    int readyBefore = frame.validity().readyPixelCount();
+                    AtomicBoolean intervalProgress = new AtomicBoolean();
+                    long deadline = System.nanoTime() + work.settings.workMillis() * 1_000_000L;
+                    // Finish at least one new region per slice. Otherwise a slow tile/reference
+                    // could repeatedly exceed the budget without ever publishing valid samples.
+                    backend.render(frame, () -> obsolete(work) || System.nanoTime() >= deadline
+                                    && intervalProgress.get(),
+                            region -> {
+                                intervalProgress.set(true);
+                                long now = System.nanoTime();
+                                if (now - lastPublication.get() >= WidePreviewSettings.PUBLICATION_INTERVAL_NANOS) {
+                                    lastPublication.set(now);
+                                    publish(work, plan, frame, started);
+                                }
+                            }, null);
+                    publish(work, plan, frame, started);
+                    if (!obsolete(work) && !Thread.currentThread().isInterrupted()
+                            && !frame.isComplete() && frame.validity().readyPixelCount() == readyBefore)
+                        throw new IllegalStateException("Preview backend returned without progress");
+                    // Visible work cancels this generation. Otherwise the application is still
+                    // idle and this same backend can continue with its reference caches intact.
+                    Thread.yield();
+                }
             }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
@@ -148,7 +163,7 @@ public final class WidePreviewService implements AutoCloseable {
 
     private boolean obsolete(Work work) { return work.generation != generation.get(); }
 
-    private void publish(Work work, WidePreviewPlan plan, RenderFrame frame) {
+    private void publish(Work work, WidePreviewPlan plan, RenderFrame frame, long started) {
         if (obsolete(work) || frame.validity().readyPixelCount() == 0) return;
         int[] colors = new int[plan.job().width() * plan.job().height()];
         // Histogram mapping remains the smooth progressive mapping in a partial reserve.
@@ -157,7 +172,7 @@ public final class WidePreviewService implements AutoCloseable {
                 coloring, frame.validity(), null);
         if (obsolete(work)) return;
         publication.set(new Publication(work,
-                new WidePreviewSnapshot(plan, colors, frame.validity().readyPixelCount())));
+                new WidePreviewSnapshot(plan, colors, frame.validity().readyPixelCount(), System.nanoTime() - started)));
         queuePublication();
     }
 

@@ -94,6 +94,106 @@ class WidePreviewFxTest {
         }
     }
 
+    @Test void qualityChangesRebuildThePreviewAndUpdateBadgeDetailsWithoutChangingExactPixels() throws Exception {
+        var ready = new CompletableFuture<Void>();
+        Object[] ui = fx(() -> {
+            var scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                    .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY));
+            var view = new FractalView(scene);
+            var surface = (FractalSurface) field(view, "fractalSurface");
+            view.setOnRenderError(ready::completeExceptionally);
+            reserve(surface).imageProperty().addListener((observable, old, image) -> {
+                if (image != null) ready.complete(null);
+            });
+            var stage = new Stage(); stage.setScene(new Scene(view, 240, 160)); stage.show();
+            return new Object[] {view, surface, stage};
+        });
+        try {
+            ready.get(20, TimeUnit.SECONDS);
+            var view = (FractalView) ui[0];
+            var surface = (FractalSurface) ui[1];
+            var controller = (FractalRenderController) field(view, "renderController");
+            drainPreview(controller);
+            int[] exact = fx(() -> pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()));
+            int previousSamples = 0;
+            for (int step : new int[] {16, 8, 4, 2}) {
+                fx(() -> {
+                    view.setWidePreviewSettings(new WidePreviewSettings(true, 2, step, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000));
+                    var badge = (RenderModeIndicator) field(view, "modeIndicator");
+                    assertFalse(badge.getTooltip().getText().contains("Preview render:"), "Old timing clears with its pixels");
+                    return null;
+                });
+                drainPreview(controller);
+                int count = fx(() -> {
+                    var snapshot = (WidePreviewSnapshot) field(surface, "widePreviewSnapshot");
+                    assertNotNull(snapshot);
+                    assertEquals(step, snapshot.plan().physicalStep());
+                    var badge = (RenderModeIndicator) field(view, "modeIndicator");
+                    String tooltip = badge.getTooltip().getText();
+                    assertTrue(tooltip.contains("Preview render: " + RenderModeIndicator.formatElapsed(snapshot.elapsedNanos())), tooltip);
+                    assertTrue(tooltip.contains("Preview step: " + step + " px (requested " + step + " px)"), tooltip);
+                    assertTrue(badge.getAccessibleText().contains("Preview render:"));
+                    assertFalse(tooltip.contains("(partial)"), tooltip);
+                    assertArrayEquals(snapshot.copyColors(), pixels(reserve(surface).getImage()));
+                    assertArrayEquals(exact, pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()));
+                    return snapshot.readySamples();
+                });
+                assertTrue(count > previousSamples, "Each finer quality calculates a denser raster");
+                previousSamples = count;
+            }
+            fx(() -> {
+                view.setWidePreviewEnabled(false);
+                assertFalse(((RenderModeIndicator) field(view, "modeIndicator")).getTooltip().getText().contains("Preview render:"));
+                return null;
+            });
+        } finally { fx(() -> { ((FractalView) ui[0]).close(); ((Stage) ui[2]).close(); return null; }); }
+    }
+
+    @Test void badgeLabelsPartialCoverageAndBudgetLimitedQualityAndClearsOldTiming() throws Exception {
+        var scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE);
+        var job = new RenderJob(FormulaDefinition.forScene(scene), scene.viewport(), 640, 480, 300);
+        var requested = new WidePreviewSettings(true, 2, 2, WidePreviewSettings.MAX_SAMPLES, 2_000);
+        var partial = new CompletableFuture<WidePreviewSnapshot>();
+        var complete = new CompletableFuture<WidePreviewSnapshot>();
+        try (var service = new WidePreviewService(Runnable::run)) {
+            service.request(job, scene.coloring(), requested, snapshot -> {
+                if (snapshot.readySamples() < snapshot.plan().job().width() * snapshot.plan().job().height())
+                    partial.complete(snapshot);
+                else complete.complete(snapshot);
+            }, error -> { partial.completeExceptionally(error); complete.completeExceptionally(error); });
+            var first = partial.get(10, TimeUnit.SECONDS);
+            var last = complete.get(10, TimeUnit.SECONDS);
+            var capped = new WidePreviewSettings(true, 2, 2, 16, 2_000);
+            var limited = new CompletableFuture<WidePreviewSnapshot>();
+            service.request(job, scene.coloring(), capped, snapshot -> {
+                if (snapshot.readySamples() == snapshot.plan().job().width() * snapshot.plan().job().height())
+                    limited.complete(snapshot);
+            }, limited::completeExceptionally);
+            var limitedSnapshot = limited.get(10, TimeUnit.SECONDS);
+            fx(() -> {
+                var surface = new FractalSurface(); surface.resize(640, 480);
+                try (var badge = new RenderModeIndicator()) {
+                    surface.setOnWidePreviewChanged(badge::setWidePreview);
+                    surface.prepareWidePreview(job, scene.coloring(), scene.iterations(), requested);
+                    surface.displayWidePreview(first);
+                    assertTrue(badge.getTooltip().getText().contains("(partial)"));
+                    surface.displayWidePreview(last);
+                    assertFalse(badge.getTooltip().getText().contains("(partial)"));
+                    surface.prepareWidePreview(job, scene.coloring(), scene.iterations(), capped);
+                    assertFalse(badge.getTooltip().getText().contains("Preview render:"));
+                    surface.displayWidePreview(limitedSnapshot);
+                    assertTrue(badge.getTooltip().getText().contains("requested 2 px) — limited by preview budget"));
+                    surface.displayWidePreview(last);
+                    assertTrue(badge.getTooltip().getText().contains("limited by preview budget"),
+                            "A stale publication must not replace current diagnostics");
+                    surface.clearWidePreview();
+                    assertFalse(badge.getTooltip().getText().contains("Preview render:"));
+                }
+                return null;
+            });
+        }
+    }
+
     @Test void thirtyVisibleCycleTicksDoNotCalculateOrUploadHiddenReserveAndStopRefreshesItsPalette() throws Exception {
         var firstPreview = new CompletableFuture<Void>();
         Object[] ui = fx(() -> {
@@ -199,7 +299,7 @@ class WidePreviewFxTest {
                 assertArrayEquals(exact, pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()),
                         "Enabling the preview must not change exact pixels");
                 assertEquals(scene, view.sceneSnapshot());
-                view.setWidePreviewSettings(new WidePreviewSettings(true, 3.0, 4, 262_144, 2_000));
+                view.setWidePreviewSettings(new WidePreviewSettings(true, 3.0, 4, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000));
                 assertNull(reserve(surface).getImage(), "Size and quality changes remove the old reserve synchronously");
                 assertArrayEquals(exact, pixels(((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage()),
                         "Changing preview size and quality keeps the exact frame");

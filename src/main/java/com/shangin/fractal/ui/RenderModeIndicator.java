@@ -1,6 +1,7 @@
 package com.shangin.fractal.ui;
 
 import com.shangin.fractal.controller.RenderStatus;
+import com.shangin.fractal.render.WidePreviewSnapshot;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.geometry.Bounds;
@@ -35,6 +36,7 @@ final class RenderModeIndicator extends Label implements AutoCloseable {
     private final ProgressIndicator spinner = new ProgressIndicator();
     private final StackPane statusIcon = new StackPane(dot, spinner);
     private final Tooltip details = new Tooltip();
+    private WidePreviewSnapshot preview;
     private String exportStatus = "";
     private boolean deepZoom;
     private RenderStatus status = new RenderStatus(RenderStatus.State.IDLE, 0);
@@ -165,6 +167,11 @@ final class RenderModeIndicator extends Label implements AutoCloseable {
         update();
     }
 
+    void setWidePreview(WidePreviewSnapshot snapshot) {
+        preview = snapshot;
+        update();
+    }
+
     void setExportStatus(String message) {
         exportStatus = Objects.requireNonNull(message);
         update();
@@ -191,6 +198,15 @@ final class RenderModeIndicator extends Label implements AutoCloseable {
         // Mode descriptions belong in Help; hover keeps only the values behind the frame.
         String values = "Zoom: " + RenderValueFormat.zoom(zoom)
                 + "\nIterations: " + RenderValueFormat.iterations(iterations);
+        if (preview != null) {
+            values += "\nPreview render: " + formatElapsed(preview.elapsedNanos())
+                    + (preview.readySamples() == (long) preview.plan().job().width() * preview.plan().job().height()
+                    ? "" : " (partial)")
+                    + "\nPreview step: " + preview.plan().physicalStep() + " px"
+                    + " (requested " + preview.plan().settings().pixelStep() + " px)"
+                    + (preview.plan().physicalStep() > preview.plan().settings().pixelStep()
+                    ? " — limited by preview budget" : "");
+        }
         details.setText(values);
         setAccessibleText(getText() + ". " + values.replace('\n', ' '));
         setPrefWidth(snappedLeftInset() + ICON_SIZE + ICON_GAP

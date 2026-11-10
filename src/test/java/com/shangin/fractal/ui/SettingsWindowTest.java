@@ -49,7 +49,7 @@ class SettingsWindowTest {
                     var restored = SettingsWindow.selection(SettingsWindow.fields(current).stream()
                             .mapToInt(SettingsWindow.ChoiceField::selected).toArray());
                     assertEquals(current, restored);
-                    assertEquals(new WidePreviewSettings(enabled, extent, step, 262_144, 2_000),
+                    assertEquals(new WidePreviewSettings(enabled, extent, step, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000),
                             restored.previewSettings());
                 }
             }

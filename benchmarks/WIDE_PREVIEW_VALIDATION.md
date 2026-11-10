@@ -1,5 +1,17 @@
 # Wide preview candidate
 
+> Historical policy: the campaigns below measured the former 262,144-sample
+> default and terminal two-second deadline. The current application uses a
+> 256 MiB preview-storage planning estimate and continues idle work across
+> cooperative quanta. These historical results do not establish performance,
+> memory or thermal acceptance for that policy. The fresh
+> [QB2 comparison](#byte-budget-comparison-qb2-with-sleep-inhibition-2026-11-0910)
+> retained the default byte-budget policy on its declared Apple Silicon matrix,
+> including active-desktop checks and verified sleep-inhibitor cleanup. QB1
+> remains inconclusive and environment-limited. See
+> [the current UI contract](../docs/platform/MACOS_UI.md#wide-navigation-preview).
+
+
 ## Contract and predeclared experiment
 
 The candidate adds a display-only reserve beneath the existing exact images.
@@ -615,3 +627,321 @@ Raw records, the policies and their hashes stay in the private archive.
 Not covered: long sessions, GPU, Windows/Linux, Intel/AMD Macs, native fullscreen,
 and deep-zoom scenes above 4096 iterations, where the reserve now spends more
 idle CPU per sample.
+
+## Quality byte-budget implementation diagnostic (2026-11-08)
+
+This is new implementation evidence, separate from the historical promotion
+campaigns above. Code state: `fix/preview-quality-render-time`, uncommitted
+production changes on base `3ac9e1dd5dfe8a50cdbaba19a2e600d54795f060`.
+SHA-256 of `git diff HEAD -- src/main` followed by the bytes of the new
+`src/main/java/com/shangin/fractal/render/WidePreviewMemory.java`:
+`a962323c6e87de78a895475eaa0b88347c09207cd8f589b3876d2584e9ea2be4`.
+
+A private, temporary in-process diagnostic exercised the production
+`WidePreviewService` with synchronous callbacks, one warm-up and three measured
+requests per configuration. Inputs: Mandelbrot, center
+`(-0.743643887037151, 0.13182590420533)`, scale `0.024`, 3024×1964 physical
+pixels, 1000 iterations, extent 2×, Ice coloring. Every completed color array
+matched a full single-worker `DirectDoubleRenderBackend` control for that exact
+planned grid; checksums repeated across all three requests per configuration.
+The legacy-grid row uses an explicit 262,144-sample ceiling in the current
+service; it is not a frozen historical executable or a paired speedup control.
+
+Environment: macOS 27.2, aarch64, JDK `26.0.1+8-34`, 12 available processors,
+one preview worker. Power/thermal state and competing desktop workloads were
+uncontrolled. Raw output and the temporary driver were not selected for public
+publication. Times exclude JavaFX upload/scanout; MiB values are planning
+estimates, not measured heap/RSS.
+
+| Policy / requested step | Effective step | Samples | Estimated preview storage (MiB) | First publication (ms), range | Completion (ms), range |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Legacy grid / 8 px | 10 px | 238,764 | 20.70 | 1.13–1.97 | 46.03–47.44 |
+| Byte budget / 8 px | 8 px | 372,444 | 29.75 | 0.93–1.34 | 71.74–72.76 |
+| Byte budget / 4 px | 4 px | 1,487,279 | 104.34 | 2.80–3.25 | 299.21–300.85 |
+| Byte budget / 2 px | 3 px | 2,642,270 | 181.16 | 3.21–5.23 | 542.54–551.09 |
+
+The checked-in `WidePreviewCancellationBenchmark` also completed its one warm-up
+and three measurements for Mandelbrot/Julia at scales `0.024` and `1e-80`,
+3024×1964, 3000 iterations, current default policy. Warm cancellation-to-worker-
+drain ranges were 0.294–0.898 ms (Mandelbrot standard), 0.080–0.084 ms
+(Mandelbrot deep), 0.171–0.180 ms (Julia standard), and 0.040–0.046 ms (Julia
+deep). It cancels after the first completed region, so this does not establish
+late-frame cancellation, interaction latency or native presentation timing.
+
+Decision: **retain the requested functional policy for review**. Quality now
+changes the production grid below the byte budget, and an over-budget request
+is explicitly reported. These diagnostics do not establish a performance
+promotion or transfer TG2-4 acceptance: production gesture/AA pairs, retained
+heap/RSS/GC, sustained thermal behavior and other platforms remain unverified.
+Continuation across elapsed work quanta, slow-region progress, cancellation,
+recolor reuse, no-progress failure and stale-publication suppression are covered
+by the implementation regression tests rather than these short timing runs.
+
+
+### Follow-up: constant-time cancellation polling
+
+The timing diagnostics above preceded this implementation follow-up and were
+not rerun for it. A regression on a 2017×1310 mask, filled except for its last
+row, reproduced 100,000 cardinality scans during 100,000 cancellation polls in
+a slow continuation after the quantum deadline. The predicate now reads an
+atomic progress flag set by `regionCompleted` and reset for each quantum.
+The final regression requires 100,000 cancellation polls to finish on another
+thread while the test holds the mask monitor, both before and after the first
+completed region. Since `readyPixelCount` is synchronized, it cannot be used in
+that polling path. The test also checks continuation to a complete snapshot. The once-per-quantum no-progress guard still counts ready samples;
+publication counts are unchanged. These are polling-path regressions,
+not a new measurement of full-render speed, RSS or thermal behavior.
+
+
+## Byte-budget comparison QB1 (2026-11-09)
+
+**Decision: inconclusive, with an additional graphical-environment limitation;
+performance acceptance remains open.** This was
+implementation self-validation of the requested functional policy, not an
+independent verification stage. No production sources were changed during or
+after the campaign. Earlier TG2 decisions and the implementation diagnostic
+above retain their original scope.
+
+### Frozen inputs and declaration
+
+Control A was `main` at
+`3ac9e1dd5dfe8a50cdbaba19a2e600d54795f060`, with the enabled `DEFAULT`
+preview, the 262,144-sample cap and terminal two-second deadline. Candidate B
+was the uncommitted `fix/preview-quality-render-time` tree on that same base,
+including the constant-time cancellation-polling correction, with enabled
+`CANDIDATE`, the 256 MiB planning estimate and continuing idle work quanta.
+Both used production default extent 2x and requested step 8 px.
+
+Frozen compiled snapshot identities:
+
+- A: `65ebb65d5ca40f485bf0a5099e96400daa06b648e2189e23f61fd74e94ddbdfd`.
+- B: `0a82b0c4bc2534d52039dd6b729d1278e24c4b668a78007175ca30636f531531`.
+
+Both builds used the pinned Maven Wrapper. The candidate snapshot explicitly
+included the new, untracked `WidePreviewMemory.java` without changing the real
+Git index. The benchmark driver source and ordered dependencies matched.
+Source and compiled manifests remain private; hashes were verified after the
+campaign, and current source bytes still matched the candidate source manifest.
+A dirty candidate cannot be reconstructed from the base revision alone.
+
+The policy, controller, chain and build manifests were hashed before measured
+processes. SHA-256 of the private declaration-hash record:
+`8b295580b7ea9d783ccfdb512783673af34f35834ed85e37e2724446971a23f7`.
+An excluded smoke run first passed exact controls on both builds. No smoke or
+historical measurements were pooled into QB1.
+
+Environment: macOS 27.2, aarch64, Apple M3 Pro, 12 physical cores, 18 GiB RAM,
+JDK `26.0.1+8-34`, JavaFX 26.0.2, Metal Prism, CPU rendering, `-Xmx4g`, no
+initial-heap or GC overrides. All recorded process boundaries reported AC power
+and nominal thermal pressure. The chain ran under `caffeinate -i` without
+competing builds/tests or requested manual window input. This assertion prevented
+system idle sleep, but did not establish an unlocked, continuously active display.
+The post-campaign checks below exposed that limitation.
+
+### Fixed protocol and calibration
+
+The matrix was the existing `WidePreviewInputBenchmark`: pan-25 and
+wide-zoom-out, 1512x982 and 3024x1964, FAST and REFINED. Each process ran one
+first sequence, three warmups and five measured sequences per cell, with the
+same 250 ms source think time. Each process passed the existing exact CPU
+sample/ARGB controls and complete-matrix validator; matched processes had
+identical final fingerprints. All frozen-build checks passed.
+
+A fresh 12-pair A/A stage ran the frozen control with `DEFAULT` under both
+labels. A/A timing overall was 0.995 (0.975-1.017), and memory v2 G1/G2 both
+passed. The declared joint rule selected the smallest N in {12,18,24,30,36}
+with timing joint pass >= 0.80, memory pass >= 0.80 and each false-fail rate
+<= 0.05. At N=12 the simulated rates were 0.924 for timing and 0.982 for memory,
+with zero false fails for either. The observed A/A gates did not fail.
+
+The selected plan was hashed before candidate measurement, then exactly 12
+fresh A/B pairs ran in alternating AB/BA order. SHA-256 of the private joint
+plan: `3812b758cac1922af604de6828e0c41d50afb017be4401b4e9f1a3208a21a81a`.
+There was no early stop, omitted pair or retry. The limits were unchanged:
+[timing v2](TIMING_GATE_V2.md), [memory v2](MEMORY_GATE_V2.md), preview
+availability >= 95%, exact controls and nominal process-boundary thermal state.
+
+### Results
+
+| Component | Result |
+| --- | --- |
+| Exact controls, complete matrices and frozen builds | pass in all 24 A/A and 24 A/B processes |
+| AC power / thermal pressure | AC / nominal in all 96 boundary observations |
+| Candidate reserve ready / complete before measured gestures | 100% / 100% |
+| Candidate-stage peak RSS range, A / B | 3.933-4.505 GB / 4.020-4.512 GB |
+| Memory v2 G1 paired median ratio | 1.005 (0.997-1.017), pass |
+| Memory v2 G2 P90 ratio | 0.989 (0.981-1.006), pass |
+| Timing overall B/A, 32 primary groups | 1.003 (0.973-1.042), pass |
+| Timing family averages | 7 pass, 1 inconclusive, 0 fail |
+| Individual timing groups | 56 pass, 0 inconclusive, 0 fail |
+
+The unresolved family is pan first-input-to-preview after layout, across both
+sizes and modes: B/A 1.043962, 95% interval 0.976799-1.131088. Its upper bound
+exceeds 1.13, so it does not pass. The measured average increase is about 4.4%;
+the interval remains too wide to establish the accepted 13% limit. The largest
+primary group estimate is 3024x1964 REFINED pan preview after layout, 1.067
+(0.945-1.205), within the individual-group rule. No statistical component confirms a failure.
+The overall and seven other families passing cannot waive the unresolved one.
+
+### Graphical-environment limitation discovered after measurement
+
+A fresh final JavaFX run on unchanged application sources completed 91 tests
+with zero assertion failures, two errors and two fullscreen skips. The errors
+were timeouts in `MacModalWindowsFxTest.closeConfirmationKeyboardReturnsSafely`
+(the Enter case) and `settingsSelectStandardAndDeepZoomModesFromPopUpButtons`.
+Both wait for native keyboard dismissal. The run also emitted
+`CVDisplayLinkCreateWithActiveCGDisplays` and related errors (`-6661`). An explicit
+desktop-access check then reported that the Mac was locked and required manual
+unlock. This supports an environment blocker for keyboard-based UI validation;
+it does not establish a new application defect. Before the campaign, the same
+91-test JavaFX selection had passed with only the two fullscreen skips.
+
+After the owner manually unlocked the Mac, the same two methods were rerun on
+unchanged application/test sources in the active desktop session, with a fresh
+JavaFX native cache, `-DreuseForks=false` and a temporary `caffeinate -di`
+assertion. All three cases passed (Escape and Enter dismissal, plus settings
+pop-up selection), with zero failures, errors or skips and no CVDisplayLink
+diagnostics. This resolves the observed keyboard-test environment blocker.
+It does not alter QB1's historical session conditions or timing verdict.
+
+Retrospective inspection found the same four CVDisplayLink diagnostics in 22 of
+24 A/A process logs and 22 of 24 A/B process logs. Neither smoke process nor the
+first two A/A processes recorded them. The exact lock/unlock chronology was not
+recorded, so continuously active desktop conditions cannot be asserted for QB1.
+All processes still initialized Metal Prism, passed exact final-output checks
+and returned successfully. The numerical timing/memory verdicts above preserve
+what the analyzer computed; they do not validate the affected graphical-session
+conditions. Any confirmatory timing campaign must establish an active desktop
+throughout; removing these observations or treating the run as an active-display
+PASS is not permitted.
+
+No performance promotion follows this result. No production tuning, limit
+relaxation or follow-up retry was performed after seeing it. Pre-existing
+user-owned functional changes remain in the task branch; they are not newly
+accepted as an optimization. Closing timing acceptance requires a separately
+declared follow-up and experiment budget; QB1 must remain inconclusive.
+
+### Evidence and scope limits
+
+The raw process records, logs, policies, hashes, plans, commands, manifests,
+source/binary snapshots and analysis stay in the private QB1 archive. This
+selected summary is not a public replay bundle. Measurements cover standard
+Mandelbrot at default preview settings on this Apple Silicon Mac. Non-default
+quality/extent choices, long sessions, retained-heap/GC attribution, physical
+scanout, sustained temperature/energy, deep Julia, native fullscreen,
+Windows/Linux and Intel/AMD Macs remain unverified by this campaign.
+Process-boundary thermal pressure and peak RSS do not establish those properties
+or turn the 256 MiB planning estimate into a process-memory cap. Manual tooltip
+inspection was not performed in this implementation continuation.
+
+
+## Byte-budget comparison QB2 with sleep inhibition (2026-11-09/10)
+
+**Decision: retain for the declared default-settings matrix.** QB2 is a fresh,
+owner-requested implementation self-validation campaign after QB1's graphical
+session limitation was diagnosed. No production tuning or gate relaxation was
+made. QB1 remains inconclusive and environment-limited; none of its measurements
+or calibration plan was pooled into QB2. This is not independent verification.
+
+### Inputs and fixed protocol
+
+The frozen A/B snapshots are the same verified binaries described in QB1:
+A `65ebb65d5ca40f485bf0a5099e96400daa06b648e2189e23f61fd74e94ddbdfd`,
+B `0a82b0c4bc2534d52039dd6b729d1278e24c4b668a78007175ca30636f531531`.
+A uses the enabled legacy `DEFAULT`; B uses the enabled byte-budget `CANDIDATE`.
+Both have extent 2x and requested step 8 px. The application/test source bytes
+still match B's source manifest. Compiled snapshots, ordered dependencies,
+driver source, declaration and plan hashes were verified after measurement.
+No source, helper, policy or analysis edits occurred during the campaign.
+
+Environment and workload are those recorded for QB1: macOS 27.2, aarch64,
+Apple M3 Pro, 12 physical cores, 18 GiB RAM, JDK `26.0.1+8-34`, JavaFX 26.0.2,
+Metal Prism, CPU rendering and `-Xmx4g`. The existing wide-input matrix covers
+pan-25 and wide-zoom-out, 1512x982 and 3024x1964, FAST and REFINED. Each process
+runs one first sequence, three warmups and five measured sequences per cell,
+with identical 250 ms source think time. Exact final sample/ARGB controls,
+complete-matrix validation and the timing v2/memory v2 limits are unchanged.
+
+The policy, controller, supervisor, session probe, frozen manifests and analysis
+sources were hashed before measured processes. SHA-256 of the private
+declaration-hash record:
+`34fe12055e74517cd2888d8868e5fa96661b9a9eefd3275aff49fdf685869f49`.
+A fresh 12-pair A/A stage used the frozen control with `DEFAULT` for both labels.
+Its timing overall was 0.992 (0.961-1.022), and memory G1/G2 both passed.
+The unchanged joint selection rule chose N=12: simulated timing joint pass
+0.970, memory pass 0.861 and zero false fails for either. The joint plan was
+hashed before the first candidate process:
+`7e6d824df5054717fe7aa660484b9fa2a3af833d40c501ebcfd2d302e9a73bca`.
+Exactly 12 fresh A/B pairs then ran, alternating AB/BA, with no early stop,
+omitted pair or retry.
+
+### Active session and inhibitor lifecycle
+
+A supervisor wrapped the entire foreground chain, including calibration and
+final analysis, in `caffeinate -di`. It confirmed both of this run's owned
+system-idle and display-idle assertions before measurement. Native CoreGraphics
+queries checked that the session was present, on console, logged in, not
+reported locked, and had an active awake display. Those conditions, AC power
+and both assertions were sampled every five seconds and before/after every JVM.
+Missing protection or session state, a reported lock, a sleeping display or any
+CVDisplayLink diagnostic was a hard stop. Checks use the observed macOS session
+dictionary, including its lock field when present; they are not a guarantee
+about every OS version or every sub-five-second transition.
+
+All **2,509 campaign guard samples passed**. All 48 JVM logs were free of
+CVDisplayLink diagnostics. All 96 process-boundary observations reported AC power
+and nominal thermal pressure. Excluded preflights had also checked normal and
+intentional-cancellation cleanup before declaration; they are not measurements.
+
+After the full chain completed successfully, the supervisor verified that its
+caffeinate helper was gone, both owned assertions had been released, and the
+persistent power configuration matched its pre-run snapshot. Cleanup passed,
+with no remaining helper or assertion. No persistent sleep/display setting or
+security policy was changed, and no other process's inhibitors were targeted.
+The analyzer's retain verdict was accepted only after this cleanup check passed.
+
+### Results
+
+| Component | Result |
+| --- | --- |
+| Exact controls, complete matrices, fingerprints and frozen-build checks | pass in all 24 A/A and 24 A/B processes |
+| Active session, awake display, AC and owned inhibition | all 2,509 guard samples pass |
+| Candidate reserve ready / complete before measured gestures | 100% / 100% |
+| Candidate-stage peak RSS range, A / B | 3.884-4.417 GB / 4.038-4.361 GB |
+| Memory v2 G1 paired median ratio | 1.007 (0.981-1.033), pass |
+| Memory v2 G2 P90 ratio | 0.991 (0.985-1.002), pass |
+| Timing overall B/A, 32 primary groups | 0.984 (0.956-1.011), pass |
+| Timing family averages | 8 pass, 0 inconclusive, 0 fail |
+| Individual timing groups | 56 pass, 0 inconclusive, 0 fail |
+| Owned inhibitor cleanup / persistent power configuration | released / unchanged |
+
+The pan-preview-after-layout family that was inconclusive in QB1 is 0.991
+(0.914-1.072), passing the unchanged 1.13 upper-bound limit. All family upper
+bounds are between 0.999 and 1.072. The largest individual group estimate is
+3024x1964 FAST pan preview before layout, a diagnostic metric, at 1.235 against
+a 0.397 ms control median. It passes the existing 1 ms floor rule; no group or
+average limit was changed after seeing the data.
+
+The overall interval includes 1, so this is acceptance within the declared
+regression limits, not proof of an overall speedup. Memory G1/G2 pass their
+unchanged 1.05 upper-bound limits. No per-pair RSS rule is substituted for those
+predeclared gates. The 256 MiB estimate remains a planning model, not a measured
+heap/RSS cap.
+
+### Decision scope and retained evidence
+
+Retain the requested byte-budget/continued-work policy at the measured production
+defaults on this Apple Silicon matrix. This closes its default-matrix performance
+acceptance gap without relabeling QB1 or TG2-4. Numerical/lifecycle tests continue
+to cover quality changes, continuation across work quanta and cancellation;
+this short standard-precision matrix does not establish sustained deep-zoom
+behavior. Non-default extent/quality settings, long sessions, retained-heap/GC
+attribution, physical scanout, energy/temperature, deep Julia, native fullscreen,
+Windows/Linux and Intel/AMD Macs remain outside this campaign's acceptance.
+Manual tooltip appearance was not inspected during this continuation.
+
+Raw logs, process records, session samples, policies, hashes, plans, commands,
+native probes and cleanup records stay in the private QB2 archive. The reused
+frozen binaries/manifests remain in their original private archive. This selected
+summary is not a public replay bundle. Nothing was committed or uploaded by the
+campaign.

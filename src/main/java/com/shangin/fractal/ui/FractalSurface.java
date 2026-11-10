@@ -25,6 +25,7 @@ import javafx.stage.Window;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * JavaFX surface that owns display buffers, applies interaction previews, and
@@ -39,6 +40,11 @@ public final class FractalSurface extends Region {
     private final ImageView widePreviewImageView = new ImageView();
     private final Affine widePreviewTransform = new Affine();
     private WidePreviewSnapshot widePreviewSnapshot;
+    private Consumer<WidePreviewSnapshot> previewChanged = ignored -> {};
+
+    void setOnWidePreviewChanged(Consumer<WidePreviewSnapshot> listener) {
+        previewChanged = Objects.requireNonNull(listener);
+    }
     private javafx.scene.image.WritableImage widePreviewImage;
     private int[] widePreviewUpload;
     private RenderJob widePreviewTarget;
@@ -119,12 +125,14 @@ public final class FractalSurface extends Region {
         widePreviewImage.getPixelWriter().setPixels(0, 0, source.width(), source.height(),
                 javafx.scene.image.PixelFormat.getIntArgbInstance(), widePreviewUpload, 0, source.width());
         widePreviewSnapshot = snapshot;
+        previewChanged.accept(snapshot);
         widePreviewImageView.setImage(widePreviewImage);
         projectWidePreview(widePreviewTarget.viewport(), widePreviewTarget.width(), widePreviewTarget.height());
     }
 
     public void clearWidePreview() {
         widePreviewSnapshot = null;
+        previewChanged.accept(null);
         widePreviewImageView.setImage(null);
     }
 

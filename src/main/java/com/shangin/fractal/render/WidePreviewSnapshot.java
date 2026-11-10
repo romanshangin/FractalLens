@@ -5,14 +5,23 @@ public final class WidePreviewSnapshot {
     private final WidePreviewPlan plan;
     private final int[] colors;
     private final int readySamples;
+    private final long elapsedNanos;
 
     WidePreviewSnapshot(WidePreviewPlan plan, int[] colors, int readySamples) {
+        this(plan, colors, readySamples, 0);
+    }
+
+    WidePreviewSnapshot(WidePreviewPlan plan, int[] colors, int readySamples, long elapsedNanos) {
+        this.elapsedNanos = elapsedNanos;
         this.plan = plan;
         this.colors = colors;
         this.readySamples = readySamples;
     }
 
     public WidePreviewPlan plan() { return plan; }
+    /** Elapsed worker time for this request through publication, including reuse and coloring. */
+    public long elapsedNanos() { return elapsedNanos; }
+
     public int readySamples() { return readySamples; }
     public int[] copyColors() { return colors.clone(); }
 

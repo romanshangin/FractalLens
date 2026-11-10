@@ -149,7 +149,10 @@ not a rerun. Evidence selection and archive limits:
   timing groups, memory v2 G1/G2, availability/thermal and exact controls passed;
   overall ratio 0.973 (0.946–0.997). Settings override persists; reserve uses the
   visible iteration limit. Earlier rejected/inconclusive/aborted campaigns stand.
-  Other preview policies/platforms/sessions remain open in 9.9.
+  QB2 subsequently retained the 256 MiB/continued-work policy at default settings
+  on the measured Apple Silicon matrix, with active-desktop and inhibitor-cleanup
+  checks. Other preview settings/platforms/sessions remain open in 9.9.
+  [QB2 decision](benchmarks/WIDE_PREVIEW_VALIDATION.md#byte-budget-comparison-qb2-with-sleep-inhibition-2026-11-0910).
   [Decision/history](benchmarks/WIDE_PREVIEW_VALIDATION.md#follow-up-campaigns-tg2-3-aborted-and-tg2-4-retain),
   [timing gate](benchmarks/TIMING_GATE_V2.md), [memory gate](benchmarks/MEMORY_GATE_V2.md).
 
@@ -643,9 +646,12 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   isolated and converge to the requested precision and iteration budget;
   never preserve a stale cap across a zoom-containing interaction batch.
   CPU low-resolution wide preview is already retained (see completed work).
-  Remaining scope: low-iteration/GPU preview policies and untested platforms/
-  sessions. New policies need separate declared correctness, timing and memory
-  decisions; prior campaign results do not transfer automatically.
+  The default byte-budget policy passed QB2 on the measured Apple Silicon matrix
+  (see completed work). Remaining scope: non-default preview extent/quality,
+  sustained/deep-zoom behavior under the 256 MiB/continued-work policy,
+  low-iteration/GPU preview policies and untested platforms/sessions. New policies
+  need separate declared correctness, timing and memory decisions; prior campaign
+  results do not transfer automatically.
 - [ ] Give tiled high-resolution export, the journey-video animation batches
   above and optional multi-device/distributed rendering their own amortization and correctness
   gates after the stable interactive path. Include tile seams, storage/encoding,
