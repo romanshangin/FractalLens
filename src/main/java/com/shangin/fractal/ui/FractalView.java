@@ -210,6 +210,7 @@ public class FractalView extends StackPane {
                 fractalSurface.setVisible(true);
             }
         });
+        fractalSurface.setOnWidePreviewChanged(modeIndicator::setWidePreview);
         renderController.setOnRenderProgressChanged(modeIndicator::setProgress);
         renderController.setOnZoomChanged(modeIndicator::setZoom);
         renderController.setOnIterationsChanged(modeIndicator::setIterations);

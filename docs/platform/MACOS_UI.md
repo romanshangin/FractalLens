@@ -364,8 +364,15 @@ Settings… standard/deep Base only, Base, then antialiasing, Antialiased displa
 Native/JavaFX Help share text; both scroll.
 
 Badge shows exact ready-pixel base progress (including reuse), refinement state
-and latest viewport duration without hover. Tooltip contains only `Zoom: …` and
-`Iterations: …` (effective limit), not mode descriptions/duration. Zoom uses the
+and latest viewport duration without hover. Tooltip contains `Zoom: …` and
+`Iterations: …` (effective limit). When a preview is available, it also shows
+`Preview render: …` and `Preview step: … px (requested … px)`. Preview timing
+is worker elapsed time for the latest published request, including reuse and
+coloring, excluding queue/idle time and UI upload. Partial coverage is labelled
+`(partial)`. A recolor/reuse request reports its own duration, not an accumulated
+original calculation time. Clearing the preview removes these details. A step coarsened by the storage
+policy is explicitly labelled `limited by preview budget`. The duration continues
+across work quanta within the same request. Zoom uses the
 Go to Coordinates text (12 significant digits). Iterations below one million are
 integers; larger limits use three significant digits in powers of ten, with an
 approximation mark if rounded. Cancel/failure is never a completed duration; render/recolor
@@ -445,8 +452,13 @@ leaving deep zoom does not clear its mode. PNG export keeps independent adaptive
 
 ### Wide navigation preview
 
-The wide preview is **enabled by default** since campaign TG2-4 passed the
-declared timing v2, memory v2, availability, thermal and exact-control gates.
+The wide preview is **enabled by default**. Its former sample/time-capped
+implementation passed campaign TG2-4's declared timing v2, memory v2,
+availability, thermal and exact-control gates. The byte-budget/continued-work
+policy below passed the declared gates in
+[QB2](../../benchmarks/WIDE_PREVIEW_VALIDATION.md#byte-budget-comparison-qb2-with-sleep-inhibition-2026-11-0910)
+at default settings on the tested Apple Silicon matrix, with active-desktop and
+sleep-inhibitor cleanup checks. QB1 remains inconclusive and environment-limited.
 Earlier campaigns rejected it or were inconclusive. The preview is a separate
 coarse CPU raster that fills uncovered areas beneath the existing pan/zoom
 images. It contains actual fractal samples, without AA, and is allowed
@@ -454,9 +466,9 @@ in all three display modes, including Antialiased display. It never covers an
 opaque exact/AA pixel and never contributes samples, validity, progress or pixels
 to export. Areas outside the available reserve still show the palette background.
 
-`WidePreviewSettings` owns the validated extent, physical-pixel step and resource
-limits. The initial request is twice the screen width and height at step eight;
-the sample budget can raise that step on large/HiDPI targets. The controller's
+`WidePreviewSettings` owns the extent, target physical-pixel step and resource
+policy. The initial request is twice the screen width and height at step eight;
+the preview storage byte budget can raise that step on large/HiDPI targets. The controller's
 `setWidePreviewSettings(WidePreviewSettings.CANDIDATE)` enables the candidate;
 passing `DISABLED` disables it. Changes cancel old work/publication and replace the reserve
 without interrupting the exact frame.
@@ -476,16 +488,33 @@ and [the calibrated memory-gate follow-up](../../benchmarks/MEMORY_GATE_V2.md).
 
 Navigation also offers **Preview area** (1.5×, 2×, 3× or 4× window width and
 height; default 2×) and **Preview quality** (16, 8, 4 or 2 physical pixels per
-sample; default 8). Smaller steps request finer previews. The existing 262,144
-sample cap and 2-second work budget remain in force, so large windows/areas may
-use a coarser grid or remain partially calculated. Changing either choice cancels
-old preview work and clears its pixels without restarting the exact render.
+sample; default 8). Smaller steps request finer previews. The application now
+plans against a **256 MiB estimate of preview frame/display storage**, rather than
+the former fixed 262,144-sample default. The estimate includes two CPU frames
+(samples and validity), ten ARGB raster allowances for publication/upload/image
+transitions, deep-coordinate axis storage, tile bookkeeping and 4 MiB fixed
+headroom. Orbit-trap planes increase the estimate. This is a conservative planning
+model, not a measured heap or process RSS cap: garbage awaiting collection,
+backend orbit/transient allocations, JVM/native caches and exact/AA frames can
+increase process memory beyond it. Custom programmatic policies retain their
+explicit `sampleLimit` ceiling; the application ceiling is 16,777,216 samples,
+above what the byte budget permits.
+
+The requested step is used whenever its grid fits. If it does not fit, the grid
+is coarsened and the badge tooltip says `limited by preview budget`, with both
+requested and effective steps. Multiple choices may still coincide at the memory
+limit. The preview lies under the exact frame, so quality differences appear in
+newly exposed areas. Changing either choice cancels old preview work and clears
+its pixels without restarting the exact render.
 Size and quality remain editable and are retained while preview is off.
 Apply saves `widePreviewExtent` and `widePreviewPixelStep` with the switch;
 old files use the current size/quality defaults. Invalid values fall back
 independently. Reset to Defaults resets all five drafts; Cancel discards them.
-Historical performance acceptance applies to the default configuration; the
-additional choices have not been promoted through the benchmark gates.
+Historical TG2-4 performance acceptance applies to the former capped
+implementation. The larger byte-budget policy and continued idle calculation
+passed the full declared gates in QB2 at default extent 2x and requested step
+8 px on the measured Apple Silicon matrix. Other quality/extent choices,
+sustained deep-zoom behavior and other platforms remain outside that acceptance.
 
 Preparation runs only after the visible frame and its AA finish. Navigation
 cancels it without blocking FX; compatible finished coarse samples survive for
@@ -493,8 +522,15 @@ the next idle calculation. During pan/zoom, the previous reserve remains an
 approximation until replaced, including when adaptive iterations change with
 zoom. Explicit iteration-policy, formula/Julia parameter, palette/trap or preview
 configuration changes remove incompatible reserve pixels. The reserve uses the
-visible frame's iteration limit, bounded only by its wall-time budget; cells it
-has not reached stay transparent. An earlier fixed 4096-iteration cap showed
+visible frame's iteration limit. The two-second work setting is now a
+cooperative quantum, not a total deadline: the same backend and frame continue
+while the visible renderer remains idle. Each quantum allows at least one new
+region, even if a slow region/reference exceeds two seconds, to avoid starvation.
+Cancellation polling reads a per-quantum progress flag set by completed-region
+callbacks; it does not repeatedly count the ready mask after the deadline.
+Navigation/close still cancels regardless of progress; registered workers drain
+before reuse. A backend that returns without progress fails once instead of
+spinning. Cells it has not reached stay transparent. An earlier fixed 4096-iteration cap showed
 slowly escaping deep-zoom samples as black interior where the exact frame is
 colored. Precise visible rendering and export are unchanged.
 

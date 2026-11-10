@@ -208,6 +208,45 @@ Match validation to risk. Use the checked-in pinned Maven Wrapper: `./mvnw` on
 macOS/Linux, `mvnw.cmd` or `.\mvnw.cmd` on Windows. Commands below use POSIX form;
 system `mvn` is not recorded validation.
 
+### Mandatory sleep inhibition for long tests
+
+All long-running tests (multi-minute suites, sustained checks and runs of unknown
+or extended duration), especially performance/benchmark campaigns, MUST run with
+temporary OS-level sleep inhibition on the machine actually executing them.
+Keep both the system and display awake throughout the entire test/campaign,
+including warmups, pauses between processes and analysis that belongs to the run.
+Do not rely on a system-sleep-only assertion for graphical testing.
+
+- **macOS:** wrap the complete command in `caffeinate -di <command> [arguments...]`.
+  For a multi-command campaign, wrap the foreground controller script; it must
+  wait for all test children. Bare `caffeinate -i` does not protect the display.
+- **Windows:** use an owned, temporary power request or
+  [SetThreadExecutionState](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate)
+  with `ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED` on a thread
+  that remains alive for the run. Check acquisition success; release the owned
+  request or restore that thread's previous execution state in `finally`.
+- **Linux:** use an available session/OS inhibitor, for example
+  `systemd-inhibit --what=idle:sleep --mode=block <command> [arguments...]`.
+  For graphical runs also acquire the desktop session's display/screensaver
+  inhibitor: [logind inhibition](https://github.com/systemd/systemd/blob/main/docs/INHIBITOR_LOCKS.md)
+  alone does not cover every desktop's screen blanking/locking policy.
+
+Before starting, verify that the protection was acquired and, for graphical
+runs, that the desktop is unlocked and active. Monitor these conditions during
+long campaigns. Sleep inhibition does not prove that the session stays unlocked.
+If protection is unavailable, acquisition fails, or the graphical session locks
+or loses its active display, stop affected measurements and report an environment
+blocker; preserve the evidence and do not promote it as valid timing acceptance.
+Do not bypass a lock or weaken authentication/security policies.
+
+The protection MUST end after success, failure, cancellation, timeout or runner
+interruption. Use command-scoped lifetime and `finally`/signal cleanup as needed;
+drain or terminate owned test children before releasing it. Verify afterwards
+that this run's helper/assertions are gone and the prior power-management state
+is restored. Never change persistent sleep/display settings, leave a detached
+keep-awake process, or kill another application's/user's inhibitors. Record the
+protection method and cleanup outcome in the validation evidence.
+
 ### Targeted tests
 
 Run nearest tests first during development:

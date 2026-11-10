@@ -46,9 +46,11 @@ class WidePreviewTest {
             var errors = new LinkedBlockingQueue<Throwable>();
             service.request(visible, new ColoringSettings(PalettePreset.ICE), WidePreviewSettings.CANDIDATE, publish, errors::add);
             var first = snapshots.poll(5, TimeUnit.SECONDS); assertNotNull(first);
+            assertTrue(first.elapsedNanos() > 0);
             service.request(visible, new ColoringSettings(PalettePreset.ICE, ColoringSettings.DEFAULT_COLOR_SCALE, 0.25),
                     WidePreviewSettings.CANDIDATE, publish, errors::add);
             var second = snapshots.poll(5, TimeUnit.SECONDS); assertNotNull(second);
+            assertTrue(second.elapsedNanos() > 0, "Recolor-only requests also report their elapsed work");
             var field = WidePreviewService.class.getDeclaredField("coordinator"); field.setAccessible(true);
             ((ExecutorService) field.get(service)).submit(() -> {}).get(5, TimeUnit.SECONDS);
             assertTrue(errors.isEmpty());
@@ -72,7 +74,7 @@ class WidePreviewTest {
         for (double extent : new double[]{0, 0.9, 4.1, Double.NaN, Double.POSITIVE_INFINITY})
             assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(extent, 8, 100, 100));
         assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 0, 100, 100));
-        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 262_145, 100));
+        assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, WidePreviewSettings.MAX_SAMPLES + 1, 100));
         assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 100, 2001));
         assertThrows(IllegalArgumentException.class, () -> new WidePreviewSettings(2, 8, 100, 0));
     }
@@ -109,6 +111,38 @@ class WidePreviewTest {
                 assertEquals(visible.viewport().center(), plan.job().viewport().center());
             }
         }
+    }
+
+    @Test void retinaQualityUsesTheRequestedStepUntilTheByteBudgetBinds() {
+        var visible = job(new Viewport(-0.75, 0, 2.4), 3024, 1964);
+        long previousSamples = 0;
+        for (int step : new int[] {16, 8, 4, 2}) {
+            var plan = WidePreviewPlan.create(visible,
+                    new WidePreviewSettings(true, 2, step, WidePreviewSettings.MAX_SAMPLES, 2_000), null);
+            if (step >= 4) assertEquals(step, plan.physicalStep());
+            else assertTrue(plan.physicalStep() < 4, "Very high quality must improve on high at this Retina size");
+            assertTrue(plan.estimatedBytes() <= plan.settings().memoryBudgetBytes());
+            long samples = (long) plan.job().width() * plan.job().height();
+            assertTrue(samples > previousSamples);
+            previousSamples = samples;
+        }
+    }
+
+    @Test void memoryBudgetIncludesTrapStorageAndExtremeAxisShapes() {
+        var settings = new WidePreviewSettings(true, 4, 2, WidePreviewSettings.MAX_SAMPLES, 2_000);
+        for (int[] size : new int[][] {{3024, 1964}, {100_000, 2}, {2, 100_000},
+                {Integer.MAX_VALUE, Integer.MAX_VALUE}, {Integer.MAX_VALUE, 2}}) {
+            var visible = job(new Viewport(-0.75, 0, 2.4), size[0], size[1]);
+            var plain = WidePreviewPlan.create(visible, settings, null);
+            assertTrue(plain.estimatedBytes() <= settings.memoryBudgetBytes());
+            var trapped = new RenderJob(FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.UNIT_CIRCLE),
+                    visible.viewport(), size[0], size[1], 300);
+            var trapPlan = WidePreviewPlan.create(trapped, settings, null);
+            assertTrue(trapPlan.estimatedBytes() <= settings.memoryBudgetBytes());
+            assertTrue(trapPlan.physicalStep() >= plain.physicalStep());
+        }
+        assertTrue(WidePreviewMemory.estimate(1000, 1000, true)
+                > WidePreviewMemory.estimate(1000, 1000, false));
     }
 
     @Test void preservesDeepDecimalCoordinatesAndSelectsCorrectFormulaBackend() {
@@ -159,6 +193,7 @@ class WidePreviewTest {
                     snapshot -> { if (snapshot.readySamples() == plan.job().width() * plan.job().height()) ready.complete(snapshot); },
                     ready::completeExceptionally);
             var snapshot = ready.get(10, TimeUnit.SECONDS);
+            assertTrue(snapshot.elapsedNanos() > 0);
             var control = RenderFrame.create(plan.job());
             try (var direct = new DirectDoubleRenderBackend(new ParallelFractalCalculator(1))) {
                 direct.render(control, () -> false, ignored -> {}, null);
@@ -203,26 +238,118 @@ class WidePreviewTest {
         }
     }
 
-    @Test void workBudgetStopsPartialCalculationAndBoundsQueuedPublications() throws Exception {
+    @Test void workSlicesContinueToCompletionAndKeepOneBackendAndOneQueuedCallback() throws Exception {
         var callbacks = new LinkedBlockingQueue<Runnable>();
         var drained = new CountDownLatch(1);
-        var limited = new WidePreviewSettings(2, 8, 1000, 10);
+        var factories = new AtomicInteger();
+        var slices = new AtomicInteger();
+        var errors = new LinkedBlockingQueue<Throwable>();
+        var limited = new WidePreviewSettings(2, 8, 1000, 1);
         var visible = job(new Viewport(-0.75, 0, 2.4), 80, 60);
-        try (var service = new WidePreviewService(callbacks::add, () -> new RenderBackend() {
-            public RenderFrame render(RenderFrame frame, BooleanSupplier stop, Consumer<RenderRegion> region, Consumer<TileTimingStats> timings) {
-                assertEquals(300, frame.job().maxIterations(), "The reserve uses the visible iteration limit");
-                var row = new RenderRegion(0, 0, frame.job().width(), 1);
-                frame.validity().markReady(row); region.accept(row);
-                while (!stop.getAsBoolean()) Thread.onSpinWait();
+        var result = new CompletableFuture<WidePreviewSnapshot>();
+        try (var service = new WidePreviewService(callbacks::add, () -> {
+            factories.incrementAndGet();
+            return new RenderBackend() {
+                public RenderFrame render(RenderFrame frame, BooleanSupplier stop, Consumer<RenderRegion> region,
+                                          Consumer<TileTimingStats> timings) {
+                    int rowIndex = slices.getAndIncrement();
+                    long waitUntil = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(2);
+                    while (System.nanoTime() < waitUntil) Thread.onSpinWait();
+                    assertFalse(stop.getAsBoolean(), "A time slice must allow at least one new region");
+                    var row = new RenderRegion(0, rowIndex, frame.job().width(), 1);
+                    frame.validity().markReady(row); region.accept(row);
+                    assertTrue(stop.getAsBoolean(), "After progress the elapsed quantum can yield");
+                    return frame;
+                }
+                public void close() { drained.countDown(); }
+            };
+        })) {
+            service.request(visible, new ColoringSettings(PalettePreset.ICE), limited, result::complete, errors::add);
+            assertTrue(drained.await(5, TimeUnit.SECONDS));
+            assertTrue(errors.isEmpty(), errors.toString());
+            assertEquals(1, factories.get(), "Continuation must retain this request's backend/cache");
+            assertTrue(slices.get() > 1);
+            assertEquals(1, callbacks.size(), "Partial and final rasters share one queued callback");
+            callbacks.take().run();
+            var snapshot = result.get(5, TimeUnit.SECONDS);
+            assertEquals(snapshot.plan().job().width() * snapshot.plan().job().height(), snapshot.readySamples());
+            assertTrue(snapshot.elapsedNanos() > TimeUnit.MILLISECONDS.toNanos(limited.workMillis()));
+            service.close();
+        }
+    }
+
+    @Test void slowContinuationPollsCancellationWithoutLockingALargeReadyMask() throws Exception {
+        var slices = new AtomicInteger();
+        var drained = new CountDownLatch(1);
+        var complete = new CompletableFuture<WidePreviewSnapshot>();
+        var settings = new WidePreviewSettings(2, 8, WidePreviewSettings.MAX_SAMPLES, 1);
+        var visible = job(new Viewport("-0.743643887037151", "0.13182590420533", "1e-80"), 8065, 5237);
+        try (var polling = Executors.newSingleThreadExecutor();
+             var service = new WidePreviewService(Runnable::run, () -> new RenderBackend() {
+                 public RenderFrame render(RenderFrame frame, BooleanSupplier stop, Consumer<RenderRegion> region,
+                                           Consumer<TileTimingStats> timing) {
+                     try {
+                         assertEquals(2017, frame.job().width());
+                         assertEquals(1310, frame.job().height());
+                         if (slices.incrementAndGet() == 1) {
+                             var prefix = new RenderRegion(0, 0, frame.job().width(), frame.job().height() - 1);
+                             frame.validity().markReady(prefix);
+                             region.accept(prefix);
+                         } else {
+                             assertEquals(2, slices.get());
+                             // The slow last row has not published progress in this new interval.
+                             long waitUntil = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(2);
+                             while (System.nanoTime() < waitUntil) Thread.onSpinWait();
+                             synchronized (frame.validity()) {
+                                 // readyPixelCount is synchronized: the predicate must work even
+                                 // while another thread holds the mask monitor after the deadline.
+                                 polling.submit(() -> {
+                                     for (int poll = 0; poll < 100_000; poll++)
+                                         assertFalse(stop.getAsBoolean(), "Allow the first new region of this interval");
+                                 }).get(5, TimeUnit.SECONDS);
+                             }
+                             var last = new RenderRegion(0, frame.job().height() - 1, frame.job().width(), 1);
+                             frame.validity().markReady(last);
+                             region.accept(last);
+                             synchronized (frame.validity()) {
+                                 polling.submit(() -> {
+                                     for (int poll = 0; poll < 100_000; poll++) assertTrue(stop.getAsBoolean());
+                                 }).get(5, TimeUnit.SECONDS);
+                             }
+                         }
+                         return frame;
+                     } catch (Throwable error) {
+                         complete.completeExceptionally(error);
+                         throw new IllegalStateException("Preview continuation regression failed", error);
+                     }
+                 }
+                 public void close() { drained.countDown(); }
+             })) {
+            service.request(visible, new ColoringSettings(PalettePreset.ICE), settings, snapshot -> {
+                if (snapshot.readySamples() == snapshot.plan().job().width() * snapshot.plan().job().height())
+                    complete.complete(snapshot);
+            }, complete::completeExceptionally);
+            assertEquals(2017 * 1310, complete.get(15, TimeUnit.SECONDS).readySamples());
+            assertTrue(drained.await(5, TimeUnit.SECONDS));
+            assertEquals(2, slices.get(), "The progress flag must reset between intervals");
+        }
+    }
+
+    @Test void backendWithoutProgressFailsOnceInsteadOfSpinning() throws Exception {
+        var failed = new CompletableFuture<Throwable>();
+        var calls = new AtomicInteger();
+        try (var service = new WidePreviewService(Runnable::run, () -> new RenderBackend() {
+            public RenderFrame render(RenderFrame frame, BooleanSupplier stop, Consumer<RenderRegion> region,
+                                      Consumer<TileTimingStats> timing) {
+                calls.incrementAndGet();
                 return frame;
             }
-            public void close() { drained.countDown(); }
+            public void close() {}
         })) {
-            service.request(visible, new ColoringSettings(PalettePreset.ICE), limited, ignored -> {}, error -> fail(error));
-            assertTrue(drained.await(3, TimeUnit.SECONDS), "The wall budget must stop calculation even without navigation");
-            assertEquals(1, callbacks.size(), "Partial and final rasters share one queued callback");
-            service.close();
-            callbacks.take().run();
+            service.request(job(new Viewport(-0.75, 0, 2.4), 80, 60), new ColoringSettings(PalettePreset.ICE),
+                    WidePreviewSettings.CANDIDATE, ignored -> fail("An empty frame cannot publish"), failed::complete);
+            assertInstanceOf(IllegalStateException.class, failed.get(5, TimeUnit.SECONDS));
+            assertEquals(1, calls.get());
         }
     }
 
@@ -274,6 +401,7 @@ class WidePreviewTest {
                     assertTrue(release.await(5, TimeUnit.SECONDS));
                 } else {
                     assertEquals(frame.job().width(), frame.validity().readyPixelCount());
+                    frame.validity().markReady(new RenderRegion(0, 0, frame.job().width(), frame.job().height()));
                     successor.countDown();
                 }
                 return frame;

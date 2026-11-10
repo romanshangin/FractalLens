@@ -42,11 +42,11 @@ class PreferencesStoreTest {
     void sizeAndQualitySurviveRestartAndBooleanChanges() throws Exception {
         Path file = temporaryDirectory.resolve(PreferencesStore.FILE_NAME);
         var store = new PreferencesStore(file);
-        var settings = new WidePreviewSettings(false, 3.0, 4, 262_144, 2_000);
+        var settings = new WidePreviewSettings(false, 3.0, 4, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000);
         store.saveWidePreview(settings);
         assertEquals(settings, new PreferencesStore(file).widePreviewSettings());
         store.saveWidePreview(true);
-        assertEquals(new WidePreviewSettings(true, 3.0, 4, 262_144, 2_000), store.widePreviewSettings());
+        assertEquals(new WidePreviewSettings(true, 3.0, 4, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000), store.widePreviewSettings());
     }
 
     @Test
@@ -58,9 +58,9 @@ class PreferencesStoreTest {
         assertEquals(WidePreviewSettings.DISABLED, store.widePreviewSettings());
         for (String invalid : new String[] {"NaN", "Infinity", "-1", "5", "text", ""}) {
             Files.writeString(file, "widePreview=off\nwidePreviewExtent=" + invalid + "\nwidePreviewPixelStep=4\n");
-            assertEquals(new WidePreviewSettings(false, 2.0, 4, 262_144, 2_000), store.widePreviewSettings());
+            assertEquals(new WidePreviewSettings(false, 2.0, 4, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000), store.widePreviewSettings());
             Files.writeString(file, "widePreview=off\nwidePreviewExtent=3.0\nwidePreviewPixelStep=" + invalid + "\n");
-            assertEquals(new WidePreviewSettings(false, 3.0, 8, 262_144, 2_000), store.widePreviewSettings());
+            assertEquals(new WidePreviewSettings(false, 3.0, 8, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000), store.widePreviewSettings());
         }
     }
 

@@ -8,6 +8,10 @@ import java.util.Objects;
 
 /** A separate coarse grid, never used to satisfy a visible-frame request. */
 public record WidePreviewPlan(RenderJob job, WidePreviewSettings settings, long physicalStep) {
+    public long estimatedBytes() {
+        return WidePreviewMemory.estimate(job.width(), job.height(), RenderFrame.storesOrbitTrapDistances(job.formula()));
+    }
+
     public static WidePreviewPlan create(RenderJob visible, WidePreviewSettings settings,
                                          RenderFrame previous) {
         Objects.requireNonNull(visible);
@@ -18,8 +22,11 @@ public record WidePreviewPlan(RenderJob job, WidePreviewSettings settings, long 
         do {
             columns = Math.max(2, (long) Math.ceil((visible.width() - 1.0) * settings.extent() / step) + 1);
             rows = Math.max(2, (long) Math.ceil((visible.height() - 1.0) * settings.extent() / step) + 1);
-            if ((double) columns * rows <= settings.sampleLimit()) break;
-            double factor = Math.max(1.01, Math.sqrt((double) columns * rows / settings.sampleLimit()));
+            long bytes = WidePreviewMemory.estimate(columns, rows, RenderFrame.storesOrbitTrapDistances(visible.formula()));
+            double excess = Math.max((double) columns * rows / settings.sampleLimit(),
+                    (double) bytes / settings.memoryBudgetBytes());
+            if (excess <= 1) break;
+            double factor = Math.max(1.01, Math.sqrt(excess));
             step = Math.max(step + 1, (long) Math.ceil(step * factor));
         } while (true);
         int width = Math.toIntExact(columns);

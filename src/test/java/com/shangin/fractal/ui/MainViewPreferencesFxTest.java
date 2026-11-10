@@ -83,14 +83,14 @@ class MainViewPreferencesFxTest {
     void sizeAndQualityApplyWithoutChangingTheSceneAndRestoreAfterRestart() throws Exception {
         var session = new LastSessionStore(temporaryDirectory.resolve("last-session.json"));
         var preferences = PreferencesStore.besides(session);
-        var selected = new WidePreviewSettings(false, 3.0, 4, 262_144, 2_000);
+        var selected = new WidePreviewSettings(false, 3.0, 4, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000);
         Stage stage = fx(Stage::new);
         MainView main = fx(() -> new MainView(stage, session));
         try {
             fx(() -> {
                 var view = fractalView(main);
                 var scene = view.sceneSnapshot();
-                var resized = new WidePreviewSettings(view.widePreviewEnabled(), 4.0, 16, 262_144, 2_000);
+                var resized = new WidePreviewSettings(view.widePreviewEnabled(), 4.0, 16, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000);
                 applySettings(main, new SettingsWindow.Values(scene.antialiasing(), resized));
                 assertEquals(resized, view.widePreviewSettings());
                 assertEquals(resized, preferences.widePreviewSettings(), "Size and quality alone are saved");
