@@ -5,7 +5,7 @@ import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.export.AdaptivePngExportService;
 
 import com.shangin.fractal.coloring.ColorStop;
-import com.shangin.fractal.scene.IterationSettings;
+import javafx.scene.control.Control;
 import com.shangin.fractal.scene.JuliaParameters;
 import javafx.event.ActionEvent;
 import javafx.scene.Node;
@@ -246,61 +246,6 @@ final class FractalDialogs {
         return juliaParametersDialog(owner, current).showAndWait();
     }
 
-    static Optional<IterationSettings> iterationSettings(Window owner, IterationSettings current) {
-        return iterationSettingsDialog(owner, current).showAndWait();
-    }
-
-    static Dialog<IterationSettings> iterationSettingsDialog(Window owner, IterationSettings current) {
-        Dialog<IterationSettings> dialog = new Dialog<>();
-        dialog.setTitle("Iteration Settings");
-        TextField base = new TextField(Integer.toString(current.baseIterations()));
-        TextField zoom = new TextField(Integer.toString(current.iterationsPerZoomLevel()));
-        base.setId("iteration-base");
-        zoom.setId("iteration-zoom");
-        base.setPromptText(Integer.toString(IterationSettings.DEFAULT_BASE_ITERATIONS));
-        zoom.setPromptText(Integer.toString(IterationSettings.DEFAULT_ITERATIONS_PER_ZOOM_LEVEL));
-        GridPane fields = new GridPane(12, 12);
-        fields.addRow(0, label("Base iterations", base), base);
-        fields.addRow(1, label("Additional per zoom level", zoom), zoom);
-        GridPane.setHgrow(base, Priority.ALWAYS);
-        GridPane.setHgrow(zoom, Priority.ALWAYS);
-        Label hint = new Label("Set the base render budget and how much it grows as you zoom in.");
-        hint.setWrapText(true);
-        hint.getStyleClass().add("dialog-hint");
-        Label error = errorLabel();
-        VBox content = new VBox(14, hint, fields, error);
-        content.getStyleClass().add("dialog-body");
-        dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().setPrefWidth(480);
-        ButtonType reset = new ButtonType("Reset to Defaults", ButtonData.OTHER);
-        ButtonType apply = new ButtonType("Apply", ButtonData.OK_DONE);
-        DialogAppearance.install(dialog, owner, () -> base);
-        Button confirm = DialogAppearance.buttons(dialog, apply, reset, ButtonType.CANCEL);
-        Button resetButton = (Button) dialog.getDialogPane().lookupButton(reset);
-        resetButton.addEventFilter(ActionEvent.ACTION, event -> {
-            event.consume();
-            base.setText(Integer.toString(IterationSettings.DEFAULT_BASE_ITERATIONS));
-            zoom.setText(Integer.toString(IterationSettings.DEFAULT_ITERATIONS_PER_ZOOM_LEVEL));
-            validateIterationSettings(dialog, base, zoom, error, false);
-            base.requestFocus();
-            base.selectAll();
-        });
-        confirm.addEventFilter(ActionEvent.ACTION, event -> {
-            if (!validateIterationSettings(dialog, base, zoom, error, true)) event.consume();
-        });
-        base.setOnAction(event -> { confirm.fire(); event.consume(); });
-        zoom.setOnAction(event -> { confirm.fire(); event.consume(); });
-        for (TextField field : List.of(base, zoom)) {
-            field.textProperty().addListener(ignored -> {
-                if (error.isVisible()) validateIterationSettings(dialog, base, zoom, error, false);
-            });
-        }
-        dialog.setResultConverter(button -> button == apply
-                ? new IterationSettings(Integer.parseInt(base.getText().trim()),
-                        Integer.parseInt(zoom.getText().trim())) : null);
-        return dialog;
-    }
-
     static Optional<SettingsWindow.Values> settings(Window owner, SettingsWindow.Values current) {
         return settingsDialog(owner, current).showAndWait();
     }
@@ -313,9 +258,11 @@ final class FractalDialogs {
         hint.getStyleClass().add("dialog-hint");
         VBox content = new VBox(10, hint);
         List<ComboBox<String>> choices = new ArrayList<>();
+        List<TextField> texts = new ArrayList<>();
+        List<Control> controls = new ArrayList<>();
         GridPane section = null;
         String sectionTitle = null;
-        for (SettingsWindow.ChoiceField field : SettingsWindow.fields(current)) {
+        for (SettingsWindow.Field field : SettingsWindow.fields(current)) {
             if (!field.section().equals(sectionTitle)) {
                 sectionTitle = field.section();
                 section = new GridPane(12, 4);
@@ -324,30 +271,44 @@ final class FractalDialogs {
                 VBox.setMargin(title, new javafx.geometry.Insets(8, 0, 0, 0));
                 content.getChildren().addAll(title, section);
             }
-            ComboBox<String> choice = new ComboBox<>(FXCollections.observableArrayList(field.choices()));
-            choice.setId(field.id());
-            choice.getSelectionModel().select(field.selected());
-            choice.setMaxWidth(Double.MAX_VALUE);
-            GridPane.setHgrow(choice, Priority.ALWAYS);
+            Control control = switch (field) {
+                case SettingsWindow.ChoiceField choiceField -> {
+                    ComboBox<String> choice = new ComboBox<>(FXCollections.observableArrayList(choiceField.choices()));
+                    choice.getSelectionModel().select(choiceField.selected());
+                    choices.add(choice);
+                    yield choice;
+                }
+                case SettingsWindow.TextField textField -> {
+                    TextField text = new TextField(textField.text());
+                    text.setPromptText(textField.defaultText());
+                    texts.add(text);
+                    yield text;
+                }
+            };
+            control.setId(field.id());
+            control.setMaxWidth(Double.MAX_VALUE);
+            GridPane.setHgrow(control, Priority.ALWAYS);
             Label fieldHint = new Label(field.hint());
             fieldHint.setWrapText(true);
             fieldHint.getStyleClass().add("dialog-hint");
-            Label fieldLabel = label(field.label(), choice);
+            Label fieldLabel = label(field.label(), control);
             // The wrapping hint shares the grid; keep the label column from collapsing.
             fieldLabel.setMinWidth(Region.USE_PREF_SIZE);
             int row = section.getRowCount();
-            section.addRow(row, fieldLabel, choice);
+            section.addRow(row, fieldLabel, control);
             section.add(fieldHint, 1, row + 1);
             GridPane.setMargin(fieldHint, new javafx.geometry.Insets(0, 0, 8, 0));
-            choices.add(choice);
+            controls.add(control);
         }
+        Label error = errorLabel();
+        content.getChildren().add(error);
         content.getStyleClass().add("dialog-body");
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().setPrefWidth(520);
         ButtonType reset = new ButtonType(SettingsWindow.RESET_TITLE, ButtonData.OTHER);
         ButtonType apply = new ButtonType("Apply", ButtonData.OK_DONE);
-        DialogAppearance.install(dialog, owner, choices::getFirst);
-        DialogAppearance.buttons(dialog, apply, reset, ButtonType.CANCEL);
+        DialogAppearance.install(dialog, owner, controls::getFirst);
+        Button confirm = DialogAppearance.buttons(dialog, apply, reset, ButtonType.CANCEL);
         dialog.getDialogPane().lookupButton(reset).addEventFilter(ActionEvent.ACTION, event -> {
             // Reset only changes the draft; Apply still decides whether the scene changes.
             event.consume();
@@ -355,13 +316,47 @@ final class FractalDialogs {
             for (int index = 0; index < choices.size(); index++) {
                 choices.get(index).getSelectionModel().select(defaults[index]);
             }
-            choices.getFirst().requestFocus();
+            List<String> defaultTexts = SettingsWindow.defaultTexts();
+            for (int index = 0; index < texts.size(); index++) {
+                texts.get(index).setText(defaultTexts.get(index));
+            }
+            validateSettingsTexts(dialog, texts, error, false);
+            controls.getFirst().requestFocus();
+            if (controls.getFirst() instanceof TextField first) first.selectAll();
         });
+        confirm.addEventFilter(ActionEvent.ACTION, event -> {
+            if (!validateSettingsTexts(dialog, texts, error, true)) event.consume();
+        });
+        for (TextField text : texts) {
+            text.setOnAction(event -> { confirm.fire(); event.consume(); });
+            text.textProperty().addListener(ignored -> {
+                if (error.isVisible()) validateSettingsTexts(dialog, texts, error, false);
+            });
+        }
         dialog.setResultConverter(button -> button == apply
                 ? SettingsWindow.selection(choices.stream()
-                        .mapToInt(choice -> choice.getSelectionModel().getSelectedIndex()).toArray())
+                        .mapToInt(choice -> choice.getSelectionModel().getSelectedIndex()).toArray(),
+                        texts.stream().map(TextField::getText).toList())
                 : null);
         return dialog;
+    }
+
+    private static boolean validateSettingsTexts(Dialog<?> dialog, List<TextField> texts, Label error,
+                                                 boolean focus) {
+        int invalid = SettingsWindow.invalidText(texts.stream().map(TextField::getText).toList());
+        for (int index = 0; index < texts.size(); index++) {
+            boolean marked = index + 1 == invalid;
+            texts.get(index).pseudoClassStateChanged(PseudoClass.getPseudoClass("invalid"), marked);
+            texts.get(index).setAccessibleHelp(marked ? SettingsWindow.textHelp(index + 1) : null);
+        }
+        if (invalid == 0) {
+            clearError(dialog, error);
+            return true;
+        }
+        showError(dialog, error, SettingsWindow.ITERATION_ERROR);
+        TextField firstInvalid = texts.get(invalid - 1);
+        if (focus) { firstInvalid.requestFocus(); firstInvalid.selectAll(); }
+        return false;
     }
 
     static Dialog<JuliaParameters> juliaParametersDialog(Window owner, JuliaParameters current) {
@@ -474,7 +469,7 @@ final class FractalDialogs {
                 + "Use View to zoom, reset the view, enter coordinates and zoom, or go full screen.\n"
                 + "Choose a formula in Fractal, then use Go to for interesting places in that fractal.\n"
                 + "Choose a palette in Color.\n"
-                + "Edit iteration settings in Render. For Julia, edit both constant components there; Reset to Defaults restores -0.8 and 0.156 before Apply.\n"
+                + "For Julia, edit both constant components in Render; Reset to Defaults restores -0.8 and 0.156 before Apply.\n"
                 + "Animate Palette is available when Histogram Coloring and Orbit Trap are off.\n\n"
                 + "Use File → Export PNG… to save the rendered image.\n\n"
                 + "Render status\n\n"
@@ -491,15 +486,17 @@ final class FractalDialogs {
                 + "Failed: the render stopped with an error.\n"
                 + "During PNG export the badge also shows the export progress and its result.\n\n"
                 + "Render Settings\n\n"
-                + "Use File → Settings… to choose how frames are presented, "
-                + "separately for standard and deep zoom:\n"
+                + "Use Settings… (FractalLens → Settings… on macOS, File → Settings… elsewhere) "
+                + "to set the iteration limit: base iterations at the initial view, "
+                + "plus additional iterations each time the zoom doubles.\n"
+                + "There you also choose how frames are presented, separately for standard and deep zoom:\n"
                 + "Base only: only the base render is calculated; antialiasing is off.\n"
                 + "Base, then antialiasing: the base render is shown first, "
                 + "then an antialiasing pass smooths it.\n"
                 + "Antialiased display: only finished antialiased tiles are displayed.\n"
                 + "Deep zoom antialiasing is precise and can take much longer than the base render.\n\n"
                 + "Navigation\n\n"
-                + "Wide preview in File → Settings… fills edges uncovered by panning or zooming out "
+                + "Wide preview in Settings… fills edges uncovered by panning or zooming out "
                 + "with a coarse preview calculated in the background beyond the window. "
                 + "It uses extra CPU time and memory, is replaced by the final image, and is never exported. "
                 + "This choice applies to the application and is not saved with scenes.";
@@ -653,30 +650,6 @@ final class FractalDialogs {
         return false;
     }
 
-    private static boolean validateIterationSettings(Dialog<?> dialog, TextField base, TextField zoom,
-                                                     Label error, boolean focus) {
-        TextField firstInvalid = null;
-        boolean invalidBase = !isPositiveInteger(base.getText());
-        boolean invalidZoom = !isNonNegativeInteger(zoom.getText());
-        for (TextField field : List.of(base, zoom)) {
-            boolean invalid = field == base ? invalidBase : invalidZoom;
-            field.pseudoClassStateChanged(PseudoClass.getPseudoClass("invalid"), invalid);
-            field.setAccessibleHelp(invalid ? iterationHelp(field == base) : null);
-            if (invalid && firstInvalid == null) firstInvalid = field;
-        }
-        if (firstInvalid == null) {
-            clearError(dialog, error);
-            return true;
-        }
-        showError(dialog, error, "Enter a positive base count and a non-negative zoom increment.");
-        if (focus) { firstInvalid.requestFocus(); firstInvalid.selectAll(); }
-        return false;
-    }
-
-    private static String iterationHelp(boolean base) {
-        return base ? "Enter a positive whole number." : "Enter zero or a positive whole number.";
-    }
-
     private static boolean isFiniteDouble(String text) {
         try {
             return Double.isFinite(Double.parseDouble(text.trim()));
@@ -703,10 +676,21 @@ final class FractalDialogs {
     private static void resizeForValidation(Dialog<?> dialog) {
         if (!dialog.isShowing()) return;
         // Establish the wrapped label's width before measuring the window.
-        dialog.getDialogPane().applyCss();
-        dialog.getDialogPane().layout();
-        dialog.getDialogPane().getScene().getWindow().sizeToScene();
+        var pane = dialog.getDialogPane();
+        pane.applyCss();
+        pane.layout();
+        // Only the height follows the message. sizeToScene() would also recompute the width
+        // from unwrapped preferred sizes, which can narrow a form of wrapping hints until its
+        // labels are ellipsized; measuring at the current width keeps every hint wrapped.
+        // The scene receives a requested window size only on a later pulse, so the window
+        // frame height is measured once, while the window and its scene still agree.
+        Window window = pane.getScene().getWindow();
+        double frame = (double) pane.getProperties().computeIfAbsent(VALIDATION_FRAME_HEIGHT,
+                key -> window.getHeight() - pane.getScene().getHeight());
+        window.setHeight(pane.prefHeight(pane.getWidth()) + frame);
     }
+
+    private static final Object VALIDATION_FRAME_HEIGHT = new Object();
 
     private static Label label(String text, Node field) {
         Label label = new Label(text);
@@ -714,19 +698,4 @@ final class FractalDialogs {
         return label;
     }
 
-    private static boolean isPositiveInteger(String text) {
-        try {
-            return Integer.parseInt(text.trim()) > 0;
-        } catch (NumberFormatException exception) {
-            return false;
-        }
-    }
-
-    private static boolean isNonNegativeInteger(String text) {
-        try {
-            return Integer.parseInt(text.trim()) >= 0;
-        } catch (NumberFormatException exception) {
-            return false;
-        }
-    }
 }

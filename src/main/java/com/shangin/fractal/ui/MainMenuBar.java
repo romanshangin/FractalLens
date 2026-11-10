@@ -69,9 +69,11 @@ final class MainMenuBar extends MenuBar {
     private boolean exporting;
     private boolean rendering = true;
     private FractalPreset currentFractal;
-    private MacIterationSheet iterationSheet;
     private MacJuliaSheet juliaSheet;
     private MacSettingsSheet settingsSheet;
+    private final MenuItem fileSettings;
+    private MacApplicationMenuCommand applicationMenuSettings;
+    private boolean closed;
     private Consumer<WidePreviewSettings> widePreviewChanged = settings -> {};
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalScene initialScene,
@@ -94,10 +96,10 @@ final class MainMenuBar extends MenuBar {
         export = command("Export PNG…", shortcut(KeyCode.E, KeyCombination.SHIFT_DOWN), onExport);
         export.setDisable(true);
         // Settings stay available while rendering; applying them restarts the render.
-        Menu file = new Menu("File", null, export, new SeparatorMenuItem(),
-                command(SettingsWindow.MENU_TITLE, shortcut(KeyCode.COMMA), this::showSettings),
-                new SeparatorMenuItem(),
-                command("Close Window", shortcut(KeyCode.W), this::requestWindowClose));
+        // On macOS they move to the application menu once it can host them.
+        fileSettings = command(SettingsWindow.MENU_TITLE, shortcut(KeyCode.COMMA), this::showSettings);
+        // No Close Window: the single main window closes with the application (Quit).
+        Menu file = new Menu("File", null, export, new SeparatorMenuItem(), fileSettings);
         if (!System.getProperty("os.name", "").startsWith("Mac")) {
             file.getItems().addAll(new SeparatorMenuItem(), command("Quit", shortcut(KeyCode.Q), this::requestWindowClose));
         }
@@ -141,9 +143,7 @@ final class MainMenuBar extends MenuBar {
                 command("Edit Palette…", shortcut(KeyCode.P, KeyCombination.SHIFT_DOWN), this::showPalette),
                 new SeparatorMenuItem(), trap, histogram, animation,
                 new SeparatorMenuItem(), command("Reset Colors to Defaults", null, this::resetColors));
-        render.getItems().setAll(
-                command("Edit Iteration Settings…", null, this::showIterations),
-                command("Edit Julia Parameters…", null, this::showJuliaParameters));
+        render.getItems().setAll(command("Edit Julia Parameters…", null, this::showJuliaParameters));
         Menu window = new Menu("Window", null,
                 command("Minimize", shortcut(KeyCode.M), () -> stage.setIconified(true)),
                 command("Zoom", null, () -> stage.setMaximized(!stage.isMaximized())));
@@ -179,6 +179,29 @@ final class MainMenuBar extends MenuBar {
         fractalView.setOnColorCyclingStopped(() -> animation.setSelected(false));
         file.setOnShowing(event -> updateAvailability());
         updateAvailability();
+        attachApplicationMenuSettings(file);
+        if (applicationMenuSettings == null && System.getProperty("os.name", "").startsWith("Mac")) {
+            // Glass installs the application menu with the first shown window; retry then.
+            stage.focusedProperty().addListener(new ChangeListener<>() {
+                @Override public void changed(javafx.beans.value.ObservableValue<? extends Boolean> observable,
+                                              Boolean oldValue, Boolean focused) {
+                    if (!focused) return;
+                    attachApplicationMenuSettings(file);
+                    if (applicationMenuSettings != null || closed) observable.removeListener(this);
+                }
+            });
+        }
+    }
+
+    /** Moves Settings… to the macOS application menu when Glass lets it host the command. */
+    private void attachApplicationMenuSettings(Menu file) {
+        if (closed || applicationMenuSettings != null) return;
+        applicationMenuSettings = MacApplicationMenuCommand.attach(SettingsWindow.MENU_TITLE, ",", stage,
+                this::showSettings);
+        if (applicationMenuSettings == null) return;
+        int index = file.getItems().indexOf(fileSettings);
+        // Remove the command with the separator that preceded it.
+        file.getItems().remove(index - 1, index + 1);
     }
 
     private void updateDestinations(FractalPreset preset) {
@@ -223,22 +246,6 @@ final class MainMenuBar extends MenuBar {
         }
     }
 
-    private void showIterations() {
-        if (parameterSheetOpen()) return;
-        if (MacIterationSheet.isAvailable()) {
-            try {
-                iterationSheet = MacIterationSheet.show(stage, fractalView.sceneSnapshot().iterations(),
-                        fractalView::setIterations);
-                return;
-            } catch (ReflectiveOperationException | LinkageError | RuntimeException error) {
-                System.getLogger(MainMenuBar.class.getName()).log(System.Logger.Level.WARNING,
-                        "Native iteration sheet unavailable; using JavaFX dialog", error);
-            }
-        }
-        FractalDialogs.iterationSettings(stage, fractalView.sceneSnapshot().iterations())
-                .ifPresent(fractalView::setIterations);
-    }
-
     /** Receives explicit wide-preview changes made in Settings, for persistence. */
     void setOnWidePreviewChanged(Consumer<WidePreviewSettings> handler) {
         widePreviewChanged = java.util.Objects.requireNonNull(handler);
@@ -246,7 +253,8 @@ final class MainMenuBar extends MenuBar {
 
     private void showSettings() {
         if (parameterSheetOpen()) return;
-        var current = new SettingsWindow.Values(fractalView.sceneSnapshot().antialiasing(),
+        FractalScene scene = fractalView.sceneSnapshot();
+        var current = new SettingsWindow.Values(scene.iterations(), scene.antialiasing(),
                 fractalView.widePreviewSettings());
         if (MacSettingsSheet.isAvailable()) {
             try {
@@ -266,7 +274,7 @@ final class MainMenuBar extends MenuBar {
             fractalView.setWidePreviewSettings(values.previewSettings());
             widePreviewChanged.accept(values.previewSettings());
         }
-        fractalView.setAntialiasSettings(values.antialiasing());
+        fractalView.setRenderSettings(values.iterations(), values.antialiasing());
     }
 
     private void showJuliaParameters() {
@@ -288,7 +296,6 @@ final class MainMenuBar extends MenuBar {
 
     private boolean parameterSheetOpen() {
         return MacParameterSheet.hasOpenSheet(stage)
-                || iterationSheet != null && iterationSheet.isOpen()
                 || juliaSheet != null && juliaSheet.isOpen()
                 || settingsSheet != null && settingsSheet.isOpen()
                 || sceneActions.hasOpenSheet();
@@ -377,9 +384,10 @@ final class MainMenuBar extends MenuBar {
         observeTextInput(null);
         FractalDialogs.close(stage);
         sceneActions.close();
-        if (iterationSheet != null) iterationSheet.close();
         if (juliaSheet != null) juliaSheet.close();
         if (settingsSheet != null) settingsSheet.close();
+        closed = true;
+        if (applicationMenuSettings != null) applicationMenuSettings.detach();
     }
 
     private void syncScene(FractalScene scene) {

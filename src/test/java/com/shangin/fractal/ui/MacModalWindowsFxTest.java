@@ -4,6 +4,7 @@ import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.render.RenderTarget;
 import com.shangin.fractal.scene.AntialiasSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
+import com.shangin.fractal.scene.IterationSettings;
 import com.shangin.fractal.scene.WidePreviewSettings;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -227,7 +228,7 @@ class MacModalWindowsFxTest {
 
     @Test void settingsSelectStandardAndDeepZoomModesFromPopUpButtons() throws Exception {
         var result = new CompletableFuture<SettingsWindow.Values>();
-        var current = new SettingsWindow.Values(
+        var current = new SettingsWindow.Values(new IterationSettings(420, 70),
                 new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.BASE_ONLY), false);
         var sheet = fx(() -> MacSettingsSheet.show(owner, current,
                 value -> { assertTrue(Platform.isFxApplicationThread()); result.complete(value); }));
@@ -250,10 +251,13 @@ class MacModalWindowsFxTest {
             assertEquals(1, AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 4)));
             AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 3), 2);
             AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 4), 2);
+            assertEquals("420", AppKitParameterProbe.stringValue(AppKitParameterProbe.textField(sheet, 0)));
+            assertEquals("70", AppKitParameterProbe.stringValue(AppKitParameterProbe.textField(sheet, 1)));
+            AppKitParameterProbe.setText(AppKitParameterProbe.textField(sheet, 1), "0");
             AppKitParameterProbe.alertKey(sheet, "\r", (short) 36);
             return null;
         });
-        assertEquals(new SettingsWindow.Values(
+        assertEquals(new SettingsWindow.Values(new IterationSettings(420, 0),
                 new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED), true, 3.0, 4),
                 result.get(10, TimeUnit.SECONDS));
         fx(() -> { assertFalse(sheet.isOpen()); return null; });
@@ -270,24 +274,65 @@ class MacModalWindowsFxTest {
         });
     }
 
-    @Test void settingsFocusOnlyAKeyboardNavigablePopUpButton() throws Exception {
+    @Test void settingsFocusTheBaseIterationsFieldAfterOpeningAndReset() throws Exception {
         var sheet = fx(() -> MacSettingsSheet.show(owner, SettingsWindow.Values.defaults(), ignored -> {}));
         fx(() -> {
-            // Checks the macOS Keyboard navigation setting of this desktop session: when it is off,
-            // a focused pop-up button keeps a stale focus ring while clicks select other controls.
-            var first = AppKitParameterProbe.choice(sheet, 0);
-            boolean navigable = AppKitParameterProbe.canBecomeKeyView(first);
-            assertEquals(navigable, AppKitParameterProbe.isFirstResponder(sheet, first));
+            // Text fields are key views regardless of the macOS Keyboard navigation setting.
+            var base = AppKitParameterProbe.textField(sheet, 0);
+            assertTrue(AppKitParameterProbe.editing(base));
             AppKitParameterProbe.action(sheet, "resetChoices");
-            assertEquals(navigable, AppKitParameterProbe.isFirstResponder(sheet, first));
+            assertTrue(AppKitParameterProbe.editing(base));
             AppKitParameterProbe.action(sheet, "cancel");
             return null;
         });
     }
 
+    @Test void settingsKeepInvalidIterationDraftsOpenUntilCorrected() throws Exception {
+        var result = new CompletableFuture<SettingsWindow.Values>();
+        var current = new SettingsWindow.Values(new IterationSettings(420, 70),
+                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.BASE_ONLY), false);
+        var sheet = fx(() -> MacSettingsSheet.show(owner, current, result::complete));
+        fx(() -> {
+            var base = AppKitParameterProbe.textField(sheet, 0);
+            var zoom = AppKitParameterProbe.textField(sheet, 1);
+            var error = AppKitParameterProbe.field(sheet, "error");
+            assertTrue(AppKitParameterProbe.hidden(error));
+            AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 0), SettingsWindow.index(InteractiveRenderMode.REFINED));
+            AppKitParameterProbe.setText(zoom, "-1");
+            for (String appearance : List.of("NSAppearanceNameAqua", "NSAppearanceNameDarkAqua")) {
+                AppKitParameterProbe.appearance(sheet, appearance);
+                AppKitParameterProbe.action(sheet, "apply");
+                assertTrue(sheet.isOpen(), "An invalid draft keeps the sheet open");
+                assertTrue(AppKitParameterProbe.showing(sheet));
+                assertFalse(AppKitParameterProbe.hidden(error));
+                assertEquals(SettingsWindow.ITERATION_ERROR, AppKitParameterProbe.stringValue(error));
+                assertTrue(AppKitParameterProbe.editing(zoom), "Focus moves to the invalid field");
+                assertEquals("-1", AppKitParameterProbe.stringValue(zoom));
+                assertEquals(SettingsWindow.index(InteractiveRenderMode.REFINED),
+                        AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 0)));
+            }
+            AppKitParameterProbe.setText(zoom, "70");
+            AppKitParameterProbe.setText(base, "abc");
+            AppKitParameterProbe.action(sheet, "apply");
+            assertTrue(sheet.isOpen());
+            assertTrue(AppKitParameterProbe.editing(base));
+            AppKitParameterProbe.action(sheet, "resetChoices");
+            assertTrue(AppKitParameterProbe.hidden(error), "Reset clears the error with the drafts");
+            assertEquals("300", AppKitParameterProbe.stringValue(base));
+            assertEquals("50", AppKitParameterProbe.stringValue(zoom));
+            AppKitParameterProbe.setText(base, "640");
+            AppKitParameterProbe.action(sheet, "apply");
+            return null;
+        });
+        // Reset restored every draft to its default before the base iterations were edited.
+        assertEquals(new SettingsWindow.Values(new IterationSettings(640, 50), new AntialiasSettings(),
+                WidePreviewSettings.DEFAULT.enabled()), result.get(10, TimeUnit.SECONDS));
+        fx(() -> { assertFalse(sheet.isOpen()); return null; });
+    }
+
     @Test void settingsResetToDefaultsChangesOnlyTheDraft() throws Exception {
         var result = new CompletableFuture<SettingsWindow.Values>();
-        var sheet = fx(() -> MacSettingsSheet.show(owner, new SettingsWindow.Values(
+        var sheet = fx(() -> MacSettingsSheet.show(owner, new SettingsWindow.Values(new IterationSettings(420, 70),
                 new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED),
                 !WidePreviewSettings.DEFAULT.enabled(), 4.0, 2), result::complete));
         fx(() -> {
@@ -300,6 +345,8 @@ class MacModalWindowsFxTest {
                     AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 1)));
             assertEquals(WidePreviewSettings.DEFAULT.enabled() ? 1 : 0,
                     AppKitParameterProbe.selectedIndex(AppKitParameterProbe.choice(sheet, 2)));
+            assertEquals("300", AppKitParameterProbe.stringValue(AppKitParameterProbe.textField(sheet, 0)));
+            assertEquals("50", AppKitParameterProbe.stringValue(AppKitParameterProbe.textField(sheet, 1)));
             AppKitParameterProbe.action(sheet, "apply");
             return null;
         });

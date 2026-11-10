@@ -71,18 +71,45 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
         finishOpening();
     }
 
-    final void showChoicesNative(String title, String hint, List<SettingsWindow.ChoiceField> fields,
-                                 int[] defaults, String resetTitle, String confirmTitle) {
+    /**
+     * Sections of labelled pop-up buttons and text fields. Native callbacks pass the
+     * comma-separated selected pop-up indices first and the text drafts, joined by
+     * {@link #THIRD_DRAFT_SEPARATOR}, second; validation indexes the text fields.
+     */
+    final void showChoicesNative(String title, String hint, List<SettingsWindow.Field> fields,
+                                 int[] defaults, List<String> defaultTexts, String error,
+                                 String resetTitle, String confirmTitle) {
         requireFxThread();
         if (!owner.isShowing()) throw new IllegalStateException("Sheet owner must be showing");
+        int[] selected = new int[fields.size()];
+        int[] choiceDefaults = new int[fields.size()];
+        String[] texts = new String[fields.size()];
+        String[] textDefaults = new String[fields.size()];
+        String[][] choices = new String[fields.size()][];
+        int choice = 0;
+        int text = 0;
+        for (int i = 0; i < fields.size(); i++) {
+            texts[i] = "";
+            textDefaults[i] = "";
+            choices[i] = new String[0];
+            switch (fields.get(i)) {
+                case SettingsWindow.ChoiceField field -> {
+                    choices[i] = field.choices().toArray(String[]::new);
+                    selected[i] = field.selected();
+                    choiceDefaults[i] = defaults[choice++];
+                }
+                case SettingsWindow.TextField field -> {
+                    texts[i] = field.text();
+                    textDefaults[i] = defaultTexts.get(text++);
+                }
+            }
+        }
         handle = openChoices(MacContextMenu.windowHandle(owner), title, hint,
-                fields.stream().map(SettingsWindow.ChoiceField::section).toArray(String[]::new),
-                fields.stream().map(SettingsWindow.ChoiceField::label).toArray(String[]::new),
-                fields.stream().map(SettingsWindow.ChoiceField::id).toArray(String[]::new),
-                fields.stream().map(SettingsWindow.ChoiceField::hint).toArray(String[]::new),
-                fields.stream().map(field -> field.choices().toArray(String[]::new)).toArray(String[][]::new),
-                fields.stream().mapToInt(SettingsWindow.ChoiceField::selected).toArray(),
-                defaults, resetTitle, confirmTitle);
+                fields.stream().map(SettingsWindow.Field::section).toArray(String[]::new),
+                fields.stream().map(SettingsWindow.Field::label).toArray(String[]::new),
+                fields.stream().map(SettingsWindow.Field::id).toArray(String[]::new),
+                fields.stream().map(SettingsWindow.Field::hint).toArray(String[]::new),
+                choices, selected, choiceDefaults, texts, textDefaults, error, resetTitle, confirmTitle);
         finishOpening();
     }
 
@@ -190,7 +217,8 @@ abstract class MacParameterSheet<T> implements AutoCloseable {
                              int kind, String confirmTitle);
     private native long openChoices(long window, String title, String hint, String[] sections,
                                     String[] labels, String[] ids, String[] hints, String[][] choices,
-                                    int[] selected, int[] defaults, String resetTitle,
+                                    int[] selected, int[] defaults, String[] texts,
+                                    String[] defaultTexts, String error, String resetTitle,
                                     String confirmTitle);
     private native long openNotice(long window, String title, String message,
                                    boolean confirmation, boolean modeless);

@@ -53,7 +53,7 @@ src/main/java/com/shangin/fractal/
   ui/          JavaFX views (MainView, FractalView, FractalSurface), menus,
                dialogs, native AppKit sheet wrappers (Mac*Sheet,
                MacContextMenu), indicators; also FX-launched benchmark mains
-src/main/macos/        AppKit bridge (FractalContextMenu.m,
+src/main/macos/        AppKit bridge (FractalContextMenu.m, FractalApplicationMenu.m,
                        FractalParameterSheet.m, FractalStatusBadge.m), Dock launcher
                        (FractalLauncher.c), Info.plist
 src/main/resources/    app icons, GLSL compute shaders (gpu/*.comp), JavaFX CSS

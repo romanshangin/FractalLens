@@ -327,7 +327,7 @@ class FractalDialogsFxTest {
     }
 
     @Test void settingsShowRenderAndNavigationSections() throws Exception {
-        var current = new SettingsWindow.Values(
+        var current = new SettingsWindow.Values(new IterationSettings(420, 70),
                 new AntialiasSettings(InteractiveRenderMode.REFINED, InteractiveRenderMode.BASE_ONLY), false);
         var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
         try {
@@ -344,7 +344,11 @@ class FractalDialogsFxTest {
                 var wide = settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_ID);
                 assertEquals(List.of("Off", "On"), wide.getItems());
                 assertEquals("Off", wide.getValue());
-                assertSame(standard, pane.getScene().getFocusOwner());
+                TextField base = field(dialog, SettingsWindow.BASE_ITERATIONS_ID);
+                TextField zoom = field(dialog, SettingsWindow.ZOOM_ITERATIONS_ID);
+                assertEquals("420", base.getText());
+                assertEquals("70", zoom.getText());
+                assertSame(base, pane.getScene().getFocusOwner(), "Base iterations is the first field");
                 var titles = List.of("Base only", "Base, then antialiasing", "Antialiased display");
                 assertEquals(titles, standard.getItems());
                 assertEquals(titles, deep.getItems());
@@ -358,7 +362,7 @@ class FractalDialogsFxTest {
                 assertEquals(Color.web("#292929"), pane.getBackground().getFills().getFirst().getFill());
                 snapshot(dialog, "settings-dark");
                 for (var node : pane.lookupAll(".label")) {
-                    if (node instanceof Label label && label.getLabelFor() instanceof ComboBox<?>) {
+                    if (node instanceof Label label && label.getLabelFor() instanceof javafx.scene.control.Control) {
                         assertEquals(label.prefWidth(-1), label.getWidth(), 0.5,
                                 "Field labels must not be truncated: " + label.getText());
                     }
@@ -368,9 +372,11 @@ class FractalDialogsFxTest {
                 wide.getSelectionModel().select("On");
                 settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_EXTENT_ID).getSelectionModel().select(2);
                 settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_QUALITY_ID).getSelectionModel().select(2);
+                base.setText("500");
+                zoom.setText("0");
                 primary(dialog).fire();
                 assertFalse(dialog.isShowing());
-                assertEquals(new SettingsWindow.Values(
+                assertEquals(new SettingsWindow.Values(new IterationSettings(500, 0),
                         new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED), true, 3.0, 4),
                         dialog.getResult());
                 return null;
@@ -410,7 +416,7 @@ class FractalDialogsFxTest {
     }
 
     @Test void settingsResetToDefaultsChangesOnlyTheDraft() throws Exception {
-        var current = new SettingsWindow.Values(
+        var current = new SettingsWindow.Values(new IterationSettings(420, 70),
                 new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.REFINED),
                 !WidePreviewSettings.DEFAULT.enabled(), 4.0, 2);
         var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
@@ -427,7 +433,10 @@ class FractalDialogsFxTest {
                 assertEquals("Base only", settingsChoice(pane, SettingsWindow.DEEP_ID).getValue());
                 assertEquals(WidePreviewSettings.DEFAULT.enabled() ? "On" : "Off",
                         settingsChoice(pane, SettingsWindow.WIDE_PREVIEW_ID).getValue());
-                assertSame(standard, pane.getScene().getFocusOwner());
+                TextField base = field(dialog, SettingsWindow.BASE_ITERATIONS_ID);
+                assertEquals("300", base.getText());
+                assertEquals("50", field(dialog, SettingsWindow.ZOOM_ITERATIONS_ID).getText());
+                assertSame(base, pane.getScene().getFocusOwner());
                 primary(dialog).fire();
                 assertEquals(SettingsWindow.Values.defaults(), dialog.getResult());
                 return null;
@@ -440,38 +449,112 @@ class FractalDialogsFxTest {
         return (ComboBox<String>) pane.lookup("#" + id);
     }
 
-    @Test void iterationEditorResetsBothFieldsAndAppliesOnlyValidValues() throws Exception {
-        var current = new IterationSettings(420, 70);
-        var dialog = fx(() -> FractalDialogs.iterationSettingsDialog(owner, current));
+    @Test void settingsValidationKeepsWrappedHintsFullyVisible() throws Exception {
+        var dialog = fx(() -> FractalDialogs.settingsDialog(owner, SettingsWindow.Values.defaults()));
+        try {
+            fx(() -> { dialog.show(); return null; });
+            // Window resizes reach the scene asynchronously; each check runs after the queued resize.
+            double[] initial = fx(() -> {
+                var window = dialog.getDialogPane().getScene().getWindow();
+                assertNoTruncatedLabels(dialog.getDialogPane(), "initial");
+                field(dialog, SettingsWindow.BASE_ITERATIONS_ID).setText("0");
+                primary(dialog).fire();
+                assertTrue(dialog.isShowing());
+                assertTrue(dialog.getDialogPane().lookup("#dialog-validation-error").isVisible());
+                return new double[] {window.getWidth(), window.getHeight()};
+            });
+            fx(() -> null);
+            fx(() -> {
+                var pane = dialog.getDialogPane();
+                var window = pane.getScene().getWindow();
+                assertNoTruncatedLabels(pane, "invalid");
+                assertTrue(window.getHeight() >= initial[1], "The message must not shrink the window");
+                field(dialog, SettingsWindow.BASE_ITERATIONS_ID).fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,
+                        "\r", "", KeyCode.ENTER, false, false, false, false));
+                assertTrue(dialog.isShowing(), "Enter with the invalid draft keeps the window open");
+                field(dialog, SettingsWindow.BASE_ITERATIONS_ID).setText("300");
+                assertFalse(pane.lookup("#dialog-validation-error").isVisible());
+                return null;
+            });
+            fx(() -> null);
+            fx(() -> {
+                var window = dialog.getDialogPane().getScene().getWindow();
+                assertNoTruncatedLabels(dialog.getDialogPane(), "corrected");
+                assertEquals(initial[0], window.getWidth(), 0.5, "Validation keeps the window width");
+                field(dialog, SettingsWindow.BASE_ITERATIONS_ID).setText("0");
+                primary(dialog).fire();
+                var reset = dialog.getDialogPane().getButtonTypes().stream()
+                        .filter(type -> SettingsWindow.RESET_TITLE.equals(type.getText())).findFirst().orElseThrow();
+                ((Button) dialog.getDialogPane().lookupButton(reset)).fire();
+                return null;
+            });
+            fx(() -> null);
+            fx(() -> {
+                var window = dialog.getDialogPane().getScene().getWindow();
+                assertNoTruncatedLabels(dialog.getDialogPane(), "reset");
+                assertEquals(initial[0], window.getWidth(), 0.5);
+                return null;
+            });
+        } finally { fx(() -> { dialog.close(); return null; }); }
+    }
+
+    /** Fails when a laid-out label shows less than its text, for example with an ellipsis. */
+    private static void assertNoTruncatedLabels(DialogPane pane, String state) {
+        pane.applyCss();
+        pane.layout();
+        for (var node : pane.lookupAll(".label")) {
+            if (node instanceof Label label && label.isVisible() && !label.getText().isEmpty()
+                    && label.lookup(".text") instanceof javafx.scene.text.Text shown) {
+                assertEquals(label.getText().replaceAll("\\s+", " "), shown.getText().replaceAll("\\s+", " "),
+                        state + ": label is truncated");
+            }
+        }
+    }
+
+    @Test void settingsKeepInvalidIterationDraftsUntilCorrectedOrReset() throws Exception {
+        var current = new SettingsWindow.Values(new IterationSettings(420, 70),
+                new AntialiasSettings(InteractiveRenderMode.FAST, InteractiveRenderMode.BASE_ONLY), false);
+        var dialog = fx(() -> FractalDialogs.settingsDialog(owner, current));
         try {
             fx(() -> { dialog.show(); return null; });
             fx(() -> {
                 var pane = dialog.getDialogPane();
-                TextField base = field(dialog, "iteration-base");
-                TextField zoom = field(dialog, "iteration-zoom");
-                assertSame(base, pane.getScene().getFocusOwner());
-                assertEquals("420", base.getText());
-                assertEquals("70", zoom.getText());
-                pane.getScene().getPreferences().setColorScheme(ColorScheme.LIGHT);
-                snapshot(dialog, "iterations-light");
-                base.setText("0");
+                TextField base = field(dialog, SettingsWindow.BASE_ITERATIONS_ID);
+                TextField zoom = field(dialog, SettingsWindow.ZOOM_ITERATIONS_ID);
+                settingsChoice(pane, SettingsWindow.STANDARD_ID).getSelectionModel().select("Base only");
+                base.setText("420");
                 zoom.setText("-1");
                 primary(dialog).fire();
-                assertTrue(dialog.isShowing());
-                assertEquals("0", base.getText());
+                assertTrue(dialog.isShowing(), "An invalid draft keeps the window open");
                 assertEquals("-1", zoom.getText());
-                assertTrue(pane.lookup("#dialog-validation-error").isVisible());
+                assertEquals("Base only", settingsChoice(pane, SettingsWindow.STANDARD_ID).getValue());
+                var error = (Label) pane.lookup("#dialog-validation-error");
+                assertTrue(error.isVisible());
+                assertEquals(SettingsWindow.ITERATION_ERROR, error.getText());
+                assertSame(zoom, pane.getScene().getFocusOwner(), "Focus moves to the invalid field");
                 pane.getScene().getPreferences().setColorScheme(ColorScheme.DARK);
-                snapshot(dialog, "iterations-dark-validation");
+                snapshot(dialog, "settings-dark-validation");
+                base.setText("not a number");
+                zoom.setText("70");
+                zoom.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "\r", "", KeyCode.ENTER, false, false, false, false));
+                assertTrue(dialog.isShowing(), "Enter in a field validates before applying");
+                assertSame(base, pane.getScene().getFocusOwner());
+                base.setText("500");
+                assertFalse(error.isVisible(), "Correcting the draft clears the error");
+                base.setText("0");
+                primary(dialog).fire();
+                assertTrue(error.isVisible());
                 Button reset = pane.getButtonTypes().stream()
-                        .filter(type -> "Reset to Defaults".equals(type.getText()))
+                        .filter(type -> SettingsWindow.RESET_TITLE.equals(type.getText()))
                         .map(type -> (Button) pane.lookupButton(type)).findFirst().orElseThrow();
                 reset.fire();
                 assertEquals("300", base.getText());
                 assertEquals("50", zoom.getText());
-                assertFalse(pane.lookup("#dialog-validation-error").isVisible());
+                assertFalse(error.isVisible());
+                base.setText("640");
                 primary(dialog).fire();
-                assertEquals(new IterationSettings(), dialog.getResult());
+                assertFalse(dialog.isShowing());
+                assertEquals(new IterationSettings(640, 50), dialog.getResult().iterations());
                 return null;
             });
         } finally { fx(() -> { dialog.close(); return null; }); }

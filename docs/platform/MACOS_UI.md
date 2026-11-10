@@ -122,18 +122,20 @@ The native JavaFX regression checks can be run with
 
 | Menu | Commands |
 | --- | --- |
-| File | Export PNG… (⌘⇧E), Settings… (⌘,), Close Window (⌘W) |
+| FractalLens | Settings… (⌘,), before the system Hide and Quit commands |
+| File | Export PNG… (⌘⇧E); on Windows/Linux, or without the AppKit bridge, also Settings… (Ctrl+, / ⌘,); on Windows/Linux also Quit (Ctrl+Q) |
 | Edit | Standard text editing commands for focused text fields |
 | View | Zoom In (⌘+, also ⌘=), Zoom Out (⌘−), Reset View (⌘0), Go to Coordinates… (⌘L), Enter/Exit Full Screen (⌃⌘F) |
 | Fractal | Mandelbrot, Julia, Multibrot, Burning Ship, Tricorn |
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette, Reset Colors to Defaults |
-| Render | Edit Iteration Settings…, Edit Julia Parameters… |
+| Render | Edit Julia Parameters… |
 | Window | Minimize (⌘M), Zoom |
 | Help | FractalLens Help, including pointer and keyboard navigation, the render status badge, Render Settings and Navigation |
 
-Settings… is available at any time, including while a frame renders; applying a
-changed render mode restarts the render, while the Navigation choice never does. Edit Iteration Settings is available for every fractal when
-rendering is idle. Edit Julia Parameters is enabled only for Julia. See
+Settings… is available at any time, including while a frame renders; applying
+changed iterations or a changed render mode restarts the render, while the
+Navigation choice never does. Iteration settings are edited in Settings… for every
+fractal. Edit Julia Parameters is enabled only for Julia when rendering is idle. See
 [Render settings (P2.6)](#render-settings-p26).
 
 Other platforms use their shortcut modifier instead of Command. Focused-canvas
@@ -255,7 +257,7 @@ antialiasing settings are preserved.
 - [JavaFX MenuBar](https://openjfx.io/javadoc/26/javafx.controls/javafx/scene/control/MenuBar.html)
 
 This is a JavaFX implementation with native macOS menus, window controls, and
-file chooser. Iteration Settings, Julia Parameters and Add Bookmark use native
+file chooser. Settings, Julia Parameters and Add Bookmark use native
 AppKit sheets with JavaFX fallback. The coordinate and gradient editors use JavaFX controls, not
 AppKit or SwiftUI. Scene controls are grouped under their task menus; there
 are currently no separate application-wide preferences.
@@ -388,20 +390,47 @@ performance measurement.
 
 ### Render settings (P2.6)
 
-File → Settings… (⌘,) replaces Display Quality/Deep Zoom Antialiasing menu items
-with one application window: **Render Settings** (scene) and **Navigation**
-(application preference, see [Wide navigation preview](#wide-navigation-preview)).
+FractalLens → Settings… (⌘,) replaces Display Quality/Deep Zoom Antialiasing and the
+former Render → Edit Iteration Settings… menu items with one application window:
+**Render Settings** (scene) and **Navigation** (application preference, see
+[Wide navigation preview](#wide-navigation-preview)).
 macOS uses the parameter-sheet bridge's owner AppKit sheet, right-aligned labels/
-hints and `NSPopUpButton` fields. Bridge failure/Windows/Linux use shared JavaFX
-combo boxes. Return/Apply commits; Escape/Cancel discards. Reset to Defaults changes
-only drafts (standard Antialiased display, deep Base only, Wide preview at its
-application default) until Apply. Initial
-focus is Standard zoom; native focus requires macOS Keyboard navigation. With it
-off, AppKit skips pop-ups/buttons like System Settings: no focus/stale ring,
+hints, `NSTextField` iteration fields and `NSPopUpButton` choices. Bridge
+failure/Windows/Linux use the shared JavaFX form with text fields and combo boxes.
+Return/Apply commits; Escape/Cancel discards. Reset to Defaults changes only drafts
+(base iterations 300, 50 additional per zoom level, standard Antialiased display,
+deep Base only, Wide preview at its application default) until Apply. Initial focus
+is Base iterations, with its value selected. With macOS Keyboard navigation off,
+AppKit skips pop-ups/buttons like System Settings: no focus/stale ring,
 Return/Escape still work. Native text is unselectable; hints cannot take focus.
-With Keyboard navigation on, Tab visits only pop-ups/buttons. Enabled during
-rendering: Apply cancels/restarts rendering. File hosts the command because
-JavaFX's public API cannot add to the system-owned application menu.
+Tab visits only the text fields and, with Keyboard navigation on, the pop-ups/buttons.
+Enabled during rendering: Apply cancels/restarts rendering.
+
+On macOS, Settings… sits in the system application menu, as in native apps:
+FractalLens → Settings… (⌘,), followed by a separator and the Hide commands.
+JavaFX's public MenuBar API cannot add to that system-owned menu, and Glass's
+internal separator insertion ignores the requested position, so
+`MacApplicationMenuCommand` and `src/main/macos/FractalApplicationMenu.m` insert a
+native `NSMenuItem` and separator through the AppKit bridge. Glass builds a new
+application menu for each window's menu bar and for its default menu bar, so the
+bridge observes `NSApp.mainMenu` and moves both items into the current application
+menu; the command stays available while another window has focus. AppKit invokes it
+on the main thread and Java only queues `showSettings` with `Platform.runLater`,
+for the focused main window or else the most recent one. The item and separator are
+removed with the last closed main window. When the bridge is unavailable (Windows,
+Linux, load failure) or no application menu exists yet, Settings… stays in File with
+the JavaFX ⌘, accelerator; on macOS it moves once the main window gains focus.
+
+Render Settings starts with the scene's `IterationSettings`: **Base iterations**
+(the limit at the initial view, a positive whole number) and **Additional per zoom
+level** (iterations added each time the zoom doubles, zero or a positive whole
+number). Both editors share `SettingsWindow` validation: Apply or Return with an
+invalid draft keeps the window open with every draft, shows one validation message
+and moves focus to the first invalid field; correcting it clears the message. Apply
+changes the scene's iterations and antialiasing modes as one scene change: one Undo
+restores both, and only one render restarts. Applying unchanged settings changes
+nothing. Changed iterations discard the previous frame's antialiasing refinement;
+an antialiasing-only change keeps the in-place presentation switch described below.
 
 Render Settings offers the same three presentations for standard zoom and for
 deep zoom. Both are stored in the scene's `AntialiasSettings` as
@@ -473,7 +502,7 @@ the preview storage byte budget can raise that step on large/HiDPI targets. The 
 passing `DISABLED` disables it. Changes cancel old work/publication and replace the reserve
 without interrupting the exact frame.
 
-File → Settings… → **Navigation → Wide preview** (Off/On) is the user switch,
+Settings… → **Navigation → Wide preview** (Off/On) is the user switch,
 through `FractalView.setWidePreviewSettings`. It is an application preference, not
 scene state: it is excluded from scene JSON, undo/redo, bookmarks and export, and
 switching it neither restarts nor changes the exact frame. An explicit change is
@@ -637,10 +666,10 @@ with the primary action on the right. Enter confirms, Escape cancels, and the
 initial editable value is selected. Closing restores the owner's previous focus
 when the owner is active.
 
-Iteration settings use the same appearance and edit both values in one window:
-base iterations and the additional iterations per zoom level are applied
-together only after Apply. Reset to Defaults restores both fields in the open
-dialog, and Cancel leaves the scene unchanged.
+Iteration settings are now part of Settings (see
+[Render settings (P2.6)](#render-settings-p26)): base iterations and the additional
+iterations per zoom level are applied together only after Apply. Reset to Defaults
+restores both fields in the open window, and Cancel leaves the scene unchanged.
 
 Dark Mode HIG audit (2026-10-04), against Apple's
 [Dark Mode guidance](https://developer.apple.com/design/human-interface-guidelines/dark-mode):
@@ -691,6 +720,11 @@ modality and native AppKit sheets; this appearance step does not implement those
 changes. Windows runtime verification remains outstanding.
 
 ### Native iteration settings sheet
+
+Superseded: the separate iteration sheet and Render → Edit Iteration Settings… were
+removed when iteration settings moved into Settings…; see
+[Render settings (P2.6)](#render-settings-p26). The record below describes the
+earlier implementation.
 
 On macOS, Edit Iteration Settings now opens a real owner-associated AppKit
 `NSPanel` sheet with two `NSTextField` controls, Reset to Defaults, Cancel and
@@ -838,8 +872,8 @@ messages through AppKit when the bridge is available:
 
 | Entry point | macOS presentation | Fallback |
 | --- | --- | --- |
-| Iteration Settings / Julia Parameters / Add Bookmark | Existing native field sheets | JavaFX owner-modal forms |
-| Settings (P2.6) | Native sheet with labelled pop-up buttons | JavaFX owner-modal form with combo boxes |
+| Julia Parameters / Add Bookmark | Existing native field sheets | JavaFX owner-modal forms |
+| Settings (P2.6) | Native sheet with labelled iteration text fields and pop-up buttons | JavaFX owner-modal form with text fields and combo boxes |
 | Go to Coordinates | Native three-field sheet (Real, Imaginary, Zoom); exact decimal parsing, shared Java validation and a selectable hint with the deep-zoom state | JavaFX owner-modal form with the same fields and validation |
 | Export PNG dimensions | Native two-field sheet with the shared memory-budget validation and live size estimate | JavaFX owner-modal form |
 | Render/export/bookmark/preset errors | Asynchronous `NSAlert` sheet | JavaFX owner-modal alert |

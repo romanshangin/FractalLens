@@ -81,7 +81,7 @@ class MainMenuBarFxTest {
             stage.show();
             return null;
         });
-        await(() -> view.hasCompletedFrame() && !command("Render", "Edit Iteration Settings…").isDisable());
+        await(() -> view.hasCompletedFrame() && !command("Color", "Edit Palette…").isDisable());
     }
 
     @AfterEach
@@ -98,25 +98,33 @@ class MainMenuBarFxTest {
     }
 
     @Test
-    void renderMenuOffersNoAntialiasingPatternChoice() throws Exception {
+    void renderMenuLeavesIterationAndAntialiasingSettingsToSettings() throws Exception {
         List<String> titles = fx(() -> menuBar.getMenus().stream()
                 .filter(menu -> "Render".equals(menu.getText()))
                 .findFirst().orElseThrow().getItems().stream()
                 .map(item -> item instanceof javafx.scene.control.SeparatorMenuItem ? "-" : item.getText())
                 .toList());
 
-        assertEquals(List.of("Edit Iteration Settings…", "Edit Julia Parameters…"), titles);
+        assertEquals(List.of("Edit Julia Parameters…"), titles);
     }
 
     @Test
-    void fileMenuOpensApplicationSettingsWithStandardShortcut() throws Exception {
+    void settingsUseTheApplicationMenuOnMacOrTheFileMenuWithStandardShortcut() throws Exception {
         List<String> titles = fx(() -> menuBar.getMenus().stream()
                 .filter(menu -> "File".equals(menu.getText()))
                 .findFirst().orElseThrow().getItems().stream()
                 .map(item -> item instanceof javafx.scene.control.SeparatorMenuItem ? "-" : item.getText())
                 .toList());
 
-        assertEquals(List.of("Export PNG…", "-", "Settings…", "-", "Close Window"), titles.subList(0, 5));
+        if (MacContextMenu.isAvailable()) {
+            // MacSystemMenuFxTest checks the native application menu item and its routing.
+            assertEquals(List.of("Export PNG…"), titles);
+            return;
+        }
+        // Without the bridge macOS keeps Settings… in File; Quit stays in the system application menu.
+        assertEquals(System.getProperty("os.name", "").startsWith("Mac")
+                ? List.of("Export PNG…", "-", "Settings…")
+                : List.of("Export PNG…", "-", "Settings…", "-", "Quit"), titles);
         assertEquals(new javafx.scene.input.KeyCodeCombination(javafx.scene.input.KeyCode.COMMA,
                 javafx.scene.input.KeyCombination.SHORTCUT_DOWN),
                 fx(() -> command("File", SettingsWindow.MENU_TITLE).getAccelerator()));
@@ -305,7 +313,7 @@ class MainMenuBarFxTest {
         assertEquals(windowTitle, fx(stage::getTitle));
         FractalScene julia = fx(view::sceneSnapshot);
         fx(() -> { command("Edit", "Undo").fire(); return null; });
-        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        await(() -> !command("Color", "Edit Palette…").isDisable());
         assertEquals(windowTitle, fx(stage::getTitle));
         fx(() -> {
             assertEquals(initial, view.sceneSnapshot());
@@ -325,7 +333,7 @@ class MainMenuBarFxTest {
             command("Edit", "Undo").fire();
             return null;
         });
-        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        await(() -> !command("Color", "Edit Palette…").isDisable());
         assertEquals(initial, fx(view::sceneSnapshot));
         assertArrayEquals(pixels, fx(this::displayedPixels));
     }
@@ -335,7 +343,7 @@ class MainMenuBarFxTest {
         FractalScene initial = fx(view::sceneSnapshot);
         fx(() -> { command("View", "Copy Scene Preset").fire(); view.setFractal(FractalPreset.JULIA); return null; });
         fx(() -> { command("View", "Apply Scene Preset from Clipboard").fire(); return null; });
-        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        await(() -> !command("Color", "Edit Palette…").isDisable());
         assertEquals(initial, fx(view::sceneSnapshot));
         await(() -> !command("Bookmarks", "Add Bookmark…").isDisable());
         saveBookmark("My scene", true);
@@ -349,7 +357,7 @@ class MainMenuBarFxTest {
         await(() -> !command("Bookmarks", "Add Bookmark…").isDisable());
         assertBookmarkCommands(false);
         fx(() -> { view.setFractal(FractalPreset.JULIA); command("Bookmarks/My scene", "Restore").fire(); return null; });
-        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        await(() -> !command("Color", "Edit Palette…").isDisable());
         assertEquals(initial, fx(view::sceneSnapshot));
         assertEquals(initial, new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory).load().getFirst().scene());
         fx(() -> {
@@ -403,20 +411,20 @@ class MainMenuBarFxTest {
             command("Bookmarks", "Add Bookmark…").fire();
             assertSame(sheet, AppKitParameterProbe.bookmarkSheet(menuBar));
             assertEquals("Unsaved scene", AppKitParameterProbe.text(sheet, "first"));
-            command("Render", "Edit Iteration Settings…").fire();
-            assertNull(AppKitParameterProbe.sheet(menuBar));
+            settingsCommand().fire();
+            assertNull(AppKitParameterProbe.settingsSheet(menuBar));
             AppKitParameterProbe.action(sheet, "cancel");
             return null;
         });
         fx(() -> {
             assertFalse(AppKitParameterProbe.bookmarkSheet(menuBar).isOpen());
-            command("Render", "Edit Iteration Settings…").fire();
-            var iterations = AppKitParameterProbe.sheet(menuBar);
-            assertNotNull(iterations);
+            settingsCommand().fire();
+            var settings = AppKitParameterProbe.settingsSheet(menuBar);
+            assertNotNull(settings);
             command("Bookmarks", "Add Bookmark…").fire();
             assertFalse(AppKitParameterProbe.bookmarkSheet(menuBar).isOpen());
-            assertTrue(iterations.isOpen());
-            AppKitParameterProbe.action(iterations, "cancel");
+            assertTrue(settings.isOpen());
+            AppKitParameterProbe.action(settings, "cancel");
             return null;
         });
         assertTrue(new com.shangin.fractal.app.BookmarkStore(bookmarkDirectory).load().isEmpty());
@@ -499,7 +507,7 @@ class MainMenuBarFxTest {
             view.undoScene();
             return null;
         });
-        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        await(() -> !command("Color", "Edit Palette…").isDisable());
         assertEquals(initial, fx(view::sceneSnapshot));
         assertFalse(fx(view::canUndo));
         assertTrue(fx(view::canRedo));
@@ -512,7 +520,7 @@ class MainMenuBarFxTest {
             view.setIterations(new IterationSettings(420, 70));
             return null;
         });
-        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        await(() -> !command("Color", "Edit Palette…").isDisable());
         FractalScene scene = fx(view::sceneSnapshot);
         TextField field = fx(() -> {
             TextField input = new TextField("draft");
@@ -729,7 +737,7 @@ class MainMenuBarFxTest {
     void pendingZoomCanBeUndoneAndResizeDoesNotAddHistory() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
         fx(() -> { view.zoom(true); view.undoScene(); return null; });
-        await(() -> !command("Render", "Edit Iteration Settings…").isDisable());
+        await(() -> !command("Color", "Edit Palette…").isDisable());
         assertEquals(initial, fx(view::sceneSnapshot));
         fx(() -> { stage.setWidth(stage.getWidth() + 30); return null; });
         await(() -> view.isLatencyIdle());
@@ -770,7 +778,7 @@ class MainMenuBarFxTest {
         FractalScene initial = fx(view::sceneSnapshot);
         assertEquals(new AntialiasSettings(), initial.antialiasing());
         var selected = new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.REFINED);
-        CompletableFuture<Void> action = fireLater(fx(() -> command("File", SettingsWindow.MENU_TITLE)));
+        CompletableFuture<Void> action = fireLater(fx(this::settingsCommand));
         if (MacSettingsSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
@@ -805,7 +813,7 @@ class MainMenuBarFxTest {
         }
         await(() -> surface().completedRender() != null
                 && surface().completedRender().scene().antialiasing().equals(selected)
-                && !command("Render", "Edit Iteration Settings…").isDisable());
+                && !command("Color", "Edit Palette…").isDisable());
         fx(() -> {
             assertEquals(selected, view.sceneSnapshot().antialiasing());
             RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
@@ -816,7 +824,7 @@ class MainMenuBarFxTest {
         });
         await(() -> surface().completedRender() != null
                 && surface().completedRender().scene().antialiasing().equals(initial.antialiasing())
-                && !command("Render", "Edit Iteration Settings…").isDisable());
+                && !command("Color", "Edit Palette…").isDisable());
     }
 
     @Test
@@ -831,7 +839,7 @@ class MainMenuBarFxTest {
         });
         boolean initialPreview = WidePreviewSettings.DEFAULT.enabled();
         for (boolean enabled : List.of(!initialPreview, initialPreview)) {
-            CompletableFuture<Void> action = fireLater(fx(() -> command("File", SettingsWindow.MENU_TITLE)));
+            CompletableFuture<Void> action = fireLater(fx(this::settingsCommand));
             int choice = enabled ? 1 : 0;
             if (MacSettingsSheet.isAvailable()) {
                 action.get(10, TimeUnit.SECONDS);
@@ -873,7 +881,7 @@ class MainMenuBarFxTest {
         }
         assertEquals(List.of(!initialPreview, initialPreview), reported);
         // Applying unchanged Settings is not an explicit preview choice.
-        CompletableFuture<Void> action = fireLater(fx(() -> command("File", SettingsWindow.MENU_TITLE)));
+        CompletableFuture<Void> action = fireLater(fx(this::settingsCommand));
         if (MacSettingsSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> { AppKitParameterProbe.action(AppKitParameterProbe.settingsSheet(menuBar), "apply"); return null; });
@@ -887,74 +895,89 @@ class MainMenuBarFxTest {
     }
 
     @Test
-    void iterationMenuAppliesBothValuesFromOneThemedDialog() throws Exception {
+    void settingsApplyIterationsAndAntialiasingAsOneUndoableSceneChange() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
-        CompletableFuture<Void> action = openEditor("Edit Iteration Settings…");
-        if (MacIterationSheet.isAvailable()) {
+        var iterations = new IterationSettings(420, 70);
+        var antialiasing = new AntialiasSettings(InteractiveRenderMode.BASE_ONLY, InteractiveRenderMode.BASE_ONLY);
+        CompletableFuture<Void> action = fireLater(fx(this::settingsCommand));
+        if (MacSettingsSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
-                var sheet = AppKitParameterProbe.sheet(menuBar);
+                var sheet = AppKitParameterProbe.settingsSheet(menuBar);
                 assertNotNull(sheet);
-                assertEquals(Integer.toString(initial.iterations().baseIterations()), AppKitParameterProbe.text(sheet, "first"));
-                assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()), AppKitParameterProbe.text(sheet, "second"));
-                AppKitParameterProbe.text(sheet, "first", "420");
-                AppKitParameterProbe.text(sheet, "second", "70");
+                var base = AppKitParameterProbe.textField(sheet, 0);
+                var zoom = AppKitParameterProbe.textField(sheet, 1);
+                assertEquals(Integer.toString(initial.iterations().baseIterations()), AppKitParameterProbe.stringValue(base));
+                assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()), AppKitParameterProbe.stringValue(zoom));
+                AppKitParameterProbe.setText(base, "420");
+                AppKitParameterProbe.setText(zoom, "70");
+                AppKitParameterProbe.select(AppKitParameterProbe.choice(sheet, 0), SettingsWindow.index(InteractiveRenderMode.BASE_ONLY));
                 assertEquals(initial, view.sceneSnapshot());
                 AppKitParameterProbe.action(sheet, "apply");
                 return null;
             });
-            await(() -> view.sceneSnapshot().iterations().equals(new IterationSettings(420, 70)));
-            assertCompletedIterations(new IterationSettings(420, 70));
-            return;
+        } else {
+            DialogPane pane = awaitDialog(SettingsWindow.TITLE);
+            fx(() -> {
+                var base = input(pane, SettingsWindow.BASE_ITERATIONS_ID);
+                var zoom = input(pane, SettingsWindow.ZOOM_ITERATIONS_ID);
+                assertEquals(Integer.toString(initial.iterations().baseIterations()), base.getText());
+                assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()), zoom.getText());
+                pane.getScene().getPreferences().setColorScheme(ColorScheme.DARK);
+                pane.applyCss();
+                assertEquals(Color.web("#292929"), pane.getBackground().getFills().getFirst().getFill());
+                base.setText("420");
+                zoom.setText("70");
+                @SuppressWarnings("unchecked")
+                var standard = (javafx.scene.control.ComboBox<String>) pane.lookup("#" + SettingsWindow.STANDARD_ID);
+                standard.getSelectionModel().select(SettingsWindow.index(InteractiveRenderMode.BASE_ONLY));
+                assertEquals(initial, view.sceneSnapshot());
+                confirm(pane);
+                return null;
+            });
+            action.get(10, TimeUnit.SECONDS);
         }
-        DialogPane pane = awaitDialog("Iteration Settings");
+        await(() -> view.sceneSnapshot().iterations().equals(iterations));
+        assertEquals(antialiasing, fx(() -> view.sceneSnapshot().antialiasing()));
+        assertCompletedIterations(iterations);
         fx(() -> {
-            var base = input(pane, "iteration-base");
-            var zoom = input(pane, "iteration-zoom");
-            assertEquals(Integer.toString(initial.iterations().baseIterations()), base.getText());
-            assertEquals(Integer.toString(initial.iterations().iterationsPerZoomLevel()), zoom.getText());
-            pane.getScene().getPreferences().setColorScheme(ColorScheme.DARK);
-            pane.applyCss();
-            assertEquals(Color.web("#292929"), pane.getBackground().getFills().getFirst().getFill());
-            base.setText("420");
-            zoom.setText("70");
-            assertEquals(initial, view.sceneSnapshot());
-            confirm(pane);
+            view.undoScene();
+            assertEquals(initial.iterations(), view.sceneSnapshot().iterations(), "One undo restores the iterations");
+            assertEquals(initial.antialiasing(), view.sceneSnapshot().antialiasing(), "and the antialiasing together");
             return null;
         });
-        action.get(10, TimeUnit.SECONDS);
-
-        assertEquals(new IterationSettings(420, 70), fx(() -> view.sceneSnapshot().iterations()));
-        assertCompletedIterations(new IterationSettings(420, 70));
+        assertCompletedIterations(initial.iterations());
     }
 
     @Test
-    void cancellingIterationDialogKeepsSceneUnchangedAfterReset() throws Exception {
-        FractalScene initial = fx(view::sceneSnapshot);
-        CompletableFuture<Void> action = openEditor("Edit Iteration Settings…");
-        if (MacIterationSheet.isAvailable()) {
+    void cancellingSettingsKeepsIterationsUnchangedAfterReset() throws Exception {
+        FractalScene initial = fx(() -> {
+            view.setIterations(new IterationSettings(420, 70));
+            return view.sceneSnapshot();
+        });
+        await(() -> !command("Color", "Edit Palette…").isDisable());
+        CompletableFuture<Void> action = fireLater(fx(this::settingsCommand));
+        if (MacSettingsSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
-                var sheet = AppKitParameterProbe.sheet(menuBar);
-                AppKitParameterProbe.text(sheet, "first", "420");
-                AppKitParameterProbe.text(sheet, "second", "70");
-                AppKitParameterProbe.action(sheet, "reset");
-                assertEquals("300", AppKitParameterProbe.text(sheet, "first"));
-                assertEquals("50", AppKitParameterProbe.text(sheet, "second"));
+                var sheet = AppKitParameterProbe.settingsSheet(menuBar);
+                AppKitParameterProbe.action(sheet, "resetChoices");
+                assertEquals("300", AppKitParameterProbe.stringValue(AppKitParameterProbe.textField(sheet, 0)));
+                assertEquals("50", AppKitParameterProbe.stringValue(AppKitParameterProbe.textField(sheet, 1)));
                 AppKitParameterProbe.action(sheet, "cancel");
                 return null;
             });
+            fx(() -> null);
             fx(() -> { assertEquals(initial, view.sceneSnapshot()); return null; });
             return;
         }
-        DialogPane pane = awaitDialog("Iteration Settings");
+        DialogPane pane = awaitDialog(SettingsWindow.TITLE);
         fx(() -> {
-            input(pane, "iteration-base").setText("420");
-            input(pane, "iteration-zoom").setText("70");
             Button reset = pane.getButtonTypes().stream()
-                    .filter(type -> "Reset to Defaults".equals(type.getText()))
+                    .filter(type -> SettingsWindow.RESET_TITLE.equals(type.getText()))
                     .map(type -> (Button) pane.lookupButton(type)).findFirst().orElseThrow();
             reset.fire();
+            assertEquals("300", input(pane, SettingsWindow.BASE_ITERATIONS_ID).getText());
             ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
             return null;
         });
@@ -964,47 +987,50 @@ class MainMenuBarFxTest {
     }
 
     @Test
-    void invalidIterationInputShowsErrorAndKeepsSceneUnchanged() throws Exception {
+    void invalidIterationInputInSettingsShowsErrorAndKeepsSceneUnchanged() throws Exception {
         FractalScene initial = fx(view::sceneSnapshot);
-        CompletableFuture<Void> action = openEditor("Edit Iteration Settings…");
-        if (MacIterationSheet.isAvailable()) {
+        CompletableFuture<Void> action = fireLater(fx(this::settingsCommand));
+        if (MacSettingsSheet.isAvailable()) {
             action.get(10, TimeUnit.SECONDS);
             fx(() -> {
-                var sheet = AppKitParameterProbe.sheet(menuBar);
+                var sheet = AppKitParameterProbe.settingsSheet(menuBar);
+                var base = AppKitParameterProbe.textField(sheet, 0);
+                var zoom = AppKitParameterProbe.textField(sheet, 1);
                 for (String invalid : List.of("not a number", "0", "2147483648", "999999999999999999999")) {
-                    AppKitParameterProbe.text(sheet, "first", invalid);
+                    AppKitParameterProbe.setText(base, invalid);
                     AppKitParameterProbe.action(sheet, "apply");
                     assertTrue(AppKitParameterProbe.showing(sheet));
-                    assertEquals(invalid, AppKitParameterProbe.text(sheet, "first"));
-                    assertFalse(AppKitParameterProbe.text(sheet, "error").isEmpty());
+                    assertEquals(invalid, AppKitParameterProbe.stringValue(base));
+                    assertEquals(SettingsWindow.ITERATION_ERROR,
+                            AppKitParameterProbe.stringValue(AppKitParameterProbe.field(sheet, "error")));
                     assertEquals(initial, view.sceneSnapshot());
                 }
-                AppKitParameterProbe.text(sheet, "first", "420");
-                AppKitParameterProbe.text(sheet, "second", "-1");
+                AppKitParameterProbe.setText(base, "420");
+                AppKitParameterProbe.setText(zoom, "-1");
                 AppKitParameterProbe.action(sheet, "apply");
                 assertTrue(AppKitParameterProbe.showing(sheet));
                 assertEquals(initial, view.sceneSnapshot());
-                AppKitParameterProbe.text(sheet, "second", "70");
+                AppKitParameterProbe.setText(zoom, "70");
                 AppKitParameterProbe.action(sheet, "apply");
                 return null;
             });
             await(() -> view.sceneSnapshot().iterations().equals(new IterationSettings(420, 70)));
             return;
         }
-        DialogPane pane = awaitDialog("Iteration Settings");
+        DialogPane pane = awaitDialog(SettingsWindow.TITLE);
         fx(() -> {
-            input(pane, "iteration-base").setText("not a number");
-            input(pane, "iteration-zoom").setText("70");
+            input(pane, SettingsWindow.BASE_ITERATIONS_ID).setText("not a number");
+            input(pane, SettingsWindow.ZOOM_ITERATIONS_ID).setText("70");
             confirm(pane);
             assertTrue(pane.lookup("#dialog-validation-error").isVisible());
             assertTrue(pane.getScene().getWindow().isShowing());
             assertEquals(initial, view.sceneSnapshot());
-            input(pane, "iteration-base").setText("420");
-            input(pane, "iteration-zoom").setText("-1");
+            input(pane, SettingsWindow.BASE_ITERATIONS_ID).setText("420");
+            input(pane, SettingsWindow.ZOOM_ITERATIONS_ID).setText("-1");
             confirm(pane);
             assertTrue(pane.lookup("#dialog-validation-error").isVisible());
             assertEquals(initial, view.sceneSnapshot());
-            input(pane, "iteration-zoom").setText("70");
+            input(pane, SettingsWindow.ZOOM_ITERATIONS_ID).setText("70");
             confirm(pane);
             return null;
         });
@@ -1016,7 +1042,7 @@ class MainMenuBarFxTest {
     private void assertCompletedIterations(IterationSettings expected) throws Exception {
         await(() -> surface().completedRender() != null
                 && surface().completedRender().scene().iterations().equals(expected)
-                && !command("Render", "Edit Iteration Settings…").isDisable());
+                && !command("Color", "Edit Palette…").isDisable());
         fx(() -> {
             assertEquals(expected.baseIterations(), surface().completedRender().frame().request().maxIterations());
             RenderModeIndicator badge = (RenderModeIndicator) view.getChildrenUnmodifiable().get(1);
@@ -1039,8 +1065,8 @@ class MainMenuBarFxTest {
                 assertNotNull(sheet);
                 command("Render", "Edit Julia Parameters…").fire();
                 assertSame(sheet, AppKitParameterProbe.juliaSheet(menuBar));
-                command("Render", "Edit Iteration Settings…").fire();
-                assertNull(AppKitParameterProbe.sheet(menuBar));
+                settingsCommand().fire();
+                assertNull(AppKitParameterProbe.settingsSheet(menuBar));
                 assertTrue(sheet.isOpen());
                 assertEquals(Double.toString(initial.juliaParameters().real()), AppKitParameterProbe.text(sheet, "first"));
                 assertEquals(Double.toString(initial.juliaParameters().imaginary()), AppKitParameterProbe.text(sheet, "second"));
@@ -1130,7 +1156,7 @@ class MainMenuBarFxTest {
     @Test
     void availabilityKeepsSceneSpecificRestrictionsAfterRendering() throws Exception {
         fx(() -> {
-            assertFalse(command("File", SettingsWindow.MENU_TITLE).isDisable());
+            assertFalse(settingsCommand().isDisable());
             assertTrue(command("Render", "Edit Julia Parameters…").isDisable());
             command("Fractal", "Julia").fire();
             return null;
@@ -1170,6 +1196,32 @@ class MainMenuBarFxTest {
             items = menu.getItems();
         }
         return items.stream().filter(item -> title.equals(item.getText())).findFirst().orElseThrow();
+    }
+
+    /**
+     * The window's Settings… command: the File item, or on macOS the action that the
+     * application menu item routes to (see MacSystemMenuFxTest for the native item).
+     */
+    private MenuItem settingsCommand() {
+        return command("File").stream().filter(item -> SettingsWindow.MENU_TITLE.equals(item.getText()))
+                .findFirst().orElseGet(() -> {
+                    MenuItem routed = new MenuItem(SettingsWindow.MENU_TITLE);
+                    routed.setOnAction(event -> {
+                        try {
+                            var show = MainMenuBar.class.getDeclaredMethod("showSettings");
+                            show.setAccessible(true);
+                            show.invoke(menuBar);
+                        } catch (ReflectiveOperationException failure) {
+                            throw new AssertionError(failure);
+                        }
+                    });
+                    return routed;
+                });
+    }
+
+    private List<MenuItem> command(String menu) {
+        return menuBar.getMenus().stream().filter(item -> menu.equals(item.getText()))
+                .findFirst().orElseThrow().getItems();
     }
 
     private CompletableFuture<Void> openEditor(String title) throws Exception {

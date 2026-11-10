@@ -54,6 +54,16 @@ class MacJuliaSheetFxTest {
         });
     }
 
+    @Test void sharedWindowHandleRejectsAnUnshownOwner() throws Exception {
+        fx(() -> {
+            var unshown = new Stage();
+            try {
+                assertThrows(IllegalStateException.class, () -> MacContextMenu.windowHandle(unshown));
+            } finally { unshown.close(); }
+            return null;
+        });
+    }
+
     @Test void appliesBothFiniteComponentsOnTheFxThread() throws Exception {
         var result = new CompletableFuture<JuliaParameters>();
         sheet = fx(() -> MacJuliaSheet.show(owner, new JuliaParameters(), value -> {
