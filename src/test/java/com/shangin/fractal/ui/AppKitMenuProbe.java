@@ -37,6 +37,45 @@ final class AppKitMenuProbe {
         return titles;
     }
 
+    /** The macOS application menu: the submenu of the main menu's first item. */
+    static MemorySegment applicationMenu() {
+        try {
+            var item = (MemorySegment) message(mainMenu(), "itemAtIndex:", ADDRESS, new MemoryLayout[]{JAVA_LONG}, 0L);
+            return (MemorySegment) message(item, "submenu", ADDRESS);
+        } catch (Throwable failure) { throw new AssertionError("Cannot inspect the application menu", failure); }
+    }
+
+    /** Titles of the application menu; separators are {@code "-"}. */
+    static List<String> applicationMenuTitles() {
+        var menu = applicationMenu();
+        long count = (long) message(menu, "numberOfItems", JAVA_LONG);
+        var titles = new ArrayList<String>();
+        for (long index = 0; index < count; index++) {
+            var item = (MemorySegment) message(menu, "itemAtIndex:", ADDRESS, new MemoryLayout[]{JAVA_LONG}, index);
+            titles.add((byte) message(item, "isSeparatorItem", JAVA_BYTE) != 0 ? "-" : string(item, "title"));
+        }
+        return titles;
+    }
+
+    /** Key equivalent and modifier flags of the application menu item at {@code index}. */
+    static String applicationMenuShortcut(int index) {
+        var item = (MemorySegment) message(applicationMenu(), "itemAtIndex:", ADDRESS,
+                new MemoryLayout[]{JAVA_LONG}, (long) index);
+        long flags = (long) message(item, "keyEquivalentModifierMask", JAVA_LONG);
+        return string(item, "keyEquivalent") + ((flags & (1L << 20)) != 0 ? "+command" : "");
+    }
+
+    /** Performs the application menu item at {@code index} as a menu selection would. */
+    static void performApplicationMenuItem(int index) {
+        message(applicationMenu(), "performActionForItemAtIndex:", null, new MemoryLayout[]{JAVA_LONG}, (long) index);
+    }
+
+    private static String string(MemorySegment object, String selector) {
+        var text = (MemorySegment) message(object, selector, ADDRESS);
+        var bytes = (MemorySegment) message(text, "UTF8String", ADDRESS);
+        return bytes.reinterpret(Long.MAX_VALUE).getString(0);
+    }
+
     static void updateSubmenu(String title) {
         try (Arena arena = Arena.ofConfined()) {
             var text = (MemorySegment) message(objcClass("NSString", arena), "stringWithUTF8String:", ADDRESS,

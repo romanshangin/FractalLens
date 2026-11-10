@@ -90,12 +90,6 @@ final class AppKitParameterProbe {
         return (MacBookmarkSheet) sheetField.get(actionsField.get(menu));
     }
 
-    static MacIterationSheet sheet(MainMenuBar menu) throws Exception {
-        var field = MainMenuBar.class.getDeclaredField("iterationSheet");
-        field.setAccessible(true);
-        return (MacIterationSheet) field.get(menu);
-    }
-
     static MacJuliaSheet juliaSheet(MainMenuBar menu) throws Exception {
         var field = MainMenuBar.class.getDeclaredField("juliaSheet");
         field.setAccessible(true);
@@ -112,6 +106,25 @@ final class AppKitParameterProbe {
     static MemorySegment choice(MacParameterSheet<?> sheet, int index) throws Exception {
         return (MemorySegment) AppKitMenuProbe.message(field(sheet, "choices"), "objectAtIndex:", ADDRESS,
                 new java.lang.foreign.MemoryLayout[]{JAVA_LONG}, (long) index);
+    }
+
+    /** Returns the text field of the settings sheet at {@code index} among its text fields. */
+    static MemorySegment textField(MacParameterSheet<?> sheet, int index) throws Exception {
+        return (MemorySegment) AppKitMenuProbe.message(field(sheet, "textFields"), "objectAtIndex:", ADDRESS,
+                new java.lang.foreign.MemoryLayout[]{JAVA_LONG}, (long) index);
+    }
+
+    static String stringValue(MemorySegment control) {
+        return nativeString((MemorySegment) AppKitMenuProbe.message(control, "stringValue", ADDRESS));
+    }
+
+    /** Whether the text field is being edited, which is how AppKit gives a text field keyboard focus. */
+    static boolean editing(MemorySegment textField) {
+        return ((MemorySegment) AppKitMenuProbe.message(textField, "currentEditor", ADDRESS)).address() != 0;
+    }
+
+    static boolean hidden(MemorySegment view) {
+        return (byte) AppKitMenuProbe.message(view, "isHidden", JAVA_BYTE) != 0;
     }
 
     static int selectedIndex(MemorySegment popup) {
@@ -181,7 +194,10 @@ final class AppKitParameterProbe {
                 new java.lang.foreign.MemoryLayout[]{ADDRESS}, MemorySegment.NULL);
     }
 
-    /** Text of every selectable text field in the sheet; a click focuses such a label and Tab then stops on it. */
+    /**
+     * Text of every selectable, non-editable text field in the sheet; a click focuses such a
+     * label and Tab then stops on it. Editable fields are controls and are expected tab stops.
+     */
     static java.util.List<String> selectableTexts(MacParameterSheet<?> sheet) throws Exception {
         try (Arena arena = Arena.ofConfined()) {
             var found = new java.util.ArrayList<String>();
@@ -194,7 +210,8 @@ final class AppKitParameterProbe {
     private static void collectSelectableTexts(MemorySegment view, MemorySegment textField, java.util.List<String> found) {
         if ((byte) AppKitMenuProbe.message(view, "isKindOfClass:", JAVA_BYTE,
                 new java.lang.foreign.MemoryLayout[]{ADDRESS}, textField) != 0
-                && (byte) AppKitMenuProbe.message(view, "isSelectable", JAVA_BYTE) != 0) {
+                && (byte) AppKitMenuProbe.message(view, "isSelectable", JAVA_BYTE) != 0
+                && (byte) AppKitMenuProbe.message(view, "isEditable", JAVA_BYTE) == 0) {
             found.add(nativeString((MemorySegment) AppKitMenuProbe.message(view, "stringValue", ADDRESS)));
         }
         var subviews = (MemorySegment) AppKitMenuProbe.message(view, "subviews", ADDRESS);

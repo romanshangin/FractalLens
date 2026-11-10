@@ -394,10 +394,10 @@ class FractalResizeFxTest {
             awaitCondition(() -> fx(() -> !alertShowing(stage, "Close FractalLens?")), 10);
             fx(() -> {
                 assertTrue(stage.isShowing(), "Returning from the decision must keep the owner open");
-                var menus = (MainMenuBar) main.getTop();
-                menus.getMenus().stream().filter(menu -> menu.getText().equals("File"))
-                        .flatMap(menu -> menu.getItems().stream())
-                        .filter(item -> "Close Window".equals(item.getText())).findFirst().orElseThrow().fire();
+                // A second close request, as Quit and the window close button send it.
+                var again = new javafx.stage.WindowEvent(stage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST);
+                stage.fireEvent(again);
+                assertTrue(again.isConsumed());
                 assertTrue(stage.isShowing(), "Close must wait for the asynchronous decision");
                 return null;
             });

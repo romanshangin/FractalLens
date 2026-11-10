@@ -16,6 +16,9 @@
 @property NSMutableArray<NSButton *> *removeButtons;
 @property NSMutableArray<NSPopUpButton *> *choices;
 @property NSArray<NSNumber *> *choiceDefaults;
+@property NSMutableArray<NSTextField *> *textFields;
+@property NSArray<NSString *> *textDefaults;
+@property NSView *firstControl;
 @property NSWindow *owner;
 @property NSTextField *first;
 @property NSTextField *second;
@@ -132,6 +135,12 @@ static NSString *firstDraft(FractalParameterSession *session) {
 }
 
 static NSString *secondDraft(FractalParameterSession *session) {
+    // Settings text fields are joined with the same unit separator that Java splits at.
+    if (session.textFields) {
+        NSMutableArray *drafts = [NSMutableArray new];
+        for (NSTextField *field in session.textFields) [drafts addObject:field.stringValue];
+        return [drafts componentsJoinedByString:@"\x1f"];
+    }
     // A three-field form packs its last two drafts; Java splits them at the unit separator.
     if (session.third) return [NSString stringWithFormat:@"%@\x1f%@",
             session.second.stringValue, session.third.stringValue];
@@ -267,7 +276,9 @@ static jint invalidField(FractalParameterSession *session) {
     jint invalidIndex = callWithDrafts(self, self.submission ? self.submission : self.validation);
     if (invalidIndex != 0) {
         self.error.stringValue = self.validationError;
+        self.error.hidden = NO;
         NSTextField *invalid = self.positions ? self.positions[MIN((NSUInteger)invalidIndex - 1, self.positions.count - 1)]
+                : self.textFields.count ? self.textFields[MIN((NSUInteger)invalidIndex - 1, self.textFields.count - 1)]
                 : invalidIndex == 1 ? self.first : invalidIndex == 3 && self.third ? self.third : self.second;
         [self.panel makeFirstResponder:invalid];
         [invalid selectText:nil];
@@ -294,13 +305,18 @@ static jint invalidField(FractalParameterSession *session) {
     // Reset only changes the draft; Apply still decides whether the scene changes.
     for (NSUInteger i = 0; i < self.choices.count; i++)
         [self.choices[i] selectItemAtIndex:self.choiceDefaults[i].integerValue];
+    for (NSUInteger i = 0; i < self.textFields.count; i++)
+        self.textFields[i].stringValue = self.textDefaults[i];
+    self.error.stringValue = @"";
+    self.error.hidden = YES;
     [self focusFirstChoice];
 }
 - (void)focusFirstChoice {
     // With macOS Keyboard navigation off, pop-up buttons are not key views; forcing focus
     // onto one would leave its focus ring in place while clicks select other controls.
-    NSPopUpButton *first = self.choices.firstObject;
+    NSView *first = self.firstControl ? self.firstControl : self.choices.firstObject;
     [self.panel makeFirstResponder:first.canBecomeKeyView ? first : nil];
+    if ([first isKindOfClass:NSTextField.class]) [(NSTextField *)first selectText:nil];
 }
 - (void)appendPosition:(NSString *)position color:(int32_t)argb {
     NSTextField *field = [NSTextField textFieldWithString:position];
@@ -383,8 +399,10 @@ static jint invalidField(FractalParameterSession *session) {
 }
 - (void)controlTextDidChange:(NSNotification *)notification {
     (void)notification;
-    if (invalidField(self) == 0)
+    if (invalidField(self) == 0) {
         self.error.stringValue = @"";
+        if (self.textFields) self.error.hidden = YES;
+    }
     [self updatePreview];
 }
 - (BOOL)windowShouldClose:(NSWindow *)sender {
@@ -706,12 +724,13 @@ static NSTextField *sectionLabel(NSString *text) {
     return view;
 }
 
-// Sections of labelled pop-up buttons; Java parses the comma-separated selected indices.
+// Sections of labelled pop-up buttons and text fields (a field without choices is a text
+// field); Java parses the comma-separated selected indices and the joined text drafts.
 JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoices
 (JNIEnv *env, jobject callback, jlong windowHandle, jstring title, jstring hintText,
  jobjectArray sectionTitles, jobjectArray fieldLabels, jobjectArray fieldIds, jobjectArray fieldHints,
- jobjectArray fieldChoices, jintArray selectedIndices, jintArray defaultIndices, jstring resetTitle,
- jstring confirmTitle) {
+ jobjectArray fieldChoices, jintArray selectedIndices, jintArray defaultIndices, jobjectArray fieldTexts,
+ jobjectArray fieldDefaultTexts, jstring errorText, jstring resetTitle, jstring confirmTitle) {
     if (!sheetMainThread(env)) return 0;
     NSWindow *owner = (__bridge NSWindow *)(void *)(intptr_t)windowHandle;
     if (!owner.isVisible || owner.attachedSheet) return 0;
@@ -719,8 +738,11 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
     NSArray<NSString *> *labels = nativeStrings(env, fieldLabels);
     NSArray<NSString *> *ids = nativeStrings(env, fieldIds);
     NSArray<NSString *> *hints = nativeStrings(env, fieldHints);
+    NSArray<NSString *> *texts = nativeStrings(env, fieldTexts);
+    NSArray<NSString *> *defaultTexts = nativeStrings(env, fieldDefaultTexts);
     NSUInteger count = sections.count;
     if (count == 0 || labels.count != count || ids.count != count || hints.count != count
+            || texts.count != count || defaultTexts.count != count
             || (NSUInteger)(*env)->GetArrayLength(env, fieldChoices) != count
             || (NSUInteger)(*env)->GetArrayLength(env, selectedIndices) != count
             || (NSUInteger)(*env)->GetArrayLength(env, defaultIndices) != count) return 0;
@@ -731,11 +753,30 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
     if ((*env)->ExceptionCheck(env)) return 0;
     NSMutableArray<NSNumber *> *choiceDefaults = [NSMutableArray arrayWithCapacity:count];
     NSMutableArray<NSPopUpButton *> *popups = [NSMutableArray arrayWithCapacity:count];
+    NSMutableArray<NSTextField *> *textFields = [NSMutableArray new];
+    NSMutableArray<NSString *> *textDefaults = [NSMutableArray new];
+    NSMutableArray<NSView *> *controls = [NSMutableArray arrayWithCapacity:count];
+    FractalParameterSession *session = [FractalParameterSession new];
     for (NSUInteger i = 0; i < count; i++) {
         jobjectArray titles = (jobjectArray)(*env)->GetObjectArrayElement(env, fieldChoices, (jsize)i);
         NSArray<NSString *> *choices = nativeStrings(env, titles);
         if (titles) (*env)->DeleteLocalRef(env, titles);
-        if (!choices || selected[i] < 0 || (NSUInteger)selected[i] >= choices.count
+        if (!choices) return 0;
+        if (choices.count == 0) {
+            NSTextField *text = [NSTextField textFieldWithString:texts[i]];
+            text.identifier = ids[i];
+            text.accessibilityLabel = labels[i];
+            text.delegate = session;
+            [(NSTextFieldCell *)text.cell setSendsActionOnEndEditing:NO];
+            text.target = session;
+            text.action = @selector(apply:);
+            [text.widthAnchor constraintGreaterThanOrEqualToConstant:160].active = YES;
+            [textFields addObject:text];
+            [textDefaults addObject:defaultTexts[i]];
+            [controls addObject:text];
+            continue;
+        }
+        if (selected[i] < 0 || (NSUInteger)selected[i] >= choices.count
                 || defaults[i] < 0 || (NSUInteger)defaults[i] >= choices.count) return 0;
         [choiceDefaults addObject:@(defaults[i])];
         NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
@@ -744,8 +785,8 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
         popup.identifier = ids[i];
         popup.accessibilityLabel = labels[i];
         [popups addObject:popup];
+        [controls addObject:popup];
     }
-    FractalParameterSession *session = [FractalParameterSession new];
     JavaVM *vm = NULL;
     (*env)->GetJavaVM(env, &vm);
     session.vm = vm;
@@ -757,9 +798,14 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
     session.callback = (*env)->NewGlobalRef(env, callback);
     if (!session.callback) return 0;
     session.owner = owner;
-    session.validationError = @"";
+    session.validationError = nativeString(env, errorText);
     session.choices = popups;
     session.choiceDefaults = choiceDefaults;
+    if (textFields.count) {
+        session.textFields = textFields;
+        session.textDefaults = textDefaults;
+    }
+    session.firstControl = controls[0];
     session.panel = [[FractalPanel alloc] initWithContentRect:NSMakeRect(0, 0, 520, 300)
             styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
             backing:NSBackingStoreBuffered defer:NO];
@@ -791,7 +837,7 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
         else labelWidth = fieldLabel.widthAnchor;
         [constraints addObject:[fieldLabel.widthAnchor constraintGreaterThanOrEqualToConstant:
                 fieldLabel.intrinsicContentSize.width]];
-        NSStackView *row = [NSStackView stackViewWithViews:@[fieldLabel, popups[i]]];
+        NSStackView *row = [NSStackView stackViewWithViews:@[fieldLabel, controls[i]]];
         row.orientation = NSUserInterfaceLayoutOrientationHorizontal;
         row.alignment = NSLayoutAttributeFirstBaseline;
         row.spacing = 8;
@@ -802,12 +848,19 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
         field.orientation = NSUserInterfaceLayoutOrientationVertical;
         field.alignment = NSLayoutAttributeLeading;
         field.spacing = 4;
-        [constraints addObject:[fieldHint.leadingAnchor constraintEqualToAnchor:popups[i].leadingAnchor]];
+        [constraints addObject:[fieldHint.leadingAnchor constraintEqualToAnchor:controls[i].leadingAnchor]];
         [constraints addObject:[fieldHint.trailingAnchor constraintEqualToAnchor:field.trailingAnchor]];
         [rows addObject:field];
         [wide addObject:field];
     }
-    session.error = label(@"");
+    session.error = staticLabel(@"");
+    session.error.identifier = @"dialog-validation-error";
+    // Hidden until Apply finds an invalid draft, so the stack keeps its usual spacing. A
+    // detached view loses constraints to the stack, so the wrap width is set on the label.
+    session.error.hidden = YES;
+    session.error.preferredMaxLayoutWidth = 440;
+    NSView *lastField = rows.lastObject;
+    [rows addObject:session.error];
     NSButton *reset = button(nativeString(env, resetTitle), session, @selector(resetChoices:));
     NSButton *cancel = button(@"Cancel", session, @selector(cancel:));
     NSButton *apply = button(nativeString(env, confirmTitle), session, @selector(apply:));
@@ -825,7 +878,8 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
     body.alignment = NSLayoutAttributeLeading;
     body.spacing = 12;
     [body setCustomSpacing:20 afterView:hint];
-    [body setCustomSpacing:20 afterView:rows[rows.count - 2]];
+    [body setCustomSpacing:20 afterView:lastField];
+    [body setCustomSpacing:20 afterView:session.error];
     body.translatesAutoresizingMaskIntoConstraints = NO;
     [session.panel.contentView addSubview:body];
     for (NSView *view in wide) [constraints addObject:[view.widthAnchor constraintEqualToAnchor:body.widthAnchor]];
@@ -836,7 +890,7 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacParameterSheet_openChoice
         [body.bottomAnchor constraintEqualToAnchor:session.panel.contentView.bottomAnchor constant:-20]]];
     [NSLayoutConstraint activateConstraints:constraints];
     [session.panel recalculateKeyViewLoop];
-    if (popups[0].canBecomeKeyView) session.panel.initialFirstResponder = popups[0];
+    if (controls[0].canBecomeKeyView) session.panel.initialFirstResponder = controls[0];
     [owner beginSheet:session.panel completionHandler:^(NSModalResponse response) {
         complete(session, response == NSModalResponseOK && invalidField(session) == 0);
     }];

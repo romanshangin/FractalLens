@@ -69,7 +69,8 @@ class MainViewPreferencesFxTest {
                 stage.setScene(new Scene(main, 320, 240));
                 stage.show();
                 assertEquals(saved, fractalView(main).widePreviewEnabled(), "The explicit choice wins over the default");
-                applySettings(main, new SettingsWindow.Values(fractalView(main).sceneSnapshot().antialiasing(), !saved));
+                var scene = fractalView(main).sceneSnapshot();
+                applySettings(main, new SettingsWindow.Values(scene.iterations(), scene.antialiasing(), !saved));
                 assertEquals(!saved, fractalView(main).widePreviewEnabled());
                 return null;
             });
@@ -91,10 +92,10 @@ class MainViewPreferencesFxTest {
                 var view = fractalView(main);
                 var scene = view.sceneSnapshot();
                 var resized = new WidePreviewSettings(view.widePreviewEnabled(), 4.0, 16, WidePreviewSettings.DEFAULT.sampleLimit(), 2_000);
-                applySettings(main, new SettingsWindow.Values(scene.antialiasing(), resized));
+                applySettings(main, new SettingsWindow.Values(scene.iterations(), scene.antialiasing(), resized));
                 assertEquals(resized, view.widePreviewSettings());
                 assertEquals(resized, preferences.widePreviewSettings(), "Size and quality alone are saved");
-                applySettings(main, new SettingsWindow.Values(scene.antialiasing(), selected));
+                applySettings(main, new SettingsWindow.Values(scene.iterations(), scene.antialiasing(), selected));
                 assertEquals(selected, view.widePreviewSettings());
                 assertEquals(scene, view.sceneSnapshot());
                 assertFalse(view.canUndo());

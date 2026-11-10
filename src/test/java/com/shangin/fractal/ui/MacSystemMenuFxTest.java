@@ -87,6 +87,68 @@ class MacSystemMenuFxTest {
         }
     }
 
+    @Test void settingsLiveInTheApplicationMenuWithStandardShortcutUntilTheViewCloses() throws Exception {
+        var stage = fx(Stage::new);
+        var other = fx(Stage::new);
+        var view = fx(() -> new MainView(stage, new LastSessionStore(directory.resolve("settings.json"))));
+        var bar = (MainMenuBar) fx(view::getTop);
+        try {
+            fx(() -> {
+                stage.setScene(new Scene(view, 320, 240));
+                stage.show(); stage.toFront(); stage.requestFocus();
+                return null;
+            });
+            await(stage::isFocused);
+            await(() -> onFx(() -> AppKitMenuProbe.applicationMenuTitles().contains(SettingsWindow.MENU_TITLE)));
+            List<String> titles = fx(AppKitMenuProbe::applicationMenuTitles);
+            int settings = titles.indexOf(SettingsWindow.MENU_TITLE);
+            assertEquals("-", titles.get(settings + 1), "A separator follows Settings…");
+            assertTrue(titles.get(settings + 2).startsWith("Hide "), "Settings… precedes the Hide commands: " + titles);
+            assertEquals(1, titles.stream().filter(SettingsWindow.MENU_TITLE::equals).count());
+            assertEquals(",+command", fx(() -> AppKitMenuProbe.applicationMenuShortcut(settings)));
+            assertTrue(fx(() -> menu(bar, "File").getItems().stream()
+                    .noneMatch(item -> SettingsWindow.MENU_TITLE.equals(item.getText()))),
+                    "The File menu no longer hosts Settings…");
+            assertEquals(List.of("Export PNG…"), fx(() -> menu(bar, "File").getItems().stream()
+                    .map(item -> item instanceof SeparatorMenuItem ? "-" : item.getText()).toList()));
+
+            // Glass builds a separate application menu for each menu bar; Settings… follows it.
+            fx(() -> {
+                other.setScene(new Scene(new Pane(), 200, 120));
+                other.show(); other.toFront(); other.requestFocus();
+                return null;
+            });
+            await(() -> other.isFocused() && !stage.isFocused());
+            assertEquals(titles, fx(AppKitMenuProbe::applicationMenuTitles), "Without a focused main window");
+            fx(() -> { other.close(); stage.toFront(); stage.requestFocus(); return null; });
+            await(stage::isFocused);
+            assertEquals(titles, fx(AppKitMenuProbe::applicationMenuTitles), "After the main window regains focus");
+
+            fx(() -> { AppKitMenuProbe.performApplicationMenuItem(settings); return null; });
+            if (MacSettingsSheet.isAvailable()) {
+                await(() -> onFx(() -> {
+                    var field = MainMenuBar.class.getDeclaredField("settingsSheet");
+                    field.setAccessible(true);
+                    return field.get(bar) instanceof MacSettingsSheet sheet && sheet.isOpen();
+                }));
+                fx(() -> {
+                    var field = MainMenuBar.class.getDeclaredField("settingsSheet");
+                    field.setAccessible(true);
+                    AppKitParameterProbe.action((MacSettingsSheet) field.get(bar), "cancel");
+                    return null;
+                });
+            }
+
+            fx(() -> { stage.close(); view.close(); view.close(); return null; });
+            List<String> closed = fx(AppKitMenuProbe::applicationMenuTitles);
+            assertFalse(closed.contains(SettingsWindow.MENU_TITLE),
+                    "Closing the last view removes Settings… from the application menu");
+            assertEquals(titles.size() - 2, closed.size(), "The separator is removed with Settings…: " + closed);
+        } finally {
+            fx(() -> { other.close(); stage.close(); view.close(); return null; });
+        }
+    }
+
     @Test void appearanceCommandsFollowStartupAndSubsequentRenderWithoutValidation() throws Exception {
         var gate = new AtomicReference<>(new CountDownLatch(1));
         var cpu = new DirectDoubleRenderBackend();
@@ -119,9 +181,8 @@ class MacSystemMenuFxTest {
             });
             assertAppearanceCommands(bar, true);
             assertFalse(fx(() -> AppKitMenuProbe.enabled("File/Export PNG…")));
-            assertTrue(fx(() -> AppKitMenuProbe.enabled("File/Close Window")));
-            assertTrue(fx(() -> AppKitMenuProbe.enabled("File/" + SettingsWindow.MENU_TITLE)),
-                    "Settings stay available while rendering");
+            List<String> applicationMenu = fx(AppKitMenuProbe::applicationMenuTitles);
+            assertTrue(applicationMenu.contains(SettingsWindow.MENU_TITLE), applicationMenu.toString());
             assertTrue(fx(() -> AppKitMenuProbe.enabled("Help/FractalLens Help")));
             gate.get().countDown();
             await(() -> canvas.hasCompletedFrame() && !item(bar, "Color", "Edit Palette…").isDisable());
@@ -139,6 +200,16 @@ class MacSystemMenuFxTest {
             gate.get().countDown();
             fx(() -> { stage.close(); view.close(); return null; });
         }
+    }
+
+    /** Evaluates an await condition, which already runs on the FX thread. */
+    private static boolean onFx(Callable<Boolean> condition) {
+        try { return condition.call(); }
+        catch (Exception failure) { throw new AssertionError(failure); }
+    }
+
+    private static Menu menu(MainMenuBar bar, String title) {
+        return bar.getMenus().stream().filter(menu -> title.equals(menu.getText())).findFirst().orElseThrow();
     }
 
     private static MenuItem item(MainMenuBar bar, String menu, String title) {

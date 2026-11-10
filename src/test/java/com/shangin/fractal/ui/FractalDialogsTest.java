@@ -82,7 +82,7 @@ class FractalDialogsTest {
                 "Standard (blue dot): standard-precision rendering.",
                 "Deep Zoom (coral dot): high-precision rendering for deep magnification",
                 "Waiting:", "Rendering N%:", "including any antialiasing pass", "Complete and a time:",
-                "Interrupted:", "Failed:", "PNG export", "File → Settings…",
+                "Interrupted:", "Failed:", "PNG export", "FractalLens → Settings… on macOS", "File → Settings… elsewhere",
                 "\n\nNavigation\n\n", "Wide preview", "never exported"}) {
             assertTrue(help.contains(expected), () -> "Help is missing: " + expected);
         }

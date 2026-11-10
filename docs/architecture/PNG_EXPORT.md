@@ -47,7 +47,7 @@ Names include fractal/approximate center, no palette. **Export…** size action
 updates rough uncompressed RGBA estimate. Detail-dependent PNG compression makes
 this guidance, not prediction/strict size bound.
 
-Window close/Close Window/Quit during export asks to cancel/close. **No, Return**
+Window close/Quit during export asks to cancel/close. **No, Return**
 is initially focused/default/Escape; **Yes, Close** allows cancellation/shutdown.
 macOS Quit uses the same FX close handler. Completion/cancel stay inline, no
 modal success. macOS errors/decisions use async AppKit `NSAlert`, sizes native

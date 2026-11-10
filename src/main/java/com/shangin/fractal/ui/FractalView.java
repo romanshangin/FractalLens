@@ -640,6 +640,23 @@ public class FractalView extends StackPane {
     }
 
     /** Applies the standard and deep zoom presentations as one undoable scene change. */
+    /**
+     * Applies the scene's render settings from Settings as one scene change, so one undo
+     * step restores both and only one render restarts. Unchanged settings do nothing.
+     */
+    void setRenderSettings(IterationSettings iterations, AntialiasSettings antialiasing) {
+        java.util.Objects.requireNonNull(iterations);
+        java.util.Objects.requireNonNull(antialiasing);
+        boolean iterationsChanged = !iterations.equals(scene.iterations());
+        if (!iterationsChanged && antialiasing.equals(scene.antialiasing())) return;
+        stopColorCyclingForSceneChange();
+        changeScene(scene.withIterations(iterations).withAntialiasing(antialiasing));
+        renderController.cancelCurrent();
+        // New iteration limits change exact pixels; antialiasing alone keeps the base frame.
+        if (iterationsChanged) fractalSurface.invalidateRefinement();
+        recalculate();
+    }
+
     public void setAntialiasSettings(AntialiasSettings antialiasing) {
         java.util.Objects.requireNonNull(antialiasing);
         if (antialiasing.equals(scene.antialiasing())) return;
