@@ -209,6 +209,42 @@ public final class FractalCamera {
         return true;
     }
 
+    /**
+     * The exact coordinate shown at a logical point of a surface that stretches the
+     * render grid over {@code logicalWidth x logicalHeight}. Render sample {@code i}
+     * covers logical {@code [i, i + 1) * logical / render}, so its center is under
+     * {@code (i + 0.5) * logical / render}; points between sample centers interpolate
+     * and points beyond the outer centers clamp to the edge samples. The mapping uses
+     * decimal arithmetic in the viewport's working precision, independent of the
+     * display's output scale except through the render-grid size.
+     */
+    public PreciseComplex pointAt(
+            double x,
+            double y,
+            double logicalWidth,
+            double logicalHeight,
+            int renderWidth,
+            int renderHeight
+    ) {
+        validateDimensions(renderWidth, renderHeight);
+        if (!Double.isFinite(x) || !Double.isFinite(y)) {
+            throw new IllegalArgumentException("Point must be finite");
+        }
+        if (!Double.isFinite(logicalWidth) || !Double.isFinite(logicalHeight)
+                || logicalWidth <= 0.0 || logicalHeight <= 0.0) {
+            throw new IllegalArgumentException("Logical size must be positive and finite");
+        }
+        MathContext context = viewport.mathContext();
+        BigDecimal half = new BigDecimal("0.5");
+        BigDecimal sampleX = BigDecimal.valueOf(x).multiply(BigDecimal.valueOf(renderWidth))
+                .divide(BigDecimal.valueOf(logicalWidth), context).subtract(half);
+        BigDecimal sampleY = BigDecimal.valueOf(y).multiply(BigDecimal.valueOf(renderHeight))
+                .divide(BigDecimal.valueOf(logicalHeight), context).subtract(half);
+        return new PreciseComplex(
+                viewport.realAtExact(sampleX, renderWidth, renderHeight),
+                viewport.imaginaryAtExact(sampleY, renderHeight));
+    }
+
     /** Only formulas with a dedicated precise backend may cross the double limit. */
     private boolean mustRemainInDirectPrecision(
             Viewport candidate,

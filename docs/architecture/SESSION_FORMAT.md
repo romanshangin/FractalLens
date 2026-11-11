@@ -20,6 +20,16 @@ Application preferences that are not scene state live beside it in
 An absent, malformed or unknown value keeps the application default; see
 [Wide navigation preview](../platform/MACOS_UI.md#wide-navigation-preview).
 
+The last view of each fractal lives beside it in `fractal-views.properties`
+(Java properties, UTF-8), written atomically on main-view close. Each fractal has
+`<PRESET>.centerReal`, `<PRESET>.centerImaginary` and `<PRESET>.scale` decimal
+strings with every digit kept; `<PRESET>` is the `fractal` enum name. The file is
+not part of any scene, so bookmarks, shared presets, history and export are
+unaffected. At launch the active fractal keeps the restored session's view and the
+others are remembered for the Fractal menu. A missing file, a file over 1 MiB, a
+malformed file, or an entry with a missing, non-decimal or non-positive value only
+makes the affected fractals open at their home views.
+
 Application data is separate from the earlier private app; old sessions are never
 automatically moved/deleted. To reuse one, copy `last-session.json` to the new
 platform location with both apps closed. Schema is unchanged.
@@ -32,7 +42,9 @@ platform location with both apps closed. Schema is unchanged.
 - viewport center and scale as decimal strings;
 - base and per-zoom iteration settings;
 - Julia constant real and imaginary components (defaulting to -0.8 and 0.156
-  when absent from older version 2 sessions);
+  when absent from older version 2 sessions); they are binary64, and
+  both Open Julia Set Here actions round the selected decimal Mandelbrot point
+  to them once (the same-zoom action centers its view on the rounded constant);
 - palette identity, editable ARGB stops, color scale, offset, histogram mode
   and orbit trap;
 - interactive antialiasing render modes for standard zoom (`renderMode`) and

@@ -4,6 +4,7 @@ import javafx.application.ColorScheme;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.event.EventHandler;
+import javafx.geometry.Point2D;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -14,13 +15,27 @@ import javafx.scene.input.*;
 import javafx.scene.paint.Color;
 import javafx.stage.Window;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 
 /** Canvas commands, presentation and dismissal live here as the menu grows. */
 final class FractalContextMenu extends ContextMenu implements AutoCloseable {
+    static final String COPY_COORDINATES_AND_ZOOM = "Copy Coordinates and Zoom";
+
+    /** One menu entry; its action runs on the JavaFX thread after the menu has closed. */
+    record Command(String title, Runnable action) {
+        Command {
+            Objects.requireNonNull(title);
+            Objects.requireNonNull(action);
+        }
+    }
+
     private final Node owner;
-    private final Runnable copyCoordinatesAndZoom;
+    private final Function<Point2D, List<Command>> commands;
+    private final BooleanSupplier nativeMenus;
     private MacContextMenu nativeMenu;
     private boolean closed;
     private Window observedWindow;
@@ -44,16 +59,23 @@ final class FractalContextMenu extends ContextMenu implements AutoCloseable {
     private void showForRequest(ContextMenuEvent event) {
         if (closed) return;
         hide();
-        if (MacContextMenu.isAvailable() && owner.getScene() != null
+        var local = owner.screenToLocal(event.getScreenX(), event.getScreenY());
+        // Commands bind the clicked point and the state it was taken from at request time.
+        List<Command> requested = List.copyOf(commands.apply(local));
+        if (requested.isEmpty()) return;
+        setCommands(requested);
+        if (nativeMenus.getAsBoolean() && owner.getScene() != null
                 && owner.getScene().getWindow() != null) {
-            var local = owner.screenToLocal(event.getScreenX(), event.getScreenY());
             var point = local == null ? null : owner.localToScene(local);
             if (point != null) {
                 try {
-                    nativeMenu = MacContextMenu.show(owner.getScene().getWindow(), point.getX(), point.getY(), selected -> {
+                    var titles = requested.stream().map(Command::title).toList();
+                    nativeMenu = MacContextMenu.show(owner.getScene().getWindow(), point.getX(), point.getY(), titles, selected -> {
                         nativeMenu = null;
                         stopObservingWindow();
-                        if (selected && !closed) copyCoordinatesAndZoom.run();
+                        if (selected >= 0 && selected < requested.size() && !closed) {
+                            requested.get(selected).action().run();
+                        }
                     });
                     observeWindow();
                     event.consume();
@@ -69,14 +91,24 @@ final class FractalContextMenu extends ContextMenu implements AutoCloseable {
     }
 
     FractalContextMenu(Node owner, Runnable copyCoordinatesAndZoom) {
+        this(owner, ignored -> List.of(new Command(COPY_COORDINATES_AND_ZOOM, copyCoordinatesAndZoom)));
+        setCommands(commands.apply(null));
+    }
+
+    /**
+     * Creates a menu whose entries are built for each request from the owner-local
+     * point that was clicked ({@code null} when it cannot be resolved). An empty list
+     * shows no menu.
+     */
+    FractalContextMenu(Node owner, Function<Point2D, List<Command>> commands) {
+        this(owner, commands, MacContextMenu::isAvailable);
+    }
+
+    /** {@code nativeMenus} decides per request whether AppKit is tried before the JavaFX menu. */
+    FractalContextMenu(Node owner, Function<Point2D, List<Command>> commands, BooleanSupplier nativeMenus) {
         this.owner = Objects.requireNonNull(owner);
-        this.copyCoordinatesAndZoom = Objects.requireNonNull(copyCoordinatesAndZoom);
-        MenuItem copy = new MenuItem("Copy Coordinates and Zoom");
-        copy.setOnAction(event -> {
-            hide();
-            copyCoordinatesAndZoom.run();
-        });
-        getItems().setAll(copy);
+        this.commands = Objects.requireNonNull(commands);
+        this.nativeMenus = Objects.requireNonNull(nativeMenus);
         getStyleClass().add("fractal-context-menu");
         updateAppearance();
         setAutoHide(true);
@@ -101,10 +133,25 @@ final class FractalContextMenu extends ContextMenu implements AutoCloseable {
         return skin;
     }
 
+    private void setCommands(List<Command> requested) {
+        getItems().setAll(requested.stream().map(command -> {
+            MenuItem item = new MenuItem(command.title());
+            item.setOnAction(event -> {
+                hide();
+                command.action().run();
+            });
+            return item;
+        }).toList());
+    }
+
     private void updateAppearance() {
         var preferences = Platform.getPreferences();
-        boolean dark = preferences.getColorScheme() == ColorScheme.DARK;
-        Color accent = preferences.getAccentColor();
+        applyAppearance(preferences.getColorScheme(), preferences.getAccentColor());
+    }
+
+    /** Styles the JavaFX menu for a color scheme; the platform scheme is applied again on showing. */
+    void applyAppearance(ColorScheme scheme, Color accent) {
+        boolean dark = scheme == ColorScheme.DARK;
         setStyle(String.format(Locale.ROOT,
                 "-menu-background: %s; -menu-foreground: %s; -menu-border: %s; "
                         + "-menu-accent: rgb(%d,%d,%d);",

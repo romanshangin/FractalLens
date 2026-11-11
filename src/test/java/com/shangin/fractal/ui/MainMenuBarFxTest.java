@@ -13,6 +13,10 @@ import com.shangin.fractal.scene.JuliaParameters;
 import com.shangin.fractal.scene.WidePreviewSettings;
 import com.shangin.fractal.formula.JuliaFormula;
 import com.shangin.fractal.render.FractalCalculator;
+import com.shangin.fractal.math.PreciseComplex;
+import com.shangin.fractal.math.Viewport;
+import javafx.geometry.Point2D;
+import java.math.BigDecimal;
 import javafx.animation.AnimationTimer;
 import javafx.application.ColorScheme;
 import javafx.application.Platform;
@@ -42,6 +46,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -336,6 +341,296 @@ class MainMenuBarFxTest {
         await(() -> !command("Color", "Edit Palette…").isDisable());
         assertEquals(initial, fx(view::sceneSnapshot));
         assertArrayEquals(pixels, fx(this::displayedPixels));
+    }
+
+    @Test
+    void openJuliaAtSelectedPointMapsExactSampleAndIsOneUndoStep() throws Exception {
+        // Navigate first so the mapping is checked away from the home view.
+        fx(() -> { view.zoom(true); view.zoom(true); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        FractalScene source = fx(view::sceneSnapshot);
+        int[] sourcePixels = fx(this::displayedPixels);
+        FractalSurface surface = fx(this::surface);
+        int renderWidth = fx(surface::renderWidth);
+        int renderHeight = fx(surface::renderHeight);
+        double width = fx(surface::getWidth);
+        double height = fx(surface::getHeight);
+        Viewport viewport = source.viewport();
+
+        for (int[] sample : new int[][]{{0, 0}, {renderWidth - 1, renderHeight - 1},
+                {renderWidth / 2 - 1, renderHeight / 2}, {renderWidth / 3, 1}}) {
+            // The logical center of displayed render pixel (i, j).
+            double x = (sample[0] + 0.5) * width / renderWidth;
+            double y = (sample[1] + 0.5) * height / renderHeight;
+            PreciseComplex selected = fx(() -> view.coordinateAt(x, y));
+            assertEquals(0, viewport.realAtExact(BigDecimal.valueOf(sample[0]), renderWidth, renderHeight)
+                    .compareTo(selected.real()), "Real coordinate of sample " + sample[0]);
+            assertEquals(0, viewport.imaginaryAtExact(BigDecimal.valueOf(sample[1]), renderHeight)
+                    .compareTo(selected.imaginary()), "Imaginary coordinate of sample " + sample[1]);
+        }
+
+        double x = 0.3 * width;
+        double y = 0.7 * height;
+        PreciseComplex selected = fx(() -> view.coordinateAt(x, y));
+        List<FractalContextMenu.Command> commands = fx(() -> view.contextCommands(new Point2D(x, y)));
+        assertEquals(List.of(FractalContextMenu.COPY_COORDINATES_AND_ZOOM, FractalView.OPEN_JULIA_SET_HERE,
+                        FractalView.OPEN_JULIA_SET_AT_SAME_ZOOM),
+                commands.stream().map(FractalContextMenu.Command::title).toList());
+        fx(() -> { commands.get(1).action().run(); return null; });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
+
+        FractalScene julia = fx(view::sceneSnapshot);
+        Viewport juliaHome = new FractalCamera(FractalPreset.JULIA).defaultViewport((int) width, (int) height);
+        assertEquals(source.withFractal(FractalPreset.JULIA, juliaHome)
+                .withJuliaParameters(JuliaParameters.nearest(selected)), julia);
+        assertEquals(new JuliaParameters(selected.real().doubleValue(), selected.imaginary().doubleValue()),
+                julia.juliaParameters());
+        fx(() -> {
+            assertEquals(julia, surface.completedRender().scene(), "Displayed pixels must belong to the Julia scene");
+            assertTrue(((RadioMenuItem) command("Fractal", "Julia")).isSelected());
+            assertEquals(List.of(FractalContextMenu.COPY_COORDINATES_AND_ZOOM),
+                    view.contextCommands(new Point2D(x, y)).stream().map(FractalContextMenu.Command::title).toList(),
+                    "Only Mandelbrot offers the Julia transition");
+            return null;
+        });
+
+        fx(() -> { command("Edit", "Undo").fire(); return null; });
+        await(() -> !command("Color", "Edit Palette…").isDisable() && view.isLatencyIdle());
+        fx(() -> {
+            assertEquals(source, view.sceneSnapshot());
+            assertEquals(source, surface.completedRender().scene());
+            assertArrayEquals(sourcePixels, displayedPixels());
+            assertTrue(((RadioMenuItem) command("Fractal", "Mandelbrot")).isSelected());
+            return null;
+        });
+        fx(() -> { command("Edit", "Redo").fire(); return null; });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable());
+        assertEquals(julia, fx(view::sceneSnapshot));
+    }
+
+    @Test
+    void openJuliaAtSameZoomCentersTheJuliaConstantAtTheSourceScale() throws Exception {
+        fx(() -> { view.zoom(true); view.zoom(true); view.zoom(true); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        FractalScene source = fx(view::sceneSnapshot);
+        int[] sourcePixels = fx(this::displayedPixels);
+        double x = fx(() -> surface().getWidth() * 0.62);
+        double y = fx(() -> surface().getHeight() * 0.41);
+        PreciseComplex selected = fx(() -> view.coordinateAt(x, y));
+        List<FractalContextMenu.Command> commands = fx(() -> view.contextCommands(new Point2D(x, y)));
+        assertEquals(FractalView.OPEN_JULIA_SET_AT_SAME_ZOOM, commands.get(2).title());
+        fx(() -> { commands.get(2).action().run(); return null; });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable() && view.isLatencyIdle());
+
+        FractalScene julia = fx(view::sceneSnapshot);
+        JuliaParameters constant = JuliaParameters.nearest(selected);
+        assertEquals(source.withFractal(FractalPreset.JULIA, new Viewport(new PreciseComplex(
+                        new BigDecimal(constant.real()), new BigDecimal(constant.imaginary())),
+                        source.viewport().scaleExact()))
+                .withJuliaParameters(constant), julia);
+        // The view is centered exactly on z = c for the binary64 constant.
+        assertEquals(0, new BigDecimal(constant.real()).compareTo(julia.viewport().center().real()));
+        assertEquals(0, new BigDecimal(constant.imaginary()).compareTo(julia.viewport().center().imaginary()));
+        assertEquals(0, source.viewport().scaleExact().compareTo(julia.viewport().scaleExact()));
+        assertEquals(julia, fx(() -> surface().completedRender().scene()));
+
+        fx(() -> { command("Edit", "Undo").fire(); return null; });
+        await(() -> !command("Color", "Edit Palette…").isDisable() && view.isLatencyIdle());
+        fx(() -> {
+            assertEquals(source, view.sceneSnapshot());
+            assertEquals(source, surface().completedRender().scene());
+            assertArrayEquals(sourcePixels, displayedPixels());
+            return null;
+        });
+
+        // A same-zoom command taken before navigation is ignored as well.
+        List<FractalContextMenu.Command> stale = fx(() -> view.contextCommands(new Point2D(x, y)));
+        fx(() -> { view.zoom(true); stale.get(2).action().run(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        assertEquals(FractalPreset.MANDELBROT, fx(view::sceneSnapshot).fractal());
+    }
+
+    @Test
+    void openJuliaAtSameZoomStaysOnTheJuliaConstantBelowItsPrecision() throws Exception {
+        // At a scale far below ulp(c) the exact selection is thousands of screens away
+        // from the rounded z = c; the view must still be centered on z = c.
+        Viewport deep = new Viewport("-0.743643887037158704752191506114774",
+                "0.131825904205311970493132056385139", "1e-20");
+        fx(() -> { view.goTo(deep); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        double x = fx(() -> surface().getWidth() * 0.25);
+        double y = fx(() -> surface().getHeight() * 0.75);
+        PreciseComplex selected = fx(() -> view.coordinateAt(x, y));
+        JuliaParameters constant = JuliaParameters.nearest(selected);
+        BigDecimal offset = selected.real().subtract(new BigDecimal(constant.real())).abs();
+        assertTrue(offset.compareTo(new BigDecimal("1e-18")) > 0,
+                "The fixture must select a point many screens from the rounded constant");
+
+        fx(() -> { view.contextCommands(new Point2D(x, y)).get(2).action().run(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Render", "Edit Julia Parameters…").isDisable());
+        FractalScene julia = fx(view::sceneSnapshot);
+        assertEquals(constant, julia.juliaParameters());
+        assertEquals(new Viewport(new PreciseComplex(new BigDecimal(constant.real()),
+                new BigDecimal(constant.imaginary())), deep.scaleExact()), julia.viewport());
+        assertEquals(julia, fx(() -> surface().completedRender().scene()));
+    }
+
+    @Test
+    void openJuliaCoversTheSurfaceUntilTheJuliaFrameIsComplete() throws Exception {
+        for (int command : new int[]{1, 2}) {
+            double x = fx(() -> surface().getWidth() * 0.3);
+            double y = fx(() -> surface().getHeight() * 0.6);
+            fx(() -> {
+                view.contextCommands(new Point2D(x, y)).get(command).action().run();
+                assertTrue(view.getChildrenUnmodifiable().stream().anyMatch(LoadingScreen.class::isInstance),
+                        "Opening Julia must show the loading screen");
+                assertFalse(surface().isVisible(), "Mandelbrot or partial Julia pixels must stay hidden");
+                return null;
+            });
+            await(() -> view.isLatencyIdle() && !command("Render", "Edit Julia Parameters…").isDisable()
+                    && view.getChildrenUnmodifiable().stream().noneMatch(LoadingScreen.class::isInstance));
+            fx(() -> {
+                assertTrue(surface().isVisible());
+                assertEquals(view.sceneSnapshot(), surface().completedRender().scene());
+                command("Edit", "Undo").fire();
+                return null;
+            });
+            await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable()
+                    && view.sceneSnapshot().fractal() == FractalPreset.MANDELBROT);
+        }
+    }
+
+    @Test
+    void switchingFractalsReturnsToEachFractalsLastView() throws Exception {
+        fx(() -> { view.zoom(true); view.zoom(true); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        FractalScene mandelbrot = fx(view::sceneSnapshot);
+        int[] mandelbrotPixels = fx(this::displayedPixels);
+
+        // A fractal that has not been visited yet starts at its home view.
+        fx(() -> { command("Fractal", "Burning Ship").fire(); return null; });
+        await(() -> view.isLatencyIdle() && view.sceneSnapshot().fractal() == FractalPreset.BURNING_SHIP
+                && !command("Color", "Edit Palette…").isDisable());
+        double width = fx(() -> view.getWidth());
+        double height = fx(() -> view.getHeight());
+        assertEquals(new FractalCamera(FractalPreset.BURNING_SHIP).defaultViewport((int) width, (int) height),
+                fx(view::sceneSnapshot).viewport());
+        fx(() -> { view.zoom(true); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        FractalScene burningShip = fx(view::sceneSnapshot);
+
+        fx(() -> { command("Fractal", "Mandelbrot").fire(); return null; });
+        await(() -> view.isLatencyIdle() && view.sceneSnapshot().fractal() == FractalPreset.MANDELBROT
+                && !command("Color", "Edit Palette…").isDisable());
+        fx(() -> {
+            assertEquals(mandelbrot, view.sceneSnapshot(), "Mandelbrot returns to its exact last view");
+            assertEquals(mandelbrot, surface().completedRender().scene());
+            assertArrayEquals(mandelbrotPixels, displayedPixels());
+            return null;
+        });
+
+        fx(() -> { command("Fractal", "Burning Ship").fire(); return null; });
+        await(() -> view.isLatencyIdle() && view.sceneSnapshot().fractal() == FractalPreset.BURNING_SHIP
+                && !command("Color", "Edit Palette…").isDisable());
+        assertEquals(burningShip, fx(view::sceneSnapshot));
+        assertEquals(burningShip, fx(() -> surface().completedRender().scene()));
+
+        // Selecting the active fractal again still resets it to its home view.
+        fx(() -> { command("Fractal", "Burning Ship").fire(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        assertEquals(new FractalCamera(FractalPreset.BURNING_SHIP).defaultViewport((int) width, (int) height),
+                fx(view::sceneSnapshot).viewport());
+
+        // Undo leaves the reset view; leaving Burning Ship by Undo remembers its zoomed view too.
+        fx(() -> { command("Edit", "Undo").fire(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        assertEquals(burningShip, fx(view::sceneSnapshot));
+        fx(() -> { command("Edit", "Undo").fire(); return null; });
+        await(() -> view.isLatencyIdle() && view.sceneSnapshot().fractal() == FractalPreset.MANDELBROT
+                && !command("Color", "Edit Palette…").isDisable());
+        fx(() -> { command("Fractal", "Burning Ship").fire(); return null; });
+        await(() -> view.isLatencyIdle() && view.sceneSnapshot().fractal() == FractalPreset.BURNING_SHIP
+                && !command("Color", "Edit Palette…").isDisable());
+        assertEquals(burningShip.viewport(), fx(view::sceneSnapshot).viewport());
+
+        Map<FractalPreset, Viewport> views = fx(view::fractalViews);
+        assertEquals(mandelbrot.viewport(), views.get(FractalPreset.MANDELBROT));
+        assertEquals(burningShip.viewport(), views.get(FractalPreset.BURNING_SHIP));
+    }
+
+    @Test
+    void openJuliaSetHereKeepsTheInitialViewWhenJuliaHasARememberedView() throws Exception {
+        fx(() -> { command("Fractal", "Julia").fire(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Render", "Edit Julia Parameters…").isDisable());
+        fx(() -> { view.zoom(true); return null; });
+        await(() -> view.isLatencyIdle() && !command("Render", "Edit Julia Parameters…").isDisable());
+        Viewport rememberedJulia = fx(view::sceneSnapshot).viewport();
+        fx(() -> { command("Fractal", "Mandelbrot").fire(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable()
+                && view.sceneSnapshot().fractal() == FractalPreset.MANDELBROT);
+
+        double x = fx(() -> surface().getWidth() * 0.4);
+        double y = fx(() -> surface().getHeight() * 0.6);
+        fx(() -> { view.contextCommands(new Point2D(x, y)).get(1).action().run(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Render", "Edit Julia Parameters…").isDisable());
+        double width = fx(() -> view.getWidth());
+        double height = fx(() -> view.getHeight());
+        Viewport julia = fx(view::sceneSnapshot).viewport();
+        assertEquals(new FractalCamera(FractalPreset.JULIA).defaultViewport((int) width, (int) height), julia);
+        assertNotEquals(rememberedJulia, julia);
+    }
+
+    @Test
+    void savedFractalViewsAreUsedForInactiveFractalsOnly() throws Exception {
+        Viewport savedJulia = new Viewport("0.125", "-0.25", "0.5");
+        Viewport savedMandelbrot = new Viewport("-1.25", "0", "0.5");
+        FractalScene active = fx(view::sceneSnapshot);
+        fx(() -> {
+            view.restoreFractalViews(Map.of(FractalPreset.JULIA, savedJulia, FractalPreset.MANDELBROT, savedMandelbrot));
+            assertEquals(active, view.sceneSnapshot(), "The restored active scene keeps its own view");
+            command("Fractal", "Julia").fire();
+            return null;
+        });
+        await(() -> view.isLatencyIdle() && !command("Render", "Edit Julia Parameters…").isDisable());
+        assertEquals(savedJulia, fx(view::sceneSnapshot).viewport());
+        assertEquals(fx(view::sceneSnapshot), fx(() -> surface().completedRender().scene()));
+        fx(() -> { command("Fractal", "Mandelbrot").fire(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable()
+                && view.sceneSnapshot().fractal() == FractalPreset.MANDELBROT);
+        assertEquals(active.viewport(), fx(view::sceneSnapshot).viewport());
+    }
+
+    @Test
+    void openJuliaCancelsRunningRenderAndIgnoresStaleSelections() throws Exception {
+        double x = fx(() -> surface().getWidth() * 0.25);
+        double y = fx(() -> surface().getHeight() * 0.5);
+        List<FractalContextMenu.Command> stale = fx(() -> view.contextCommands(new Point2D(x, y)));
+        // A command taken before navigation must not act on the newer view.
+        fx(() -> { view.zoom(true); stale.get(1).action().run(); return null; });
+        await(() -> view.isLatencyIdle() && !command("Color", "Edit Palette…").isDisable());
+        FractalScene zoomed = fx(view::sceneSnapshot);
+        assertEquals(FractalPreset.MANDELBROT, zoomed.fractal());
+        assertEquals(zoomed, fx(() -> surface().completedRender().scene()));
+
+        // Selecting while a Mandelbrot render is still running replaces it without stale pixels.
+        PreciseComplex selected = fx(() -> {
+            view.zoom(true);
+            assertFalse(view.isLatencyIdle(), "The Mandelbrot render must still be in progress");
+            PreciseComplex point = view.coordinateAt(x, y);
+            view.contextCommands(new Point2D(x, y)).get(1).action().run();
+            return point;
+        });
+        await(() -> !command("Render", "Edit Julia Parameters…").isDisable() && view.isLatencyIdle());
+        FractalScene julia = fx(view::sceneSnapshot);
+        assertEquals(FractalPreset.JULIA, julia.fractal());
+        assertEquals(JuliaParameters.nearest(selected), julia.juliaParameters());
+        assertEquals(julia, fx(() -> surface().completedRender().scene()));
+        fx(() -> { command("Edit", "Undo").fire(); return null; });
+        await(() -> !command("Color", "Edit Palette…").isDisable() && view.isLatencyIdle());
+        FractalScene restored = fx(view::sceneSnapshot);
+        assertEquals(FractalPreset.MANDELBROT, restored.fractal());
+        assertNotEquals(zoomed.viewport(), restored.viewport(), "Undo returns to the view the point was selected in");
+        assertEquals(restored, fx(() -> surface().completedRender().scene()));
     }
 
     @Test

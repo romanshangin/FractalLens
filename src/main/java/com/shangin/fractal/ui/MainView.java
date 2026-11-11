@@ -1,5 +1,6 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.FractalViewStore;
 import com.shangin.fractal.app.LastSessionStore;
 import com.shangin.fractal.app.PreferencesStore;
 import com.shangin.fractal.coloring.PalettePreset;
@@ -41,6 +42,7 @@ public class MainView extends BorderPane {
     private final MainMenuBar menuBar;
     private final LastSessionStore sessionStore;
     private final PreferencesStore preferences;
+    private final FractalViewStore fractalViews;
     private boolean closed;
     private boolean exporting;
     private long exportRequest;
@@ -73,6 +75,8 @@ public class MainView extends BorderPane {
         fractalView.setOnRenderError(this::renderFailed);
         preferences = PreferencesStore.besides(sessionStore);
         restoreWidePreview();
+        fractalViews = FractalViewStore.besides(sessionStore);
+        restoreFractalViews();
         menuBar = new MainMenuBar(stage, fractalView, initialScene, this::exportPng);
         menuBar.setOnWidePreviewChanged(this::saveWidePreview);
         if (System.getProperty("os.name", "").startsWith("Mac")) {
@@ -120,6 +124,14 @@ public class MainView extends BorderPane {
             preferences.saveWidePreview(settings);
         } catch (IOException exception) {
             System.err.println("Could not save FractalLens preferences: " + exception.getMessage());
+        }
+    }
+
+    private void restoreFractalViews() {
+        try {
+            fractalView.restoreFractalViews(fractalViews.load());
+        } catch (IOException exception) {
+            System.err.println("Could not restore FractalLens fractal views: " + exception.getMessage());
         }
     }
 
@@ -302,6 +314,11 @@ public class MainView extends BorderPane {
         } catch (IOException exception) {
             System.err.println("Could not save the last FractalLens session: "
                     + exception.getMessage());
+        }
+        try {
+            fractalViews.save(fractalView.fractalViews());
+        } catch (IOException exception) {
+            System.err.println("Could not save FractalLens fractal views: " + exception.getMessage());
         }
         exportService.close();
         menuBar.close();

@@ -146,8 +146,24 @@ final class AppKitMenuProbe {
     }
 
     static void select(FractalContextMenu owner) throws Exception {
+        select(owner, 0);
+    }
+
+    static void select(FractalContextMenu owner, int index) throws Exception {
         var menu = menu(owner);
-        message(menu, "performActionForItemAtIndex:", null, new MemoryLayout[]{JAVA_LONG}, 0L);
+        message(menu, "performActionForItemAtIndex:", null, new MemoryLayout[]{JAVA_LONG}, (long) index);
+    }
+
+    /** Titles of the open native canvas menu, in order. */
+    static List<String> titles(FractalContextMenu owner) throws Exception {
+        var menu = menu(owner);
+        long count = (long) message(menu, "numberOfItems", JAVA_LONG);
+        var titles = new ArrayList<String>();
+        for (long index = 0; index < count; index++) {
+            var item = (MemorySegment) message(menu, "itemAtIndex:", ADDRESS, new MemoryLayout[]{JAVA_LONG}, index);
+            titles.add(string(item, "title"));
+        }
+        return titles;
     }
 
     static void cancel(FractalContextMenu owner) throws Exception {

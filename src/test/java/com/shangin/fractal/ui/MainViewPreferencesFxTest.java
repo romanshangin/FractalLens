@@ -1,7 +1,10 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.FractalViewStore;
 import com.shangin.fractal.app.LastSessionStore;
 import com.shangin.fractal.app.PreferencesStore;
+import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.scene.WidePreviewSettings;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -16,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -114,6 +118,55 @@ class MainViewPreferencesFxTest {
             assertEquals(selected, fx(() -> fractalView(restarted).widePreviewSettings()));
         } finally {
             fx(() -> { restarted.close(); restartedStage.close(); return null; });
+        }
+    }
+
+    @Test
+    void eachFractalsLastViewIsSavedOnExitAndRestoredAfterRestart() throws Exception {
+        var session = new LastSessionStore(temporaryDirectory.resolve("last-session.json"));
+        Stage stage = fx(Stage::new);
+        MainView main = fx(() -> new MainView(stage, session));
+        Viewport mandelbrot;
+        Viewport julia;
+        try {
+            fx(() -> { stage.setScene(new Scene(main, 320, 240)); stage.show(); return null; });
+            awaitIdle(main);
+            fx(() -> { fractalView(main).zoom(true); fractalView(main).zoom(true); return null; });
+            awaitIdle(main);
+            mandelbrot = fx(() -> fractalView(main).sceneSnapshot().viewport());
+            fx(() -> { fractalView(main).setFractal(FractalPreset.JULIA); return null; });
+            awaitIdle(main);
+            fx(() -> { fractalView(main).zoom(true); return null; });
+            awaitIdle(main);
+            julia = fx(() -> fractalView(main).sceneSnapshot().viewport());
+        } finally {
+            fx(() -> { main.close(); stage.close(); return null; });
+        }
+        assertEquals(Map.of(FractalPreset.MANDELBROT, mandelbrot, FractalPreset.JULIA, julia),
+                FractalViewStore.besides(session).load(), "Closing saves the last view of every visited fractal");
+
+        Stage restartedStage = fx(Stage::new);
+        MainView restarted = fx(() -> new MainView(restartedStage, session));
+        try {
+            fx(() -> { restartedStage.setScene(new Scene(restarted, 320, 240)); restartedStage.show(); return null; });
+            awaitIdle(restarted);
+            assertEquals(FractalPreset.JULIA, fx(() -> fractalView(restarted).sceneSnapshot().fractal()));
+            assertEquals(julia, fx(() -> fractalView(restarted).sceneSnapshot().viewport()));
+            fx(() -> { fractalView(restarted).setFractal(FractalPreset.MANDELBROT); return null; });
+            awaitIdle(restarted);
+            assertEquals(mandelbrot, fx(() -> fractalView(restarted).sceneSnapshot().viewport()),
+                    "Switching after a restart returns to the saved view");
+        } finally {
+            fx(() -> { restarted.close(); restartedStage.close(); return null; });
+        }
+    }
+
+    /** Waits for a concrete state: no pending render or gesture work and a completed frame. */
+    private static void awaitIdle(MainView main) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (!fx(() -> fractalView(main).isLatencyIdle() && fractalView(main).hasCompletedFrame())) {
+            assertTrue(System.nanoTime() < deadline, "The view did not become idle");
+            Thread.onSpinWait();
         }
     }
 
