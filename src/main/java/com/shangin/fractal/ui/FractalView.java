@@ -10,6 +10,7 @@ import com.shangin.fractal.controller.RenderStatus;
 import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.export.ExportFileName;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.math.PreciseComplex;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.CompletedRender;
 import com.shangin.fractal.render.RenderPriority;
@@ -25,6 +26,7 @@ import com.shangin.fractal.scene.WidePreviewSettings;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import javafx.animation.PauseTransition;
 import javafx.animation.AnimationTimer;
+import javafx.geometry.Point2D;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.StackPane;
@@ -33,7 +35,9 @@ import javafx.util.Duration;
 import java.nio.file.Path;
 import java.math.BigDecimal;
 import java.util.function.Consumer;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Interactive fractal viewport that translates resize, scroll, and drag events
@@ -75,6 +79,8 @@ public class FractalView extends StackPane {
     private final FractalContextMenu contextMenu;
     private FractalScene scene;
     private final SceneHistory history;
+    /** The last view of each fractal that was left; the active fractal's view is the scene's. */
+    private final Map<FractalPreset, Viewport> rememberedViews = new EnumMap<>(FractalPreset.class);
     private Consumer<FractalScene> sceneChangedHandler = ignored -> {};
     private boolean restoringScene;
     private boolean resizingScene;
@@ -97,6 +103,9 @@ public class FractalView extends StackPane {
             advanceColorCycle(now);
         }
     };
+
+    static final String OPEN_JULIA_SET_HERE = "Open Julia Set Here";
+    static final String OPEN_JULIA_SET_AT_SAME_ZOOM = "Open Julia Set Here at Same Zoom";
 
     private Viewport panSourceViewport;
     private Viewport trackpadPanSourceViewport;
@@ -173,7 +182,7 @@ public class FractalView extends StackPane {
         configureZoom();
         configurePan();
         configureTrackpadGestures();
-        contextMenu = new FractalContextMenu(this, this::copyCoordinatesAndZoom);
+        contextMenu = new FractalContextMenu(this, this::contextCommands);
         setFocusTraversable(true);
         setAccessibleText("Fractal canvas");
         setAccessibleHelp("Use arrow keys to pan, Page Up and Page Down to zoom, or Home to reset. Drag to pan, scroll to zoom, or pinch on a trackpad.");
@@ -247,7 +256,65 @@ public class FractalView extends StackPane {
                 + "; viewport=" + request.viewport() + "; iterations=" + request.maxIterations();
     }
 
+    /**
+     * Switches to another fractal at the view it was last left at, when that view is
+     * still renderable at the current size; otherwise, and when the active fractal is
+     * selected again, at its home view.
+     */
     public void setFractal(FractalPreset preset) {
+        Viewport remembered = preset == scene.fractal() ? null : rememberedViews.get(preset);
+        switchFractal(preset, scene.juliaParameters(), remembered);
+    }
+
+    /** The last view of every fractal, including the active one, for saving across restarts. */
+    Map<FractalPreset, Viewport> fractalViews() {
+        Map<FractalPreset, Viewport> views = new EnumMap<>(FractalPreset.class);
+        views.putAll(rememberedViews);
+        views.put(scene.fractal(), camera.viewport());
+        return views;
+    }
+
+    /** Installs views saved by an earlier run; the active fractal keeps its restored scene view. */
+    void restoreFractalViews(Map<FractalPreset, Viewport> views) {
+        views.forEach((preset, viewport) -> {
+            if (preset != scene.fractal()) rememberedViews.put(preset, java.util.Objects.requireNonNull(viewport));
+        });
+    }
+
+    /**
+     * Opens the Julia set for an exact Mandelbrot point at Julia's initial view, as one
+     * history step from the source scene. A selection taken from an earlier view is
+     * ignored, so a stale menu command can never replace a newer scene.
+     */
+    void openJuliaAt(Viewport sourceViewport, PreciseComplex point) {
+        openJulia(sourceViewport, point, false);
+    }
+
+    /**
+     * Opens the Julia set for an exact Mandelbrot point at the source's exact scale,
+     * centered on {@code z = c} for the rounded binary64 constant, where Julia's local
+     * structure resembles the Mandelbrot set around {@code c}. Centering on the exact
+     * selection instead would drift from {@code z = c} by up to half a ULP of {@code c},
+     * many screens away at deep zoom.
+     */
+    void openJuliaAtSameZoom(Viewport sourceViewport, PreciseComplex point) {
+        openJulia(sourceViewport, point, true);
+    }
+
+    private void openJulia(Viewport sourceViewport, PreciseComplex point, boolean sameZoom) {
+        dismissContextMenu();
+        if (scene.fractal() != FractalPreset.MANDELBROT || !camera.viewport().equals(sourceViewport)) return;
+        JuliaParameters julia = JuliaParameters.nearest(point);
+        Viewport destination = sameZoom ? new Viewport(new PreciseComplex(
+                new BigDecimal(julia.real()), new BigDecimal(julia.imaginary())), sourceViewport.scaleExact()) : null;
+        switchFractal(FractalPreset.JULIA, julia, destination);
+    }
+
+    /**
+     * A {@code null} destination opens the preset's initial view, as does a destination
+     * beyond the preset's precision limit at the current render size.
+     */
+    private void switchFractal(FractalPreset preset, JuliaParameters juliaParameters, Viewport destination) {
         dismissContextMenu();
         int width = (int) getWidth();
         int height = (int) getHeight();
@@ -261,10 +328,35 @@ public class FractalView extends StackPane {
         cancelSceneInteraction();
         renderController.cancelCurrent();
         showLoadingScreen(true);
+        rememberedViews.put(scene.fractal(), camera.viewport());
         camera.setPreset(preset, width, height);
-        scene = scene.withFractal(preset, camera.viewport());
+        if (destination != null && camera.canGoTo(destination, renderGridWidth(), renderGridHeight())) {
+            camera.goTo(destination, width, height, renderGridWidth(), renderGridHeight());
+        }
+        scene = scene.withFractal(preset, camera.viewport()).withJuliaParameters(juliaParameters);
         resetPriority();
         recalculate();
+    }
+
+    /** The exact coordinate displayed at a canvas point, or {@code null} before layout. */
+    PreciseComplex coordinateAt(double x, double y) {
+        double width = fractalSurface.getWidth();
+        double height = fractalSurface.getHeight();
+        if ((int) width < 2 || (int) height < 2) return null;
+        return camera.pointAt(x, y, width, height, renderGridWidth(), renderGridHeight());
+    }
+
+    List<FractalContextMenu.Command> contextCommands(Point2D point) {
+        var copy = new FractalContextMenu.Command(
+                FractalContextMenu.COPY_COORDINATES_AND_ZOOM, this::copyCoordinatesAndZoom);
+        if (point == null || scene.fractal() != FractalPreset.MANDELBROT) return List.of(copy);
+        Viewport source = camera.viewport();
+        PreciseComplex selected = coordinateAt(point.getX(), point.getY());
+        if (selected == null) return List.of(copy);
+        return List.of(copy,
+                new FractalContextMenu.Command(OPEN_JULIA_SET_HERE, () -> openJuliaAt(source, selected)),
+                new FractalContextMenu.Command(OPEN_JULIA_SET_AT_SAME_ZOOM,
+                        () -> openJuliaAtSameZoom(source, selected)));
     }
 
     /** A bookmark is a scene replacement, including cancellation of queued gestures. */
@@ -1108,7 +1200,10 @@ public class FractalView extends StackPane {
         resizeRender.stop();
         resizePending = false;
         fractalSurface.resizeBuffer((int) getWidth(), (int) getHeight());
-        if (scene.fractal() != replacement.fractal()) showLoadingScreen(true);
+        if (scene.fractal() != replacement.fractal()) {
+            rememberedViews.put(scene.fractal(), camera.viewport());
+            showLoadingScreen(true);
+        }
         scene = replacement;
         camera.restore(scene.fractal(), scene.viewport(), (int) getWidth(), (int) getHeight());
         colorCycleOffset = scene.coloring().offset();

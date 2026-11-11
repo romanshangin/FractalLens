@@ -500,4 +500,73 @@ class FractalCameraTest {
         assertEquals(renderWidth * renderHeight - expectedReused, formulaCalls.get());
         assertTrue(reuse.frame().isComplete());
     }
+
+    @Test
+    void pointAtMapsCenterAndEdgesOfTheDisplayedRenderGrid() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(400, 300);
+        Viewport viewport = camera.viewport();
+        // Retina: an 800 x 600 render grid stretched over 400 x 300 logical points.
+        assertEquals(viewport.center(), camera.pointAt(200, 150, 400, 300, 800, 600));
+        assertEquals(new PreciseComplex(viewport.minRealExact(800, 600), viewport.maxImaginaryExact()),
+                camera.pointAt(0, 0, 400, 300, 800, 600));
+        assertEquals(new PreciseComplex(viewport.realAtExact(BigDecimal.valueOf(799), 800, 600),
+                        viewport.imaginaryAtExact(BigDecimal.valueOf(599), 600)),
+                camera.pointAt(400, 300, 400, 300, 800, 600));
+        // Outside the outer sample centers the selection clamps to the edge samples.
+        assertEquals(camera.pointAt(0, 0, 400, 300, 800, 600),
+                camera.pointAt(-3, -2, 400, 300, 800, 600));
+    }
+
+    @Test
+    void pointAtSelectsTheSampleUnderEachDisplayedPixelCenter() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(400, 300);
+        camera.zoomIn(97, 211, 400, 300, 800, 600);
+        camera.pan(-37, 18, 400, 300);
+        Viewport viewport = camera.viewport();
+        for (int[] sample : new int[][]{{0, 0}, {1, 599}, {399, 300}, {400, 299}, {799, 1}}) {
+            int x = sample[0];
+            int y = sample[1];
+            // Physical pixel (x, y) occupies logical [x / 2, (x + 1) / 2); its center is (x + 0.5) / 2.
+            PreciseComplex point = camera.pointAt((x + 0.5) / 2, (y + 0.5) / 2, 400, 300, 800, 600);
+            assertEquals(0, viewport.realAtExact(BigDecimal.valueOf(x), 800, 600).compareTo(point.real()));
+            assertEquals(0, viewport.imaginaryAtExact(BigDecimal.valueOf(y), 600).compareTo(point.imaginary()));
+        }
+        // At scale 1 the same logical point is a different sample, but the same plane position.
+        PreciseComplex standard = camera.pointAt(123.5, 77.25, 400, 300, 400, 300);
+        PreciseComplex retina = camera.pointAt(123.5, 77.25, 400, 300, 800, 600);
+        assertEquals(standard.real().doubleValue(), retina.real().doubleValue(),
+                viewport.realUnitsPerPixel(400, 300));
+        assertEquals(standard.imaginary().doubleValue(), retina.imaginary().doubleValue(),
+                viewport.imaginaryUnitsPerPixel(300));
+    }
+
+    @Test
+    void pointAtKeepsDeepZoomDigitsBeyondDoublePrecision() {
+        Viewport deep = new Viewport("-0.743643887037158704752191506114774",
+                "0.131825904205311970493132056385139", "1e-40");
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT, deep);
+        camera.resize(640, 400);
+
+        PreciseComplex center = camera.pointAt(320, 200, 640, 400, 640, 400);
+        PreciseComplex nextSample = camera.pointAt(321, 200, 640, 400, 640, 400);
+
+        assertEquals(deep.center(), center);
+        BigDecimal step = deep.realUnitsPerPixelExact(640, 400);
+        // Equal to one sample step up to the working precision's last digits.
+        assertTrue(nextSample.real().subtract(center.real()).subtract(step).abs()
+                .compareTo(step.movePointLeft(25)) < 0);
+        assertEquals(center.real().doubleValue(), nextSample.real().doubleValue(),
+                "Adjacent deep samples share one binary64 value; only the decimal keeps them apart");
+    }
+
+    @Test
+    void pointAtRejectsInvalidInput() {
+        FractalCamera camera = new FractalCamera(FractalPreset.MANDELBROT);
+        camera.resize(400, 300);
+        assertThrows(IllegalArgumentException.class, () -> camera.pointAt(Double.NaN, 0, 400, 300, 800, 600));
+        assertThrows(IllegalArgumentException.class, () -> camera.pointAt(0, 0, 0, 300, 800, 600));
+        assertThrows(IllegalArgumentException.class, () -> camera.pointAt(0, 0, 400, 300, 1, 600));
+    }
 }

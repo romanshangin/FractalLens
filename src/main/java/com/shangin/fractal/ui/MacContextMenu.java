@@ -6,13 +6,14 @@ import javafx.stage.Window;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.function.Consumer;
+import java.util.List;
+import java.util.function.IntConsumer;
 
 /** One AppKit tracking session. All entry points and disposal belong to the FX thread. */
 final class MacContextMenu implements AutoCloseable {
     private long handle;
     private boolean closed;
-    private final Consumer<Boolean> completion;
+    private final IntConsumer completion;
 
     private static final class Library {
         static final boolean AVAILABLE = load();
@@ -43,20 +44,22 @@ final class MacContextMenu implements AutoCloseable {
         return windowHandle;
     }
 
-    static MacContextMenu show(Window window, double sceneX, double sceneY,
-                               Consumer<Boolean> completion) throws ReflectiveOperationException {
+    /** Completion receives the selected item index, or {@code -1} when tracking ends without selection. */
+    static MacContextMenu show(Window window, double sceneX, double sceneY, List<String> titles,
+                               IntConsumer completion) throws ReflectiveOperationException {
+        if (titles.isEmpty()) throw new IllegalArgumentException("Native menu needs at least one item");
         long windowHandle = windowHandle(window);
         var session = new MacContextMenu(completion);
-        session.handle = session.open(windowHandle, sceneX, sceneY);
+        session.handle = session.open(windowHandle, sceneX, sceneY, titles.toArray(String[]::new));
         if (session.handle == 0) throw new IllegalStateException("Cannot create native menu");
         return session;
     }
 
-    private MacContextMenu(Consumer<Boolean> completion) { this.completion = completion; }
+    private MacContextMenu(IntConsumer completion) { this.completion = completion; }
 
     // Called by AppKit after tracking has finished. Never run application commands in JNI.
     @SuppressWarnings("unused")
-    private void completed(boolean selected) {
+    private void completed(int selected) {
         Platform.runLater(() -> {
             if (closed) return;
             close();
@@ -78,7 +81,7 @@ final class MacContextMenu implements AutoCloseable {
         if (!Platform.isFxApplicationThread()) throw new IllegalStateException("FX thread required");
     }
 
-    private native long open(long window, double x, double y);
+    private native long open(long window, double x, double y, String[] titles);
     private static native long nativeWindowHandle(Window window);
     private static native void dispose(long handle);
 }

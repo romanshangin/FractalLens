@@ -28,7 +28,7 @@ static BOOL requireMainThread(JNIEnv *env) {
 @property NSView *view;
 @property NSPoint point;
 @property BOOL cancelled;
-@property BOOL selected;
+@property NSInteger selectedIndex;
 @property BOOL tracking;
 @property JavaVM *vm;
 @property jobject callback;
@@ -39,8 +39,7 @@ static BOOL requireMainThread(JNIEnv *env) {
 
 @implementation FractalMenuSession
 - (void)choose:(id)sender {
-    (void)sender;
-    self.selected = YES;
+    self.selectedIndex = [(NSMenuItem *)sender tag];
     // Also finish tracking when accessibility invokes the item's action directly.
     [self.menu cancelTracking];
 }
@@ -57,7 +56,7 @@ static BOOL requireMainThread(JNIEnv *env) {
         BOOL attached;
         JNIEnv *env = environment(session.vm, &attached);
         if (env) {
-            (*env)->CallVoidMethod(env, session.callback, session.completion, (jboolean)session.selected);
+            (*env)->CallVoidMethod(env, session.callback, session.completion, (jint)session.selectedIndex);
             // Exceptions must not escape into the AppKit run loop.
             if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionDescribe(env); (*env)->ExceptionClear(env); }
             if (attached) (*session.vm)->DetachCurrentThread(session.vm);
@@ -98,14 +97,21 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacContextMenu_nativeWindowH
 }
 
 JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacContextMenu_open
-(JNIEnv *env, jobject callback, jlong windowHandle, jdouble x, jdouble y) {
+(JNIEnv *env, jobject callback, jlong windowHandle, jdouble x, jdouble y, jobjectArray titles) {
     if (!requireMainThread(env)) return 0;
+    jsize count = titles ? (*env)->GetArrayLength(env, titles) : 0;
+    if (count <= 0) {
+        (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/IllegalArgumentException"),
+                        "Native menu needs at least one item");
+        return 0;
+    }
     NSWindow *window = (__bridge NSWindow *)(void *)(intptr_t)windowHandle;
     FractalMenuSession *session = [FractalMenuSession new];
+    session.selectedIndex = -1;
     JavaVM *vm = NULL;
     (*env)->GetJavaVM(env, &vm);
     session.vm = vm;
-    session.completion = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, callback), "completed", "(Z)V");
+    session.completion = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, callback), "completed", "(I)V");
     if (!session.completion) return 0;
     session.callback = (*env)->NewGlobalRef(env, callback);
     if (!session.callback) return 0;
@@ -117,10 +123,19 @@ JNIEXPORT jlong JNICALL Java_com_shangin_fractal_ui_MacContextMenu_open
             session.view.isFlipped ? NSMinY(bounds) + y : NSMaxY(bounds) - y);
     session.menu = [[NSMenu alloc] initWithTitle:@""];
     session.menu.autoenablesItems = NO;
-    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:@"Copy Coordinates and Zoom"
-            action:@selector(choose:) keyEquivalent:@""];
-    item.target = session;
-    [session.menu addItem:item];
+    for (jsize index = 0; index < count; index++) {
+        jstring title = (jstring)(*env)->GetObjectArrayElement(env, titles, index);
+        if (!title) return 0;
+        const char *characters = (*env)->GetStringUTFChars(env, title, NULL);
+        if (!characters) return 0;
+        NSString *text = [NSString stringWithUTF8String:characters];
+        (*env)->ReleaseStringUTFChars(env, title, characters);
+        (*env)->DeleteLocalRef(env, title);
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:text action:@selector(choose:) keyEquivalent:@""];
+        item.tag = index;
+        item.target = session;
+        [session.menu addItem:item];
+    }
     // Return to Java before entering AppKit's nested event loop. Schedule only
     // in the default mode: a replacement must wait for the old tracking loop
     // to unwind, otherwise AppKit can cancel the newly opened menu as well.

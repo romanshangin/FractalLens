@@ -1066,6 +1066,113 @@ class FractalResizeFxTest {
         }
     }
 
+    @Test
+    void javaFxFallbackMenuRunsRequestScopedCommandsFromPointerAndKeyboard() throws Exception {
+        var stage = fx(javafx.stage.Stage::new);
+        var canvas = fx(javafx.scene.layout.Pane::new);
+        var requests = new java.util.ArrayList<javafx.geometry.Point2D>();
+        var runs = new java.util.ArrayList<String>();
+        java.util.function.Function<javafx.geometry.Point2D, java.util.List<FractalContextMenu.Command>> commands =
+                point -> {
+                    requests.add(point);
+                    return java.util.List.of(
+                            new FractalContextMenu.Command("First", () -> runs.add("First " + point)),
+                            new FractalContextMenu.Command("Second", () -> runs.add("Second " + point)),
+                            new FractalContextMenu.Command("Third", () -> runs.add("Third " + point)));
+                };
+        // The JavaFX menu is the only canvas menu on Windows/Linux and without the AppKit bridge.
+        var menu = fx(() -> new FractalContextMenu(canvas, commands, () -> false));
+        try {
+            fx(() -> {
+                stage.setScene(new javafx.scene.Scene(canvas, 360, 180));
+                stage.show();
+                return null;
+            });
+            fx(() -> {
+                requestMenu(canvas, 90, 45, false);
+                assertTrue(menu.isShowing(), "A pointer request must open the JavaFX menu");
+                assertFalse(menu.hasNativeMenu());
+                assertEquals(java.util.List.of("First", "Second", "Third"),
+                        menu.getItems().stream().map(javafx.scene.control.MenuItem::getText).toList());
+                assertEquals(new javafx.geometry.Point2D(90, 45), requests.getLast());
+                menu.getItems().get(2).fire();
+                assertFalse(menu.isShowing());
+                assertEquals(java.util.List.of("Third Point2D [x = 90.0, y = 45.0]"), runs);
+
+                // A keyboard request is positioned by JavaFX at the owner; commands bind that point.
+                requestMenu(canvas, 180, 90, true);
+                assertTrue(menu.isShowing(), "A keyboard request must open the JavaFX menu");
+                assertEquals(new javafx.geometry.Point2D(180, 90), requests.getLast());
+                menu.getItems().get(1).fire();
+                assertEquals("Second Point2D [x = 180.0, y = 90.0]", runs.getLast());
+
+                // A new request replaces the items bound to an earlier point.
+                requestMenu(canvas, 30, 20, false);
+                requestMenu(canvas, 300, 150, false);
+                menu.getItems().getFirst().fire();
+                assertEquals("First Point2D [x = 300.0, y = 150.0]", runs.getLast());
+                return null;
+            });
+        } finally {
+            fx(() -> { menu.close(); stage.close(); return null; });
+        }
+    }
+
+    @Test
+    void javaFxFallbackMenuIsLegibleInLightAndDarkAppearance() throws Exception {
+        var stage = fx(javafx.stage.Stage::new);
+        var canvas = fx(javafx.scene.layout.Pane::new);
+        var menu = fx(() -> new FractalContextMenu(canvas, point -> java.util.List.of(
+                new FractalContextMenu.Command("Copy Coordinates and Zoom", () -> {}),
+                new FractalContextMenu.Command("Open Julia Set Here", () -> {}),
+                new FractalContextMenu.Command("Open Julia Set Here at Same Zoom", () -> {})), () -> false));
+        try {
+            fx(() -> {
+                stage.setScene(new javafx.scene.Scene(canvas, 360, 180));
+                stage.show();
+                requestMenu(canvas, 40, 40, false);
+                assertTrue(menu.isShowing());
+                var backgrounds = new java.util.EnumMap<javafx.application.ColorScheme, Double>(
+                        javafx.application.ColorScheme.class);
+                for (var scheme : javafx.application.ColorScheme.values()) {
+                    menu.applyAppearance(scheme, javafx.scene.paint.Color.DODGERBLUE);
+                    menu.getScene().getRoot().applyCss();
+                    menu.getScene().getRoot().layout();
+                    double[] luminance = opaqueLuminance(menu.getScene().snapshot(null));
+                    double background = luminance[luminance.length / 2];
+                    boolean dark = scheme == javafx.application.ColorScheme.DARK;
+                    double text = dark ? luminance[luminance.length - 1] : luminance[0];
+                    assertTrue(Math.abs(text - background) > 0.4,
+                            scheme + " menu text must contrast with its background: " + text + " vs " + background);
+                    backgrounds.put(scheme, background);
+                }
+                assertTrue(backgrounds.get(javafx.application.ColorScheme.LIGHT)
+                                > backgrounds.get(javafx.application.ColorScheme.DARK) + 0.3,
+                        "Light and dark menus must use their own backgrounds: " + backgrounds);
+                return null;
+            });
+        } finally {
+            fx(() -> { menu.close(); stage.close(); return null; });
+        }
+    }
+
+    private static void requestMenu(javafx.scene.Node owner, double x, double y, boolean keyboard) {
+        var screen = owner.localToScreen(x, y);
+        owner.fireEvent(new javafx.scene.input.ContextMenuEvent(
+                javafx.scene.input.ContextMenuEvent.CONTEXT_MENU_REQUESTED, x, y,
+                screen.getX(), screen.getY(), keyboard, null));
+    }
+
+    /** Sorted luminance of the snapshot's opaque pixels; the median is the menu background. */
+    private static double[] opaqueLuminance(javafx.scene.image.WritableImage image) {
+        int w = (int) image.getWidth(), h = (int) image.getHeight();
+        int[] pixels = new int[w * h];
+        image.getPixelReader().getPixels(0, 0, w, h, PixelFormat.getIntArgbInstance(), pixels, 0, w);
+        return java.util.Arrays.stream(pixels).filter(argb -> (argb >>> 24) > 200).mapToDouble(argb ->
+                (0.2126 * ((argb >> 16) & 0xff) + 0.7152 * ((argb >> 8) & 0xff) + 0.0722 * (argb & 0xff)) / 255.0)
+                .sorted().toArray();
+    }
+
     @ParameterizedTest
     @EnumSource(InteractiveRenderMode.class)
     void resizePreservesCenterColorsAndCropCompletesSynchronously(InteractiveRenderMode mode) throws Exception {

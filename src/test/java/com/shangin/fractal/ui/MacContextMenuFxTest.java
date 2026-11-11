@@ -118,6 +118,47 @@ class MacContextMenuFxTest {
             fx(() -> { timer.stop(); menu.close(); stage.close(); return null; });
         }
     }
+    @Test void nativeMenuRunsTheSelectedRequestScopedCommand() throws Exception {
+        var owner = fx(Pane::new);
+        var points = new java.util.ArrayList<javafx.geometry.Point2D>();
+        var selections = new java.util.ArrayList<String>();
+        var menu = fx(() -> new FractalContextMenu(owner, point -> {
+            points.add(point);
+            var commands = new java.util.ArrayList<FractalContextMenu.Command>();
+            commands.add(new FractalContextMenu.Command("First", () -> selections.add("first@" + point)));
+            if (points.size() == 1) commands.add(new FractalContextMenu.Command("Second", () -> selections.add("second@" + point)));
+            return commands;
+        }));
+        var stage = fx(() -> {
+            var s = new Stage(); s.setScene(new Scene(owner, 500, 320));
+            s.show(); s.toFront(); s.requestFocus(); return s;
+        });
+        try {
+            Thread.sleep(500);
+            assertTrue(fx(stage::isFocused), "Native menu test window must have desktop focus");
+            fx(() -> { request(owner); return null; });
+            Thread.sleep(250);
+            assertEquals(java.util.List.of("First", "Second"), fx(() -> AppKitMenuProbe.titles(menu)));
+            fx(() -> { AppKitMenuProbe.select(menu, 1); return null; });
+            awaitClosed(menu);
+            var clicked = fx(() -> points.getFirst());
+            assertEquals(60, clicked.getX(), 1e-9);
+            assertEquals(60, clicked.getY(), 1e-9);
+            assertEquals(java.util.List.of("second@" + clicked), fx(() -> java.util.List.copyOf(selections)),
+                    "Only the chosen command runs, bound to the requested point");
+
+            // The next request rebuilds the items; cancellation runs nothing.
+            fx(() -> { request(owner); return null; });
+            Thread.sleep(250);
+            assertEquals(java.util.List.of("First"), fx(() -> AppKitMenuProbe.titles(menu)));
+            fx(() -> { AppKitMenuProbe.cancel(menu); return null; });
+            awaitClosed(menu);
+            assertEquals(1, fx(selections::size));
+        } finally {
+            fx(() -> { menu.close(); stage.close(); return null; });
+        }
+    }
+
     @Test void renderingPublishesWhileNativeMenuTracks() throws Exception {
         var surface = fx(() -> { var s = new FractalSurface(); s.setManaged(false); return s; });
         var controller = fx(() -> new FractalRenderController(surface));

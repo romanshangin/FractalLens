@@ -132,6 +132,15 @@ The native JavaFX regression checks can be run with
 | Window | Minimize (⌘M), Zoom |
 | Help | FractalLens Help, including pointer and keyboard navigation, the render status badge, Render Settings and Navigation |
 
+Choosing another fractal in the Fractal menu returns to the view, center and
+scale, that fractal was last left at, without rounding; a fractal not visited yet,
+or a remembered view beyond its precision limit at the current render size, opens
+at its home view. Choosing the active fractal again resets it to its home view.
+A view is remembered whenever a fractal is left, including through Undo, Redo,
+a bookmark or a shared preset. The Mandelbrot-to-Julia actions open their own
+views. The views are saved on exit beside the last session and restored at the
+next launch; see [Session format](../architecture/SESSION_FORMAT.md#storage-locations).
+
 Settings… is available at any time, including while a frame renders; applying
 changed iterations or a changed render mode restarts the render, while the
 Navigation choice never does. Iteration settings are edited in Settings… for every
@@ -142,11 +151,18 @@ Other platforms use their shortcut modifier instead of Command. Focused-canvas
 arrows pan after zooming; Page Up/Down zoom centrally, Home resets. Pointer-centered
 scroll, drag and trackpad remain; menu/key zoom preserves center. Right-click
 **Copy Coordinates and Zoom** copies the real/imaginary center and zoom as shareable,
-re-enterable plain decimals (see Go to Coordinates for rounding). Renderer-independent `FractalContextMenu` owns commands/
+re-enterable plain decimals (see Go to Coordinates for rounding). In Mandelbrot only,
+**Open Julia Set Here** and **Open Julia Set Here at Same Zoom** follow it; see
+[Mandelbrot to Julia](#mandelbrot-to-julia).
+Renderer-independent `FractalContextMenu` owns commands/
 lifecycle. macOS uses AppKit `NSMenu` via Objective-C/JNI
 `src/main/macos/FractalContextMenu.m`: native appearance, highlighting, keyboard
 navigation/tracking, no CSS/custom styling. Styled JavaFX fallback covers other
 platforms, unavailable native library or missing JavaFX module access.
+
+Commands are built for each request from the clicked owner-local point and the
+state they were taken from; the native menu receives their titles and reports the
+selected index (or none) back to Java, which runs that request's command.
 
 Create/cancel native sessions on the JavaFX/AppKit main thread. Native-run-loop
 scheduling returns from Java before tracking; selection uses `Platform.runLater`
@@ -248,6 +264,41 @@ original stops, the default color scale, and zero offset. It turns off histogram
 coloring, orbit traps, and palette animation, updates the menu checkmarks, and
 renders the current view again. Fractal, viewport, iteration, Julia, and
 antialiasing settings are preserved.
+
+### Mandelbrot to Julia
+
+The selection is the right-clicked point. The render grid is stretched over the
+canvas, so render sample `i` covers logical `[i, i + 1) * width / renderWidth` and
+the point maps to fractional sample `x * renderWidth / width - 0.5` (likewise
+vertically), clamped to the outer sample centers. This uses the render grid, so on
+Retina the selection resolves to physical samples, not logical points. The
+coordinate is computed in decimal at the viewport's working precision against the
+view shown when the menu opened; a command from an earlier view (for example after
+navigation while the menu was pending) does nothing.
+
+Julia's constant `c` is binary64, so the parameter boundary is the only conversion:
+each component is rounded once to the nearest double (ties to even) with
+`JuliaParameters.nearest`, which rejects non-finite results and normalizes signed
+zero. Supported precision is therefore that of a double constant: deep Mandelbrot
+points closer than about one double ULP of `c` (about `1.1e-16` for components
+between 0.5 and 1) open the same Julia set. **Open Julia Set Here** switches to
+Julia's fitted initial view. Its overall shape changes continuously with `c`, so
+points that are close in a zoomed Mandelbrot view, or far inside or far outside the
+set, can look alike there. **Open Julia Set Here at Same Zoom** instead centers the
+Julia view exactly on `z = c`, the decimal value of the rounded constant, at the
+source viewport's exact scale (the same pixel spacing, so the zoom indicator can
+differ from Mandelbrot's because the fitted home views differ). Near `z = c` the
+Julia set locally resembles the Mandelbrot set around `c`, so this view shows how
+nearby selections differ while the source pixel spacing is well above one ULP of
+`c`. That is the supported boundary: below it, selections within one ULP open the
+same constant and the same view, and the view shows the Julia set around the
+rounded `c` rather than the Mandelbrot detail at that scale. The view is never
+centered on the exact selection, which can be up to half a ULP from `z = c`, many
+screens away at deep zoom. Both actions keep
+iterations, coloring and antialiasing, cancel the current render and show the
+loading screen until the Julia frame completes. Each is one history step, so Undo
+returns to the exact source Mandelbrot scene and Redo reopens the Julia set. A live
+Julia preview is not part of these actions.
 
 ## Design references and implementation boundary
 
