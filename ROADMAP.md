@@ -216,13 +216,17 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
 
 ### 4. Exploration and comparison workflows
 
-- [ ] **Mandelbrot -> Julia at a selected point:** add an action that maps the
-  selected Mandelbrot coordinate to Julia's fixed `c` and opens its initial view.
-  Preserve the source scene for return/Undo. Keep selection coordinates exact
-  until the Julia parameter boundary; define supported precision and validate
-  any conversion explicitly. Verify center/edge clicks, pan/zoom/Retina mapping,
-  Julia parameters, history and cancellation without stale pixels. A live Julia
-  preview may follow as a separately bounded interaction feature.
+- [x] **Mandelbrot -> Julia at a selected point:** Mandelbrot canvas menu
+  Open Julia Set Here (Julia's initial view) and Open Julia Set Here at Same Zoom
+  (centered on `z = c` at the source scale). Selection stays exact decimal on the
+  render grid and is rounded once to the binary64 constant; the supported
+  precision and the Same Zoom boundary (pixel spacing well above one ULP of `c`)
+  are documented in [Mandelbrot to Julia](docs/platform/MACOS_UI.md#mandelbrot-to-julia).
+  One history step, cancellation without stale pixels, stale selections ignored;
+  covered by center/edge/Retina/pan/zoom, deep-coordinate, history, loading and
+  JavaFX fallback menu tests. Owner accepted delivery with remaining gaps: native
+  menu in light appearance, a real keyboard-invoked menu and real Windows/Linux
+  runs. A live Julia preview remains a separately bounded follow-up.
 - [ ] **Interesting-places gallery:** ship a curated set of named scenes with
   descriptions and previews, grouped by fractal. Open entries through the same
   scene/history pipeline as bookmarks; preserve exact coordinates and parameters.
@@ -251,6 +255,9 @@ with a 192 MiB budget but is cleared when the formula changes. Last-session
 storage saves scene parameters only. AA samples have a separate current-frame
 lifecycle. Fractal selection resets the viewport to the preset's home view, so
 retaining frames alone will not restore the user's previous exploration.
+Update (2026-11-10): each fractal's last view (exact center and scale) is now
+remembered on leaving it, restored from the Fractal menu and saved across
+launches in `fractal-views.properties`; render results are not yet retained.
 
 - [ ] **Stage A: retain results within one process.** Reuse the existing cache
   and compatibility planner across formula switches; keep one shared memory
