@@ -780,6 +780,93 @@ class InteractiveAntialiasServiceTest {
         }
     }
 
+    @Test
+    void restoredSamplesServeRecolorAndRefinementWithoutSamplingOrAdmission() throws Exception {
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0);
+        var fire = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.02, 0.5);
+        RenderFrame source = checkerFrame(new FractalCalculator((r, i, limit) ->
+                new FractalSample(1, true, 3 + r * 0.01, i * 0.01)));
+        AntialiasSampleCache.Retained retained;
+        int[] sourceFire;
+        try (var original = new InteractiveAntialiasService(new AntialiasSampleCache(), false)) {
+            refineAndWait(original, source, ice);
+            retained = original.retainSamples(source);
+            assertNull(original.retainSamples(checkerFrame(new FractalCalculator((r, i, l) -> null))));
+            sourceFire = original.recolorCached(source, fire);
+        }
+        assertEquals(16, retained.size());
+
+        AtomicInteger samples = new AtomicInteger();
+        FractalCalculator counting = new FractalCalculator((r, i, limit) -> {
+            samples.incrementAndGet();
+            return new FractalSample(1, true, 3 + r * 0.01, i * 0.01);
+        });
+        RenderFrame cached = checkerFrame(counting);
+        RenderFrame target = checkerFrame(counting);
+        var cache = new AntialiasSampleCache();
+        try (var service = new InteractiveAntialiasService(cache, true)) {
+            service.restoreSamples(cached, retained);
+            assertSame(retained, service.retainSamples(cached));
+            assertArrayEquals(sourceFire, service.recolorCached(cached, fire), "Reads use restored samples at once");
+            assertEquals(0, cache.size(), "Restored samples wait for a write before admission");
+
+            // An unshifted copy keeps them pending; a fully cached pass adds nothing and admits nothing.
+            service.reuseFrame(cached, target, new PixelShift(0, 0));
+            assertSame(retained, service.retainSamples(target));
+            assertArrayEquals(sourceFire, refineAndWait(service, target, fire));
+            assertEquals(0, samples.get(), "Restored samples must not be recalculated");
+            assertEquals(0, service.lastProfile().cacheBatches());
+            assertEquals(0, cache.size());
+            assertArrayEquals(sourceFire, service.recolorCached(target, fire));
+        }
+    }
+
+    @Test
+    void restoredSamplesAreAdmittedBeforeShiftsAndNewSamplesAndDroppedForOtherFrames() throws Exception {
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0);
+        FractalSample[] grid = new FractalSample[16];
+        Arrays.fill(grid, new FractalSample(1, true, 3.5, 0));
+        var partial = new AntialiasSampleCache();
+        for (int pixel = 0; pixel < 8; pixel++) partial.put(pixel, grid, ice);
+        AntialiasSampleCache.Retained retained = partial.retain();
+
+        AtomicInteger samples = new AtomicInteger();
+        FractalCalculator counting = new FractalCalculator((r, i, limit) -> {
+            samples.incrementAndGet();
+            return new FractalSample(1, true, 3, 0);
+        });
+        var cache = new AntialiasSampleCache();
+        try (var service = new InteractiveAntialiasService(cache, false)) {
+            // A pan admits the pending samples and shifts them with the frame.
+            RenderFrame cached = checkerFrame(counting);
+            RenderFrame panned = checkerFrame(counting);
+            service.restoreSamples(cached, retained);
+            service.reuseFrame(cached, panned, new PixelShift(1, 0));
+            assertEquals(6, cache.size(), "Rows 0-1 keep three of their four pixels after a one-pixel pan");
+            assertTrue(cache.contains(1) && cache.contains(7) && !cache.contains(0) && !cache.contains(4));
+            assertEquals(6, service.retainSamples(panned).size());
+
+            // New candidates admit the pending samples first, so both survive in the cache.
+            RenderFrame restored = checkerFrame(counting);
+            service.restoreSamples(restored, retained);
+            refineAndWait(service, restored, ice);
+            assertEquals(8 * 16, samples.get(), "Only the eight pixels without restored samples are sampled");
+            assertEquals(16, cache.size());
+
+            // Another frame drops pending samples instead of attaching them to the wrong pixels.
+            RenderFrame stale = checkerFrame(counting);
+            service.restoreSamples(stale, retained);
+            RenderFrame other = checkerFrame(counting);
+            refineAndWait(service, other, ice);
+            assertNull(service.retainSamples(stale));
+            assertEquals(16, service.retainSamples(other).size(), "The other frame keeps only its own samples");
+            service.restoreSamples(stale, retained);
+            service.reuseFrame(other, checkerFrame(counting), new PixelShift(0, 0));
+            assertNull(service.retainSamples(stale));
+            assertEquals(0, cache.size());
+        }
+    }
+
     private static RenderFrame checkerFrame(FractalCalculator calculator) {
         RenderFrame frame = RenderFrame.create(new RenderRequest(calculator,
                 FractalPreset.BURNING_SHIP.defaultViewport(), 4, 4, 20));

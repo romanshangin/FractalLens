@@ -736,6 +736,32 @@ public final class FractalSurface extends Region {
         displayedFrame.update();
     }
 
+    /**
+     * Puts AA pixels retained for a cached frame on the staging frame prepared for its
+     * reuse, with their validity, so later base coloring preserves them and the AA pass
+     * skips them. Returns false, changing nothing, unless {@code frame} is being staged
+     * at the snapshot's size.
+     */
+    public boolean restoreStagingRefinement(RenderFrame frame, RefinedPixelSnapshot refined) {
+        Objects.requireNonNull(refined);
+        if (stagingRenderFrame != frame || stagingFrame == null || stagingRefinementValidity == null
+                || refined.width() != stagingFrame.width() || refined.height() != stagingFrame.height()) {
+            return false;
+        }
+        int[] pixels = stagingFrame.intBuffer().array();
+        int width = refined.width();
+        for (int y = 0; y < refined.height(); y++) {
+            for (int x = 0; x < width; x++) {
+                if (refined.isRefined(x, y)) {
+                    pixels[y * width + x] = refined.color(x, y);
+                }
+            }
+        }
+        stagingRefinementValidity.copyFrom(refined.validity());
+        stagingFrame.update();
+        return true;
+    }
+
     /** Records that the visible frame now presents {@code scene}, which differs only in antialiasing. */
     public void completePresentationChange(RenderFrame frame, FractalScene scene) {
         if (displayedRenderFrame == frame) {

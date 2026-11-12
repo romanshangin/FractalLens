@@ -64,6 +64,7 @@ no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism
 | Wide-preview TG2-2 (36 pairs): memory v2, availability and thermal pass; timing inconclusive on 3024x1964 REFINED first zoom-out preview (1.381, not a confirmed fail); disabled by default | [Evidence](WIDE_PREVIEW_VALIDATION.md#follow-up-campaign-tg2-2-36-pairs) | Selected numerical tables in report |
 | Wide-preview TG2-3 aborted by external pointer input in its A/A stage (no decision); TG2-4 (12 pairs) passes timing v2 (56 of 56 groups), memory v2, availability, thermal and exact controls; retained, enabled by default | [Evidence](WIDE_PREVIEW_VALIDATION.md#follow-up-campaigns-tg2-3-aborted-and-tg2-4-retain) | Selected numerical tables in report |
 | P0.3 bounded validity-mask candidate rejected | [Decision](VALIDITY_MASK_OPTIMIZATION.md) | [Headless analysis](baseline-p0-3-validity-headless-20260921/analysis.json), [JavaFX analysis](baseline-p0-3-validity-fx-desktop-20260921/analysis.json) |
+| P2.7 complete-mask fast path for retained-frame returns retained (isolated scans; partial masks unchanged; end-to-end return left to Stage A verification) | [Results](RETAINED_RETURN_SCAN_RESULTS.md) | Selected numerical table in report |
 | P1.2 on-demand snapshot preparation rejected | [Decision](RETAINED_SNAPSHOT_PREPARATION.md) | [Matched samples](RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv) |
 | P1.3 queued publication rejected | [Decision](FX_PUBLICATION_P1_3.md) | [Analysis](p1-3-publication-20260924/coalescing-pairs/analysis.json), [probe 1](p1-3-publication-20260924/probe-1.csv), [probe 2](p1-3-publication-20260924/probe-2.csv), [probe 3](p1-3-publication-20260924/probe-3.csv) |
 | P1.4 allocation attribution; no optimization promoted | [Profile](ALLOCATION_PROFILE_9_4.md) | [Summary](p1-4-allocation-profile-20260924/summary.json), [allocation groups](p1-4-allocation-profile-20260924/allocations.json) |
@@ -135,6 +136,7 @@ raw log file is included.
 - [PALETTE_BENCHMARK_RESULTS.md](PALETTE_BENCHMARK_RESULTS.md)
 - [PRISM_PIPELINE_BENCHMARK.md](PRISM_PIPELINE_BENCHMARK.md)
 - [PRISM_PIPELINE_RESULTS.md](PRISM_PIPELINE_RESULTS.md)
+- [RETAINED_RETURN_SCAN_RESULTS.md](RETAINED_RETURN_SCAN_RESULTS.md)
 - [RETAINED_SNAPSHOT_PREPARATION.md](RETAINED_SNAPSHOT_PREPARATION.md)
 - [RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv](RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv)
 - [SERIES_APPROXIMATION_RESULTS.md](SERIES_APPROXIMATION_RESULTS.md)

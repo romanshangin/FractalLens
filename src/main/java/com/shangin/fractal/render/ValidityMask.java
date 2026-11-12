@@ -13,6 +13,13 @@ public final class ValidityMask {
     private final int totalPixels;
 
     private final BitSet ready;
+    /**
+     * Cached {@link #isComplete()}: {@code null} when unknown. Guarded by this mask's
+     * monitor; adding ready pixels keeps a complete mask complete, any other change
+     * forgets the answer. A complete frame then skips per-tile scans, which otherwise
+     * search its whole ready suffix from every tile row.
+     */
+    private Boolean complete = Boolean.FALSE;
 
     public ValidityMask(
             int width,
@@ -47,6 +54,7 @@ public final class ValidityMask {
 
             ready.set(from, to);
         }
+        if (complete != Boolean.TRUE) complete = null;
     }
 
     /** Marks a region ready and returns how many of its pixels were not ready before. */
@@ -61,6 +69,7 @@ public final class ValidityMask {
             }
             ready.set(from, to);
         }
+        if (added > 0 && complete != Boolean.TRUE) complete = null;
         return added;
     }
 
@@ -77,6 +86,7 @@ public final class ValidityMask {
 
     public synchronized boolean isRegionReady(RenderRegion region) {
         validateRegion(region);
+        if (isComplete()) return true;
 
         for (int y = region.y(); y < region.y() + region.height(); y++) {
 
@@ -110,6 +120,7 @@ public final class ValidityMask {
     private List<RenderRegion> missingRowSpansSnapshot(RenderRegion region, BooleanSupplier cancelled) {
         validateRegion(region);
         if (scanCancelled(cancelled)) return List.of();
+        if (isComplete()) return List.of();
 
         List<RenderRegion> missing = new ArrayList<>();
 
@@ -150,7 +161,8 @@ public final class ValidityMask {
     }
 
     public synchronized boolean isComplete() {
-        return ready.nextClearBit(0) >= totalPixels;
+        if (complete == null) complete = ready.nextClearBit(0) >= totalPixels;
+        return complete;
     }
 
     public synchronized int readyPixelCount() {
@@ -159,6 +171,7 @@ public final class ValidityMask {
 
     public synchronized void clear() {
         ready.clear();
+        complete = Boolean.FALSE;
     }
 
     /** Replaces this mask with an equally sized source mask. */
@@ -170,12 +183,14 @@ public final class ValidityMask {
         synchronized (this) {
             ready.clear();
             ready.or(sourceReady);
+            complete = null;
         }
     }
 
     public synchronized ValidityMask copy() {
         ValidityMask copy = new ValidityMask(width, height);
         copy.ready.or(ready);
+        copy.complete = complete;
         return copy;
     }
 

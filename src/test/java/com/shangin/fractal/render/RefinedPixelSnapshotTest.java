@@ -10,6 +10,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RefinedPixelSnapshotTest {
 
     @Test
+    void completeSnapshotsReportEveryRegionRefinedAndPartialOnesStillScan() {
+        ValidityMask validity = new ValidityMask(65, 2);
+        validity.markReady(new RenderRegion(0, 0, 65, 2));
+        RefinedPixelSnapshot complete = new RefinedPixelSnapshot(65, 2, new int[130], validity);
+        assertTrue(complete.isRegionRefined(new RenderRegion(32, 0, 33, 2)));
+        assertThrows(IllegalArgumentException.class, () -> complete.isRegionRefined(new RenderRegion(40, 0, 33, 2)),
+                "Region validation still applies to complete snapshots");
+
+        validity.clear();
+        validity.markReady(new RenderRegion(0, 0, 65, 2));
+        validity.copyShiftedFrom(validity.copy(), new PixelShift(0, 1));
+        RefinedPixelSnapshot partial = new RefinedPixelSnapshot(65, 2, new int[130], validity);
+        assertTrue(partial.isRegionRefined(new RenderRegion(0, 1, 65, 1)));
+        assertFalse(partial.isRegionRefined(new RenderRegion(32, 0, 33, 2)));
+        assertTrue(complete.isRegionRefined(new RenderRegion(0, 0, 1, 1)), "Snapshots are independent of later changes");
+    }
+
+    @Test
     void shouldDefensivelyCopyColorsAndValidity() {
         int[] colors = {1, 2, 3, 4};
         ValidityMask validity = new ValidityMask(2, 2);

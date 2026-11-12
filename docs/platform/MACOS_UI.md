@@ -141,6 +141,21 @@ a bookmark or a shared preset. The Mandelbrot-to-Julia actions open their own
 views. The views are saved on exit beside the last session and restored at the
 next launch; see [Session format](../architecture/SESSION_FORMAT.md#storage-locations).
 
+Within one run, completed base frames of every fractal stay in one shared,
+memory-bounded frame cache, so returning to a remembered view at the same window
+size, iteration limit and Julia constant shows its retained samples without
+recalculating them; the least recently used frames are evicted first. A changed
+Julia constant, iteration setting or render size, or an evicted frame, renders
+normally. Finished antialiasing is kept with its frame in the same budget, so
+returning with the same colors shows it without another antialiasing pass. Its
+supersamples are kept too while they fit; with them, another palette reuses them
+and only edge detection runs again. Supersamples are dropped first when space
+runs short, and at typical window sizes they usually do not fit; a palette change
+on a frame shown without them then runs its antialiasing pass again. A visit without antialiasing, such as Base only, keeps the earlier
+antialiasing for the next visit. Antialiasing cancelled before it finished is not
+kept, and a palette change during the antialiasing pass keeps only its
+supersamples. Rendered frames are not saved across launches.
+
 Settings… is available at any time, including while a frame renders; applying
 changed iterations or a changed render mode restarts the render, while the
 Navigation choice never does. Iteration settings are edited in Settings… for every

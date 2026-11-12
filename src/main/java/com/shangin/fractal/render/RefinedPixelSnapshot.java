@@ -11,6 +11,8 @@ public final class RefinedPixelSnapshot {
     private final int[] colors;
     private final ValidityMask validity;
     private final BitSet ready;
+    /** Lets fully refined snapshots skip per-tile scans of their whole ready suffix. */
+    private final boolean complete;
 
     public RefinedPixelSnapshot(
             int width,
@@ -26,6 +28,7 @@ public final class RefinedPixelSnapshot {
         this.colors = Objects.requireNonNull(colors).clone();
         this.validity = Objects.requireNonNull(validity).copy();
         ready = this.validity.readyBitsCopy();
+        complete = this.validity.isComplete();
         if (colors.length != Math.multiplyExact(width, height)
                 || validity.width() != width
                 || validity.height() != height) {
@@ -59,6 +62,7 @@ public final class RefinedPixelSnapshot {
 
     public boolean isRegionRefined(RenderRegion region) {
         validateRegion(region);
+        if (complete) return true;
 
         for (int y = region.y(); y < region.y() + region.height(); y++) {
             int from = y * width + region.x();
