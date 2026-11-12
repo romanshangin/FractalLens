@@ -53,6 +53,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private final AntialiasSampleCache sampleCache;
     private final boolean profiling;
     private RenderFrame cachedFrame;
+    /**
+     * Samples of {@link #cachedFrame} restored from frame retention and not yet admitted
+     * to {@link #sampleCache}; reads use them directly, so admission waits for a write.
+     */
+    private AntialiasSampleCache.Retained pendingSamples;
     private volatile boolean cachedSamplesShown = true;
     private RenderFrame basePhaseFrame;
     private BaseColorPhaseCache basePhaseCache;
@@ -150,6 +155,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         synchronized (this) {
             if (cachedFrame != frame) {
                 sampleCache.clear();
+                pendingSamples = null;
                 cachedFrame = frame;
                 basePhaseFrame = null;
                 basePhaseCache = null;
@@ -200,7 +206,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             synchronized (this) {
                 if (shouldCancel(refinementId) || cachedFrame != frame) return;
                 retained = coloring instanceof SmoothPaletteColoring smooth
-                        ? sampleCache.snapshotFor(smooth) : AntialiasSampleCache.Snapshot.EMPTY;
+                        ? cachedSnapshot(smooth) : AntialiasSampleCache.Snapshot.EMPTY;
             }
             BitSet cachedPixels = retained.pixelMask();
             // Keep retained AA colors separate: candidate detection must still see base-only colors.
@@ -393,6 +399,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private synchronized boolean commitTile(long refinementId, RenderFrame frame,
                                             AntialiasSampleCache.Batch batch) {
         if (shouldCancel(refinementId) || cachedFrame != frame) return false;
+        if (!batch.isEmpty()) admitPendingSamples();
         sampleCache.merge(batch);
         return true;
     }
@@ -463,7 +470,45 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private synchronized AntialiasSampleCache.Snapshot aaSnapshot(
             RenderFrame frame, SmoothPaletteColoring coloring) {
         return cachedSamplesShown && cachedFrame == frame
-                ? sampleCache.snapshotFor(coloring) : AntialiasSampleCache.Snapshot.EMPTY;
+                ? cachedSnapshot(coloring) : AntialiasSampleCache.Snapshot.EMPTY;
+    }
+
+    /** Caller owns this service's monitor. */
+    private AntialiasSampleCache.Snapshot cachedSnapshot(SmoothPaletteColoring coloring) {
+        return pendingSamples != null ? pendingSamples.snapshotFor(coloring) : sampleCache.snapshotFor(coloring);
+    }
+
+    /** Caller owns this service's monitor. */
+    private void admitPendingSamples() {
+        if (pendingSamples != null) {
+            sampleCache.restore(pendingSamples);
+            pendingSamples = null;
+        }
+    }
+
+    /**
+     * Palette-independent AA samples cached for {@code frame}, for retention beside the
+     * completed frame, or {@code null} when the cache belongs to another frame or is empty.
+     */
+    public synchronized AntialiasSampleCache.Retained retainSamples(RenderFrame frame) {
+        Objects.requireNonNull(frame);
+        if (cachedFrame != frame) return null;
+        return pendingSamples != null ? pendingSamples : sampleCache.retain();
+    }
+
+    /**
+     * Binds samples retained for a completed frame to that frame again, replacing the
+     * current samples. They serve reads at once and enter the mutable cache only before
+     * new samples are added, off the FX thread for refinement.
+     */
+    public synchronized void restoreSamples(RenderFrame frame, AntialiasSampleCache.Retained retained) {
+        Objects.requireNonNull(frame);
+        Objects.requireNonNull(retained);
+        sampleCache.clear();
+        pendingSamples = retained;
+        cachedFrame = frame;
+        basePhaseFrame = null;
+        basePhaseCache = null;
     }
 
     /** Creates the deep reference orbit once, when the first candidate needs new samples. */
@@ -513,11 +558,20 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         cachedSamplesShown = shown;
     }
 
+    /** False while the visible frame is shown Base only. */
+    public boolean cachedSamplesShown() {
+        return cachedSamplesShown;
+    }
+
     /** Transfers cached AA samples along the exact pixel shift used for frame reuse. */
     public synchronized void reuseFrame(RenderFrame source, RenderFrame target, PixelShift shift) {
         if (cachedFrame != source) {
             sampleCache.clear();
-        } else {
+            pendingSamples = null;
+        } else if (pendingSamples == null || shift.dx() != 0 || shift.dy() != 0
+                || source.samplePlane().width() != target.samplePlane().width()
+                || source.samplePlane().height() != target.samplePlane().height()) {
+            admitPendingSamples();
             sampleCache.shift(source.samplePlane().width(),
                     target.samplePlane().width(), target.samplePlane().height(), shift);
         }

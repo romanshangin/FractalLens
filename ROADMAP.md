@@ -258,6 +258,38 @@ retaining frames alone will not restore the user's previous exploration.
 Update (2026-11-10): each fractal's last view (exact center and scale) is now
 remembered on leaving it, restored from the Fractal menu and saved across
 launches in `fractal-views.properties`; render results are not yet retained.
+Update (2026-11-10): the frame cache is no longer cleared on formula switches.
+Completed base frames of all fractals share its one 192 MiB LRU budget and hit
+only for the same formula and parameters (including the Julia constant), orbit
+trap, sample accuracy, viewport, render size and iteration limit, so returning to
+a remembered view, by the Fractal menu or Undo/Redo, reuses its base samples.
+Reset View (selecting the active fractal) stays an explicit home-view render;
+Julia constant edits and changed iteration/render settings miss and render
+normally. Finished AA is retained beside its cached frame under the same budget
+(base and AA bytes per entry): displayed AA colors with their coloring plus
+palette-independent AA samples. When space runs short, samples go first (least
+recently used frames first, never displacing a frame), then least recently used
+frames together with their AA colors.
+Independent verification (2026-11-11, M3 Pro, 807x569 pt Retina window) found the
+samples of one realistic frame larger than the whole budget (~1.0 M sample
+entries, over 240 MB by heap estimate), which then dropped the AA entirely; the
+colors (~8 MiB there) are now kept without them. A palette change on a frame
+shown from colors alone samples its AA again in place, since recoloring needs the
+samples. A
+hit with the same coloring performs no AA candidate detection or supersampling;
+another palette of the same color scale reuses the samples and re-detects
+candidates from its own base colors. Retained AA survives later visits that add
+none (Base only, a cancelled or failed pass). AA that was cancelled before it
+finished is not retained; a pass during which a recolor was published keeps only
+its samples, never its mixed display colors. The
+192 MiB default was not resized: the same verification saw the default-size
+window (1296x869 pt Retina) evict even another fractal's base frame, so how many
+fractals stay retained needs the measured budgets below. Re-verification then saw
+a fully compatible return still take about 1 s, spent in per-tile readiness
+scans of the complete frame; a complete-mask fast path was
+[retained](benchmarks/RETAINED_RETURN_SCAN_RESULTS.md) for those scans only
+(isolated scans; the visible return time awaits verification).
+Stage A stays open until the correctness/performance acceptance below passes.
 
 - [ ] **Stage A: retain results within one process.** Reuse the existing cache
   and compatibility planner across formula switches; keep one shared memory

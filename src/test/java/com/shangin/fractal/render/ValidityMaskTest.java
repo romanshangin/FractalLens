@@ -13,6 +13,50 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ValidityMaskTest {
 
     @Test
+    void cachedCompletenessFollowsEveryChangeAndCompleteMasksReportNoMissingWork() {
+        ValidityMask mask = new ValidityMask(65, 3);
+        RenderRegion all = new RenderRegion(0, 0, 65, 3);
+        RenderRegion lastTile = new RenderRegion(32, 0, 33, 3);
+        assertFalse(mask.isComplete());
+
+        mask.markReady(new RenderRegion(0, 0, 65, 2));
+        assertFalse(mask.isComplete());
+        assertEquals(List.of(new RenderRegion(0, 2, 65, 1)), mask.missingRowSpans(all));
+        assertEquals(64, mask.markReadyCountingNew(new RenderRegion(0, 2, 64, 1)));
+        assertFalse(mask.isComplete(), "One pixel is still missing");
+        assertEquals(List.of(new RenderRegion(64, 2, 1, 1)), mask.missingRowSpans(lastTile));
+        assertFalse(mask.isRegionReady(lastTile));
+
+        mask.markReady(new RenderRegion(64, 2, 1, 1));
+        assertTrue(mask.isComplete());
+        assertTrue(mask.missingRowSpans(lastTile).isEmpty());
+        assertTrue(mask.missingRowSpans(lastTile, () -> false).isEmpty());
+        assertTrue(mask.isRegionReady(lastTile));
+        assertEquals(0, mask.markReadyCountingNew(all));
+        assertTrue(mask.isComplete(), "Adding ready pixels keeps a complete mask complete");
+
+        ValidityMask copy = mask.copy();
+        assertTrue(copy.isComplete());
+        copy.copyShiftedFrom(mask, new PixelShift(1, 0));
+        assertFalse(copy.isComplete(), "A shift exposes a missing column");
+        assertEquals(List.of(new RenderRegion(0, 0, 1, 1), new RenderRegion(0, 1, 1, 1), new RenderRegion(0, 2, 1, 1)),
+                copy.missingRowSpans(new RenderRegion(0, 0, 32, 3)));
+
+        ValidityMask partial = new ValidityMask(65, 3);
+        partial.markReady(new RenderRegion(0, 0, 10, 1));
+        mask.copyFrom(partial);
+        assertFalse(mask.isComplete(), "Copying a partial mask forgets completeness");
+        assertFalse(mask.isRegionReady(lastTile));
+        mask.copyFrom(copy.copy());
+        mask.markReady(new RenderRegion(0, 0, 1, 3));
+        assertTrue(mask.isComplete());
+
+        mask.clear();
+        assertFalse(mask.isComplete());
+        assertEquals(3, mask.missingRowSpans(lastTile).size());
+    }
+
+    @Test
     void anyReadyFindsOnlyPixelsInsideTheRegion() {
         RenderRegion region = new RenderRegion(3, 2, 4, 3);
         assertFalse(new ValidityMask(10, 8).anyReady(region));

@@ -201,6 +201,25 @@ public final class AntialiasSampleCache {
         cachedColorScale = Double.NaN;
     }
 
+    /**
+     * An immutable copy of every cached pixel for retention beside its completed frame,
+     * or {@code null} when nothing is cached. The copy shares only immutable samples.
+     */
+    public synchronized Retained retain() {
+        return entries.isEmpty() ? null : new Retained(snapshot(), cachedColorScale, usedBytes());
+    }
+
+    /** Replaces the contents with retained samples, subject to this cache's own budget. */
+    public synchronized void restore(Retained retained) {
+        clear();
+        cachedColorScale = retained.colorScale;
+        Snapshot source = retained.snapshot;
+        for (int index = 0; index < source.samples.length; index++) {
+            putEncoded(source.pixelIndices[index], source.samples[index]);
+        }
+        if (entries.size() == source.size()) recolorSnapshot = source;
+    }
+
     /** Retains samples whose pixels remain visible after an integer pan. */
     public synchronized void shift(int width, int height, PixelShift shift) {
         shift(width, width, height, shift);
@@ -291,6 +310,29 @@ public final class AntialiasSampleCache {
                     0,
                     LINEAR_TO_SRGB.length - 1);
             return LINEAR_TO_SRGB[index];
+        }
+    }
+
+    /** Retained palette-independent samples of one completed frame, with their accounted size. */
+    public static final class Retained {
+        private final Snapshot snapshot;
+        private final double colorScale;
+        private final long bytes;
+
+        private Retained(Snapshot snapshot, double colorScale, long bytes) {
+            this.snapshot = snapshot;
+            this.colorScale = colorScale;
+            this.bytes = bytes;
+        }
+
+        public int size() { return snapshot.size(); }
+
+        /** The conservative size charged while these samples are retained. */
+        public long bytes() { return bytes; }
+
+        /** The retained samples for recoloring, or an empty snapshot for another color scale. */
+        public Snapshot snapshotFor(SmoothPaletteColoring coloring) {
+            return Double.compare(colorScale, coloring.colorScale()) == 0 ? snapshot : Snapshot.EMPTY;
         }
     }
 

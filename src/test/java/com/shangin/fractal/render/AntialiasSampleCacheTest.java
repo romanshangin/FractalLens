@@ -39,6 +39,38 @@ class AntialiasSampleCacheTest {
     }
 
     @Test
+    void retainedSamplesSurviveLaterChangesAndRestoreTheSameColors() {
+        var cache = new AntialiasSampleCache(8192);
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0.0);
+        var fire = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.02, 0.5);
+        assertNull(cache.retain(), "An empty cache retains nothing");
+        cache.put(1, samples(20.0, 4), ice);
+        cache.put(5, samples(7.0, 4), ice);
+        Integer one = cache.color(1, fire, 100);
+        Integer five = cache.color(5, fire, 100);
+
+        AntialiasSampleCache.Retained retained = cache.retain();
+        assertEquals(2, retained.size());
+        assertEquals(cache.usedBytes(), retained.bytes());
+        cache.shift(4, 3, new PixelShift(1, 1));
+        cache.put(2, samples(3.0, 4), ice);
+        cache.clear();
+
+        var restored = new AntialiasSampleCache(8192);
+        restored.restore(retained);
+        assertEquals(2, restored.size());
+        assertEquals(one, restored.color(1, fire, 100));
+        assertEquals(five, restored.color(5, fire, 100));
+        assertFalse(restored.contains(2));
+        assertEquals(2, retained.snapshotFor(fire).size(), "Any palette of the same color scale reuses them");
+        assertEquals(0, retained.snapshotFor(new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.05, 0.0)).size());
+
+        var small = new AntialiasSampleCache(1100);
+        small.restore(retained);
+        assertTrue(small.usedBytes() <= small.maxBytes(), "Restoring respects the receiving budget");
+    }
+
+    @Test
     void preservesSmoothPhaseAtVeryHighIterationCounts() {
         AntialiasSampleCache cache = new AntialiasSampleCache(4096);
         var coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.0075, 0.37);
