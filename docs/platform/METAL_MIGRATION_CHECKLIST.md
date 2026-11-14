@@ -120,7 +120,9 @@ Repeat both checks once startup pipeline selection exists.
   resize, window movement, focus loss and close.
 - [ ] Native parameter sheet: focus, Enter, Escape, Cancel, Apply and
   validation errors.
-- [ ] macOS application menu and the visible Dock tooltip `FractalLens`.
+- [x] Visible Dock tooltip `FractalLens` for the installed app on the development
+  Mac (owner check, 2026-11-13).
+- [ ] macOS application menu on the installed build.
 - [x] JavaFX fallbacks still work when the native bridge is unavailable
   (three independent desktop fallback tests passed on Metal).
 
@@ -143,10 +145,12 @@ Repeat both checks once startup pipeline selection exists.
 
 - [x] `./mvnw compile javafx:run` starts on Metal: `-Dprism.verbose=true`
   reports `MTLPipeline`.
-- [ ] Dock launcher: `python3 scripts/macos/test_macos_launcher.py`, then a
-  manual launch with the Dock tooltip check.
-- [ ] DMG from `python3 scripts/packaging/package_runtime.py`: the installed app
-  actually runs on Metal.
+- [x] Native launcher contract tests and manual Finder launch with the installed
+  Dock tooltip check on the development Mac.
+- [x] DMG from `python3 scripts/packaging/package_runtime.py`: the app installed
+  in `/Applications` on the development Mac runs on Metal.
+- [ ] Verify clean-machine installation and Gatekeeper acceptance. See the
+  [installed-build evidence below](#development-mac-installed-dmg-check-2026-11-11).
 - [x] Fallback: with Metal unavailable to initialization, the app starts on the
   next available pipeline (ES2 or SW) as defined in section 1.
 - [x] The user override `-Dprism.order=es2` still selects ES2.
@@ -157,8 +161,8 @@ Repeat both checks once startup pipeline selection exists.
 ## 8. Automated checks
 
 - [x] Full portable suite: `./mvnw clean test`.
-- [ ] JavaFX integration tests with Metal selected explicitly, because tests
-  start the toolkit themselves:
+- [x] JavaFX integration tests with Metal selected explicitly on the development
+  Mac, because tests start the toolkit themselves:
 
   ```shell
   ./mvnw -Dfractal.fx.tests=true \
@@ -478,3 +482,66 @@ VirtualBuddy had no listed VMs: guest not run. `ROADMAP.md` defers external
 displays, other Macs, Windows/Linux/minimum OS. Guest Metal crash, standard/clean
 install, fallback focus repaint, final image comparison/CI remain open. Raw logs,
 diagnostic sources/CSVs/PNGs stay private, not selected benchmark evidence.
+
+## Development Mac installed DMG check (2026-11-11)
+
+Built `FractalLens-1.0.dmg` from clean revision `d4c2b7f18e0da0a27d506b4959a59e3925698d55`
+on macOS 27.2 ARM64 with Microsoft OpenJDK 25 (update 4, vendor patch 1) and
+JavaFX 26.0.2. The app-image smoke passed JavaFX, AppKit, CPU fallback and a
+completed CPU render. The mounted DMG bundle and its copy in `/Applications`
+both passed `codesign --verify --deep --strict`. The file comparison found no
+differences before the image was detached.
+
+The installed app launched through Launch Services with an isolated Java user
+home and JavaFX cache and with verbose Prism logging. The default pipeline
+initialized as `MTLPipeline`. The window displayed a completed Mandelbrot
+overview, then completed after keyboard zoom and pan. The fullscreen shortcut
+entered fullscreen, and Escape returned to the window with a completed frame.
+Quitting shut down the renderer. A transition to another Space and back was
+not observable in this developer run. On 2026-11-13 the owner confirmed direct
+Finder launch, the visible `FractalLens` Dock tooltip and Spaces switching.
+The owner check does not add trials to the controlled Spaces campaign.
+
+Gatekeeper assessments were enabled. `spctl --assess --type execute` rejected
+the installed bundle with exit status 3. The bundle had an ad hoc signature,
+no team identifier and no quarantine attribute. Launch Services nevertheless
+started the local copy without changing security settings or using an override.
+The owner deferred clean-machine installation and additional configurations on
+2026-11-13. Release signing/notarization remains open.
+
+Developer checks on the same revision:
+
+- `./mvnw test`: 762 reported, 176 conditional skips, no failures or errors.
+- The Metal JavaFX command in section 8: 789 reported, 13 conditional skips,
+  no failures or errors. All 21 logged Prism initializations selected Metal.
+  The skips were the separate fullscreen and no-native-bridge configurations,
+  opt-in GPU tests and the Julia latency test.
+- A separate Metal run enabled the fullscreen scenarios in
+  `MacContextMenuFxTest` and `FractalResizeFxTest`: four passed without skips.
+- Separate `FractalLauncherFxTest` runs with explicit `es2` and `sw` passed one
+  case each without skips and logged `ES2Pipeline` and `SWPipeline`, respectively.
+  These runs exercised the override, without inducing an initialization failure
+  or testing fallback focus repaint.
+- The packaging contract suite reported 17 tests with one Windows-only skip.
+  All three native launcher tests passed.
+
+The build, graphical smoke and Maven test runs used command-scoped
+`caffeinate -di` with both assertions verified and the unlocked console checked
+during graphical runs. The owned assertions were gone at completion. Raw output
+remains private.
+
+### Antialiased display enlargement check (2026-11-13)
+
+On the installed Metal build with an isolated profile, Settings confirmed
+Antialiased display for standard zoom. A completed Mandelbrot scene at about
+2.44x was expanded from the regular window to fullscreen. With Wide preview
+enabled, intermediate captures showed a sharp retained center and coarse image
+along newly exposed edges. With Wide preview disabled, a control after panning
+showed the sharp retained center surrounded by blank pending edges during base
+rendering. The control reached Complete. This observation distinguishes the
+coarse preview from publication of base-render tiles for the observed frames.
+
+Window > Zoom also enlarged the regular window from 2592x1730 to 3296x2168
+captured pixels, including decoration. Captures after this menu action first
+showed Complete with a filled image. The publication sequence during ordinary
+window enlargement and drag resizing remain unverified.
