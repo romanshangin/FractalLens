@@ -20,9 +20,12 @@ Packages and Maven `javafx:run`/native development share plain
 if absent, forward args to `Application.launch(FractalFxApplication.class, args)`.
 Explicit/empty JVM values win; Windows/Linux defaults stay. Initialization can
 fall back to ES2/SW, native crashes cannot. VirtualBuddy needs `-Dprism.order=sw`.
-Owner accepted latency 2026-10-29, historical verdicts unchanged. Standard/clean
-DMG, guest/minimum-OS acceptance stays open in
-[P1.7 checklist](../platform/METAL_MIGRATION_CHECKLIST.md); copied-DMG host check below.
+Owner accepted latency 2026-10-29, historical verdicts unchanged. A later DMG
+installed in `/Applications` on the development Mac launched on Metal. Explicit
+Gatekeeper assessment rejected that ad hoc signed build. The owner confirmed
+Finder launch and the visible installed Dock tooltip. Clean-machine, guest and
+minimum-OS acceptance remain open in the
+[P1.7 checklist](../platform/METAL_MIGRATION_CHECKLIST.md#development-mac-installed-dmg-check-2026-11-11).
 
 Inspection: uncommitted bootstrap based on `2139aa063e22c057b1cd0a7f94433c7fd31de1a7`,
 macOS 27.2 ARM64, Microsoft OpenJDK 25 (update 4, vendor patch 1), `pom.xml` JavaFX.

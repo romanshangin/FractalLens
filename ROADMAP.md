@@ -194,10 +194,15 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   open. Owner's performance waiver requires no new timing campaign and closes
   no other gate; screen-latency and long-session RSS/GPU comparisons remain
   unperformed. Bounded worker preparation was rejected and remains benchmark-only.
-- [ ] Finish standard-location and clean-machine DMG installation, Gatekeeper
-  and visible installed Dock-tooltip acceptance. Temporary-install smoke is
-  insufficient. Recheck VirtualBuddy separately: historical Metal crash/SW
-  workaround persists; no guest was available in the latest local run.
+- [x] Install the DMG app in `/Applications` on the development Mac and verify
+  that the installed bundle launches on Metal and presents a completed frame.
+  [Installed-build evidence](docs/platform/METAL_MIGRATION_CHECKLIST.md#development-mac-installed-dmg-check-2026-11-11).
+- [x] Owner checked Finder launch, the visible `FractalLens` Dock tooltip and
+  Spaces switching on the development Mac (2026-11-13).
+- [ ] Clean-machine installation and additional platform configurations are
+  deferred per owner (2026-11-13). Gatekeeper rejected the local ad hoc signed
+  bundle. Recheck VirtualBuddy separately: historical Metal crash/SW workaround
+  persists; no guest was available in the previous guest check.
 - [ ] Establish the supported minimum macOS for JDK/JavaFX/AppKit/launcher/bundle
   together and execute there. Binary floor/plist 11.0 is not runtime acceptance.
 - [ ] Check external-display hotplug, mixed Retina scales/refresh rates and frames
@@ -208,8 +213,12 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
 - [ ] Resolve ES2/SW fallback focus repaint using Spaces evidence; reconcile the
   detailed checklist with final acceptance without inventing controlled-trial
   counts. Assess keyboard exit from fullscreen against platform conventions.
+  Escape returned the installed Metal build to its window on the development Mac.
   The owner also reported base-before-AA on window enlargement in Antialiased
-  display; retain this as a separate behavior issue pending its own closure.
+  display. PR #56 corrected the resize mode selection. On the installed Metal
+  build, fullscreen enlargement showed coarse edges with Wide preview enabled
+  and retained the sharp center with blank pending edges when disabled. Ordinary
+  Window > Zoom completed visually; its intermediate presentation remains open.
 - [ ] Complete final CI and record the exact committed candidate after review/
   delivery authorization. Local acceptance alone authorizes no commit, push or
   workflow dispatch. Platform gaps stay open until executed or explicitly accepted.
