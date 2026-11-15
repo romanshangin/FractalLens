@@ -359,17 +359,17 @@ class PersistentFrameStoreTest {
                 job(MANDELBROT, new Viewport(-0.72, 0.1, 2.4), 24, 16, 100));
         calculateAndStore(jobs.getFirst());
         long entryBytes = Files.size(storedFiles().getFirst());
-        Instant time = Instant.now().minusSeconds(100);
+        // Distinct times per entry: eviction order among equal times is unspecified, and
+        // file systems differ in timestamp resolution and directory listing order.
+        Instant start = Instant.now().minusSeconds(100);
         for (int index = 0; index < jobs.size(); index++) {
-            try (PersistentFrameRenderBackend backend = new PersistentFrameRenderBackend(
-                    new DirectDoubleRenderBackend(),
-                    new PersistentFrameStore(directory, 2 * entryBytes + 10, Duration.ZERO))) {
+            PersistentFrameStore store = new PersistentFrameStore(directory, 2 * entryBytes + 10, Duration.ZERO);
+            try (PersistentFrameRenderBackend backend =
+                         new PersistentFrameRenderBackend(new DirectDoubleRenderBackend(), store)) {
                 backend.render(RenderFrame.create(jobs.get(index)), () -> false, ignored -> {}, null);
             }
-            for (Path file : storedFiles()) {
-                Files.setLastModifiedTime(file, FileTime.from(time.plusSeconds(index)));
-            }
-            time = time.plusSeconds(10);
+            Files.setLastModifiedTime(store.fileFor(jobs.get(index)),
+                    FileTime.from(start.plusSeconds(10L * index)));
         }
 
         try (PersistentFrameStore store = store()) {

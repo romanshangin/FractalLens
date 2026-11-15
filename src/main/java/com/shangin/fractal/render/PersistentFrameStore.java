@@ -481,17 +481,18 @@ public final class PersistentFrameStore implements AutoCloseable {
         writeFully(channel, buffer);
     }
 
+    /** Writes the buffer at the channel position and advances the position past it. */
     private static void writeFully(FileChannel channel, ByteBuffer buffer) throws IOException {
-        while (buffer.hasRemaining()) {
-            channel.write(buffer);
-        }
+        channel.position(writeFully(channel, buffer, channel.position()));
     }
 
-    private static void writeFully(FileChannel channel, ByteBuffer buffer, long position) throws IOException {
+    /** Writes the buffer at {@code position}; returns the offset just past the written bytes. */
+    private static long writeFully(FileChannel channel, ByteBuffer buffer, long position) throws IOException {
         long offset = position;
         while (buffer.hasRemaining()) {
             offset += channel.write(buffer, offset);
         }
+        return offset;
     }
 
     private static long payloadBytes(int size, boolean storesOrbitTraps) {
