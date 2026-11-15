@@ -92,11 +92,9 @@ public final class AntialiasSampleCache {
      */
     private boolean append(int pixel, short[] phases, int from, int length, int escapedMask,
                            float edgeStrength, boolean deepZoom) {
-        int slot = slotOf(pixel);
-        boolean replaces = table.length > 0 && table[slot] != 0;
+        boolean replaces = table.length > 0 && table[slotOf(pixel)] != 0;
         if (replaces && storage.count - live >= Math.max(live, MIN_ENTRY_CAPACITY)) {
             rebuild(null, 0, 0, 0);
-            slot = slotOf(pixel);
         }
         int liveAfter = replaces ? live : live + 1;
         if (!reserve(storage.count + 1, storage.phaseCount + length, liveAfter)) {
@@ -108,7 +106,8 @@ public final class AntialiasSampleCache {
                 return false;
             }
         }
-        slot = slotOf(pixel);
+        // Growth, rehashing and compaction may move the pixel's slot.
+        int slot = slotOf(pixel);
         Storage target = storage;
         int index = target.count;
         target.pixels[index] = pixel;
