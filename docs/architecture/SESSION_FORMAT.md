@@ -30,6 +30,10 @@ others are remembered for the Fractal menu. A missing file, a file over 1 MiB, a
 malformed file, or an entry with a missing, non-decimal or non-positive value only
 makes the affected fractals open at their home views.
 
+Completed base frames are stored separately, in the platform cache directory
+(P2.7 Stage B, first increment). See
+[Stored completed frames](#stored-completed-frames-p27-stage-b).
+
 Application data is separate from the earlier private app; old sessions are never
 automatically moved/deleted. To reuse one, copy `last-session.json` to the new
 platform location with both apps closed. Schema is unchanged.
@@ -168,3 +172,72 @@ Owner confirmed both clipboard stages: configured scene copy/apply restores
 settings; unsupported schema errors without mutation. P2.2 accepted 2026-10-14:
 product workflow only, not replacement for review, required independent
 verification/delivery of current bookmark fixes or expanded platform coverage.
+
+## Stored completed frames (P2.7 Stage B)
+
+`PersistentFrameStore` keeps the numerical base samples of completed frames, so
+a view rendered in an earlier launch (the restored session or a remembered
+fractal view) is shown without recalculating its samples. The data is
+recalculable, so it lives in the platform cache directory rather than in the
+backed-up application data:
+
+- macOS: `~/Library/Caches/FractalLens/frame-cache/`
+- Windows: `%LOCALAPPDATA%\FractalLens\frame-cache\`, falling back to the user
+  profile (Windows has no separate cache root)
+- Linux: `$XDG_CACHE_HOME/fractallens/frame-cache/`, or
+  `~/.cache/fractallens/frame-cache/`
+
+It is independent of scene JSON: no scene, bookmark, preset or history format
+changes, and deleting the directory only costs recalculation.
+`-Dfractal.frameStore.enabled=false` disables it. Only the application's main
+view uses it. A main view opened on a non-default session store (as JavaFX
+tests do with temporary directories) keeps its frames in `frame-cache/` beside
+that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
+`target/`, so tests never reach the real cache.
+
+- **Contents.** One `<sha-256 of key>.frame` file per frame: iterations, smooth
+  iterations, escape flags and, when the formula stores them, orbit-trap
+  distances, uncompressed and big-endian. Palettes, coloring and display mode
+  are not stored; colors are derived from the samples, so palette changes reuse
+  a restored frame. Antialiasing is not stored yet.
+- **Key.** Formula and parameters (doubles by bit pattern), orbit trap, sample
+  accuracy, the decimal center and scale exactly as held by the viewport, the
+  render grid derived from them (double and decimal origin, steps, offsets,
+  conjugate-symmetry height, math context), render width/height and iteration
+  limit. The viewport's working precision enters only through that grid, so a
+  view restored from scene JSON hits the entry saved from the navigated view.
+  The header repeats the full key and grid, which must match. Custom
+  (non-preset) formulas are not stored.
+- **Pan limitation.** Only frames on their viewport's fresh grid are stored. A
+  frame completed by pan reuse keeps the shifted grid of its source frame,
+  whose sample positions differ from the fresh grid, so it is not stored; a view
+  left after panning is restored only if it was also rendered fresh (for
+  example after a zoom). Within one launch the
+  memory cache still reuses it.
+- **Versions.** `FORMAT_VERSION` covers the file layout. `CALCULATION_VERSION`
+  covers calculated sample semantics and must be incremented whenever a formula,
+  backend selection, precision policy or sample encoding change alters the
+  samples of an unchanged key; older entries are then discarded.
+- **Loading.** Only an empty frame (no reused pixels) is restored, on the render
+  thread inside the normal render call, so generations, cancellation and atomic
+  publication are unchanged: the frame is published as one completed region.
+  Header lengths are bounded before reading, the file length must equal the
+  expected payload, escape flags must be 0 or 1 and the payload CRC-32 must
+  match before any pixel is marked ready. Cancellation stops between 1 MiB
+  chunks and leaves every pixel not ready. Mismatched, truncated, corrupt or
+  outdated entries are deleted and the frame is calculated normally; read
+  failures also fall back to calculation.
+- **Saving.** A frame the wrapped backend completes is written by a background
+  writer once it has stayed the most recently completed frame for 1 s, so a
+  gesture that completes many frames writes only where it stops. An existing
+  entry for the same key is not rewritten. Files are written to a temporary
+  name and published by an atomic move; no fsync is issued, so an entry lost to
+  a crash is rejected by its length or checksum. Write failures are logged once
+  and rendering continues. Closing writes the frame still waiting for its
+  delay and waits at most 3 s; temporary files older than 10 minutes are
+  removed by a later store.
+- **Budget.** All entries share a 1 GiB disk budget; after each write the least
+  recently written or restored entries beyond it are deleted, and a frame
+  larger than the whole budget is not stored. The budget is provisional until
+  retained sizes and I/O latency are measured (ROADMAP P2.7). At 3024x1964 a
+  frame without orbit-trap distances takes about 74 MiB.

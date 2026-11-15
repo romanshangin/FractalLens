@@ -55,6 +55,28 @@ class LastSessionStoreTest {
     }
 
     @Test
+    void frameCacheUsesThePlatformCacheDirectory() {
+        String originalOs = System.getProperty("os.name");
+        try {
+            System.setProperty("os.name", "Mac OS X");
+            assertEquals(Path.of(System.getProperty("user.home"), "Library", "Caches", "FractalLens", "frame-cache"),
+                    LastSessionStore.defaultFrameCacheDirectory());
+            for (String os : new String[] {"Windows 11", "Linux"}) {
+                System.setProperty("os.name", os);
+                Path directory = LastSessionStore.defaultFrameCacheDirectory();
+                assertEquals("frame-cache", directory.getFileName().toString());
+                assertEquals(os.equals("Linux") ? "fractallens" : "FractalLens",
+                        directory.getParent().getFileName().toString());
+                assertTrue(directory.startsWith(Path.of("target", "test-application-data").toAbsolutePath()),
+                        "Tests that start the application must not reach the real " + os + " cache: " + directory);
+            }
+        } finally {
+            if (originalOs == null) System.clearProperty("os.name");
+            else System.setProperty("os.name", originalOs);
+        }
+    }
+
+    @Test
     void savesAndLoadsTheLatestScene() throws Exception {
         LastSessionStore store = store();
         FractalScene scene = scene(FractalPreset.JULIA, "-0.12", "0.34", "5E-80");

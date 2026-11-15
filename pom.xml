@@ -93,6 +93,7 @@
                     <environmentVariables>
                         <LOCALAPPDATA>${project.build.directory}/test-application-data</LOCALAPPDATA>
                         <XDG_STATE_HOME>${project.build.directory}/test-application-data</XDG_STATE_HOME>
+                        <XDG_CACHE_HOME>${project.build.directory}/test-application-data</XDG_CACHE_HOME>
                     </environmentVariables>
                 </configuration>
             </plugin>

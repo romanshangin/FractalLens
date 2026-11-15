@@ -56,6 +56,27 @@ public final class LastSessionStore {
         return Path.of(stateHome, "fractallens", FILE_NAME);
     }
 
+    /**
+     * The platform cache directory for completed render frames: recalculable data that
+     * belongs outside backed-up application data (macOS {@code ~/Library/Caches}, XDG
+     * {@code $XDG_CACHE_HOME}; Windows has no separate cache root, so the local,
+     * non-roaming application data directory is used).
+     */
+    public static Path defaultFrameCacheDirectory() {
+        String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        if (osName.startsWith("mac")) {
+            return Path.of(System.getProperty("user.home"), "Library", "Caches", "FractalLens", "frame-cache");
+        }
+        if (osName.startsWith("windows")) {
+            String localData = firstNonBlank(System.getenv("LOCALAPPDATA"), System.getProperty("user.home"));
+            return Path.of(localData, "FractalLens", "frame-cache");
+        }
+        String cacheHome = firstNonBlank(
+                System.getenv("XDG_CACHE_HOME"),
+                Path.of(System.getProperty("user.home"), ".cache").toString());
+        return Path.of(cacheHome, "fractallens", "frame-cache");
+    }
+
     private static String firstNonBlank(String... values) {
         for (String value : values) {
             if (value != null && !value.isBlank()) return value;

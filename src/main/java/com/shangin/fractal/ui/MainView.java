@@ -8,6 +8,7 @@ import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.render.FractalRenderService;
+import com.shangin.fractal.render.PersistentFrameStore;
 import com.shangin.fractal.render.RenderTarget;
 import javafx.event.EventHandler;
 import com.shangin.fractal.scene.FractalScene;
@@ -48,15 +49,33 @@ public class MainView extends BorderPane {
     private long exportRequest;
     private final PauseTransition exportStatusTimeout = new PauseTransition(Duration.seconds(4));
     private boolean confirmingClose;
+    private static final String FRAME_STORE_DIRECTORY = "frame-cache";
     private final AdaptivePngExportService exportService =
             new AdaptivePngExportService();
 
+    /** Stores completed frames in the platform cache directory. */
     public MainView(Stage stage) {
-        this(stage, LastSessionStore.systemDefault());
+        this(stage, LastSessionStore.systemDefault(), LastSessionStore.defaultFrameCacheDirectory());
     }
 
+    /** Stores completed frames beside the given session, keeping a test's data in one place. */
     MainView(Stage stage, LastSessionStore sessionStore) {
-        this(stage, sessionStore, new FractalRenderService());
+        this(stage, sessionStore, sessionStore.path().resolveSibling(FRAME_STORE_DIRECTORY));
+    }
+
+    private MainView(Stage stage, LastSessionStore sessionStore, Path frameCacheDirectory) {
+        this(stage, sessionStore, createRenderService(frameCacheDirectory));
+    }
+
+    /**
+     * Completed frames are stored so a restored or revisited view is shown without
+     * recalculation; {@code -Dfractal.frameStore.enabled=false} disables it.
+     */
+    private static FractalRenderService createRenderService(Path frameCacheDirectory) {
+        if (!Boolean.parseBoolean(System.getProperty("fractal.frameStore.enabled", "true"))) {
+            return new FractalRenderService();
+        }
+        return FractalRenderService.withPersistentFrames(new PersistentFrameStore(frameCacheDirectory));
     }
 
     MainView(Stage stage, LastSessionStore sessionStore, FractalRenderService renderService) {
