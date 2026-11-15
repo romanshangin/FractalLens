@@ -301,10 +301,28 @@ fractals stay retained needs the measured budgets below. Re-verification then sa
 a fully compatible return still take about 1 s, spent in per-tile readiness
 scans of the complete frame; a complete-mask fast path was
 [retained](benchmarks/RETAINED_RETURN_SCAN_RESULTS.md) for those scans only
-(isolated scans; the visible return time awaits verification).
-Stage A stays open until the correctness/performance acceptance below passes.
+(isolated scans).
+Follow-up on the merged candidate (2026-11-13, Apple Silicon, Metal): at
+1696x1188, the median switch to the post-layout observation was 40 ms on a
+compatible retained Mandelbrot view and 264 ms after clearing the frame cache.
+At 3024x1964, the 192 MiB cache retained one frame in the tested switch sequence
+and recalculated on return. A test-only 320 MiB cap kept two frames with AA colors
+and restored the target without recalculation. See the
+[Stage A validation](benchmarks/STAGE_A_RETENTION_VALIDATION.md) for correctness,
+timings and memory observations. Two mixed-scene windowed process pairs with
+default Wide Preview met their screening limits at 320 MiB, with about 79 MiB
+more post-GC heap and peak RSS increases of 1–8%. A subsequent six-pair run
+with pan met its timing and memory screening limits, but 320 MiB failed
+exact ARGB conformance at two palette-change checkpoints in every pair.
+The native macOS menu walkthrough completed. After PR #70, the same six-pair
+comparison passed all sample and ARGB checkpoints and the timing and memory
+screening limits. The first Fire recolor after a colors-only restore still
+took 691–775 ms with 320 MiB in the measured workload. The owner accepted
+320 MiB as the default, prioritizing faster fractal returns and accepting
+this recolor trade-off. Windows and Linux desktop validation will run
+separately, outside the scope of this macOS acceptance.
 
-- [ ] **Stage A: retain results within one process.** Reuse the existing cache
+- [x] **Stage A: retain results within one process (macOS acceptance).** Reuse the existing cache
   and compatibility planner across formula switches; keep one shared memory
   budget rather than allocating a full cache budget per fractal. **Remember each
   fractal's last view** (coordinates, scale and parameters) and restore it on

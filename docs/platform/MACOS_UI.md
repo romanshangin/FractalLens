@@ -141,8 +141,8 @@ a bookmark or a shared preset. The Mandelbrot-to-Julia actions open their own
 views. The views are saved on exit beside the last session and restored at the
 next launch; see [Session format](../architecture/SESSION_FORMAT.md#storage-locations).
 
-Within one run, completed base frames of every fractal stay in one shared,
-memory-bounded frame cache, so returning to a remembered view at the same window
+Within one run, completed base frames of every fractal share a 320 MiB frame
+cache, so returning to a remembered view at the same window
 size, iteration limit and Julia constant shows its retained samples without
 recalculating them; the least recently used frames are evicted first. A changed
 Julia constant, iteration setting or render size, or an evicted frame, renders

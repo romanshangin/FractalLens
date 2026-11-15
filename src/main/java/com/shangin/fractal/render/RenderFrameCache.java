@@ -17,8 +17,8 @@ import java.util.Optional;
  */
 public final class RenderFrameCache {
 
-    /** Four 1080p sample frames, with room for their validity masks. */
-    public static final long DEFAULT_MAX_BYTES = 192L * 1024L * 1024L;
+    /** Shared budget for completed base frames, retained AA colors, and AA samples. */
+    public static final long DEFAULT_MAX_BYTES = 320L * 1024L * 1024L;
 
     private static final long APPROXIMATE_BYTES_PER_PIXEL =
             Integer.BYTES + 2L * Double.BYTES + 1L + 1L;
