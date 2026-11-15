@@ -49,7 +49,7 @@ public final class AdaptivePngExportService implements AutoCloseable {
     static final int MAX_SAMPLE_GRID = 8;
 
     private static final int TILE_SIZE = 32;
-    private static final double BASE_EDGE_THRESHOLD = 0.10;
+    private static final double BASE_EDGE_THRESHOLD = com.shangin.fractal.coloring.PaletteEdgeThresholds.DIRECT_CONTRAST;
     private static final double TWO_BY_TWO_THRESHOLD = 0.10;
     private static final double FOUR_BY_FOUR_THRESHOLD = 0.055;
     private static final double[] SRGB_TO_LINEAR = createLinearLookup();
@@ -505,10 +505,18 @@ public final class AdaptivePngExportService implements AutoCloseable {
             int x,
             int y
     ) {
-        if (isBaseEdge(data, colors, x, y)) {
-            return true;
-        }
+        return isBaseEdge(data, colors, x, y)
+                || isDistanceEstimateEdge(calculator, grid, maxIterations, x, y);
+    }
 
+    /** True when the formula's exterior distance estimate puts the boundary inside the pixel. */
+    static boolean isDistanceEstimateEdge(
+            FractalCalculator calculator,
+            RenderGrid grid,
+            int maxIterations,
+            int x,
+            int y
+    ) {
         if (!calculator.supportsDistanceEstimation()) {
             return false;
         }

@@ -1,6 +1,7 @@
 package com.shangin.fractal.export;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
+import com.shangin.fractal.coloring.PaletteEdgeThresholds;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.gpu.PaletteRecolorBackend;
 import com.shangin.fractal.gpu.PaletteRecolorTiming;
@@ -42,7 +43,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private static final int SAMPLE_GRID = 4;
     private static final int DEEP_LOW_SAMPLE_GRID = 2;
     private static final int DEEP_HIGH_SAMPLE_GRID = 4;
-    private static final double DEEP_COLOR_EDGE_THRESHOLD = 0.20;
+    private static final double DEEP_COLOR_EDGE_THRESHOLD = PaletteEdgeThresholds.DEEP_CONTRAST;
     private static final int TILE_SIZE = 32;
 
     private final ExecutorService coordinator = Executors.newSingleThreadExecutor(
@@ -64,6 +65,14 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private final ThreadLocal<SmoothColorLookup> recolorLookup =
             ThreadLocal.withInitial(SmoothColorLookup::new);
     private Future<?> currentRefinement;
+    /**
+     * The smallest phase threshold whose candidates finished passes tested over the whole
+     * of {@link #cachedFrame}, at {@link #completeColorScale}; positive infinity until one
+     * vouches. Samples the bounded cache rejected are tracked by the cache itself, see
+     * {@link #missesCandidates}.
+     */
+    private double completeThreshold = Double.POSITIVE_INFINITY;
+    private double completeColorScale = Double.NaN;
     private volatile Profile lastProfile = Profile.EMPTY;
 
     /** Worker elapsed times are summed and overlap; they are not process CPU time. */
@@ -76,6 +85,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
     public InteractiveAntialiasService() {
         this(new AntialiasSampleCache(), Boolean.getBoolean("fractal.aa.profile"));
+    }
+
+    /** Uses a caller-sized sample cache, for example to exercise its budget. */
+    public static InteractiveAntialiasService withSampleCache(AntialiasSampleCache sampleCache) {
+        return new InteractiveAntialiasService(sampleCache, Boolean.getBoolean("fractal.aa.profile"));
     }
 
     InteractiveAntialiasService(AntialiasSampleCache sampleCache) {
@@ -159,6 +173,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 cachedFrame = frame;
                 basePhaseFrame = null;
                 basePhaseCache = null;
+                forgetCompleteness();
             }
         }
         currentRefinement = coordinator.submit(() -> runRefinement(
@@ -203,8 +218,10 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             if (profiling) profile.baseColorNanos = System.nanoTime() - started;
             long cacheStarted = profiling ? System.nanoTime() : 0;
             AntialiasSampleCache.Snapshot retained;
+            long rejectionsAtStart;
             synchronized (this) {
                 if (shouldCancel(refinementId) || cachedFrame != frame) return;
+                rejectionsAtStart = sampleCache.rejections();
                 retained = coloring instanceof SmoothPaletteColoring smooth
                         ? cachedSnapshot(smooth) : AntialiasSampleCache.Snapshot.EMPTY;
             }
@@ -243,6 +260,10 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
             if (shouldCancel(refinementId)) {
                 return;
+            }
+            if (coloring instanceof SmoothPaletteColoring smooth) {
+                recordCompleteness(frame, smooth, deepZoom, reusedPixels.validity().readyPixelCount() > 0,
+                        rejectionsAtStart);
             }
             if (profiling) lastProfile = profile.snapshot(System.nanoTime() - started);
 
@@ -288,6 +309,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         FractalSample[] regularSamples = null, smallSamples = null;
         long candidateNanos = 0, samplingNanos = 0, cacheColorNanos = 0;
         long testedPixels = 0, candidates = 0, samplesCount = 0;
+        SmoothPaletteColoring smooth = coloring instanceof SmoothPaletteColoring palette ? palette : null;
+        boolean deepZoom = preciseSampler != null;
+        double sharedThreshold = PaletteEdgeThresholds.sharedThreshold(deepZoom);
+        double phaseThreshold = smooth == null ? Double.NaN
+                : PaletteEdgeThresholds.phaseThreshold(smooth.palette(), deepZoom);
 
         for (int y = tile.y(); y < tile.y() + tile.height(); y++) {
             if (shouldCancel(refinementId)) {
@@ -315,12 +341,19 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 tileColors[tileIndex] = baseColors[frameIndex];
 
                 long candidateStarted = profiling ? System.nanoTime() : 0;
-                boolean candidate = preciseSampler == null
-                        ? AdaptivePngExportService.isSupersamplingCandidate(
-                        calculator, grid, frame.request().maxIterations(),
-                        data, baseColors, x, y)
-                        : isDeepSupersamplingCandidate(
-                        data, baseColors, x, y);
+                double edgeStrength = Double.NaN;
+                boolean candidate;
+                if (smooth == null) {
+                    candidate = deepZoom
+                            ? isDeepSupersamplingCandidate(data, baseColors, x, y)
+                            : AdaptivePngExportService.isSupersamplingCandidate(
+                            calculator, grid, frame.request().maxIterations(), data, baseColors, x, y);
+                } else {
+                    // Decide on the stored float, so recoloring shows exactly the sampled pixels.
+                    edgeStrength = (float) edgeStrength(calculator, grid, frame.request().maxIterations(),
+                            data, smooth, deepZoom, sharedThreshold, x, y);
+                    candidate = edgeStrength > phaseThreshold;
+                }
                 if (profiling) {
                     candidateNanos += System.nanoTime() - candidateStarted;
                     testedPixels++;
@@ -358,7 +391,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 }
                 long cacheStarted = profiling ? System.nanoTime() : 0;
                 if (batch != null) {
-                    Integer storedColor = batch.add(frameIndex, samples, lookup);
+                    Integer storedColor = batch.add(frameIndex, samples, lookup, edgeStrength, deepZoom);
                     if (storedColor != null) {
                         tileColors[tileIndex] = storedColor;
                         if (profiling) cacheColorNanos += System.nanoTime() - cacheStarted;
@@ -428,6 +461,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         }
 
         if (coloring instanceof SmoothPaletteColoring smooth) {
+            prepareThresholds(smooth);
             BaseColorPhaseCache phases = basePhases(frame, smooth);
             SmoothColorLookup lookup = recolorLookup.get();
             lookup.update(smooth);
@@ -460,11 +494,20 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             long elapsed = System.nanoTime() - started;
             return PaletteRecolorTiming.cpu(0, elapsed, elapsed);
         }
+        prepareThresholds(smooth);
         BaseColorPhaseCache phases = basePhases(frame, smooth);
         AntialiasSampleCache.Snapshot aa = aaSnapshot(frame, smooth);
         long prepared = System.nanoTime();
         PaletteRecolorTiming timing = backend.recolor(phases, aa, smooth, colors);
         return timing.withPreparation(prepared - started, System.nanoTime() - started);
+    }
+
+    /**
+     * Measures a new palette's thresholds on the calling recolor thread, outside this
+     * service's monitor, so {@link #missesCandidates} on the FX thread finds them ready.
+     */
+    private static void prepareThresholds(SmoothPaletteColoring coloring) {
+        PaletteEdgeThresholds.phaseThreshold(coloring.palette(), false);
     }
 
     private synchronized AntialiasSampleCache.Snapshot aaSnapshot(
@@ -476,6 +519,89 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     /** Caller owns this service's monitor. */
     private AntialiasSampleCache.Snapshot cachedSnapshot(SmoothPaletteColoring coloring) {
         return pendingSamples != null ? pendingSamples.snapshotFor(coloring) : sampleCache.snapshotFor(coloring);
+    }
+
+    /**
+     * True when the samples cached for {@code frame} may lack AA candidates that
+     * {@code coloring} selects: some were {@linkplain #leavesCandidatesUntested untested},
+     * or a pass sampled them but the bounded cache rejected them. Recoloring shows only
+     * the candidates cached; a pass under {@code coloring} adds the rest. When the frame's
+     * candidates exceed the cache budget, every recolor therefore samples the rejected
+     * ones again, and only those.
+     */
+    public synchronized boolean missesCandidates(RenderFrame frame, ColoringStrategy coloring,
+                                                 boolean deepZoom) {
+        return leavesCandidatesUntested(frame, coloring, deepZoom)
+                || coloring instanceof SmoothPaletteColoring
+                && (pendingSamples != null ? pendingSamples.dropped() : sampleCache.dropped());
+    }
+
+    /**
+     * True when finished passes may not have tested every AA candidate that
+     * {@code coloring} selects on {@code frame}: none finished at its color scale, or its
+     * palette is steeper than the palettes of every pass that did. Unlike
+     * {@link #missesCandidates}, samples the cache rejected do not count: the pass that
+     * rejected them still displayed their AA colors.
+     */
+    public synchronized boolean leavesCandidatesUntested(RenderFrame frame, ColoringStrategy coloring,
+                                                         boolean deepZoom) {
+        Objects.requireNonNull(frame);
+        if (!(coloring instanceof SmoothPaletteColoring smooth)) return false;
+        return cachedFrame != frame
+                || Double.compare(completeColorScale, smooth.colorScale()) != 0
+                || completeThreshold > PaletteEdgeThresholds.phaseThreshold(smooth.palette(), deepZoom);
+    }
+
+    /**
+     * Records that {@code frame} shows finished AA of {@code coloring} restored without
+     * samples: a completed pass under that coloring chose those pixels, so a later pass
+     * that skips them still vouches for its threshold. Recoloring them needs samples, which
+     * the controller's palette-change pass provides.
+     */
+    public synchronized void vouchForRestoredColors(RenderFrame frame, ColoringStrategy coloring,
+                                                    boolean deepZoom) {
+        Objects.requireNonNull(frame);
+        if (cachedFrame != frame || !(coloring instanceof SmoothPaletteColoring smooth)) return;
+        completeColorScale = smooth.colorScale();
+        completeThreshold = PaletteEdgeThresholds.phaseThreshold(smooth.palette(), deepZoom);
+    }
+
+    /**
+     * A pass tests every pixel it does not skip under its palette's threshold. Skipping no
+     * pixel, it adds that threshold to the earlier passes'; skipping reused AA pixels, which
+     * only those earlier passes tested, it vouches for neither threshold below the other.
+     *
+     * <p>Samples rejected earlier belong to candidates of a finished pass's threshold or
+     * of a cancelled pass. A pass that skips nothing, at a threshold no larger than every
+     * finished pass's, samples each of them that is not cached; when it stores all of
+     * them, the cache is complete again.
+     */
+    private synchronized void recordCompleteness(RenderFrame frame, SmoothPaletteColoring coloring,
+                                                 boolean deepZoom, boolean skippedReusedPixels,
+                                                 long rejectionsAtStart) {
+        if (cachedFrame != frame) return;
+        double threshold = PaletteEdgeThresholds.phaseThreshold(coloring.palette(), deepZoom);
+        boolean sameScale = Double.compare(completeColorScale, coloring.colorScale()) == 0;
+        boolean dropped = pendingSamples != null ? pendingSamples.dropped() : sampleCache.dropped();
+        if (dropped && !skippedReusedPixels && (!sameScale || threshold <= completeThreshold)) {
+            // Retained samples carry the mark; the mutable cache can clear it.
+            admitPendingSamples();
+            if (sampleCache.rejections() == rejectionsAtStart) sampleCache.markComplete();
+        }
+        if (!sameScale) {
+            completeColorScale = coloring.colorScale();
+            completeThreshold = skippedReusedPixels ? Double.POSITIVE_INFINITY : threshold;
+        } else {
+            completeThreshold = skippedReusedPixels
+                    ? Math.max(completeThreshold, threshold)
+                    : Math.min(completeThreshold, threshold);
+        }
+    }
+
+    /** Caller owns this service's monitor. */
+    private void forgetCompleteness() {
+        completeThreshold = Double.POSITIVE_INFINITY;
+        completeColorScale = Double.NaN;
     }
 
     /** Caller owns this service's monitor. */
@@ -493,7 +619,10 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     public synchronized AntialiasSampleCache.Retained retainSamples(RenderFrame frame) {
         Objects.requireNonNull(frame);
         if (cachedFrame != frame) return null;
-        return pendingSamples != null ? pendingSamples : sampleCache.retain();
+        AntialiasSampleCache.Retained retained = pendingSamples != null ? pendingSamples : sampleCache.retain();
+        if (retained == null) return null;
+        boolean vouched = Double.compare(completeColorScale, retained.colorScale()) == 0;
+        return retained.withCompleteThreshold(vouched ? completeThreshold : Double.POSITIVE_INFINITY);
     }
 
     /**
@@ -509,6 +638,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         cachedFrame = frame;
         basePhaseFrame = null;
         basePhaseCache = null;
+        completeThreshold = retained.completeThreshold();
+        completeColorScale = retained.colorScale();
     }
 
     /** Creates the deep reference orbit once, when the first candidate needs new samples. */
@@ -565,7 +696,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
     /** Transfers cached AA samples along the exact pixel shift used for frame reuse. */
     public synchronized void reuseFrame(RenderFrame source, RenderFrame target, PixelShift shift) {
+        // Shifted samples keep their completeness; the next pass accounts for exposed pixels.
         if (cachedFrame != source) {
+            forgetCompleteness();
             sampleCache.clear();
             pendingSamples = null;
         } else if (pendingSamples == null || shift.dx() != 0 || shift.dy() != 0
@@ -643,6 +776,79 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             }
         }
         return DEEP_LOW_SAMPLE_GRID;
+    }
+
+    /**
+     * Base-phase edge strength of a smooth-palette pixel: infinite across the set boundary
+     * or, outside deep zoom, where the distance estimate puts the boundary inside the
+     * pixel; otherwise the largest cyclic phase difference to a 3x3 neighbor. The distance
+     * estimate runs at or below the shared threshold, the largest any palette uses, so the
+     * stored strength decides candidacy correctly for every palette.
+     */
+    static double edgeStrength(
+            FractalCalculator calculator,
+            RenderGrid grid,
+            int maxIterations,
+            SamplePlane data,
+            SmoothPaletteColoring coloring,
+            boolean deepZoom,
+            double sharedThreshold,
+            int x,
+            int y
+    ) {
+        double strength = phaseEdgeStrength(data, coloring, x, y);
+        if (!deepZoom && strength <= sharedThreshold
+                && AdaptivePngExportService.isDistanceEstimateEdge(calculator, grid, maxIterations, x, y)) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return strength;
+    }
+
+    /** True where {@link #phaseEdgeStrength} exceeds {@code threshold}. */
+    static boolean isPhaseEdge(
+            SamplePlane data,
+            SmoothPaletteColoring coloring,
+            double threshold,
+            int x,
+            int y
+    ) {
+        return phaseEdgeStrength(data, coloring, x, y) > threshold;
+    }
+
+    /**
+     * Infinite when a 3x3 neighbor lies across the set boundary, otherwise the largest
+     * cyclic base-phase difference to an escaped neighbor. Phases repeat every two units.
+     */
+    static double phaseEdgeStrength(
+            SamplePlane data,
+            SmoothPaletteColoring coloring,
+            int x,
+            int y
+    ) {
+        int width = data.width();
+        int centerIndex = y * width + x;
+        boolean centerEscaped = data.escaped(centerIndex);
+        double centerPhase = centerEscaped
+                ? coloring.basePhase(data.smoothIterations(centerIndex)) : 0.0;
+        double strongest = 0.0;
+        for (int neighborY = Math.max(0, y - 1);
+             neighborY <= Math.min(data.height() - 1, y + 1);
+             neighborY++) {
+            for (int neighborX = Math.max(0, x - 1);
+                 neighborX <= Math.min(width - 1, x + 1);
+                 neighborX++) {
+                int neighborIndex = neighborY * width + neighborX;
+                if (centerEscaped != data.escaped(neighborIndex)) {
+                    return Double.POSITIVE_INFINITY;
+                }
+                if (centerEscaped) {
+                    double difference = Math.abs(centerPhase
+                            - coloring.basePhase(data.smoothIterations(neighborIndex)));
+                    strongest = Math.max(strongest, Math.min(difference, 2.0 - difference));
+                }
+            }
+        }
+        return strongest;
     }
 
     /** Deep AA focuses on set boundaries and visually strong palette outliers. */

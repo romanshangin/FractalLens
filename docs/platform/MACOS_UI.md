@@ -148,10 +148,11 @@ recalculating them; the least recently used frames are evicted first. A changed
 Julia constant, iteration setting or render size, or an evicted frame, renders
 normally. Finished antialiasing is kept with its frame in the same budget, so
 returning with the same colors shows it without another antialiasing pass. Its
-supersamples are kept too while they fit; with them, another palette reuses them
-and only edge detection runs again. Supersamples are dropped first when space
-runs short, and at typical window sizes they usually do not fit; a palette change
-on a frame shown without them then runs its antialiasing pass again. A visit without antialiasing, such as Base only, keeps the earlier
+supersamples are kept too while they fit; with them, another palette reuses them,
+and its edge scan finds no new pixels (see "Antialiasing candidates"). Supersamples are dropped first when space
+runs short; a palette change on a frame shown without them then runs its
+antialiasing pass again. How often they fit beside the frames at a given window
+size has not been measured since the AA sample cache became compact. A visit without antialiasing, such as Base only, keeps the earlier
 antialiasing for the next visit. Antialiasing cancelled before it finished is not
 kept, and a palette change during the antialiasing pass keeps only its
 supersamples. Rendered frames are not saved across launches.
@@ -513,6 +514,62 @@ Mandelbrot/Julia requiring precise rendering use the deep setting, all other
 frames the standard setting; both remain editable at any zoom. Deep AA uses
 candidate-only `refineDeep`; Antialiased display shows refined tiles only and
 may take much longer than base rendering.
+
+#### Antialiasing candidates
+
+With smooth palettes, interactive AA chooses its pixels from base phases (smooth
+iterations times color scale, before the palette offset), not from displayed
+colors. Each pixel gets an edge strength: infinite when a 3x3 neighbor lies on the
+other side of the set boundary or, outside deep zoom, when the formula's distance
+estimate places the boundary within half a pixel; otherwise the largest cyclic
+phase difference to a neighbor. A palette selects the pixels whose strength
+exceeds its phase threshold (`PaletteEdgeThresholds`): the widest phase step over
+which none of its linear-light channels can change by the color edge contrast
+(0.10, or 0.20 in deep zoom), at most `contrast / 11`. 11 bounds the contrast slope
+of every built-in palette, so all of them, and every edited palette at least as
+smooth, share that threshold and one candidate set, which contains every pixel the
+color-contrast test would choose for any of them at any offset.
+
+Cached samples keep their strength, and recoloring shows AA only where the current
+palette's threshold selects it. The image therefore depends on the frame and the
+palette alone: recoloring equals a direct pass under the new palette, and Ice,
+Fire, Ice, Fire repeats exactly without new samples. A steeper edited palette has a
+smaller threshold and more candidates; the first switch to it on a frame
+antialiases that frame again in place, sampling only the missing pixels, after
+which switching between it and any smoother palette needs no pass and repeats
+exactly. The same pass follows a render whose pass skipped reused AA pixels under a
+palette steeper than the earlier passes. The threshold is bounded below at
+`1/32` of the shared one, which covers a black-to-white stop about 0.01 of the
+palette wide; a sharper stop may lose AA where neighboring phases straddle it
+closely, rather than supersampling most of the frame. A changed color scale changes
+the phases and samples again.
+
+The AA sample cache stores each entry in flat primitive arrays (about 60 bytes
+charged for 16 phases, against about 270 for the former per-pixel objects), so
+its default 512 MiB budget holds every pixel of a 2592x1738 Retina window as a
+direct candidate. The cache never evicts: a candidate that does not fit is
+rejected and the frame is marked as missing samples; space held by replaced
+entries is reclaimed first. The pass that rejected it still shows its AA, and no
+second pass follows; every later palette change, on that frame or on its
+retained copy, runs one in-place pass that samples only the rejected candidates,
+so each switch still repeats a direct render. Such a pass that skips no reused AA
+pixel, at a threshold no larger than the earlier passes', and stores every
+sample it takes, for example after a pan moved other samples out, clears the
+mark. Palette
+animation on such a frame replaces that pass with each animation step and shows
+the rejected candidates' base colors until it stops.
+Histogram Coloring and Orbit Trap have no base phase and keep the color-contrast
+test. PNG export keeps its own color-contrast test.
+
+Cost, exploratory (`aa-benchmark`, Ice, 3024x1964, Apple M3 Pro, Java 26.0.1,
+two alternating control/candidate process pairs of five samples each, against
+`main` at `d4c2b7f`): candidates grew by 34% (overview), 12% (seahorse), 13%
+(Julia) and 29% (deep) against Ice's color edges. Median AA time stayed within
+±4% for the direct scenes (160 → 159 ms, 826 → 845 ms, 803 → 833 ms) and rose
+from 9.5 s to 12.5 s (+31%) in deep zoom. Steeper palettes such as Fire already
+chose more pixels, so their increase is smaller. The per-palette thresholds that
+followed review keep these built-in candidate sets unchanged. Measuring an edited
+palette's threshold takes about 10-13 ms once, on the recolor or AA thread.
 
 Base only completes at `RenderStatus.COMPLETE` after base, without refinement.
 All modes show whole-frame `Rendering N%`, no separate `Refining…`. Base only
@@ -1127,7 +1184,10 @@ Pan, zoom and ordinary later resize remain progressive; the status indicator
 stays above the cover. This prevents new formula tiles from
 being composited over pixels of the previous formula.
 
-The AA sample cache admission budget includes conservative retained object, LRU
-table and current snapshot storage, rather than phase payload alone. Reaching
-that budget preserves completed AA pixels and may retain fewer samples for
-subsequent palette animation; the existing base-color fallback applies.
+The AA sample cache admission budget includes conservative array headers,
+alignment, growth slack, its hash table and current snapshot indices, rather than
+phase payload alone. Reaching that budget preserves completed AA pixels and
+rejects further samples; the next palette change samples them again in place.
+Growth copies the arrays, so old and new arrays coexist briefly, and a snapshot
+still in use keeps its generation of arrays alive; neither is charged to the
+budget.
