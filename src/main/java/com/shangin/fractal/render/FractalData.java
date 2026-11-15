@@ -81,6 +81,27 @@ public class FractalData implements SamplePlane {
         }
     }
 
+    /*
+     * Direct array access for PersistentFrameStore, which streams whole planes to and
+     * from disk. Callers must not keep the arrays beyond one load or save.
+     */
+    int[] iterationsArray() {
+        return iterations;
+    }
+
+    double[] smoothIterationsArray() {
+        return smoothIterations;
+    }
+
+    boolean[] escapedArray() {
+        return escaped;
+    }
+
+    /** Null when this plane does not store orbit-trap distances. */
+    double[] orbitTrapDistancesArray() {
+        return orbitTrapDistances;
+    }
+
     /** True when both planes write to at least one common array. */
     boolean sharesStorageWith(FractalData other) {
         return iterations == other.iterations

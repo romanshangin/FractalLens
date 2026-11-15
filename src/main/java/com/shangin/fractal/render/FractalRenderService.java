@@ -58,6 +58,16 @@ public final class FractalRenderService implements AutoCloseable {
     }
 
     /**
+     * The default backends, restoring empty frames from {@code store} and storing the
+     * frames they complete. The service owns the store and closes it.
+     */
+    public static FractalRenderService withPersistentFrames(PersistentFrameStore store) {
+        Objects.requireNonNull(store);
+        GpuRuntime runtime = GpuRuntimeFactory.createDefault();
+        return new FractalRenderService(new PersistentFrameRenderBackend(defaultBackend(runtime), store), runtime);
+    }
+
+    /**
      * The runtime is owned here rather than by the controller or JavaFX surface.
      * Explicitly injected backends retain their selection policy.
      */

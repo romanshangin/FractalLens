@@ -339,6 +339,13 @@ separately, outside the scope of this macOS acceptance.
   iteration limit and sample accuracy. Include AA pattern/quality and encoding
   dependencies such as color scale where applicable. Palette changes may reuse
   only data whose representation supports them.
+  Implemented, not accepted (2026-11-14): the main view stores completed base
+  frames in the platform cache directory and restores an exactly matching
+  empty frame inside the normal render call; see
+  [Stored completed frames](docs/architecture/SESSION_FORMAT.md#stored-completed-frames-p27-stage-b).
+  Covered by portable unit tests only. Pan-reused frames (shifted grids) are
+  not stored. AA persistence, compression, measured
+  budgets, manual restart checks and the acceptance items below remain open.
 - [ ] Use background, bounded I/O with lazy loading and explicit disk eviction.
   Prefer writing after frame completion instead of starting a large save at exit.
   Publish complete files atomically, validate metadata, lengths and integrity
