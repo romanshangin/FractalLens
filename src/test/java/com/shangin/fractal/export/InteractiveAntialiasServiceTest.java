@@ -1,5 +1,9 @@
 package com.shangin.fractal.export;
 
+import com.shangin.fractal.coloring.ColorStop;
+import com.shangin.fractal.coloring.GradientPalette;
+import com.shangin.fractal.coloring.Palette;
+import com.shangin.fractal.coloring.PaletteEdgeThresholds;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.formula.FractalPreset;
@@ -507,11 +511,23 @@ class InteractiveAntialiasServiceTest {
 
     private static void refineWholeFrame(InteractiveAntialiasService service, RenderFrame frame,
                                          SmoothPaletteColoring coloring) throws InterruptedException {
+        refineWholeFrame(service, frame, coloring, false);
+    }
+
+    private static void refineWholeFrame(InteractiveAntialiasService service, RenderFrame frame,
+                                         SmoothPaletteColoring coloring, boolean deepZoom)
+            throws InterruptedException {
         CountDownLatch completed = new CountDownLatch(1);
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        service.refine(frame, coloring,
-                RefinedPixelSnapshot.empty(frame.samplePlane().width(), frame.samplePlane().height()),
-                Runnable::run, (region, colors) -> {}, completed::countDown, failure::set);
+        RefinedPixelSnapshot empty = RefinedPixelSnapshot.empty(
+                frame.samplePlane().width(), frame.samplePlane().height());
+        if (deepZoom) {
+            service.refineDeep(frame, coloring, empty, Runnable::run, (region, colors) -> {},
+                    completed::countDown, failure::set);
+        } else {
+            service.refine(frame, coloring, empty, Runnable::run, (region, colors) -> {},
+                    completed::countDown, failure::set);
+        }
         assertTrue(completed.await(15, TimeUnit.SECONDS));
         assertNull(failure.get());
     }
@@ -865,6 +881,333 @@ class InteractiveAntialiasServiceTest {
             assertNull(service.retainSamples(stale));
             assertEquals(0, cache.size());
         }
+    }
+
+    @Test
+    void everyBuiltInPaletteSharesOnePhaseThreshold() {
+        for (PalettePreset preset : PalettePreset.values()) {
+            for (boolean deep : new boolean[] {false, true}) {
+                assertEquals(PaletteEdgeThresholds.sharedThreshold(deep),
+                        PaletteEdgeThresholds.phaseThreshold(preset.palette(), deep),
+                        preset + (deep ? " deep" : " direct"));
+            }
+        }
+    }
+
+    @Test
+    void steepCustomPalettesGetTheThresholdTheirGradientNeedsBoundedBelow() {
+        double shared = PaletteEdgeThresholds.sharedThreshold(false);
+        double previous = shared;
+        for (double gap : new double[] {0.1, 0.05, 0.02}) {
+            Palette steep = sharpStop(gap);
+            double threshold = PaletteEdgeThresholds.phaseThreshold(steep, false);
+            assertTrue(threshold < previous, "A sharper stop needs a smaller threshold: " + gap);
+            // No two palette positions this close may differ by the color edge contrast.
+            int span = (int) Math.floor(threshold * 65_535);
+            for (int index = 0; index + span < 65_536; index += 7) {
+                assertTrue(AdaptivePngExportService.colorContrast(
+                                steep.color(index / 65_535.0), steep.color((index + span) / 65_535.0))
+                                <= PaletteEdgeThresholds.DIRECT_CONTRAST,
+                        "gap " + gap + " at " + index);
+            }
+            previous = threshold;
+        }
+        assertEquals(shared * PaletteEdgeThresholds.MIN_THRESHOLD_FRACTION,
+                PaletteEdgeThresholds.phaseThreshold(sharpStop(0.0), false),
+                "A discontinuous stop must not make every pixel a candidate");
+    }
+
+    @Test
+    void phaseEdgesCoverTheColorEdgesOfEveryPaletteAndOffset() throws Exception {
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator(FractalPreset.MANDELBROT.createFormula()),
+                FractalPreset.MANDELBROT.defaultViewport().zoom(4), 160, 120, 400));
+        try (ParallelFractalCalculator calculator = new ParallelFractalCalculator(2)) {
+            calculator.calculate(frame, () -> false, ignored -> {});
+        }
+        SamplePlane data = frame.samplePlane();
+        List<Palette> palettes = new java.util.ArrayList<>();
+        for (PalettePreset preset : PalettePreset.values()) palettes.add(preset.palette());
+        palettes.add(sharpStop(0.1));
+        palettes.add(sharpStop(0.02));
+        int colorEdges = 0;
+        for (Palette palette : palettes) {
+            double direct = PaletteEdgeThresholds.phaseThreshold(palette, false);
+            double deep = PaletteEdgeThresholds.phaseThreshold(palette, true);
+            for (double offset : new double[] {0.0, 0.37, 1.2}) {
+                var coloring = new SmoothPaletteColoring(palette, SmoothPaletteColoring.DEFAULT_COLOR_SCALE, offset);
+                int[] colors = AdaptivePngExportService.colorBaseFrame(data, coloring);
+                for (int y = 0; y < data.height(); y++) for (int x = 0; x < data.width(); x++) {
+                    double strength = InteractiveAntialiasService.phaseEdgeStrength(data, coloring, x, y);
+                    if (AdaptivePngExportService.isBaseEdge(data, colors, x, y)) {
+                        colorEdges++;
+                        assertTrue(strength > direct, palette + " offset " + offset + " edge at " + x + "," + y);
+                    }
+                    if (InteractiveAntialiasService.isDeepSupersamplingCandidate(data, colors, x, y)) {
+                        assertTrue(strength > deep, palette + " offset " + offset + " deep edge at " + x + "," + y);
+                    }
+                }
+            }
+        }
+        assertTrue(colorEdges > 0, "The fixture must contain color edges");
+        long iceEdges = 0;
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        for (int y = 0; y < data.height(); y++) for (int x = 0; x < data.width(); x++) {
+            if (InteractiveAntialiasService.isPhaseEdge(data, ice, PaletteEdgeThresholds.sharedThreshold(false), x, y)) {
+                iceEdges++;
+            }
+        }
+        assertTrue(iceEdges < data.size() / 4, "Phase edges must stay candidate-only: " + iceEdges);
+    }
+
+    @Test
+    void paletteSwitchesReproduceADirectPassExactlyWithoutNewSamples() throws Exception {
+        assertPaletteSwitchesAreRepeatable(mandelbrotFrame(), false);
+    }
+
+    @Test
+    void deepPaletteSwitchesReproduceADirectPassExactlyWithoutNewSamples() throws Exception {
+        assertPaletteSwitchesAreRepeatable(renderDeepFrame(), true);
+    }
+
+    @Test
+    void steepCustomPaletteSamplesItsMissingCandidatesOnceAndSwitchesRepeatExactly() throws Exception {
+        assertSteepPaletteSwitchesAreRepeatable(mandelbrotFrame(), false);
+    }
+
+    @Test
+    void deepSteepCustomPaletteSamplesItsMissingCandidatesOnceAndSwitchesRepeatExactly() throws Exception {
+        assertSteepPaletteSwitchesAreRepeatable(renderDeepFrame(), true);
+    }
+
+    @Test
+    void completenessFollowsRetainedSamplesAndIsForgottenByShiftsAndOtherFrames() throws Exception {
+        RenderFrame frame = mandelbrotFrame();
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        var steep = new SmoothPaletteColoring(sharpStop(0.02), SmoothPaletteColoring.DEFAULT_COLOR_SCALE, 0);
+        var scaled = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0);
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            assertTrue(service.missesCandidates(frame, ice, false), "No pass has finished yet");
+            assertFalse(service.missesCandidates(frame, new com.shangin.fractal.coloring.HistogramPaletteColoring(
+                    PalettePreset.ICE.palette(), 0.0, frame.samplePlane()), false), "Only smooth palettes have cached AA");
+            refineWholeFrame(service, frame, ice, false);
+            assertFalse(service.missesCandidates(frame, ice, false));
+            assertTrue(service.missesCandidates(frame, steep, false));
+            assertTrue(service.missesCandidates(frame, scaled, false), "Another color scale needs other samples");
+            var retained = service.retainSamples(frame);
+            assertEquals(PaletteEdgeThresholds.sharedThreshold(false), retained.completeThreshold());
+
+            RenderFrame other = mandelbrotFrame();
+            refineWholeFrame(service, other, ice, false);
+            assertTrue(service.missesCandidates(frame, ice, false), "The cache now belongs to another frame");
+            service.restoreSamples(frame, retained);
+            assertFalse(service.missesCandidates(frame, ice, false), "Retained samples keep their completeness");
+            // A pass that skips reused AA pixels keeps the larger of the two thresholds.
+            service.reuseFrame(frame, frame, new PixelShift(3, 0));
+            assertFalse(service.missesCandidates(frame, ice, false), "Shifted samples keep their completeness");
+            int width = frame.samplePlane().width(), height = frame.samplePlane().height();
+            var reusedValidity = new ValidityMask(width, height);
+            reusedValidity.markReady(new RenderRegion(0, 0, 8, 8));
+            refineWith(service, frame, steep,
+                    new RefinedPixelSnapshot(width, height, new int[width * height], reusedValidity));
+            assertTrue(service.missesCandidates(frame, steep, false), "A pass skipping nothing is needed for steep");
+            refineWholeFrame(service, frame, steep, false);
+            assertFalse(service.missesCandidates(frame, steep, false));
+        }
+    }
+
+    @Test
+    void aPhaseStepJustAboveTheThresholdIsDecidedAsStoredSoRecoloringMatchesThePass() throws Exception {
+        double threshold = PaletteEdgeThresholds.sharedThreshold(false);
+        double justAbove = Math.nextUp(threshold);
+        assertTrue((float) justAbove <= threshold, "The fixture must sit in the float rounding window");
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator((r, i, limit) -> new FractalSample(1, true, 8 + r, 0)),
+                FractalPreset.BURNING_SHIP.defaultViewport(), 4, 4, 20));
+        for (int index = 0; index < 16; index++) {
+            frame.fractalData().setValues(index, 1, index == 5 ? justAbove : 0.0, true, Double.NaN);
+        }
+        frame.validity().markReady(new RenderRegion(0, 0, 4, 4));
+        // Color scale one makes the stored smooth iterations the base phases themselves.
+        var coloring = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 1.0, 0);
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            int[] published = refineAndWait(service, frame, coloring);
+            assertArrayEquals(published, service.recolorCached(frame, coloring),
+                    "Recoloring must show exactly the pixels the pass antialiased");
+            assertFalse(service.missesCandidates(frame, coloring, false));
+        }
+    }
+
+    @Test
+    void samplesTheCacheRejectedAreMissingSoEveryRecolorPassStillMatchesADirectPass() throws Exception {
+        RenderFrame frame = mandelbrotFrame();
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        var fire = new SmoothPaletteColoring(PalettePreset.FIRE.palette(),
+                SmoothPaletteColoring.DEFAULT_COLOR_SCALE, 0.7);
+        int[] directIce;
+        int[] directFire;
+        int candidates;
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            refineWholeFrame(service, frame, fire);
+            directFire = service.recolorCached(frame, fire);
+            refineWholeFrame(service, frame, ice);
+            directIce = service.recolorCached(frame, ice);
+            candidates = service.retainSamples(frame).size();
+        }
+        // A budget that holds about half of the frame's candidates.
+        var probe = new AntialiasSampleCache();
+        FractalSample[] sixteen = new FractalSample[16];
+        java.util.Arrays.fill(sixteen, new FractalSample(10, true, 10, 0));
+        for (int pixel = 0; pixel < candidates / 2; pixel++) probe.put(pixel, sixteen, ice);
+        var tight = new AntialiasSampleCache(probe.usedBytes());
+        AntialiasSampleCache.Retained overflowed;
+        try (var service = new InteractiveAntialiasService(tight, true)) {
+            assertArrayEquals(directIce, refinePublished(service, frame, ice),
+                    "The pass shows the AA of every candidate, cached or not");
+            assertTrue(tight.dropped());
+            int cached = tight.size();
+            assertTrue(cached > 0 && cached < candidates, "The fixture must overflow the cache: " + cached);
+            assertFalse(service.leavesCandidatesUntested(frame, ice, false), "The pass tested every candidate");
+            assertTrue(service.missesCandidates(frame, fire, false), "Rejected samples are missing for a recolor");
+            assertTrue(service.missesCandidates(frame, ice, false));
+            assertTrue(service.retainSamples(frame).dropped());
+
+            for (int round = 0; round < 2; round++) {
+                // The pass the controller runs after each recolor samples only the rejected pixels.
+                assertArrayEquals(directFire, refinePublished(service, frame, fire), "Ice -> Fire, round " + round);
+                assertEquals((long) (candidates - cached) * 16, service.lastProfile().samples());
+                assertArrayEquals(directIce, refinePublished(service, frame, ice), "Fire -> Ice, round " + round);
+                assertEquals(cached, tight.size(), "Cached samples stay; rejected ones are not stored");
+            }
+            overflowed = service.retainSamples(frame);
+        }
+        // Where the rejected samples fit, the first full pass stores them and clears the mark.
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            service.restoreSamples(frame, overflowed);
+            assertTrue(service.missesCandidates(frame, fire, false));
+            assertArrayEquals(directFire, refinePublished(service, frame, fire));
+            assertTrue(service.lastProfile().samples() > 0);
+            assertFalse(service.missesCandidates(frame, fire, false), "Every candidate is stored now");
+            assertFalse(service.missesCandidates(frame, ice, false));
+            assertFalse(service.retainSamples(frame).dropped());
+            refineWholeFrame(service, frame, ice);
+            assertEquals(0, service.lastProfile().samples(), "No further pass samples anything");
+            assertArrayEquals(directIce, service.recolorCached(frame, ice));
+        }
+    }
+
+    /** Runs a whole-frame pass and assembles its published tiles. */
+    private static int[] refinePublished(InteractiveAntialiasService service, RenderFrame frame,
+                                         SmoothPaletteColoring coloring) throws Exception {
+        int width = frame.samplePlane().width();
+        int[] output = new int[frame.samplePlane().size()];
+        var done = new java.util.concurrent.CompletableFuture<int[]>();
+        service.refine(frame, coloring, RefinedPixelSnapshot.empty(width, frame.samplePlane().height()),
+                Runnable::run, (region, colors) -> {
+                    for (int row = 0; row < region.height(); row++) {
+                        System.arraycopy(colors, row * region.width(), output,
+                                (region.y() + row) * width + region.x(), region.width());
+                    }
+                }, () -> done.complete(output), done::completeExceptionally);
+        return done.get(15, TimeUnit.SECONDS);
+    }
+
+    private static void assertPaletteSwitchesAreRepeatable(RenderFrame frame, boolean deepZoom)
+            throws Exception {
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        var fire = new SmoothPaletteColoring(PalettePreset.FIRE.palette(),
+                SmoothPaletteColoring.DEFAULT_COLOR_SCALE, 0.7);
+        int[] directIce;
+        int[] directFire;
+        long fireCandidates;
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            refineWholeFrame(service, frame, fire, deepZoom);
+            fireCandidates = service.lastProfile().candidates();
+            directFire = service.recolorCached(frame, fire);
+        }
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            refineWholeFrame(service, frame, ice, deepZoom);
+            assertTrue(service.lastProfile().candidates() > 0, "The fixture must contain AA candidates");
+            assertEquals(fireCandidates, service.lastProfile().candidates(),
+                    "Ice and Fire must select the same AA pixels");
+            directIce = service.recolorCached(frame, ice);
+            assertFalse(service.missesCandidates(frame, fire, deepZoom), "Fire needs no further pass");
+
+            for (int round = 0; round < 2; round++) {
+                assertArrayEquals(directFire, service.recolorCached(frame, fire), "Ice -> Fire, round " + round);
+                assertArrayEquals(directIce, service.recolorCached(frame, ice), "Fire -> Ice, round " + round);
+            }
+            // A later pass under another palette, as on a revisit, finds no new candidates.
+            refineWholeFrame(service, frame, fire, deepZoom);
+            assertEquals(0, service.lastProfile().samples(), "No pixel may be sampled again");
+            assertEquals(0, service.lastProfile().candidates(), "No candidate may be added");
+            assertArrayEquals(directFire, service.recolorCached(frame, fire));
+            assertArrayEquals(directIce, service.recolorCached(frame, ice));
+        }
+    }
+
+    private static void assertSteepPaletteSwitchesAreRepeatable(RenderFrame frame, boolean deepZoom)
+            throws Exception {
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        var steep = new SmoothPaletteColoring(sharpStop(0.02), SmoothPaletteColoring.DEFAULT_COLOR_SCALE, 0.3);
+        int[] directSteep;
+        long steepSamples;
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            refineWholeFrame(service, frame, steep, deepZoom);
+            steepSamples = service.lastProfile().samples();
+            directSteep = service.recolorCached(frame, steep);
+        }
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            refineWholeFrame(service, frame, ice, deepZoom);
+            long iceSamples = service.lastProfile().samples();
+            int[] directIce = service.recolorCached(frame, ice);
+            assertTrue(steepSamples > iceSamples, "The steep palette must select more candidates");
+            assertTrue(service.missesCandidates(frame, steep, deepZoom), "Ice's pass cannot cover the steep palette");
+
+            // The pass the controller runs after the recolor samples only the missing candidates.
+            refineWholeFrame(service, frame, steep, deepZoom);
+            assertEquals(steepSamples - iceSamples, service.lastProfile().samples());
+            assertFalse(service.missesCandidates(frame, steep, deepZoom));
+            assertFalse(service.missesCandidates(frame, ice, deepZoom));
+
+            for (int round = 0; round < 2; round++) {
+                assertArrayEquals(directIce, service.recolorCached(frame, ice), "Steep -> Ice, round " + round);
+                assertArrayEquals(directSteep, service.recolorCached(frame, steep), "Ice -> steep, round " + round);
+            }
+            refineWholeFrame(service, frame, ice, deepZoom);
+            assertEquals(0, service.lastProfile().samples(), "Returning to Ice samples nothing");
+            assertArrayEquals(directIce, service.recolorCached(frame, ice));
+        }
+    }
+
+    private static void refineWith(InteractiveAntialiasService service, RenderFrame frame,
+                                   SmoothPaletteColoring coloring, RefinedPixelSnapshot reused)
+            throws InterruptedException {
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        service.refine(frame, coloring, reused, Runnable::run, (region, colors) -> {},
+                completed::countDown, failure::set);
+        assertTrue(completed.await(15, TimeUnit.SECONDS));
+        assertNull(failure.get());
+    }
+
+    private static RenderFrame mandelbrotFrame() throws InterruptedException {
+        RenderFrame frame = RenderFrame.create(new RenderRequest(
+                new FractalCalculator(FractalPreset.MANDELBROT.createFormula()),
+                FractalPreset.MANDELBROT.defaultViewport().zoom(4), 120, 90, 300));
+        try (ParallelFractalCalculator calculator = new ParallelFractalCalculator(2)) {
+            calculator.calculate(frame, () -> false, ignored -> {});
+        }
+        return frame;
+    }
+
+    /** Dark blue up to 0.5, then white within {@code gap}: a sharp stop of an edited palette. */
+    private static Palette sharpStop(double gap) {
+        return new GradientPalette(List.of(
+                new ColorStop(0.0, 0xFF001020),
+                new ColorStop(0.5, 0xFF000000),
+                new ColorStop(0.5 + gap, 0xFFFFFFFF),
+                new ColorStop(1.0, 0xFFFFFFFF)));
     }
 
     private static RenderFrame checkerFrame(FractalCalculator calculator) {

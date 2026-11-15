@@ -277,8 +277,12 @@ colors (~8 MiB there) are now kept without them. A palette change on a frame
 shown from colors alone samples its AA again in place, since recoloring needs the
 samples. A
 hit with the same coloring performs no AA candidate detection or supersampling;
-another palette of the same color scale reuses the samples and re-detects
-candidates from its own base colors. Retained AA survives later visits that add
+another palette of the same color scale reuses the samples; its candidate scan
+finds no new pixels unless the palette is steeper than the built-in ones, because
+smooth-palette candidates follow base phases rather than displayed colors (see
+`docs/platform/MACOS_UI.md`, "Antialiasing candidates"). The flat AA sample cache
+holds a whole Retina window's candidates; one that overflows it samples the rejected
+candidates again on each palette change. Retained AA survives later visits that add
 none (Base only, a cancelled or failed pass). AA that was cancelled before it
 finished is not retained; a pass during which a recolor was published keeps only
 its samples, never its mixed display colors. The

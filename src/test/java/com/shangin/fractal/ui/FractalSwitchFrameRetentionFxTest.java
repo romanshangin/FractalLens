@@ -310,6 +310,194 @@ class FractalSwitchFrameRetentionFxTest {
         }
     }
 
+    /**
+     * Built-in palettes share one candidate set, so switching among them needs no pass. A
+     * steeper edited palette samples its missing candidates once, in place; afterwards
+     * every switch repeats a direct render in that palette without another pass.
+     */
+    @Test
+    void steepEditedPaletteSamplesItsMissingAntialiasingOnceAndPaletteSwitchesRepeat() throws Exception {
+        var fast = new AntialiasSettings(InteractiveRenderMode.FAST);
+        var mandelbrot = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE).withAntialiasing(fast);
+        var fire = new ColoringSettings(PalettePreset.FIRE);
+        var steep = new ColoringSettings(PalettePreset.ICE, java.util.List.of(
+                new com.shangin.fractal.coloring.ColorStop(0.0, 0xFF001020),
+                new com.shangin.fractal.coloring.ColorStop(0.5, 0xFF000000),
+                new com.shangin.fractal.coloring.ColorStop(0.52, 0xFFFFFFFF),
+                new com.shangin.fractal.coloring.ColorStop(1.0, 0xFFFFFFFF)),
+                ColoringSettings.DEFAULT_COLOR_SCALE, 0.0, false, com.shangin.fractal.coloring.OrbitTrap.NONE);
+        var completed = new AtomicReference<CompletableFuture<Void>>(new CompletableFuture<>());
+        long[] steepSamples = new long[1];
+        int[] directFire = directRender(completed, mandelbrot.withColoring(fire), new long[1]);
+        int[] directSteep = directRender(completed, mandelbrot.withColoring(steep), steepSamples);
+
+        Object[] ui = profiledUi(new AtomicInteger(), completed);
+        var surface = (FractalSurface) ui[0];
+        var controller = (FractalRenderController) ui[1];
+        try {
+            int[] ice = renderAndCapture(controller, surface, completed, mandelbrot);
+            long iceSamples = aaProfile(controller).samples();
+            assertTrue(iceSamples > 0, "The fixture must need antialiasing samples");
+            var passes = new AtomicInteger();
+            var resampled = new AtomicReference<CompletableFuture<Void>>(new CompletableFuture<>());
+            fx(() -> {
+                controller.setOnRenderStatusChanged(status -> {
+                    if (status.state() == RenderStatus.State.RENDERING) passes.incrementAndGet();
+                    if (status.state() == RenderStatus.State.COMPLETE && passes.get() > 0) resampled.get().complete(null);
+                });
+                return null;
+            });
+
+            assertNearlyEqual(directFire, recolor(controller, surface, fire), "Ice -> Fire must match a Fire render");
+            fx(() -> null);
+            assertEquals(0, passes.get(), "Built-in palettes share their antialiasing candidates");
+
+            recolor(controller, surface, steep);
+            resampled.get().get(15, TimeUnit.SECONDS);
+            assertEquals(1, passes.get(), "The steeper palette samples its missing candidates once");
+            assertTrue(steepSamples[0] > iceSamples, "Fixture: steep " + steepSamples[0] + ", Ice " + iceSamples);
+            assertEquals(steepSamples[0] - iceSamples, aaProfile(controller).samples(),
+                    "Only the missing candidates may be sampled");
+            int[] firstSteep = fx(() -> pixels(surface));
+            assertNearlyEqual(directSteep, firstSteep, "The steep palette must match its own render");
+
+            for (int round = 0; round < 2; round++) {
+                assertArrayEquals(ice, recolor(controller, surface, mandelbrot.coloring()), "-> Ice, round " + round);
+                assertNearlyEqual(directFire, recolor(controller, surface, fire), "-> Fire, round " + round);
+                assertArrayEquals(firstSteep, recolor(controller, surface, steep), "-> steep, round " + round);
+                fx(() -> null);
+            }
+            assertEquals(1, passes.get(), "Once sampled, palette switches need no further pass");
+        } finally {
+            fx(() -> { controller.close(); ((Stage) ui[2]).close(); return null; });
+        }
+    }
+
+    /**
+     * A frame whose AA candidates exceed the sample cache budget still shows its full AA:
+     * the visit's pass displays every candidate without a second pass, and each palette
+     * change samples the candidates the cache rejected, so switches repeat direct renders.
+     */
+    @Test
+    void candidatesBeyondTheSampleCacheBudgetAreSampledAgainOnEachPaletteChange() throws Exception {
+        var fast = new AntialiasSettings(InteractiveRenderMode.FAST);
+        var mandelbrot = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE).withAntialiasing(fast);
+        var fire = new ColoringSettings(PalettePreset.FIRE);
+        var completed = new AtomicReference<CompletableFuture<Void>>(new CompletableFuture<>());
+        long[] iceSamples = new long[1];
+        int[] directIce = directRender(completed, mandelbrot, iceSamples);
+        int[] directFire = directRender(completed, mandelbrot.withColoring(fire), new long[1]);
+        // A direct pass takes 16 samples per candidate; hold about half of them.
+        int candidates = (int) (iceSamples[0] / 16);
+        var probe = new AntialiasSampleCache();
+        var sixteen = new com.shangin.fractal.formula.FractalSample[16];
+        java.util.Arrays.fill(sixteen, new com.shangin.fractal.formula.FractalSample(10, true, 10, 0));
+        var smooth = new com.shangin.fractal.coloring.SmoothPaletteColoring(PalettePreset.ICE.palette());
+        for (int pixel = 0; pixel < candidates / 2; pixel++) probe.put(pixel, sixteen, smooth);
+        var sampleCache = new AntialiasSampleCache(probe.usedBytes());
+
+        Object[] ui = profiledUi(new AtomicInteger(), completed, new RenderFrameCache(), sampleCache);
+        var surface = (FractalSurface) ui[0];
+        var controller = (FractalRenderController) ui[1];
+        try {
+            var passes = new AtomicInteger();
+            var resampled = new AtomicReference<CompletableFuture<Void>>(new CompletableFuture<>());
+            int[] ice = renderAndCapture(controller, surface, completed, mandelbrot);
+            assertArrayEquals(directIce, ice, "The visit's pass shows every candidate's AA");
+            assertTrue(sampleCache.dropped(), "The fixture must overflow the sample cache");
+            var busyField = FractalRenderController.class.getDeclaredField("visibleBusy");
+            busyField.setAccessible(true);
+            assertFalse(fx(() -> busyField.getBoolean(controller)), "The visit must not start a second AA pass");
+            int cached = sampleCache.size();
+            fx(() -> {
+                controller.setOnRenderStatusChanged(status -> {
+                    if (status.state() == RenderStatus.State.RENDERING) passes.incrementAndGet();
+                    if (status.state() == RenderStatus.State.COMPLETE && passes.get() > 0) {
+                        resampled.get().complete(null);
+                    }
+                });
+                return null;
+            });
+
+            for (int round = 0; round < 2; round++) {
+                resampled.set(new CompletableFuture<>());
+                recolor(controller, surface, fire);
+                resampled.get().get(15, TimeUnit.SECONDS);
+                assertEquals((long) (candidates - cached) * 16, aaProfile(controller).samples(),
+                        "Only the rejected candidates may be sampled again");
+                assertNearlyEqual(directFire, fx(() -> pixels(surface)), "-> Fire, round " + round);
+                resampled.set(new CompletableFuture<>());
+                recolor(controller, surface, mandelbrot.coloring());
+                resampled.get().get(15, TimeUnit.SECONDS);
+                assertArrayEquals(ice, fx(() -> pixels(surface)), "-> Ice, round " + round);
+            }
+            fx(() -> null);
+            assertEquals(4, passes.get(), "Each palette change runs exactly one in-place pass");
+        } finally {
+            fx(() -> { controller.close(); ((Stage) ui[2]).close(); return null; });
+        }
+    }
+
+    /** A pan from a revisited frame showing AA colors without samples tests only the exposed strip. */
+    @Test
+    void panningARevisitedFrameWithColorsOnlyRunsOnlyItsOwnAntialiasingPass() throws Exception {
+        var calculatedFrames = new AtomicInteger();
+        var completed = new AtomicReference<CompletableFuture<Void>>(new CompletableFuture<>());
+        var budget = tightBudget();
+        Object[] ui = profiledUi(calculatedFrames, completed, budget);
+        var surface = (FractalSurface) ui[0];
+        var controller = (FractalRenderController) ui[1];
+        var fast = new AntialiasSettings(InteractiveRenderMode.FAST);
+        var mandelbrot = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE).withAntialiasing(fast);
+        var julia = FractalScene.create(FractalPreset.JULIA, PalettePreset.ICE).withAntialiasing(fast);
+        try {
+            var mandelbrotFrame = renderFrame(controller, surface, completed, mandelbrot);
+            renderAndCapture(controller, surface, completed, julia);
+            assertNull(budget.refinementFor(mandelbrotFrame).orElseThrow().samples(),
+                    "The fixture budget must keep the AA colors without their samples");
+            renderAndCapture(controller, surface, completed, mandelbrot);
+            assertEquals(0, aaProfile(controller).testedPixels(), "Retained colors alone show finished AA");
+
+            var passes = new AtomicInteger();
+            var settled = new CompletableFuture<Void>();
+            var panned = mandelbrot.withViewport(mandelbrot.viewport().shiftedByPixels(8, 0, WIDTH, HEIGHT));
+            fx(() -> {
+                controller.setOnRenderStatusChanged(status -> {
+                    if (status.state() == RenderStatus.State.RENDERING) passes.incrementAndGet();
+                    if (status.state() == RenderStatus.State.COMPLETE && passes.get() > 0) settled.complete(null);
+                });
+                controller.render(panned, new RenderTarget(WIDTH, HEIGHT, RenderPriority.center()),
+                        panned.fractal().defaultViewport());
+                return null;
+            });
+            settled.get(15, TimeUnit.SECONDS);
+            var panPass = aaProfile(controller);
+            // A follow-up pass would start in the same FX callback that completed the pan.
+            var busyField = FractalRenderController.class.getDeclaredField("visibleBusy");
+            busyField.setAccessible(true);
+            assertFalse(fx(() -> busyField.getBoolean(controller)), "The pan must not start a second AA pass");
+            assertEquals(1, passes.get(), "The pan must not start a second antialiasing pass");
+            assertTrue(panPass.testedPixels() > 0 && panPass.testedPixels() < WIDTH * HEIGHT / 4,
+                    "Only the exposed strip is tested: " + panPass.testedPixels());
+        } finally {
+            fx(() -> { controller.close(); ((Stage) ui[2]).close(); return null; });
+        }
+    }
+
+    /** Renders {@code scene} on a fresh controller and reports its AA sample count. */
+    private static int[] directRender(AtomicReference<CompletableFuture<Void>> completed, FractalScene scene,
+                                      long[] samples) throws Exception {
+        Object[] reference = profiledUi(new AtomicInteger(), completed);
+        try {
+            int[] pixels = renderAndCapture((FractalRenderController) reference[1], (FractalSurface) reference[0],
+                    completed, scene);
+            samples[0] = aaProfile((FractalRenderController) reference[1]).samples();
+            return pixels;
+        } finally {
+            fx(() -> { ((FractalRenderController) reference[1]).close(); ((Stage) reference[2]).close(); return null; });
+        }
+    }
+
     /** A palette change while the return visit still renders waits for that pass, then samples. */
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(value = InteractiveRenderMode.class, names = {"REFINED", "FAST"})
@@ -420,6 +608,13 @@ class FractalSwitchFrameRetentionFxTest {
     private static Object[] profiledUi(AtomicInteger calculatedFrames,
                                        AtomicReference<CompletableFuture<Void>> completed,
                                        RenderFrameCache frameCache) throws Exception {
+        return profiledUi(calculatedFrames, completed, frameCache, new AntialiasSampleCache());
+    }
+
+    private static Object[] profiledUi(AtomicInteger calculatedFrames,
+                                       AtomicReference<CompletableFuture<Void>> completed,
+                                       RenderFrameCache frameCache, AntialiasSampleCache sampleCache)
+            throws Exception {
         String profiling = System.getProperty("fractal.aa.profile");
         System.setProperty("fractal.aa.profile", "true");
         try {
@@ -431,7 +626,7 @@ class FractalSwitchFrameRetentionFxTest {
                 surface.setOutputScale(1, 1);
                 surface.resizeBuffer(WIDTH, HEIGHT);
                 var controller = new FractalRenderController(surface,
-                        new FractalRenderService(countingBackend(calculatedFrames)), frameCache);
+                        new FractalRenderService(countingBackend(calculatedFrames)), frameCache, sampleCache);
                 controller.setWidePreviewSettings(WidePreviewSettings.DISABLED);
                 controller.setOnRenderStatusChanged(status -> {
                     if (status.state() == RenderStatus.State.COMPLETE) completed.get().complete(null);
