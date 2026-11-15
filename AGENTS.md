@@ -16,11 +16,20 @@
 
 ## Project overview and sources of truth
 
-FractalLens is a modular desktop fractal explorer: Java/JavaFX versions from
-`pom.xml`, Maven, JUnit Jupiter, module `com.shangin.fractal`, mandatory CPU and
-optional LWJGL/Vulkan GPU rendering, arbitrary-precision Mandelbrot/Julia deep
-zoom, native macOS AppKit/Objective-C integration and launcher, progressive
-rendering, frame reuse, antialiasing and PNG export.
+FractalLens is a JavaFX desktop fractal explorer: Mandelbrot, Julia, Burning
+Ship, Tricorn and cubic Multibrot; arbitrary-precision Mandelbrot/Julia deep
+zoom; progressive cancellable CPU rendering with frame reuse, antialiasing and
+palettes; sessions, bookmarks, undo/redo and PNG export; optional LWJGL/Vulkan
+GPU rendering (macOS MoltenVK, disabled by default); native macOS
+AppKit/Objective-C integration and launcher. It ships macOS/Windows
+distributions and keeps Linux code portable.
+
+It is a single Maven module with Java module `com.shangin.fractal`
+(`src/main/java/module-info.java`). The main class
+`com.shangin.fractal.app.FractalLauncher` starts JavaFX through
+`FractalFxApplication`; `FractalApplication` is a plain-Java compatibility entry
+point using the same bootstrap. Java, JavaFX, JUnit and LWJGL versions come from
+`pom.xml` properties.
 
 Keep portable Java, JavaFX and CPU rendering compatible with macOS, Windows and
 Linux. `ROADMAP.md` defines packaging/hardware acceptance targets. macOS-specific
@@ -28,11 +37,16 @@ AppKit integration must degrade safely elsewhere.
 
 | Source | Owns |
 | --- | --- |
-| `ROADMAP.md` | Work order, requirements, acceptance criteria |
+| `ROADMAP.md` | Work order ("Remaining work by function"), requirements, acceptance criteria |
 | `pom.xml` | Dependency/plugin versions, Maven profiles, launch/test settings |
 | `docs/platform/MACOS_RUN.md` | macOS launch and application identity |
 | `docs/platform/MACOS_UI.md` | Current UI behavior and native/JavaFX boundary |
-| Relevant `*_BENCHMARK.md`, `*_VALIDATION.md`, `*_RESULTS.md` | Measurement protocols and evidence |
+| `docs/platform/GPU_RUNTIME.md` | GPU scope, runtime flags and CPU fallback |
+| `docs/architecture/SESSION_FORMAT.md`, `PNG_EXPORT.md` | Scene file format, history, bookmarks; export pipeline |
+| `docs/development/CI.md`, `TASK_ORCHESTRATOR.md`, `PUBLICATION.md` | CI, task workflow orchestration, evidence publication |
+| `docs/packaging/RUNTIME_PACKAGING.md` | jlink/jpackage DMG/EXE runtime artifacts |
+| `benchmarks/README.md`, relevant `*_BENCHMARK.md`, `*_VALIDATION.md`, `*_RESULTS.md` | Measurement protocols and evidence |
+| `scripts/README.md` | Build, CI, packaging, publication, quality, benchmark and orchestration tools |
 | Existing tests | Executable behavioral contract |
 
 Resolve source conflicts explicitly: identify stale documentation/tests or an
@@ -42,12 +56,62 @@ declarations without a specific reason.
 
 A direct user task takes precedence over autonomous roadmap selection; use the
 roadmap for that task's requirements, dependencies and acceptance. An unspecified
-"continue" follows unfinished priorities at the start of `ROADMAP.md`. Do not
-start lower-priority optimization with open dependencies or decision gates.
-Task workflows may strengthen, never weaken, these project constraints.
+"continue" follows the execution order in `ROADMAP.md`, section "Remaining work
+by function". Do not start lower-priority optimization with open dependencies or
+decision gates. Task workflows may strengthen, never weaken, these project
+constraints.
 
 Keep historical benchmark results tied to their original implementation. Record
 new experiments separately with environment, inputs, code state and decision.
+
+## Repository map
+
+Java packages live under `src/main/java/com/shangin/fractal/` (see
+"Architecture constraints"). Other locations:
+
+| Path | Contents |
+| --- | --- |
+| `src/main/macos/` | AppKit bridge (`FractalContextMenu.m`, `FractalApplicationMenu.m`, `FractalParameterSheet.m`, `FractalStatusBadge.m`), Dock launcher `FractalLauncher.c`, `Info.plist` |
+| `src/main/resources/com/shangin/fractal/` | App icons, GLSL compute shaders (`gpu/*.comp`), JavaFX CSS |
+| `src/test/java/` | JUnit tests mirroring main packages; benchmark mains (`*Benchmark.java`) |
+| `docs/` | `architecture/`, `development/`, `platform/`, `packaging/` documents |
+| `benchmarks/` | Selected public benchmark protocols and evidence |
+| `scripts/` | Reproducible tooling, indexed in `scripts/README.md` |
+| `.agents/skills/`, `.claude/skills/` | Task workflow skills (see "Task workflow") |
+| `.github/workflows/` | `ci`, `portable-ci`, `publication-checks`, `qodana_code_quality`, `runtime-artifacts` |
+| `.qodana/`, `scripts/quality/` | Qodana configuration, baseline and acceptance |
+| `packaging/`, `design/app-icon/` | Third-party license inventory for runtime artifacts; icon sources |
+
+`target/`, `node_modules/`, `.idea/` and raw benchmark output are not source; do
+not edit or commit them.
+
+Main runtime flow: `FractalLauncher` -> `FractalFxApplication` -> `MainView`
+(menus/indicators) -> `FractalView` (input/camera/debounce) ->
+`FractalRenderController` -> `FractalRenderService` ->
+`PrecisionSelectingRenderBackend`, which picks `DirectDoubleRenderBackend` when
+doubles are safe and a deep-zoom backend otherwise. Batch progress uses the
+caller executor (FX in the UI); stale generations never publish.
+`FractalColorizer`/`coloring` colors frames; `FractalSurface`/`SurfaceBuffer`
+displays them. `scene/FractalScene` is the reproducible state behind session
+restore, bookmarks, shared presets, undo/redo and export.
+
+## Build and run
+
+```shell
+./mvnw compile              # on macOS also builds the AppKit bridge
+./mvnw compile javafx:run   # run the app; needs a graphical session
+```
+
+- On macOS the `macos-native-menu`, `macos-app-name`, `gpu-macos` and
+  `macos-aarch64`/`macos-arm64` profiles activate automatically.
+  `scripts/macos/build-macos-menu` compiles the Objective-C bridge during
+  `process-classes` (requires Xcode Command Line Tools); `javafx:run` uses
+  `scripts/macos/macos-java` so the Dock shows `FractalLens`.
+- On Windows, `runtime-windows` adds LWJGL natives (no Vulkan GPU path yet).
+- Manual GPU toggles (`docs/platform/GPU_RUNTIME.md`), for example
+  `JAVA_TOOL_OPTIONS=-Dfractal.gpu.mandelbrot.enabled=true ./mvnw javafx:run`;
+  also `-Dfractal.gpu.palette.enabled=true` and `-Dfractal.gpu.enabled=false`.
+- Runtime installers: `python3 scripts/packaging/package_runtime.py --version 1.0.0`.
 
 ## Project rules
 
@@ -113,19 +177,19 @@ new experiments separately with environment, inputs, code state and decision.
 
 Preserve package boundaries; move responsibilities only for a clear reason.
 
-| Area | Responsibility |
+| Area | Responsibility (key types) |
 | --- | --- |
-| `app` | Startup and application integration |
-| `scene` | Scene/rendering configuration |
-| `formula` | Formulas and fractal presets |
-| `math` | Coordinates, viewports, numeric types |
-| `render` | CPU/deep-zoom rendering, caches, reuse, progress publication |
-| `config` | Iteration-limit policies |
-| `controller` | Rendering orchestration/lifecycle |
-| `ui` | JavaFX presentation, input, menus, dialogs, result display |
-| `coloring` | Palettes and coloring algorithms |
-| `export` | Export workflows/rendering |
-| `gpu` | Optional Vulkan/LWJGL runtime/backends |
+| `app` | Startup and application integration: launchers, last-session and bookmark stores, macOS app menu, app icon, runtime-artifact smoke entry |
+| `scene` | Scene/rendering configuration: immutable `FractalScene` and settings records, `FractalSceneJson`, `SceneHistory` (undo/redo) |
+| `formula` | `FractalFormula` implementations, presets, destinations, samples |
+| `math` | Coordinates, viewports, numeric types: `PreciseComplex`, `BigDecimal`-based `Viewport` |
+| `render` | CPU/deep-zoom rendering, caches, reuse, progress publication: `FractalRenderService` (async lifecycle, generations, progress batching), `RenderBackend` implementations (DirectDouble, MandelbrotPerturbation + BLA, JuliaDeepZoom, PrecisionSelecting), `FrameReusePlanner`, `FrameReprojection`, `PixelShift*`, `SpareFrameStorage`, `RenderGrid`/`RenderTarget` |
+| `config` | Iteration-limit policies (adaptive limit) |
+| `controller` | Rendering orchestration/lifecycle: `FractalRenderController` (camera bridge, iteration policy, reuse, recoloring, `RenderStatus`) |
+| `ui` | JavaFX presentation, input, menus, dialogs, result display: `MainView`, `FractalView`, `FractalSurface`, native AppKit wrappers (`Mac*Sheet`, `MacContextMenu`), indicators, FX-launched benchmark mains |
+| `coloring` | Palettes, gradient stops, smooth/histogram/orbit-trap coloring |
+| `export` | Export workflows/rendering: `AdaptivePngExportService` (tiled high-res), `PngExporter`, interactive AA service |
+| `gpu` | Optional Vulkan/LWJGL runtime/backends: MoltenVK session, Mandelbrot and palette kernels, precision gate, diagnostics |
 | `src/main/macos` | Native macOS sources/metadata |
 | `scripts` | Reproducible build, diagnostic, benchmark tools |
 
@@ -206,7 +270,8 @@ Numerical correctness takes priority over local performance gains.
 
 Match validation to risk. Use the checked-in pinned Maven Wrapper: `./mvnw` on
 macOS/Linux, `mvnw.cmd` or `.\mvnw.cmd` on Windows. Commands below use POSIX form;
-system `mvn` is not recorded validation.
+system `mvn` is not recorded validation. Surefire sets
+`fractal.gpu.enabled=false`, so tests are CPU-only by default.
 
 ### Mandatory sleep inhibition for long tests
 
@@ -280,6 +345,10 @@ Build/CI wrappers such as `scripts/macos/build-macos-menu` and
 changes need no application suite. If environment failure or a user constraint
 blocks it, report the limitation and exact checks run; do not imply full validation.
 
+CI runs `./mvnw --batch-mode --no-transfer-progress -Dfractal.gpu.enabled=false clean test`
+through `scripts/ci/run-ci-tests` on Ubuntu (`ci.yml`) and macOS/Windows
+(`portable-ci.yml`); see `docs/development/CI.md`.
+
 ### Script tests
 
 Run from the repository root for each changed directory:
@@ -304,11 +373,10 @@ current candidate (base revision, merge base, content), check definition and
 applicable environment, with intact execution logs. Use
 `scripts/orchestration/check.ts` and the private registry per
 `docs/development/TASK_ORCHESTRATOR.md`; prose handoffs are insufficient.
-Do not repeat valid PASS evidence for confidence alone. Review may diagnose a
-concrete suspected finding. Verification must independently assess coverage,
-skips and remaining acceptance, then run missing checks. Reuse waives no portable,
+Do not repeat valid PASS evidence for confidence alone. Reuse waives no portable,
 subsystem, visible or independent-review requirements. Replace stale,
-insufficient or suspicious evidence; a required skip is not PASS.
+insufficient or suspicious evidence; a required skip is not PASS. Stage-specific
+reuse duties are in the workflow skills.
 
 ### JavaFX and visible behavior
 
@@ -324,7 +392,10 @@ Model tests alone cannot validate visible UI changes.
 - Viewport-dependent menu tests must await initial rendering before actions.
 - Explicitly list unchecked visual behavior.
 
-JavaFX integration is opt-in:
+JavaFX integration is opt-in. `*FxTest` classes (mostly in
+`src/test/java/com/shangin/fractal/ui/`, plus `app/FractalApplicationFxTest` and
+`app/FractalLauncherFxTest`) are gated by
+`@EnabledIfSystemProperty(fractal.fx.tests)`:
 
 ```shell
 ./mvnw -Dfractal.fx.tests=true "-Djavafx.cachedir=TASK_SPECIFIC_TEMP_DIRECTORY" -DreuseForks=false -Dtest=RelevantFxTest test
@@ -347,10 +418,11 @@ JavaFX integration is opt-in:
 
 ### GPU tests
 
-Run native GPU smoke tests separately:
+Run native GPU tests (`*NativeTest` in `gpu/`) separately:
 
 ```shell
-./mvnw -Pgpu-smoke test
+./mvnw -Pgpu-smoke test     # native GPU smoke
+./mvnw -Pfp32-native test   # FP32 precision, MandelbrotPrecisionNativeTest
 ```
 
 Results apply only to the tested device, driver and platform.
@@ -371,6 +443,23 @@ Launch current sources/rebuilt bridge, including `compile`:
 
 Manually verify Dock identity and affected system behavior.
 
+### Benchmarks
+
+Benchmarks are opt-in Maven profiles; never wire them into the default build.
+
+- Headless (exec in `integration-test`, test classpath): `benchmark` (frame
+  reuse), `baseline-benchmark`, `aa-benchmark`, `formula-benchmark`,
+  `symmetry-benchmark`, `render-tuning-benchmark`, `julia-pipeline-benchmark`,
+  `perturbation-benchmark`, `series-approximation-benchmark`,
+  `distance-estimation-benchmark`, `fp32-precision`. Example:
+  `./mvnw -Pperturbation-benchmark verify -DskipTests` (the `fp32-precision`
+  docs use `-DskipTests integration-test`).
+- JavaFX-launched (replace the `javafx:run` main class): `palette-benchmark`,
+  `interaction-latency`, `gpu-render-benchmark`, `gpu-resident-benchmark`,
+  `gpu-diagnostics`. Example: `./mvnw -Ppalette-benchmark javafx:run`.
+- Protocol-specific properties are in the matching `benchmarks/*_BENCHMARK.md`;
+  paired A/B campaigns, frozen builds and analyzers live in `scripts/benchmarks/`.
+
 ### Test design
 
 - Regression tests should fail before the fix and pass after it.
@@ -381,6 +470,23 @@ Manually verify Dock identity and affected system behavior.
 - Reuse/publication tests must inspect frames/pixels, not callbacks alone.
 - Assert UI state after relevant JavaFX queue work.
 - Keep native unit/contract tests alongside real-platform validation.
+
+## Task workflow
+
+Repository changes run through stages implement -> review -> verify -> deliver.
+Each stage has one skill, `.agents/skills/<stage>-task/`, read by Codex.
+`.claude/skills/<stage>-task` are symlinks to those folders for Claude Code; edit
+only `.agents/skills/`. A new skill also needs its symlink (exactly
+`../../.agents/skills/<name>`) and an entry in `SKILL_LINKS` in
+`scripts/publication/check_public_data.py`, which rejects every other symlink. Claude skills on Windows need a checkout with symlinks enabled. `verify-task` and
+`deliver-task` run only when invoked explicitly (`disable-model-invocation` for
+Claude, `agents/openai.yaml` for Codex).
+`scripts/orchestration/task-orchestrator.ts` runs the whole workflow with Codex
+(default) or `--executor claude`.
+
+This file holds all agent instructions. `CLAUDE.md` only imports it
+(`@AGENTS.md`) so every Claude Code session loads it, including those that cannot
+read `AGENTS.md` directly; add nothing else there.
 
 ## Git policy
 

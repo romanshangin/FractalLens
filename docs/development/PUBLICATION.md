@@ -75,5 +75,9 @@ This provenance document claims none of those checks passed.
 
 [CI controls](CI.md): hosted runners, read-only permissions, secret-free Community,
 checked Qodana artifact, explicit installer upload. Privacy guards/scans supplement
-review; they certify no uninspected images/installers/future logs. Destination
+review; they certify no uninspected images/installers/future logs. The public-data
+guard rejects every symlink except the listed `.claude/skills/<skill>` links with
+the exact text `../../.agents/skills/<skill>`, through real directories to a
+committed `SKILL.md`, which is scanned instead of the link; name and benchmark
+rules apply to links too. Destination
 fork/platform acceptance is still required before publication.

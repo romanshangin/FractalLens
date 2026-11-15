@@ -6,6 +6,7 @@ description: >
   pull request. Use only for the delivery stage after required review and
   verification gates have passed. Do not implement, review, verify, merge, or
   close pull requests.
+disable-model-invocation: true
 ---
 
 # Deliver FractalLens changes
