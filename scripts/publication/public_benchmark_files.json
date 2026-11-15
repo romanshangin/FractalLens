@@ -47,6 +47,7 @@
   "benchmarks/SERIES_APPROXIMATION_RESULTS.md",
   "benchmarks/SPACE_SWITCH_VALIDATION.md",
   "benchmarks/SPARE_FRAME_STORAGE_RESULTS.md",
+  "benchmarks/STAGE_A_RETENTION_VALIDATION.md",
   "benchmarks/TIMING_GATE_V2.md",
   "benchmarks/VALIDITY_MASK_OPTIMIZATION.md",
   "benchmarks/VIEWPORT_PRECISION_RESULTS.md",
