@@ -38,7 +38,8 @@ def candidate_files(root):
     """Tracked files plus untracked files Git does not ignore: everything a commit can include.
 
     Ignored output, nested worktrees and embedded repositories are not candidates.
-    Symlinks are skipped like a plain Gitleaks directory scan; the public-data guard rejects them.
+    Symlinks are skipped like a plain Gitleaks directory scan; the public-data guard accepts only
+    fixed-text `.claude/skills` links to `.agents/skills`, whose files this scan covers.
     """
     output=subprocess.check_output(['git','ls-files','-z','--cached','--others','--exclude-standard'],cwd=root)
     names=sorted(set(filter(None,output.decode().split('\0'))))

@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import check_public_data
 from check_public_data import issues
 import check_secrets
 from check_secrets import candidate_files, file_hash_finding, report_unresolved
@@ -28,6 +29,12 @@ json.dump(findings,open(report,'w'));sys.exit(1 if findings else 0)
 
 
 def git(cwd,*args):subprocess.run(['git',*args],cwd=cwd,check=True,capture_output=True)
+
+
+def make_symlink(target,link,directory=False):
+    """Create a symlink, skipping where the platform or account cannot (Windows without the privilege)."""
+    try:os.symlink(target,link,target_is_directory=directory)
+    except (OSError,NotImplementedError):raise unittest.SkipTest('symlink creation is unavailable')
 
 
 def secret_fixture_repository(root):
@@ -154,6 +161,70 @@ class PrivacyTest(unittest.TestCase):
             self.assertEqual(37,result.returncode)
             self.assertNotIn(home,result.stdout+result.stderr)
             self.assertNotIn(home,(Path(d)/'target/ci-test.log').read_text())
+
+    def test_only_listed_skill_links_with_exact_targets_are_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);skills=root/'.agents/skills';git(root,'init','-q')
+            for skill in ['implement-task','verify-task','deliver-task',SECRET_MARKER.lower()]:(skills/skill).mkdir(parents=True)
+            for skill in ['implement-task','deliver-task',SECRET_MARKER.lower()]:(skills/skill/'SKILL.md').write_text('body\n')
+            (skills/'verify-task/README.md').write_text('no entry point\n')
+            (root/'.claude/skills').mkdir(parents=True)
+            # A local alias inside the target tree would resolve here but not in a fresh clone.
+            make_symlink('implement-task',skills/'review-task',directory=True)
+            links={
+                '.claude/skills/implement-task':'../../.agents/skills/implement-task',
+                '.claude/skills/review-task':'../../.agents/skills/review-task',
+                '.claude/skills/verify-task':'../../.agents/skills/verify-task',
+                '.claude/skills/deliver-task':'..\\..\\.agents\\skills\\deliver-task',
+                '.claude/skills/'+SECRET_MARKER.lower():'../../.agents/skills/'+SECRET_MARKER.lower(),
+            }
+            for name,target in links.items():make_symlink(target,root/name,directory=True)
+            candidates={*links,'.agents/skills/review-task','.agents/skills/verify-task/README.md',
+                        *(f'.agents/skills/{skill}/SKILL.md' for skill in ['implement-task','deliver-task',SECRET_MARKER.lower()])}
+            # Links stay unstaged; on POSIX their filesystem text is the text Git would store.
+            with patch.object(check_public_data,'NATIVE_SEP','/'):
+                self.assertEqual([],check_public_data.symlink_issues(root,'.claude/skills/implement-task',candidates))
+                for name in links.keys()-{'.claude/skills/implement-task'}:
+                    self.assertEqual(['symlink'],check_public_data.symlink_issues(root,name,candidates),name)
+
+    def test_skill_link_uses_git_text_and_accepts_the_native_checkout_form(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);git(root,'init','-q')
+            (root/'.agents/skills/review-task').mkdir(parents=True);(root/'.claude/skills').mkdir(parents=True)
+            (root/'.agents/skills/review-task/SKILL.md').write_text('body\n')
+            name='.claude/skills/review-task';target='../../.agents/skills/review-task'
+            make_symlink(target,root/name,directory=True)
+            git(root,'add','.')
+            candidates={name,'.agents/skills/review-task/SKILL.md'}
+            posix=lambda path:target
+            windows=lambda path:target.replace('/','\\')
+            def check(separator,readlink):
+                with patch.object(check_public_data,'NATIVE_SEP',separator),patch.object(check_public_data.os,'readlink',readlink):
+                    return check_public_data.symlink_issues(root,name,candidates)
+            self.assertEqual([],check('/',posix))
+            # Git for Windows writes the staged '/' text with backslashes into the checkout.
+            self.assertEqual([],check('\\',windows))
+            self.assertEqual(['symlink'],check('/',windows))
+            self.assertEqual(['symlink'],check('\\',posix))
+            # A staged blob with backslashes is not the canonical text, whatever the checkout shows.
+            blob=subprocess.run(['git','hash-object','-w','--stdin'],cwd=root,input=target.replace('/','\\'),
+                                capture_output=True,text=True,check=True).stdout.strip()
+            git(root,'update-index','--cacheinfo',f'120000,{blob},{name}')
+            self.assertEqual(['symlink'],check('\\',windows))
+            self.assertEqual(['symlink'],check('/',posix))
+
+    def test_symlink_paths_get_name_and_benchmark_rules(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);git(root,'init','-q')
+            (root/'scripts/publication').mkdir(parents=True)
+            (root/'scripts/publication/public_benchmark_files.json').write_text('[]')
+            (root/'benchmarks').mkdir();(root/'notes.txt').write_text('text\n')
+            make_symlink('../notes.txt',root/'benchmarks/new.log')
+            stdout,stderr=io.StringIO(),io.StringIO()
+            with patch.object(check_public_data,'ROOT',root),patch.object(sys,'argv',['check_public_data.py']),\
+                    patch('sys.stdout',stdout),patch('sys.stderr',stderr):
+                self.assertTrue(check_public_data.main())
+            for rule in ['symlink','raw-or-secret-file','unreviewed-benchmark-file']:self.assertIn('rule='+rule,stderr.getvalue())
 
     def test_guard_cli_rejects_missing_export_report(self):
         result=subprocess.run([sys.executable,str(ROOT/'scripts/publication/check_public_data.py'),'--files','target/missing-export-report'],capture_output=True,text=True)

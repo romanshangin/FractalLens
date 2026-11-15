@@ -89,7 +89,8 @@ which can advance afterward.
 
 Executors bind `.agents/skills/<skill>/SKILL.md`: Codex via `$skill`, Claude via
 explicit full-file reading. Claude disables skills/slash commands; `.claude/skills`
-`verify-task`/`deliver-task` wrappers disable model invocation.
+entries are symlinks to `.agents/skills`, whose `verify-task`/`deliver-task`
+frontmatter disables model invocation.
 
 ### Codex permissions
 

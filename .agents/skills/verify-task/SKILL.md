@@ -5,6 +5,7 @@ description: >
   Use only when explicitly invoked by the user or orchestrator after implementation
   and independent review are complete. Do not use during implementation,
   developer self-validation, code review, or delivery.
+disable-model-invocation: true
 ---
 
 # Verify a FractalLens task
