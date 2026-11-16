@@ -1,5 +1,10 @@
 package com.shangin.fractal.render;
 
+import com.shangin.fractal.coloring.ColorStop;
+import com.shangin.fractal.coloring.OrbitTrap;
+import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.scene.ColoringSettings;
+
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -19,11 +24,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -43,7 +51,11 @@ import java.util.zip.CRC32;
  * render grid derived from it, render size and iteration limit. The file also records the render
  * grid it was calculated on; a frame whose grid differs is never filled. Palette and
  * display settings are not part of the key, because colors are derived from the samples.
- * Antialiasing is not stored.
+ *
+ * <p>A second file beside it holds the frame's finished antialiasing, as kept in memory by
+ * {@link RetainedRefinement}: the AA display colors with the coloring that produced them,
+ * and the palette-independent AA samples. It is only read after its base frame was
+ * restored, is versioned by {@link #ANTIALIAS_VERSION} and is deleted with its base frame.
  *
  * <p>Loading runs on the calling render thread and is cancellable between chunks. Saving
  * runs on a background writer once a completed frame has remained the most recently
@@ -74,6 +86,19 @@ public final class PersistentFrameStore implements AutoCloseable {
 
     private static final byte[] MAGIC = "FLFRAME\0".getBytes(StandardCharsets.US_ASCII);
     static final String SUFFIX = ".frame";
+
+    /** Layout of the antialiasing file stored beside a base frame. */
+    static final int REFINEMENT_FORMAT_VERSION = 1;
+    /**
+     * Version of the antialiasing semantics: subpixel sampling grids, candidate edge
+     * thresholds, phase encoding and color averaging. Increment it whenever a change alters
+     * the AA colors or samples stored for an unchanged frame and coloring.
+     */
+    static final int ANTIALIAS_VERSION = 1;
+    private static final byte[] REFINEMENT_MAGIC = "FLAAREF\0".getBytes(StandardCharsets.US_ASCII);
+    static final String REFINEMENT_SUFFIX = ".aa";
+    private static final int MAX_PALETTE_STOPS = 4_096;
+    private static final int MAX_AA_SAMPLES = Integer.SIZE;
     private static final String TEMPORARY_SUFFIX = ".tmp";
     private static final int MAX_TEXT_BYTES = 1 << 20;
     private static final int CHUNK_BYTES = 1 << 20;
@@ -81,20 +106,28 @@ public final class PersistentFrameStore implements AutoCloseable {
 
     private final Path directory;
     private final long maxBytes;
+    /**
+     * Memory limit of restored AA samples: the interactive sample cache's own budget, so
+     * nothing larger was ever retained, and a corrupt header cannot exhaust the heap.
+     */
+    private final long maxSampleBytes;
     private final long settleDelayNanos;
     private final ScheduledThreadPoolExecutor writer;
     private final AtomicLong temporaryCounter = new AtomicLong();
     private final AtomicBoolean writeFailureLogged = new AtomicBoolean();
     private final Object lock = new Object();
     private PendingSave pending;
+    private PendingSave pendingRefinement;
     private boolean closed;
 
     private static final class PendingSave {
         private final RenderFrame frame;
+        private final RetainedRefinement refinement;
         private ScheduledFuture<?> future;
 
-        private PendingSave(RenderFrame frame) {
+        private PendingSave(RenderFrame frame, RetainedRefinement refinement) {
             this.frame = frame;
+            this.refinement = refinement;
         }
     }
 
@@ -103,6 +136,14 @@ public final class PersistentFrameStore implements AutoCloseable {
     }
 
     PersistentFrameStore(Path directory, long maxBytes, Duration settleDelay) {
+        this(directory, maxBytes, settleDelay, AntialiasSampleCache.DEFAULT_MAX_BYTES);
+    }
+
+    PersistentFrameStore(Path directory, long maxBytes, Duration settleDelay, long maxSampleBytes) {
+        if (maxSampleBytes < 0) {
+            throw new IllegalArgumentException("Sample memory limit must not be negative");
+        }
+        this.maxSampleBytes = maxSampleBytes;
         this.directory = Objects.requireNonNull(directory).toAbsolutePath();
         if (maxBytes < 1) {
             throw new IllegalArgumentException("Frame store budget must be positive");
@@ -181,6 +222,7 @@ public final class PersistentFrameStore implements AutoCloseable {
         } catch (InvalidEntryException exception) {
             LOGGER.log(System.Logger.Level.INFO, "Discarding a stored frame: " + exception.getMessage());
             deleteQuietly(file);
+            deleteQuietly(refinementFileFor(file));
             return false;
         } catch (ClosedByInterruptException exception) {
             Thread.currentThread().interrupt();
@@ -212,7 +254,7 @@ public final class PersistentFrameStore implements AutoCloseable {
             if (pending != null) {
                 pending.future.cancel(false);
             }
-            PendingSave next = new PendingSave(frame);
+            PendingSave next = new PendingSave(frame, null);
             pending = next;
             next.future = writer.schedule(() -> writeIfStillPending(next), settleDelayNanos, TimeUnit.NANOSECONDS);
         }
@@ -229,6 +271,41 @@ public final class PersistentFrameStore implements AutoCloseable {
     }
 
     /**
+     * Schedules a completed frame's finished antialiasing to be written beside its stored
+     * base frame once no other AA is retained within the settle delay. It is written only
+     * when the base frame is stored by then; AA identical to the stored AA is not rewritten.
+     */
+    public void saveRefinementWhenSettled(RenderFrame frame, RetainedRefinement refinement) {
+        Objects.requireNonNull(frame);
+        Objects.requireNonNull(refinement);
+        if (!isPersistable(frame) || !frame.isComplete()) {
+            return;
+        }
+        synchronized (lock) {
+            if (closed) {
+                return;
+            }
+            if (pendingRefinement != null) {
+                pendingRefinement.future.cancel(false);
+            }
+            PendingSave next = new PendingSave(frame, refinement);
+            pendingRefinement = next;
+            next.future = writer.schedule(() -> writeRefinementIfStillPending(next),
+                    settleDelayNanos, TimeUnit.NANOSECONDS);
+        }
+    }
+
+    private void writeRefinementIfStillPending(PendingSave save) {
+        synchronized (lock) {
+            if (pendingRefinement != save) {
+                return;
+            }
+            pendingRefinement = null;
+        }
+        writeRefinement(save.frame, save.refinement);
+    }
+
+    /**
      * Writes the frame still waiting for its settle delay, then stops the writer. Waits
      * a bounded time; an interrupted write leaves only a temporary file, which is never
      * read and is removed by a later store. Idempotent.
@@ -236,6 +313,7 @@ public final class PersistentFrameStore implements AutoCloseable {
     @Override
     public void close() {
         PendingSave flush;
+        PendingSave flushRefinement;
         synchronized (lock) {
             if (closed) {
                 return;
@@ -243,10 +321,17 @@ public final class PersistentFrameStore implements AutoCloseable {
             closed = true;
             flush = pending;
             pending = null;
+            flushRefinement = pendingRefinement;
+            pendingRefinement = null;
         }
+        // The base frame first: its antialiasing is written only beside a stored frame.
         if (flush != null) {
             flush.future.cancel(false);
             writer.execute(() -> write(flush.frame));
+        }
+        if (flushRefinement != null) {
+            flushRefinement.future.cancel(false);
+            writer.execute(() -> writeRefinement(flushRefinement.frame, flushRefinement.refinement));
         }
         writer.shutdown();
         try {
@@ -300,19 +385,514 @@ public final class PersistentFrameStore implements AutoCloseable {
             }
             Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             temporary = null;
-            evict(target);
+            evict(Set.of(target));
         } catch (ClosedByInterruptException exception) {
             Thread.currentThread().interrupt();
         } catch (IOException | RuntimeException exception) {
-            if (writeFailureLogged.compareAndSet(false, true)) {
-                LOGGER.log(System.Logger.Level.WARNING,
-                        "Could not store a completed frame; rendering continues without it: "
-                                + exception.getMessage());
-            }
+            logWriteFailure(exception);
         } finally {
             if (temporary != null) {
                 deleteQuietly(temporary);
             }
+        }
+    }
+
+    private void logWriteFailure(Exception exception) {
+        if (writeFailureLogged.compareAndSet(false, true)) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Could not store a completed frame; rendering continues without it: "
+                            + exception.getMessage());
+        }
+    }
+
+    /**
+     * Reads the antialiasing stored beside a frame that {@link #load} has just restored.
+     * Every length, count and value is validated and the payload checksum must match
+     * before anything is returned.
+     *
+     * @return the stored AA, or null on a miss, a rejected entry, an I/O failure or
+     *         cancellation; a rejected entry is deleted
+     */
+    public RetainedRefinement loadRefinement(RenderFrame frame, BooleanSupplier cancelled) {
+        Objects.requireNonNull(frame);
+        Objects.requireNonNull(cancelled);
+        if (!isPersistable(frame) || !frame.isComplete()) {
+            return null;
+        }
+        String key = keyText(frame.request());
+        Path file = refinementFileFor(fileFor(key));
+        if (!Files.isRegularFile(file)) {
+            return null;
+        }
+        RetainedRefinement refinement;
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            RefinementHeader header = readRefinementHeader(channel);
+            if (!header.key().equals(key)) {
+                return null;
+            }
+            int width = frame.samplePlane().width();
+            int height = frame.samplePlane().height();
+            int size = frame.samplePlane().size();
+            if (!header.grid().equals(gridText(frame.renderGrid()))
+                    || header.width() != width || header.height() != height) {
+                throw new InvalidEntryException("antialiasing does not match its frame");
+            }
+            boolean colors = header.stopCount() > 0;
+            boolean samples = header.entryCount() > 0;
+            if (!colors && !samples
+                    || colors && (header.stopCount() < 2 || header.stopCount() > MAX_PALETTE_STOPS)
+                    || colors == header.palette().isEmpty() || colors == header.orbitTrap().isEmpty()
+                    || header.entryCount() < 0 || header.entryCount() > size
+                    || header.phaseCount() < header.entryCount()
+                    || header.phaseCount() > (long) header.entryCount() * MAX_AA_SAMPLES) {
+                throw new InvalidEntryException("invalid antialiasing header");
+            }
+            if (samples && AntialiasSampleCache.retainedBytesFor(header.entryCount(), header.phaseCount())
+                    > maxSampleBytes) {
+                throw new InvalidEntryException("antialiasing samples exceed the memory limit");
+            }
+            long payloadBytes = refinementPayloadBytes(size, header.stopCount(), header.entryCount(),
+                    header.phaseCount());
+            if (header.payloadBytes() != payloadBytes
+                    || channel.size() != channel.position() + payloadBytes) {
+                throw new InvalidEntryException("unexpected antialiasing length");
+            }
+            // The whole payload is checked before any array sized by the header is allocated.
+            long payloadStart = channel.position();
+            new PayloadReader(channel, payloadBytes, cancelled).verify(header.crc());
+            channel.position(payloadStart);
+            PayloadReader in = new PayloadReader(channel, payloadBytes, cancelled);
+            ColoringSettings coloring = null;
+            RefinedPixelSnapshot pixels = null;
+            if (colors) {
+                coloring = readColoring(in, header);
+                pixels = readRefinedPixels(in, width, height);
+            }
+            AntialiasSampleCache.Retained retained = samples
+                    ? readSamples(in, size, header.entryCount(), header.phaseCount()) : null;
+            in.finish(header.crc());
+            refinement = new RetainedRefinement(pixels, coloring, retained);
+        } catch (LoadCancelledException exception) {
+            return null;
+        } catch (InvalidEntryException exception) {
+            LOGGER.log(System.Logger.Level.INFO, "Discarding stored antialiasing: " + exception.getMessage());
+            deleteQuietly(file);
+            return null;
+        } catch (IllegalArgumentException exception) {
+            LOGGER.log(System.Logger.Level.INFO, "Discarding stored antialiasing: " + exception.getMessage());
+            deleteQuietly(file);
+            return null;
+        } catch (ClosedByInterruptException exception) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (NoSuchFileException exception) {
+            return null;
+        } catch (IOException exception) {
+            LOGGER.log(System.Logger.Level.WARNING, "Could not read stored antialiasing: " + exception.getMessage());
+            return null;
+        }
+        touch(file);
+        return refinement;
+    }
+
+    private void writeRefinement(RenderFrame frame, RetainedRefinement refinement) {
+        RenderJob job = frame.request();
+        String grid = gridText(frame.renderGrid());
+        // Like base frames, only AA on the viewport's fresh grid can ever be restored.
+        if (!grid.equals(gridText(RenderGrid.from(job.viewport(), job.width(), job.height())))) {
+            return;
+        }
+        RefinedPixelSnapshot pixels = refinement.pixels();
+        if (pixels != null && (pixels.width() != job.width() || pixels.height() != job.height())) {
+            return;
+        }
+        String key = keyText(job);
+        Path frameFile = fileFor(key);
+        Path target = refinementFileFor(frameFile);
+        Path temporary = null;
+        try {
+            if (!Files.isRegularFile(frameFile)) {
+                // AA is only ever read after its base frame, so without one it is never stored.
+                return;
+            }
+            ColoringSettings coloring = refinement.coloring();
+            AntialiasSampleCache.Retained samples = refinement.samples();
+            int size = Math.multiplyExact(job.width(), job.height());
+            int stopCount = pixels == null ? 0 : coloring.paletteStops().size();
+            int entryCount = samples == null ? 0 : samples.size();
+            int phaseCount = samples == null ? 0 : samples.phaseCount();
+            if (stopCount == 0 && entryCount == 0 || stopCount > MAX_PALETTE_STOPS) {
+                return;
+            }
+            long payloadBytes = refinementPayloadBytes(size, stopCount, entryCount, phaseCount);
+            ByteBuffer header = refinementHeaderBuffer(key, grid, job.width(), job.height(),
+                    pixels == null ? null : coloring, stopCount, entryCount, phaseCount, payloadBytes);
+            // Eviction would delete AA that does not fit with its frame, so it is not written.
+            if (header.remaining() + payloadBytes + Files.size(frameFile) > maxBytes) {
+                return;
+            }
+            if (Files.isRegularFile(target)) {
+                // Every restored visit stores its AA again, mostly unchanged: compare the
+                // stored file with the complete header, checksum included, without writing.
+                PayloadWriter checksum = new PayloadWriter(null);
+                writeRefinementPayload(checksum, pixels, coloring, samples, size);
+                ByteBuffer expected = header.duplicate().putLong(header.limit() - Long.BYTES,
+                        checksum.finish(payloadBytes));
+                if (storedFileMatches(target, expected, payloadBytes, checksum.crc())) {
+                    touch(target);
+                    touch(frameFile);
+                    return;
+                }
+            }
+            temporary = directory.resolve(target.getFileName() + "." + ProcessHandle.current().pid()
+                    + "." + temporaryCounter.incrementAndGet() + TEMPORARY_SUFFIX);
+            try (FileChannel channel = FileChannel.open(temporary,
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                long crcOffset = header.limit() - Long.BYTES;
+                writeFully(channel, header);
+                PayloadWriter out = new PayloadWriter(channel);
+                writeRefinementPayload(out, pixels, coloring, samples, size);
+                long crc = out.finish(payloadBytes);
+                writeFully(channel, ByteBuffer.allocate(Long.BYTES).putLong(0, crc), crcOffset);
+            }
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            temporary = null;
+            // The base frame is in use with its AA, so it is as recent and kept with it.
+            touch(frameFile);
+            evict(Set.of(target, frameFile));
+        } catch (ClosedByInterruptException exception) {
+            Thread.currentThread().interrupt();
+        } catch (IOException | RuntimeException exception) {
+            logWriteFailure(exception);
+        } finally {
+            if (temporary != null) {
+                deleteQuietly(temporary);
+            }
+        }
+    }
+
+    private static void writeRefinementPayload(PayloadWriter out, RefinedPixelSnapshot pixels,
+                                               ColoringSettings coloring, AntialiasSampleCache.Retained samples,
+                                               int size) throws IOException {
+        if (pixels != null) {
+            writeColoring(out, coloring);
+            for (int index = 0; index < size; index++) out.putInt(pixels.colorAt(index));
+            for (int index = 0; index < size; index++) out.putByte(pixels.isRefinedAt(index) ? 1 : 0);
+        }
+        if (samples != null) {
+            out.putDouble(samples.colorScale());
+            out.putDouble(samples.completeThreshold());
+            out.putByte(samples.dropped() ? 1 : 0);
+            samples.forEachEntry((pixel, mask, strength, deep, phases, from, length) -> {
+                out.putInt(pixel);
+                out.putInt(mask);
+                out.putFloat(strength);
+                out.putByte(deep ? 1 : 0);
+                out.putByte(length);
+                for (int offset = 0; offset < length; offset++) out.putShort(phases[from + offset]);
+            });
+        }
+    }
+
+    /**
+     * True when {@code file} has the expected length, starts with {@code header}, whose key,
+     * grid, coloring identity and counts then match, and its payload as read has the
+     * checksum {@code crc}, so a damaged payload behind an intact header is replaced.
+     */
+    private static boolean storedFileMatches(Path file, ByteBuffer header, long payloadBytes, long crc) {
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            if (channel.size() != header.remaining() + payloadBytes
+                    || !readExactly(channel, header.remaining()).equals(header)) {
+                return false;
+            }
+            new PayloadReader(channel, payloadBytes, () -> false).verify(crc);
+            return true;
+        } catch (IOException exception) {
+            // Includes a payload that is truncated or fails the checksum.
+            return false;
+        }
+    }
+
+    private static long refinementPayloadBytes(int size, int stopCount, int entryCount, long phaseCount) {
+        long colors = stopCount == 0 ? 0L
+                : Math.addExact(Math.multiplyExact((long) stopCount, Double.BYTES + Integer.BYTES)
+                        + 2L * Double.BYTES + 1L,
+                Math.multiplyExact((long) size, Integer.BYTES + 1L));
+        long samples = entryCount == 0 ? 0L
+                : Math.addExact(2L * Double.BYTES + 1L
+                        + Math.multiplyExact((long) entryCount, 3L * Integer.BYTES + 2L),
+                Math.multiplyExact(phaseCount, Short.BYTES));
+        return Math.addExact(colors, samples);
+    }
+
+    private static ByteBuffer refinementHeaderBuffer(String key, String grid, int width, int height,
+                                                     ColoringSettings coloring, int stopCount,
+                                                     int entryCount, int phaseCount, long payloadBytes) {
+        byte[] keyBytes = key.getBytes(StandardCharsets.UTF_8);
+        byte[] gridBytes = grid.getBytes(StandardCharsets.UTF_8);
+        byte[] palette = (coloring == null ? "" : coloring.palette().name()).getBytes(StandardCharsets.UTF_8);
+        byte[] orbitTrap = (coloring == null ? "" : coloring.orbitTrap().name()).getBytes(StandardCharsets.UTF_8);
+        ByteBuffer header = ByteBuffer.allocate(REFINEMENT_MAGIC.length + 3 * Integer.BYTES
+                + 4 * Integer.BYTES + keyBytes.length + gridBytes.length + palette.length + orbitTrap.length
+                + 5 * Integer.BYTES + 2 * Long.BYTES);
+        header.put(REFINEMENT_MAGIC)
+                .putInt(REFINEMENT_FORMAT_VERSION)
+                .putInt(CALCULATION_VERSION)
+                .putInt(ANTIALIAS_VERSION)
+                .putInt(keyBytes.length).put(keyBytes)
+                .putInt(gridBytes.length).put(gridBytes)
+                .putInt(palette.length).put(palette)
+                .putInt(orbitTrap.length).put(orbitTrap)
+                .putInt(width)
+                .putInt(height)
+                .putInt(stopCount)
+                .putInt(entryCount)
+                .putInt(phaseCount)
+                .putLong(payloadBytes)
+                .putLong(0L);
+        return header.flip();
+    }
+
+    private record RefinementHeader(String key, String grid, String palette, String orbitTrap, int width,
+                                    int height, int stopCount, int entryCount, int phaseCount,
+                                    long payloadBytes, long crc) {}
+
+    private static RefinementHeader readRefinementHeader(FileChannel channel) throws IOException {
+        ByteBuffer start = readExactly(channel, REFINEMENT_MAGIC.length + 3 * Integer.BYTES);
+        byte[] magic = new byte[REFINEMENT_MAGIC.length];
+        start.get(magic);
+        if (!Arrays.equals(magic, REFINEMENT_MAGIC)) {
+            throw new InvalidEntryException("not stored antialiasing");
+        }
+        if (start.getInt() != REFINEMENT_FORMAT_VERSION || start.getInt() != CALCULATION_VERSION
+                || start.getInt() != ANTIALIAS_VERSION) {
+            throw new InvalidEntryException("outdated format, calculation or antialiasing version");
+        }
+        String key = readText(channel);
+        String grid = readText(channel);
+        String palette = readText(channel);
+        String orbitTrap = readText(channel);
+        ByteBuffer rest = readExactly(channel, 5 * Integer.BYTES + 2 * Long.BYTES);
+        return new RefinementHeader(key, grid, palette, orbitTrap, rest.getInt(), rest.getInt(), rest.getInt(),
+                rest.getInt(), rest.getInt(), rest.getLong(), rest.getLong());
+    }
+
+    private static void writeColoring(PayloadWriter out, ColoringSettings coloring) throws IOException {
+        for (ColorStop stop : coloring.paletteStops()) {
+            out.putDouble(stop.position());
+            out.putInt(stop.color());
+        }
+        out.putDouble(coloring.colorScale());
+        out.putDouble(coloring.offset());
+        out.putByte(coloring.histogramColoring() ? 1 : 0);
+    }
+
+    /** Throws {@link IllegalArgumentException} for values the coloring rejects. */
+    private static ColoringSettings readColoring(PayloadReader in, RefinementHeader header) throws IOException {
+        List<ColorStop> stops = new ArrayList<>(header.stopCount());
+        for (int index = 0; index < header.stopCount(); index++) {
+            double position = in.getDouble();
+            stops.add(new ColorStop(position, in.getInt()));
+        }
+        double colorScale = in.getDouble();
+        double offset = in.getDouble();
+        boolean histogram = in.getFlag();
+        return new ColoringSettings(PalettePreset.valueOf(header.palette()), stops, colorScale, offset,
+                histogram, OrbitTrap.valueOf(header.orbitTrap()));
+    }
+
+    private static RefinedPixelSnapshot readRefinedPixels(PayloadReader in, int width, int height)
+            throws IOException {
+        int[] colors = new int[Math.multiplyExact(width, height)];
+        for (int index = 0; index < colors.length; index++) colors[index] = in.getInt();
+        ValidityMask validity = new ValidityMask(width, height);
+        for (int y = 0; y < height; y++) {
+            int runStart = -1;
+            for (int x = 0; x <= width; x++) {
+                boolean refined = x < width && in.getFlag();
+                if (refined && runStart < 0) {
+                    runStart = x;
+                } else if (!refined && runStart >= 0) {
+                    validity.markReady(new RenderRegion(runStart, y, x - runStart, 1));
+                    runStart = -1;
+                }
+            }
+        }
+        return new RefinedPixelSnapshot(width, height, colors, validity);
+    }
+
+    private static AntialiasSampleCache.Retained readSamples(PayloadReader in, int size, int entryCount,
+                                                             int phaseCount) throws IOException {
+        double colorScale = in.getDouble();
+        double completeThreshold = in.getDouble();
+        boolean dropped = in.getFlag();
+        if (!Double.isFinite(colorScale) || colorScale <= 0.0 || Double.isNaN(completeThreshold)) {
+            throw new InvalidEntryException("invalid antialiasing samples");
+        }
+        int[] pixels = new int[entryCount];
+        int[] masks = new int[entryCount];
+        float[] strengths = new float[entryCount];
+        byte[] deep = new byte[entryCount];
+        int[] offsets = new int[entryCount + 1];
+        short[] phases = new short[phaseCount];
+        BitSet seen = new BitSet(size);
+        int phase = 0;
+        for (int entry = 0; entry < entryCount; entry++) {
+            int pixel = in.getInt();
+            int mask = in.getInt();
+            float strength = in.getFloat();
+            boolean deepZoom = in.getFlag();
+            int length = Byte.toUnsignedInt(in.getByte());
+            if (pixel < 0 || pixel >= size || seen.get(pixel) || Float.isNaN(strength)
+                    || length < 1 || length > MAX_AA_SAMPLES || length > phaseCount - phase
+                    || length < MAX_AA_SAMPLES && (mask >>> length) != 0) {
+                throw new InvalidEntryException("invalid antialiasing entry");
+            }
+            seen.set(pixel);
+            pixels[entry] = pixel;
+            masks[entry] = mask;
+            strengths[entry] = strength;
+            deep[entry] = (byte) (deepZoom ? 1 : 0);
+            for (int sample = 0; sample < length; sample++) {
+                short value = in.getShort();
+                // Samples that did not escape carry no phase.
+                if ((mask & 1 << sample) == 0 && value != 0) {
+                    throw new InvalidEntryException("invalid antialiasing phase");
+                }
+                phases[phase++] = value;
+            }
+            offsets[entry + 1] = phase;
+        }
+        if (phase != phaseCount) {
+            throw new InvalidEntryException("unexpected antialiasing phase count");
+        }
+        return AntialiasSampleCache.restored(colorScale, completeThreshold, dropped,
+                pixels, masks, strengths, deep, offsets, phases);
+    }
+
+    /**
+     * Streams primitives through a chunk buffer, accumulating the payload checksum. Without
+     * a channel it only computes the checksum.
+     */
+    private static final class PayloadWriter {
+        private final FileChannel channel;
+        private final ByteBuffer buffer = ByteBuffer.allocateDirect(CHUNK_BYTES);
+        private final CRC32 crc = new CRC32();
+        private long written;
+
+        private PayloadWriter(FileChannel channel) {
+            this.channel = channel;
+        }
+
+        private void reserve(int bytes) throws IOException {
+            if (buffer.remaining() < bytes) flush();
+        }
+
+        void putByte(int value) throws IOException { reserve(1); buffer.put((byte) value); }
+        void putShort(short value) throws IOException { reserve(Short.BYTES); buffer.putShort(value); }
+        void putInt(int value) throws IOException { reserve(Integer.BYTES); buffer.putInt(value); }
+        void putFloat(float value) throws IOException { reserve(Float.BYTES); buffer.putFloat(value); }
+        void putDouble(double value) throws IOException { reserve(Double.BYTES); buffer.putDouble(value); }
+
+        private void flush() throws IOException {
+            buffer.flip();
+            written += buffer.remaining();
+            crc.update(buffer.duplicate());
+            if (channel != null) writeFully(channel, buffer);
+            buffer.clear();
+        }
+
+        /** The checksum of what {@link #finish} accepted. */
+        long crc() {
+            return crc.getValue();
+        }
+
+        /** Writes the rest and returns the checksum, after checking the written length. */
+        long finish(long expectedBytes) throws IOException {
+            flush();
+            if (written != expectedBytes) {
+                throw new IOException("Antialiasing payload length changed while writing");
+            }
+            return crc.getValue();
+        }
+    }
+
+    /**
+     * Reads primitives of a payload whose length was validated against the file, in
+     * chunks, checking cancellation before each chunk and accumulating the checksum.
+     */
+    private static final class PayloadReader {
+        private final FileChannel channel;
+        private final BooleanSupplier cancelled;
+        private final ByteBuffer buffer = ByteBuffer.allocateDirect(CHUNK_BYTES);
+        private final CRC32 crc = new CRC32();
+        private long unread;
+
+        private PayloadReader(FileChannel channel, long payloadBytes, BooleanSupplier cancelled) {
+            this.channel = channel;
+            this.unread = payloadBytes;
+            this.cancelled = cancelled;
+            buffer.limit(0);
+        }
+
+        private void require(int bytes) throws IOException {
+            if (buffer.remaining() >= bytes) return;
+            if (cancelled.getAsBoolean()) throw new LoadCancelledException();
+            buffer.compact();
+            int start = buffer.position();
+            int length = (int) Math.min(buffer.remaining(), unread);
+            buffer.limit(start + length);
+            while (buffer.hasRemaining()) {
+                if (channel.read(buffer) < 0) {
+                    throw new InvalidEntryException("truncated antialiasing");
+                }
+            }
+            unread -= length;
+            crc.update(buffer.duplicate().flip().position(start));
+            buffer.flip();
+            if (buffer.remaining() < bytes) {
+                throw new InvalidEntryException("truncated antialiasing");
+            }
+        }
+
+        byte getByte() throws IOException { require(1); return buffer.get(); }
+        short getShort() throws IOException { require(Short.BYTES); return buffer.getShort(); }
+        int getInt() throws IOException { require(Integer.BYTES); return buffer.getInt(); }
+        float getFloat() throws IOException { require(Float.BYTES); return buffer.getFloat(); }
+        double getDouble() throws IOException { require(Double.BYTES); return buffer.getDouble(); }
+
+        boolean getFlag() throws IOException {
+            byte value = getByte();
+            if (value != 0 && value != 1) {
+                throw new InvalidEntryException("invalid antialiasing flag");
+            }
+            return value == 1;
+        }
+
+        /** Reads the whole payload, only to check its length and checksum. */
+        void verify(long expectedCrc) throws IOException {
+            while (unread > 0) {
+                buffer.position(buffer.limit());
+                require(1);
+            }
+            buffer.position(buffer.limit());
+            finish(expectedCrc);
+        }
+
+        void finish(long expectedCrc) throws IOException {
+            if (unread != 0 || buffer.hasRemaining()) {
+                throw new InvalidEntryException("unexpected antialiasing length");
+            }
+            if (crc.getValue() != expectedCrc) {
+                throw new InvalidEntryException("antialiasing checksum mismatch");
+            }
+        }
+    }
+
+    /** A load stopped by cancellation; the entry stays valid. */
+    private static final class LoadCancelledException extends IOException {
+        private LoadCancelledException() {
+            super("cancelled");
         }
     }
 
@@ -500,26 +1080,68 @@ public final class PersistentFrameStore implements AutoCloseable {
         return Math.multiplyExact((long) size, perPixel);
     }
 
-    /** Deletes the least recently used entries until the store fits its budget. */
-    private void evict(Path keep) throws IOException {
-        record Entry(Path path, long bytes, FileTime modified) {}
-        List<Entry> entries = new ArrayList<>();
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*" + SUFFIX)) {
+    /**
+     * Deletes the least recently used entries until the store fits its budget. A base frame
+     * and its antialiasing are one entry, as recent as its newer file, so neither is counted
+     * after it is deleted. An entry that does not fit keeps its base frame without the
+     * antialiasing when the frame alone fits. Antialiasing without its base frame is
+     * useless, since it is only read after the frame, and is deleted.
+     */
+    private void evict(Set<Path> keep) throws IOException {
+        final class Entry {
+            Path frame;
+            long frameBytes;
+            Path refinement;
+            long refinementBytes;
+            FileTime modified;
+
+            void add(FileTime time) {
+                if (modified == null || time.compareTo(modified) > 0) modified = time;
+            }
+
+            boolean kept() {
+                // Immutable sets reject null lookups.
+                return frame != null && keep.contains(frame) || refinement != null && keep.contains(refinement);
+            }
+        }
+        Map<Path, Entry> entries = new TreeMap<>();
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory,
+                "*{" + SUFFIX + "," + REFINEMENT_SUFFIX + "}")) {
             for (Path file : files) {
                 try {
-                    entries.add(new Entry(file, Files.size(file), Files.getLastModifiedTime(file)));
+                    long bytes = Files.size(file);
+                    FileTime modified = Files.getLastModifiedTime(file);
+                    boolean refinement = file.getFileName().toString().endsWith(REFINEMENT_SUFFIX);
+                    Path frame = refinement ? frameFileFor(file) : file;
+                    Entry entry = entries.computeIfAbsent(frame, ignored -> new Entry());
+                    if (refinement) {
+                        entry.refinement = file;
+                        entry.refinementBytes = bytes;
+                    } else {
+                        entry.frame = file;
+                        entry.frameBytes = bytes;
+                    }
+                    entry.add(modified);
                 } catch (NoSuchFileException ignored) {
                     // Removed concurrently, for example by another application instance.
                 }
             }
         }
-        entries.sort(Comparator.comparing((Entry entry) -> !entry.path().equals(keep))
-                .thenComparing(Entry::modified, Comparator.reverseOrder()));
+        List<Entry> ordered = new ArrayList<>(entries.values());
+        ordered.sort(Comparator.comparing((Entry entry) -> !entry.kept())
+                .thenComparing(entry -> entry.modified, Comparator.reverseOrder()));
         long retained = 0L;
-        for (Entry entry : entries) {
-            retained += entry.bytes();
-            if (retained > maxBytes) {
-                deleteQuietly(entry.path());
+        for (Entry entry : ordered) {
+            if (entry.frame == null) {
+                deleteQuietly(entry.refinement);
+            } else if (retained + entry.frameBytes + entry.refinementBytes <= maxBytes) {
+                retained += entry.frameBytes + entry.refinementBytes;
+            } else if (retained + entry.frameBytes <= maxBytes) {
+                retained += entry.frameBytes;
+                if (entry.refinement != null) deleteQuietly(entry.refinement);
+            } else {
+                deleteQuietly(entry.frame);
+                if (entry.refinement != null) deleteQuietly(entry.refinement);
             }
         }
     }
@@ -572,6 +1194,19 @@ public final class PersistentFrameStore implements AutoCloseable {
 
     Path fileFor(RenderJob job) {
         return fileFor(keyText(job));
+    }
+
+    /** The antialiasing file stored beside a base frame file. */
+    static Path refinementFileFor(Path frameFile) {
+        String name = frameFile.getFileName().toString();
+        String stem = name.endsWith(SUFFIX) ? name.substring(0, name.length() - SUFFIX.length()) : name;
+        return frameFile.resolveSibling(stem + REFINEMENT_SUFFIX);
+    }
+
+    private static Path frameFileFor(Path refinementFile) {
+        String name = refinementFile.getFileName().toString();
+        return refinementFile.resolveSibling(
+                name.substring(0, name.length() - REFINEMENT_SUFFIX.length()) + SUFFIX);
     }
 
     /**

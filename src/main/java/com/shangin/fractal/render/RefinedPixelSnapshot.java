@@ -73,6 +73,27 @@ public final class RefinedPixelSnapshot {
         return true;
     }
 
+    /** Row-major access for {@link PersistentFrameStore}, without copying. */
+    int colorAt(int index) {
+        return colors[index];
+    }
+
+    boolean isRefinedAt(int index) {
+        return ready.get(index);
+    }
+
+    /** True when both mark the same pixels refined, with the same colors there. */
+    boolean sameRefinedPixels(RefinedPixelSnapshot other) {
+        if (other == this) return true;
+        if (other == null || other.width != width || other.height != height || !ready.equals(other.ready)) {
+            return false;
+        }
+        for (int index = ready.nextSetBit(0); index >= 0; index = ready.nextSetBit(index + 1)) {
+            if (colors[index] != other.colors[index]) return false;
+        }
+        return true;
+    }
+
     private int index(int x, int y) {
         if (x < 0 || x >= width || y < 0 || y >= height) {
             throw new IndexOutOfBoundsException();

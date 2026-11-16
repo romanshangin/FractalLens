@@ -501,6 +501,10 @@ public final class FractalRenderController implements AutoCloseable {
                     // The new entry replaced its source's; keep the AA until this visit finishes its own.
                     if (carriedRefinement != null && completedFrame == targetFrame) {
                         frameCache.retainRefinement(completedFrame, carriedRefinement);
+                    } else if (completedFrame == targetFrame) {
+                        renderService.takeRestoredRefinement(completedFrame).ifPresent(stored ->
+                                restoreStoredRefinement(completedFrame, stored, scene.coloring(), coloring,
+                                        baseOnly, deepZoom));
                     }
 
                     ColoringStrategy completedColoring =
@@ -769,8 +773,37 @@ public final class FractalRenderController implements AutoCloseable {
     }
 
     /**
+     * Applies the AA stored in an earlier launch with a base frame just restored from disk,
+     * exactly like AA retained in memory: it is kept beside the cached frame, its samples
+     * serve recoloring and later passes, and colors of the displayed coloring are put on the
+     * staging frame, so the visit's AA pass only fills what they leave out. FX thread only.
+     */
+    private void restoreStoredRefinement(RenderFrame frame, RetainedRefinement stored,
+                                         ColoringSettings settings, ColoringStrategy coloring,
+                                         boolean baseOnly, boolean deepZoom) {
+        frameCache.retainRefinement(frame, stored);
+        if (stored.samples() != null) {
+            antialiasService.restoreSamples(frame, stored.samples());
+        } else {
+            // Bind the AA service to the restored frame, as frame reuse does for retained AA.
+            antialiasService.reuseFrame(frame, frame, new PixelShift(0, 0));
+        }
+        if (!stored.showsColorsFor(settings)) {
+            return;
+        }
+        if (baseOnly) {
+            // Kept like AA hidden by switching to Base only, so an AA mode shows it again.
+            hiddenRefinement = new HiddenRefinement(frame, settings, stored.pixels());
+        } else if (surface.restoreStagingRefinement(frame, stored.pixels()) && stored.samples() == null) {
+            unsampledAntialias = new UnsampledAntialias(frame, deepZoom);
+            antialiasService.vouchForRestoredColors(frame, coloring, deepZoom);
+        }
+    }
+
+    /**
      * Keeps a frame's finished AA beside it in the frame cache, so returning to the frame
-     * later, including after a fractal switch, shows it without another AA pass.
+     * later, including after a fractal switch, shows it without another AA pass. When
+     * frames persist across launches, it is also stored beside the stored base frame.
      */
     private void retainRefinement(RenderFrame frame, ColoringSettings coloring) {
         AntialiasSampleCache.Retained samples = antialiasService.retainSamples(frame);
@@ -781,8 +814,9 @@ public final class FractalRenderController implements AutoCloseable {
         RefinedPixelSnapshot pixels = oneColoring ? surface.refinedPixelSnapshot(frame) : null;
         if (pixels != null && pixels.validity().readyPixelCount() == 0) pixels = null;
         if (pixels == null && samples == null) return;
-        frameCache.retainRefinement(frame,
-                new RetainedRefinement(pixels, pixels == null ? null : coloring, samples));
+        RetainedRefinement refinement = new RetainedRefinement(pixels, pixels == null ? null : coloring, samples);
+        frameCache.retainRefinement(frame, refinement);
+        renderService.saveRefinementWhenSettled(frame, refinement);
     }
 
     /** Deep frames use candidate-only AA that keeps subpixel coordinates exact. */

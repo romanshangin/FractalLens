@@ -199,7 +199,37 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   iterations, escape flags and, when the formula stores them, orbit-trap
   distances, uncompressed and big-endian. Palettes, coloring and display mode
   are not stored; colors are derived from the samples, so palette changes reuse
-  a restored frame. Antialiasing is not stored yet.
+  a restored frame.
+- **Antialiasing.** Finished AA is stored beside its base frame as
+  `<sha-256 of key>.aa`, in the form kept in memory beside a cached frame: the AA
+  display colors with their validity and the coloring that produced them
+  (palette identity and stops, color scale, offset, histogram mode and orbit trap),
+  and the palette-independent AA samples (16-bit phases, escape masks, edge
+  strengths, deep-zoom flags, color scale, tested threshold and budget-rejection
+  mark). The colors are shown only for an equal coloring; the samples serve any
+  smooth palette of the same color scale. Another palette recolors without new
+  supersampling when the stored samples cover all of its AA candidates.
+  Otherwise (a steeper palette than every finished pass tested, or samples the
+  cache dropped for its budget, the stored rejection mark) a pass over the
+  whole frame runs: it tests again every pixel without matching cached samples,
+  including pixels tested earlier that were not candidates, and supersamples
+  only the new palette's candidates whose samples are not cached. Histogram and
+  orbit-trap colorings have no samples, so their AA restores only for the same
+  coloring. A file is written only beside a stored base frame, after the visit's
+  AA pass, with the same 1 s settle delay as frames; AA whose complete header,
+  payload checksum included, equals the stored file's is not rewritten, so a
+  restored visit that keeps its AA unchanged writes nothing. The header repeats the frame key and
+  grid and carries the AA-specific counts, bounded before allocation; samples
+  whose memory would exceed the interactive AA sample cache budget
+  (`fractal.aaCache.maxBytes`, 512 MiB by default) are rejected, and the whole
+  payload's length and CRC-32 are checked in a streaming pass before any array
+  sized by the header is allocated. Pixel indices must be in range and distinct,
+  phase counts 1–32 and masks and phases consistent before any of it is used. It is read on
+  the render thread right after its base frame, so an exact hit runs neither
+  candidate detection nor supersampling. In Base only mode the restored AA
+  colors stay hidden with the frame, so switching to an AA mode shows them
+  without another pass. Deleting or rejecting a base frame deletes its AA; AA
+  without a stored frame is never read.
 - **Key.** Formula and parameters (doubles by bit pattern), orbit trap, sample
   accuracy, the decimal center and scale exactly as held by the viewport, the
   render grid derived from them (double and decimal origin, steps, offsets,
@@ -208,16 +238,22 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   view restored from scene JSON hits the entry saved from the navigated view.
   The header repeats the full key and grid, which must match. Custom
   (non-preset) formulas are not stored.
-- **Pan limitation.** Only frames on their viewport's fresh grid are stored. A
+- **Pan limitation.** Only frames on their viewport's fresh grid, and their AA,
+  are stored. A
   frame completed by pan reuse keeps the shifted grid of its source frame,
   whose sample positions differ from the fresh grid, so it is not stored; a view
   left after panning is restored only if it was also rendered fresh (for
   example after a zoom). Within one launch the
   memory cache still reuses it.
-- **Versions.** `FORMAT_VERSION` covers the file layout. `CALCULATION_VERSION`
-  covers calculated sample semantics and must be incremented whenever a formula,
+- **Versions.** `FORMAT_VERSION` covers the frame file layout and
+  `REFINEMENT_FORMAT_VERSION` the AA file layout. `CALCULATION_VERSION` covers
+  calculated sample semantics and must be incremented whenever a formula,
   backend selection, precision policy or sample encoding change alters the
-  samples of an unchanged key; older entries are then discarded.
+  samples of an unchanged key; older frames and their AA are then discarded.
+  `ANTIALIAS_VERSION` covers AA semantics (subpixel sampling grids, candidate
+  edge thresholds, phase encoding and color averaging) and must be incremented
+  whenever such a change alters the AA stored for an unchanged frame and
+  coloring; older AA is then discarded while its frames stay valid.
 - **Loading.** Only an empty frame (no reused pixels) is restored, on the render
   thread inside the normal render call, so generations, cancellation and atomic
   publication are unchanged: the frame is published as one completed region.
@@ -233,11 +269,17 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   entry for the same key is not rewritten. Files are written to a temporary
   name and published by an atomic move; no fsync is issued, so an entry lost to
   a crash is rejected by its length or checksum. Write failures are logged once
-  and rendering continues. Closing writes the frame still waiting for its
-  delay and waits at most 3 s; temporary files older than 10 minutes are
+  and rendering continues. Closing writes the frame and then the AA still
+  waiting for their delay and waits at most 3 s; temporary files older than 10 minutes are
   removed by a later store.
-- **Budget.** All entries share a 1 GiB disk budget; after each write the least
-  recently written or restored entries beyond it are deleted, and a frame
+- **Budget.** All frames and AA files share a 1 GiB disk budget; after each
+  write the least recently written or restored entries beyond it are deleted.
+  A base frame and its AA are one entry, as recent as its newer file; an entry
+  that does not fit keeps its frame without the AA when the frame alone fits,
+  and AA without its frame is deleted. An AA write keeps its own frame, AA that
+  does not fit the budget together with its frame is not written, and a frame
   larger than the whole budget is not stored. The budget is provisional until
   retained sizes and I/O latency are measured (ROADMAP P2.7). At 3024x1964 a
-  frame without orbit-trap distances takes about 74 MiB.
+  frame without orbit-trap distances takes about 74 MiB; AA colors add about
+  28 MiB, and AA samples 14 bytes per candidate pixel plus 2 bytes per subpixel
+  sample (an arithmetic estimate, not a measurement).

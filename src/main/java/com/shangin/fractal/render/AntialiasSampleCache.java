@@ -185,7 +185,7 @@ public final class AntialiasSampleCache {
         return capacity;
     }
 
-    private long bytesFor(int entryCapacity, int phaseCapacity, int tableCapacity) {
+    private static long bytesFor(int entryCapacity, int phaseCapacity, int tableCapacity) {
         if (entryCapacity == 0 && tableCapacity == 0) return 0;
         long intArray = alignedArrayBytes(entryCapacity, Integer.BYTES);
         return FIXED_BYTES
@@ -523,6 +523,18 @@ public final class AntialiasSampleCache {
             phases = new short[phaseCapacity];
         }
 
+        /** Adopts complete arrays holding exactly {@code pixels.length} entries. */
+        Storage(int[] pixels, int[] masks, float[] strengths, byte[] deep, int[] offsets, short[] phases) {
+            this.pixels = pixels;
+            this.masks = masks;
+            this.strengths = strengths;
+            this.deep = deep;
+            this.offsets = offsets;
+            this.phases = phases;
+            count = pixels.length;
+            phaseCount = phases.length;
+        }
+
         int capacity() { return pixels.length; }
 
         Storage grownTo(int entryCapacity, int phaseCapacity) {
@@ -628,6 +640,54 @@ public final class AntialiasSampleCache {
             return Double.compare(colorScale, coloring.colorScale()) == 0
                     ? snapshot.forPalette(coloring.palette()) : Snapshot.EMPTY;
         }
+
+        /** Number of phases over all entries, for {@link PersistentFrameStore}. */
+        int phaseCount() {
+            long count = 0;
+            for (int index : snapshot.indices) count += snapshot.storage.length(index);
+            return Math.toIntExact(count);
+        }
+
+        /** Visits every entry in snapshot order, for {@link PersistentFrameStore}. */
+        <E extends Exception> void forEachEntry(EntryVisitor<E> visitor) throws E {
+            Storage storage = snapshot.storage;
+            for (int index : snapshot.indices) {
+                visitor.entry(storage.pixels[index], storage.masks[index], storage.strengths[index],
+                        storage.deep[index] != 0, storage.phases, storage.offsets[index], storage.length(index));
+            }
+        }
+    }
+
+    /** Receives one retained entry; its phases are {@code phases[from .. from + length)}. */
+    @FunctionalInterface
+    interface EntryVisitor<E extends Exception> {
+        void entry(int pixel, int escapedMask, float edgeStrength, boolean deepZoom,
+                   short[] phases, int from, int length) throws E;
+    }
+
+    /**
+     * Retained samples rebuilt from validated stored entries: distinct pixels, 1 to 32
+     * phases per entry, offsets ascending from zero to {@code phases.length}. The arrays
+     * are adopted, not copied. For {@link PersistentFrameStore}.
+     */
+    static Retained restored(double colorScale, double completeThreshold, boolean dropped,
+                             int[] pixels, int[] masks, float[] strengths, byte[] deep,
+                             int[] offsets, short[] phases) {
+        int count = pixels.length;
+        if (count == 0 || masks.length != count || strengths.length != count || deep.length != count
+                || offsets.length != count + 1 || offsets[count] != phases.length) {
+            throw new IllegalArgumentException("Stored AA entries are inconsistent");
+        }
+        Storage storage = new Storage(pixels, masks, strengths, deep, offsets, phases);
+        int[] indices = new int[count];
+        for (int index = 0; index < count; index++) indices[index] = index;
+        long bytes = retainedBytesFor(count, phases.length);
+        return new Retained(new Snapshot(storage, indices), colorScale, bytes, completeThreshold, dropped);
+    }
+
+    /** Memory of samples {@link #restored} from {@code entries} entries holding {@code phases} phases. */
+    static long retainedBytesFor(int entries, int phases) {
+        return bytesFor(entries, phases, tableCapacityFor(entries, 1));
     }
 
     /** Immutable generation of the cache, shared by CPU and GPU recoloring. */
