@@ -56,6 +56,7 @@ import java.util.zip.CRC32;
  * {@link RetainedRefinement}: the AA display colors with the coloring that produced them,
  * and the palette-independent AA samples. It is only read after its base frame was
  * restored, is versioned by {@link #ANTIALIAS_VERSION} and is deleted with its base frame.
+ * Rewriting it with AA colors alone keeps its stored samples, which are exact for the frame.
  *
  * <p>Loading runs on the calling render thread and is cancellable between chunks. Saving
  * runs on a background writer once a completed frame has remained the most recently
@@ -275,7 +276,8 @@ public final class PersistentFrameStore implements AutoCloseable {
     /**
      * Schedules a completed frame's finished antialiasing to be written beside its stored
      * base frame once no other AA is retained within the settle delay. It is written only
-     * when the base frame is stored by then; AA identical to the stored AA is not rewritten.
+     * when the base frame is stored by then; AA identical to the stored AA is not rewritten,
+     * and AA colors without samples keep the samples already stored for the frame.
      */
     public void saveRefinementWhenSettled(RenderFrame frame, RetainedRefinement refinement) {
         Objects.requireNonNull(frame);
@@ -418,6 +420,22 @@ public final class PersistentFrameStore implements AutoCloseable {
     public RetainedRefinement loadRefinement(RenderFrame frame, BooleanSupplier cancelled) {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(cancelled);
+        try {
+            return readRefinement(frame, cancelled);
+        } catch (ClosedByInterruptException exception) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (IOException exception) {
+            LOGGER.log(System.Logger.Level.WARNING, "Could not read stored antialiasing: " + exception.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * {@link #loadRefinement} that reports I/O failures, so a caller can tell an unreadable
+     * entry from a missing, rejected or cancelled one, which all give null.
+     */
+    private RetainedRefinement readRefinement(RenderFrame frame, BooleanSupplier cancelled) throws IOException {
         if (!isPersistable(frame) || !frame.isComplete()) {
             return null;
         }
@@ -484,17 +502,32 @@ public final class PersistentFrameStore implements AutoCloseable {
             LOGGER.log(System.Logger.Level.INFO, "Discarding stored antialiasing: " + exception.getMessage());
             deleteQuietly(file);
             return null;
-        } catch (ClosedByInterruptException exception) {
-            Thread.currentThread().interrupt();
-            return null;
         } catch (NoSuchFileException exception) {
-            return null;
-        } catch (IOException exception) {
-            LOGGER.log(System.Logger.Level.WARNING, "Could not read stored antialiasing: " + exception.getMessage());
             return null;
         }
         touch(file);
         return refinement;
+    }
+
+    /**
+     * The AA samples stored for a completed frame that was not just restored, such as a
+     * cached frame shown again after the in-memory frame cache dropped its samples. Only a
+     * frame on its viewport's fresh grid can match the stored AA; any other frame misses
+     * without touching the entry.
+     *
+     * @return the stored samples, or null on a miss, an entry without samples, a rejected
+     *         entry, an I/O failure or cancellation
+     */
+    public AntialiasSampleCache.Retained loadStoredSamples(RenderFrame frame, BooleanSupplier cancelled) {
+        Objects.requireNonNull(frame);
+        Objects.requireNonNull(cancelled);
+        RenderJob job = frame.request();
+        if (!isPersistable(frame) || !frame.isComplete()
+                || !gridText(frame.renderGrid()).equals(gridText(RenderGrid.from(job.viewport(), job.width(), job.height())))) {
+            return null;
+        }
+        RetainedRefinement stored = loadRefinement(frame, cancelled);
+        return stored == null ? null : stored.samples();
     }
 
     private void writeRefinement(RenderFrame frame, RetainedRefinement refinement) {
@@ -515,6 +548,10 @@ public final class PersistentFrameStore implements AutoCloseable {
         try {
             if (!Files.isRegularFile(frameFile)) {
                 // AA is only ever read after its base frame, so without one it is never stored.
+                return;
+            }
+            refinement = keepingStoredSamples(frame, refinement, target);
+            if (refinement == null) {
                 return;
             }
             ColoringSettings coloring = refinement.coloring();
@@ -571,6 +608,31 @@ public final class PersistentFrameStore implements AutoCloseable {
                 deleteQuietly(temporary);
             }
         }
+    }
+
+    /**
+     * AA colors retained without samples keep the samples stored for the same frame. The
+     * in-memory frame cache drops samples first when it runs short, for example while
+     * another fractal is shown, so a later visit retains only colors; the samples on disk
+     * are palette-independent and exact for this key and {@link #ANTIALIAS_VERSION}, so
+     * they still serve recoloring after a restart. Without stored samples, or when they
+     * were rejected as invalid, the refinement is returned unchanged; {@code null} when
+     * reading them was interrupted, so the stored AA is kept as it is. An I/O failure is
+     * thrown for the same reason.
+     */
+    private RetainedRefinement keepingStoredSamples(RenderFrame frame, RetainedRefinement refinement,
+                                                    Path target) throws IOException {
+        if (refinement.samples() != null || !Files.isRegularFile(target)) {
+            return refinement;
+        }
+        // A read failure propagates, so the stored AA is kept rather than replaced without samples.
+        RetainedRefinement stored = readRefinement(frame, () -> Thread.currentThread().isInterrupted());
+        if (Thread.currentThread().isInterrupted()) {
+            return null;
+        }
+        return stored == null || stored.samples() == null
+                ? refinement
+                : new RetainedRefinement(refinement.pixels(), refinement.coloring(), stored.samples());
     }
 
     private static void writeRefinementPayload(PayloadWriter out, RefinedPixelSnapshot pixels,

@@ -73,6 +73,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
      */
     private double completeThreshold = Double.POSITIVE_INFINITY;
     private double completeColorScale = Double.NaN;
+    /** Changes whenever cached samples are bound to a frame, replaced or moved, see {@link #sampleBinding}. */
+    private long sampleBinding;
     private volatile Profile lastProfile = Profile.EMPTY;
 
     /** Worker elapsed times are summed and overlap; they are not process CPU time. */
@@ -170,6 +172,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             if (cachedFrame != frame) {
                 sampleCache.clear();
                 pendingSamples = null;
+                sampleBinding++;
                 cachedFrame = frame;
                 basePhaseFrame = null;
                 basePhaseCache = null;
@@ -635,6 +638,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         Objects.requireNonNull(retained);
         sampleCache.clear();
         pendingSamples = retained;
+        sampleBinding++;
         cachedFrame = frame;
         basePhaseFrame = null;
         basePhaseCache = null;
@@ -709,8 +713,18 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     target.samplePlane().width(), target.samplePlane().height(), shift);
         }
         cachedFrame = target;
+        sampleBinding++;
         basePhaseFrame = null;
         basePhaseCache = null;
+    }
+
+    /**
+     * Identifies the samples bound for recoloring: it changes whenever samples are bound to
+     * another frame, restored or moved, but not when a pass adds samples. A recolor computed
+     * under one value and published under another may lack AA that is now bound.
+     */
+    public synchronized long sampleBinding() {
+        return sampleBinding;
     }
 
     private static FractalSample[] sampleDeepGrid(

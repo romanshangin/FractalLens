@@ -171,6 +171,68 @@ class PersistentRefinementStoreTest {
     }
 
     @Test
+    void aCompletedFrameReadsItsStoredSamplesOnRequestOnly() throws Exception {
+        RenderJob job = job(-0.75);
+        RenderFrame source = calculateAndStore(job, CUSTOM);
+        // A cached frame shown again: complete before its render, so nothing is restored.
+        RenderFrame cached = RenderFrame.create(job);
+        new DirectDoubleRenderBackend().render(cached, () -> false, ignored -> {}, null);
+        try (PersistentFrameRenderBackend backend =
+                     new PersistentFrameRenderBackend(new DirectDoubleRenderBackend(), store())) {
+            backend.render(cached, () -> false, ignored -> {}, null);
+            assertTrue(backend.takeRestoredRefinement(cached).isEmpty(), "Unrequested samples are not read");
+
+            backend.readStoredSamples(cached, () -> true);
+            assertTrue(backend.takeRestoredRefinement(cached).isEmpty(), "A cancelled read keeps nothing");
+
+            backend.readStoredSamples(cached, () -> false);
+            assertTrue(backend.takeRestoredRefinement(source).isEmpty(), "Another frame object gets nothing");
+            RetainedRefinement samples = backend.takeRestoredRefinement(cached).orElseThrow();
+            assertNull(samples.pixels(), "Only the samples are handed out");
+            RetainedRefinement full = refinement(source, CUSTOM);
+            assertSameRefinement(full, new RetainedRefinement(full.pixels(), full.coloring(), samples.samples()));
+            assertTrue(backend.takeRestoredRefinement(cached).isEmpty(), "Handed out once");
+
+            backend.readStoredSamples(cached, () -> false);
+            backend.render(cached, () -> false, ignored -> {}, null);
+            assertTrue(backend.takeRestoredRefinement(cached).isEmpty(), "A newer render discards them");
+        }
+    }
+
+    @Test
+    void anUnreadableStoredAntialiasingIsKeptInsteadOfReplacedWithoutSamples() throws Exception {
+        RenderJob job = job(-0.75);
+        RenderFrame frame = calculateAndStore(job, CUSTOM);
+        Path file = refinementFile(job);
+        byte[] stored = Files.readAllBytes(file);
+        assumeTrue(file.toFile().setReadable(false) && !Files.isReadable(file),
+                "The file system must deny reading the stored AA");
+        try {
+            try (PersistentFrameStore store = store()) {
+                store.saveRefinementWhenSettled(frame,
+                        refinement(frame, new ColoringSettings(PalettePreset.FIRE, 1.7, 0.3)).withoutSamples());
+            }
+        } finally {
+            assertTrue(file.toFile().setReadable(true));
+        }
+        assertArrayEquals(stored, Files.readAllBytes(file), "An unreadable entry must not be replaced");
+    }
+
+    @Test
+    void storedSamplesMissForAFrameOnAShiftedGridAndKeepTheEntry() throws Exception {
+        RenderJob job = job(-0.75);
+        calculateAndStore(job, CUSTOM);
+        RenderFrame shifted = RenderFrame.create(job,
+                RenderGrid.from(job.viewport(), job.width(), job.height()).shifted(new PixelShift(1, 0)));
+        new DirectDoubleRenderBackend().render(shifted, () -> false, ignored -> {}, null);
+        try (PersistentFrameStore store = store()) {
+            assertNull(store.loadStoredSamples(shifted, () -> false));
+        }
+        assertTrue(Files.isRegularFile(refinementFile(job)), "A miss must not discard the entry");
+        assertNotNull(restore(job).samples());
+    }
+
+    @Test
     void cancellationWhileReadingTheAntialiasingKeepsTheEntry() throws Exception {
         calculateAndStore(job(-0.75), CUSTOM);
         RenderFrame frame = RenderFrame.create(job(-0.75));
@@ -293,6 +355,34 @@ class PersistentRefinementStoreTest {
             store.saveRefinementWhenSettled(frame, refinement(frame, fire));
         }
         assertEquals(fire, restore(job).coloring(), "AA of another coloring replaces the stored AA");
+    }
+
+    @Test
+    void antialiasingColorsWithoutSamplesKeepTheStoredSamples() throws Exception {
+        RenderJob job = job(-0.75);
+        RenderFrame frame = calculateAndStore(job, CUSTOM);
+        RetainedRefinement full = refinement(frame, CUSTOM);
+        Path file = refinementFile(job);
+        Object original = Files.readAttributes(file, BasicFileAttributes.class).fileKey();
+        assumeTrue(original != null, "The file system must identify files to detect a rewrite");
+
+        // The frame cache dropped the samples under memory pressure; the colors are unchanged.
+        try (PersistentFrameStore store = store()) {
+            store.saveRefinementWhenSettled(frame, full.withoutSamples());
+        }
+        assertEquals(original, Files.readAttributes(file, BasicFileAttributes.class).fileKey(),
+                "Unchanged colors without samples must not rewrite the stored AA");
+        assertSameRefinement(full, restore(job));
+
+        var fire = new ColoringSettings(PalettePreset.FIRE, 1.7, 0.3);
+        RetainedRefinement fireColors = refinement(frame, fire).withoutSamples();
+        try (PersistentFrameStore store = store()) {
+            store.saveRefinementWhenSettled(frame, fireColors);
+        }
+        RetainedRefinement restored = restore(job);
+        assertEquals(fire, restored.coloring(), "New colors replace the stored colors");
+        assertTrue(fireColors.pixels().sameRefinedPixels(restored.pixels()));
+        assertSameRefinement(full, new RetainedRefinement(full.pixels(), full.coloring(), restored.samples()));
     }
 
     @Test

@@ -769,20 +769,25 @@ public final class FractalSurface extends Region {
         }
     }
 
-    /** Atomically publishes a background-computed palette frame. */
-    public void applyRecolor(
+    /**
+     * Atomically publishes a background-computed palette frame.
+     *
+     * @return false when {@code frame} is not the displayed frame yet, so nothing was published
+     */
+    public boolean applyRecolor(
             RenderFrame frame,
             int[] colors,
             ColoringSettings settings
     ) {
         if (displayedRenderFrame != frame || displayedFrame == null
                 || colors.length != displayedFrame.width() * displayedFrame.height()) {
-            return;
+            return false;
         }
         displayedFrame.publish(colors);
         if (displayedScene != null) {
             displayedScene = displayedScene.withColoring(settings);
         }
+        return true;
     }
 
     public void invalidateRefinement() {
