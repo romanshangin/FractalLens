@@ -1191,6 +1191,70 @@ class InteractiveAntialiasServiceTest {
         assertNull(failure.get());
     }
 
+    @Test
+    void repeatedDeepPassesProduceIdenticalPixelsAcrossServices() throws Exception {
+        // The antenna tip's centre orbit glitches, so candidates need recovery references.
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT,
+                        com.shangin.fractal.coloring.OrbitTrap.NONE),
+                new com.shangin.fractal.math.Viewport("-2", "0", "1e-14"), 324, 209, 2_688);
+        RenderFrame frame = RenderFrame.create(job);
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(4, ignored -> {})) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+        assertRepeatedPassesMatch(frame, true);
+    }
+
+    @Test
+    void repeatedPassesProduceIdenticalPixelsAcrossServices() throws Exception {
+        assertRepeatedPassesMatch(mandelbrotFrame(), false);
+    }
+
+    /** Fresh services with several workers must reproduce one pass pixel by pixel. */
+    private static void assertRepeatedPassesMatch(RenderFrame frame, boolean deepZoom) throws Exception {
+        SmoothPaletteColoring coloring = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        int[] expected = null;
+        for (int pass = 0; pass < 4; pass++) {
+            try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), false, 4)) {
+                int[] colors = refinedColors(service, frame, coloring, deepZoom);
+                if (expected == null) {
+                    expected = colors;
+                    assertFalse(Arrays.equals(AdaptivePngExportService.colorBaseFrame(
+                            frame.samplePlane(), coloring), colors), "The fixture must have AA candidates");
+                    continue;
+                }
+                for (int index = 0; index < colors.length; index++) {
+                    assertEquals(expected[index], colors[index], "pass " + pass + " differs at pixel " + index);
+                }
+            }
+        }
+    }
+
+    private static int[] refinedColors(InteractiveAntialiasService service, RenderFrame frame,
+                                       SmoothPaletteColoring coloring, boolean deepZoom)
+            throws InterruptedException {
+        int width = frame.samplePlane().width();
+        int[] colors = AdaptivePngExportService.colorBaseFrame(frame.samplePlane(), coloring);
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        RefinedPixelSnapshot empty = RefinedPixelSnapshot.empty(width, frame.samplePlane().height());
+        java.util.function.BiConsumer<RenderRegion, int[]> publish = (region, tile) -> {
+            for (int row = 0; row < region.height(); row++) {
+                System.arraycopy(tile, row * region.width(), colors,
+                        (region.y() + row) * width + region.x(), region.width());
+            }
+        };
+        if (deepZoom) {
+            service.refineDeep(frame, coloring, empty, Runnable::run, publish, completed::countDown, failure::set);
+        } else {
+            service.refine(frame, coloring, empty, Runnable::run, publish, completed::countDown, failure::set);
+        }
+        assertTrue(completed.await(60, TimeUnit.SECONDS));
+        assertNull(failure.get());
+        return colors;
+    }
+
     private static RenderFrame mandelbrotFrame() throws InterruptedException {
         RenderFrame frame = RenderFrame.create(new RenderRequest(
                 new FractalCalculator(FractalPreset.MANDELBROT.createFormula()),

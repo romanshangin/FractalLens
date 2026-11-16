@@ -81,8 +81,9 @@ public final class PersistentFrameStore implements AutoCloseable {
      * Version of the calculated sample semantics. Increment it whenever a formula,
      * backend selection, precision policy or sample encoding change alters the samples
      * that the same key produces, so older entries are discarded instead of shown.
+     * Version 2: deep Julia recovery references became coordinate-determined.
      */
-    static final int CALCULATION_VERSION = 1;
+    static final int CALCULATION_VERSION = 2;
 
     private static final byte[] MAGIC = "FLFRAME\0".getBytes(StandardCharsets.US_ASCII);
     static final String SUFFIX = ".frame";
@@ -93,8 +94,9 @@ public final class PersistentFrameStore implements AutoCloseable {
      * Version of the antialiasing semantics: subpixel sampling grids, candidate edge
      * thresholds, phase encoding and color averaging. Increment it whenever a change alters
      * the AA colors or samples stored for an unchanged frame and coloring.
+     * Version 2: deep AA recovery references became coordinate-determined.
      */
-    static final int ANTIALIAS_VERSION = 1;
+    static final int ANTIALIAS_VERSION = 2;
     private static final byte[] REFINEMENT_MAGIC = "FLAAREF\0".getBytes(StandardCharsets.US_ASCII);
     static final String REFINEMENT_SUFFIX = ".aa";
     private static final int MAX_PALETTE_STOPS = 4_096;

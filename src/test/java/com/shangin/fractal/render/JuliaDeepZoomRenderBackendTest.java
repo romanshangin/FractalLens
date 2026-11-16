@@ -235,6 +235,32 @@ class JuliaDeepZoomRenderBackendTest {
         assertEquals(0, sampler.fallbackPixelCount(), "Avoid per-pixel BigDecimal recovery in the reported view");
     }
 
+    @Test
+    void recoveredSamplesDoNotDependOnSamplingOrder() {
+        // Long orbits beside the repelling fixed point exceed the primary reference's error bound.
+        RenderJob job = new RenderJob(FormulaDefinition.forPreset(FractalPreset.JULIA, OrbitTrap.NONE),
+                new Viewport(
+                        "1.527503118643534632274607931351916169475312417511732493905728256658568636525695786020421879731335118",
+                        "-0.0759121783522878653764568658687429427997344025257309526545062431394591595504218065971744205889118132",
+                        "1e-40"), 64, 48, 20_000);
+        var grid = job.preciseGrid();
+        var forward = JuliaReferenceSampler.create(job, grid, () -> false);
+        var backward = JuliaReferenceSampler.create(job, grid, () -> false);
+        assertNotNull(forward);
+        assertNotNull(backward);
+        FractalSample[] samples = new FractalSample[job.width() * job.height()];
+        for (int index = 0; index < samples.length; index++) {
+            samples[index] = forward.sample(grid.realAt(index % job.width()),
+                    grid.imaginaryAt(index / job.width()), () -> false);
+        }
+        for (int index = samples.length - 1; index >= 0; index--) {
+            assertEquals(samples[index], backward.sample(grid.realAt(index % job.width()),
+                    grid.imaginaryAt(index / job.width()), () -> false),
+                    "sample " + index + " must not depend on which samples were taken first");
+        }
+        assertTrue(forward.referenceBuildCount() > 1, "The fixture must exercise recovery references");
+    }
+
     /** The repelling fixed point (1 + sqrt(1 - 4c)) / 2 of the default binary Julia constant. */
     private static BigDecimal[] repellingFixedPoint(MathContext mc) {
         BigDecimal a = BigDecimal.ONE.subtract(new BigDecimal(-0.8).multiply(BigDecimal.valueOf(4)));

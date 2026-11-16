@@ -252,14 +252,19 @@ class PersistentFrameStoreTest {
 
     @Test
     void discardsEntriesOfAnotherCalculationVersion() throws Exception {
-        calculateAndStore(mandelbrot());
-        Path file = storedFiles().getFirst();
-        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
-            channel.write(ByteBuffer.allocate(Integer.BYTES)
-                    .putInt(0, PersistentFrameStore.CALCULATION_VERSION + 1), 8 + Integer.BYTES);
-        }
+        assertTrue(PersistentFrameStore.CALCULATION_VERSION >= 2,
+                "Version 1 frames hold deep Julia samples of order-dependent recovery references");
+        for (int version : new int[]{PersistentFrameStore.CALCULATION_VERSION - 1,
+                PersistentFrameStore.CALCULATION_VERSION + 1}) {
+            calculateAndStore(mandelbrot());
+            Path file = storedFiles().getFirst();
+            try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
+                channel.write(ByteBuffer.allocate(Integer.BYTES).putInt(0, version), 8 + Integer.BYTES);
+            }
 
-        assertEquals(1, renderAgain(mandelbrot()).calculated());
+            assertEquals(1, renderAgain(mandelbrot()).calculated(), "version " + version);
+            assertEquals(0, renderAgain(mandelbrot()).calculated(), "the recalculated entry is stored again");
+        }
     }
 
     @Test
