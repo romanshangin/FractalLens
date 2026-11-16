@@ -513,7 +513,11 @@ Defaults preserve earlier behavior: standard Antialiased display, deep Base only
 Mandelbrot/Julia requiring precise rendering use the deep setting, all other
 frames the standard setting; both remain editable at any zoom. Deep AA uses
 candidate-only `refineDeep`; Antialiased display shows refined tiles only and
-may take much longer than base rendering.
+may take much longer than base rendering. AA is deterministic: repeated passes
+over the same frame, coloring and mode produce identical pixels. Deep AA
+samples the primary reference cannot resolve use the recovery reference of a
+fixed lattice point near the sample (16 pixels apart), then exact iteration,
+so no sample depends on worker scheduling or on which samples ran first.
 
 #### Antialiasing candidates
 

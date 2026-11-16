@@ -960,26 +960,37 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
             return Optional.empty();
         }
-        return Optional.of(new PreciseSampler(
-                job,
-                grid.mathContext(),
-                new ReferencePool(job, grid.mathContext(), primary, bla)));
+        MathContext context = grid.mathContext();
+        return Optional.of(new PreciseSampler(job, context, primary, bla,
+                new RecoveryReferenceLattice<>(primary.cReal(), primary.cImaginary(),
+                        grid.realStep(), grid.imaginaryStep(), context, MAX_ADDITIONAL_REFERENCES,
+                        (real, imaginary, stop) -> ReferenceOrbit.create(job, real, imaginary, context, stop))));
     }
 
-    /** Shared-reference arbitrary-coordinate sampler used by deep antialiasing. */
+    /**
+     * Arbitrary-coordinate sampler used by deep antialiasing. A sample the primary reference
+     * cannot resolve uses the recovery reference of its lattice point, then exact iteration,
+     * so every sample is a function of its coordinate however workers interleave.
+     */
     public static final class PreciseSampler {
         private final RenderJob job;
         private final MathContext mathContext;
-        private final ReferencePool referencePool;
+        private final ReferenceOrbit primary;
+        private final MandelbrotBlaTable primaryBla;
+        private final RecoveryReferenceLattice<ReferenceOrbit> recovery;
 
         private PreciseSampler(
                 RenderJob job,
                 MathContext mathContext,
-                ReferencePool referencePool
+                ReferenceOrbit primary,
+                MandelbrotBlaTable primaryBla,
+                RecoveryReferenceLattice<ReferenceOrbit> recovery
         ) {
             this.job = job;
             this.mathContext = mathContext;
-            this.referencePool = referencePool;
+            this.primary = primary;
+            this.primaryBla = primaryBla;
+            this.recovery = recovery;
         }
 
         /** Returns {@code null} only when the supplied generation is cancelled. */
@@ -995,7 +1006,6 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 return null;
             }
 
-            ReferenceOrbit primary = referencePool.primary();
             double deltaReal = cReal.subtract(primary.cReal(), mathContext).doubleValue();
             double deltaImaginary = cImaginary.subtract(
                     primary.cImaginary(), mathContext).doubleValue();
@@ -1005,14 +1015,28 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 return new FractalSample(job.maxIterations(), false, 0.0, 0.0);
             }
 
-            PerturbationResult result = referencePool.calculate(
-                    cReal, cImaginary, deltaReal, deltaImaginary,
-                    job.maxIterations(), cancelled);
+            PerturbationResult result = perturb(
+                    primary, deltaReal, deltaImaginary, job.maxIterations(), primaryBla, cancelled);
             if (result.reliable()) {
                 return result.sample();
             }
+            ReferenceOrbit reference = recovery.reference(deltaReal, deltaImaginary, cancelled);
+            if (reference != null) {
+                result = perturb(reference,
+                        cReal.subtract(reference.cReal(), mathContext).doubleValue(),
+                        cImaginary.subtract(reference.cImaginary(), mathContext).doubleValue(),
+                        job.maxIterations(), null, cancelled);
+                if (result.reliable()) {
+                    return result.sample();
+                }
+            }
             return calculateHighPrecision(
                     cReal, cImaginary, mathContext, job.maxIterations(), cancelled);
+        }
+
+        /** Recovery references built so far, for tests. */
+        long recoveryReferenceBuildCount() {
+            return recovery.buildCount();
         }
     }
 

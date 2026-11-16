@@ -18,14 +18,13 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
     private static final double LOG2_10 = Math.log(10) / Math.log(2);
     // Scaled deltas return to plain doubles once their low components stay far from underflow.
     private static final int UNSCALED_EXPONENT = -900;
+    private static final int RECOVERY_REFERENCES = 8;
     private static final int RESCALE_EXPONENT = 128;
     private final RenderJob job;
     private final MathContext context;
     private final PreciseFractalSampler fallback;
     private final Reference primary;
-    private final java.util.concurrent.ConcurrentMap<Thread, Recovery> recovery =
-            new java.util.concurrent.ConcurrentHashMap<>();
-    private final LongAdder referenceBuilds = new LongAdder();
+    private final RecoveryReferenceLattice<Reference> recovery;
     private final LongAdder fallbackPixels = new LongAdder();
 
     private JuliaReferenceSampler(RenderJob job, PreciseRenderGrid grid, Reference primary) {
@@ -33,7 +32,10 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
         this.context = grid.mathContext();
         this.fallback = JuliaDeepZoomRenderBackend.sampler(job, context);
         this.primary = primary;
-        referenceBuilds.increment();
+        // A few recovery orbits, each as large as the primary one, cover a worker's neighborhood.
+        this.recovery = new RecoveryReferenceLattice<>(primary.startReal, primary.startImaginary,
+                grid.realStep(), grid.imaginaryStep(), context, RECOVERY_REFERENCES,
+                (real, imaginary, cancelled) -> reference(job, context, real, imaginary, cancelled));
     }
 
     static JuliaReferenceSampler create(RenderJob job, PreciseRenderGrid grid, BooleanSupplier cancelled) {
@@ -47,24 +49,21 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
         if (stopped(cancelled)) return null;
         FractalSample sample = perturb(primary, real, imaginary, cancelled);
         if (sample != null || stopped(cancelled)) return sample;
-        Recovery local = recovery.computeIfAbsent(Thread.currentThread(), ignored -> new Recovery());
-        if (local.reference != null) {
-            sample = perturb(local.reference, real, imaginary, cancelled);
-            if (sample != null || stopped(cancelled)) return sample;
+        // The recovery orbit depends only on the sample's coordinate, never on worker history.
+        Reference nearby = recovery.reference(
+                real.subtract(primary.startReal, context).doubleValue(),
+                imaginary.subtract(primary.startImaginary, context).doubleValue(), cancelled);
+        if (nearby != null) {
+            sample = perturb(nearby, real, imaginary, cancelled);
+            if (sample != null) return sample;
         }
-        // Bounded worker-local references avoid rebuilding a BigDecimal orbit for every nearby pixel.
-        if (local.builds < 8) {
-            local.reference = reference(job, context, real, imaginary, cancelled);
-            local.builds++;
-            if (local.reference == null) return null;
-            referenceBuilds.increment();
-            if (local.reference.terminal != null) return local.reference.terminal;
-        }
+        if (stopped(cancelled)) return null;
         fallbackPixels.increment();
         return fallback.sample(real, imaginary, cancelled);
     }
 
-    long referenceBuildCount() { return referenceBuilds.sum(); }
+    /** Exact orbits built: the primary one plus recovery orbits, counting rebuilds after eviction. */
+    long referenceBuildCount() { return 1 + recovery.buildCount(); }
     long fallbackPixelCount() { return fallbackPixels.sum(); }
 
     private FractalSample perturb(Reference ref, BigDecimal real, BigDecimal imaginary,
@@ -259,10 +258,5 @@ final class JuliaReferenceSampler implements PreciseFractalSampler {
             double result = product + tail;
             return new Wide(result, tail - (result - product));
         }
-    }
-
-    private static final class Recovery {
-        Reference reference;
-        int builds;
     }
 }

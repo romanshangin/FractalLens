@@ -315,6 +315,45 @@ class MandelbrotPerturbationRenderBackendTest {
     }
 
     @Test
+    void preciseSamplesDoNotDependOnSamplingOrderWhenGlitchesNeedRecoveryReferences() {
+        // The antenna tip's centre orbit glitches over much of the frame.
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-2", "0", "1e-14"), 96, 64, 2_688);
+        PreciseRenderGrid grid = job.preciseGrid();
+        List<BigDecimal[]> points = new ArrayList<>();
+        for (int y = 0; y < job.height(); y++) {
+            for (int x = 0; x < job.width(); x++) {
+                points.add(new BigDecimal[]{grid.realAt(x), grid.imaginaryAt(y)});
+            }
+        }
+        MandelbrotPerturbationRenderBackend.PreciseSampler forward =
+                MandelbrotPerturbationRenderBackend.createPreciseSampler(job, () -> false).orElseThrow();
+        MandelbrotPerturbationRenderBackend.PreciseSampler backward =
+                MandelbrotPerturbationRenderBackend.createPreciseSampler(job, () -> false).orElseThrow();
+        FractalSample[] forwardSamples = new FractalSample[points.size()];
+        for (int index = 0; index < points.size(); index++) {
+            forwardSamples[index] = forward.sample(points.get(index)[0], points.get(index)[1], () -> false);
+        }
+        for (int index = points.size() - 1; index >= 0; index--) {
+            assertEquals(forwardSamples[index],
+                    backward.sample(points.get(index)[0], points.get(index)[1], () -> false),
+                    "sample " + index + " must not depend on which samples were taken first");
+        }
+        assertTrue(forward.recoveryReferenceBuildCount() > 1,
+                "the fixture must exercise recovery references");
+
+        for (int index = 0; index < points.size(); index += 397) {
+            HighPrecisionSample expected = highPrecisionSample(
+                    points.get(index)[0], points.get(index)[1], grid.mathContext(), job.maxIterations());
+            assertEquals(expected.iterations(), forwardSamples[index].iterations(), "pixel " + index);
+            assertEquals(expected.escaped(), forwardSamples[index].escaped(), "pixel " + index);
+            assertEquals(expected.smoothIterations(), forwardSamples[index].smoothIterations(), 1e-6,
+                    "pixel " + index);
+        }
+    }
+
+    @Test
     void blaMatchesScalarAndHighPrecisionOnADeepBoundaryWithEscapingAndBoundedPixels() throws Exception {
         RenderFrame frame = assertBlaMatchesControls(new Viewport("0", "1", "1e-30"), 137);
         int escaped = 0;

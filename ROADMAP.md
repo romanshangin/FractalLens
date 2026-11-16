@@ -363,7 +363,7 @@ separately, outside the scope of this macOS acceptance.
   alone are approximately 74 MiB without orbit-trap distances or 119 MiB with
   them, before masks, AA and other overhead. Compression gains and I/O latency
   require measurement; these sizes are arithmetic estimates, not RSS evidence.
-- [ ] **Investigate nondeterministic AA recalculation.** Found during AA
+- [x] **Investigate nondeterministic AA recalculation.** Found during AA
   persistence verification (2026-11-15, macOS, deep Mandelbrot in Fast mode at
   2592x1674): two AA passes over the same restored base frame produced
   different colors at 1,687 pixels (up to 7/255 per channel), and two launches
@@ -375,6 +375,28 @@ separately, outside the scope of this macOS acceptance.
   Add a regression test that compares repeated passes pixel by pixel, including
   deep zoom. Correctness acceptance below compares restored AA with recalculated
   AA and depends on this item.
+  Resolved (2026-11-15): the deep AA samplers chose recovery references by
+  worker scheduling. Mandelbrot's precise sampler shared a pool of references
+  built at whichever glitched samples came first, bounded by a first-come
+  count; Julia kept per-worker references. A glitched sample's value therefore
+  depended on timing. Both now use the recovery reference of a fixed lattice
+  point near the sample (16 pixels apart, cached within a bounded count that
+  affects only rebuilding), then exact iteration. Batch merge order, candidate
+  selection and sample-cache rejection do not change colors. Portable tests
+  sample a glitch-heavy Mandelbrot view (`-2`, `1e-14`) and a Julia recovery
+  view in opposite orders, and compare repeated multi-worker deep and standard
+  AA passes pixel by pixel; the order tests fail on the previous samplers. The
+  deep Mandelbrot base render still shares a scheduling-dependent reference
+  pool, so cold base frames of glitch-heavy views may differ slightly; see the
+  next item.
+- [ ] **Make deep Mandelbrot base rendering deterministic.** The perturbation
+  backend's shared recovery reference pool is filled in glitch-discovery order
+  and capped at 64 references, so two cold renders of a glitch-heavy view can
+  differ in a few pixels (seen as differing AA candidate counts after cold
+  starts during AA persistence verification, 2026-11-15). Apply a
+  coordinate-determined recovery choice like the deep AA samplers, measure
+  first-visible latency and completion on glitch-heavy and BLA-friendly scenes
+  against the current backend, and add a repeated-render pixel comparison.
 - [ ] **Correctness acceptance:** compare stored/restored samples and complete
   displayed frames with their source, including deep Mandelbrot and Julia,
   other presets, palette changes, all display modes and parameter changes.

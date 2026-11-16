@@ -23,8 +23,13 @@ digits and exact per-pixel orbit cost beyond pixel-scale needs.
   Two-component double arithmetic carries the small displacement through the
   critical-point neighborhood. The error propagation uses the actual orbit
   derivative 2 abs(z), retaining rounding/error bounds through reference reindexing.
-- Uncertain escape decisions and growing error use bounded per-worker
-  recovery references, then an exact BigDecimal fallback.
+- Uncertain escape decisions and growing error use a recovery reference, then
+  an exact BigDecimal fallback. Recovery references start at fixed lattice
+  points 16 pixels apart around the primary reference; a sample uses the point
+  nearest to it, so its value depends only on its coordinate, never on worker
+  scheduling or sampling order. A bounded cache of eight such orbits only saves
+  rebuilding (2026-11-15; previously up to eight per-worker references built at
+  the failing samples, which made repeated passes differ).
 - Pixel deltas below the normal-double range (P2.5) are carried as
   `delta * 2^exponent` with the error bound in the same units. The quadratic
   term carries the extra `2^exponent` factor; the delta is rescaled when its

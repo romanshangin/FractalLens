@@ -224,12 +224,17 @@ class PersistentRefinementStoreTest {
         assertNull(restore(job));
         assertFalse(Files.exists(file));
 
-        byte[] outdated = valid.clone();
-        // Magic, format version and calculation version precede the AA version.
-        ByteBuffer.wrap(outdated).putInt(8 + 2 * Integer.BYTES, PersistentFrameStore.ANTIALIAS_VERSION + 1);
-        Files.write(file, outdated);
-        assertNull(restore(job));
-        assertFalse(Files.exists(file));
+        assertTrue(PersistentFrameStore.ANTIALIAS_VERSION >= 2,
+                "Version 1 AA holds deep samples of order-dependent recovery references");
+        for (int version : new int[]{PersistentFrameStore.ANTIALIAS_VERSION - 1,
+                PersistentFrameStore.ANTIALIAS_VERSION + 1}) {
+            byte[] outdated = valid.clone();
+            // Magic, format version and calculation version precede the AA version.
+            ByteBuffer.wrap(outdated).putInt(8 + 2 * Integer.BYTES, version);
+            Files.write(file, outdated);
+            assertNull(restore(job), "AA version " + version);
+            assertFalse(Files.exists(file));
+        }
 
         Files.write(file, valid);
         assertNotNull(restore(job), "The intact entry still restores");
