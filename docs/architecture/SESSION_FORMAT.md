@@ -218,7 +218,18 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   coloring. A file is written only beside a stored base frame, after the visit's
   AA pass, with the same 1 s settle delay as frames; AA whose complete header,
   payload checksum included, equals the stored file's is not rewritten, so a
-  restored visit that keeps its AA unchanged writes nothing. The header repeats the frame key and
+  restored visit that keeps its AA unchanged writes nothing. AA retained with
+  colors but without samples (the in-memory frame cache drops AA samples first
+  when it runs short, for example while another fractal is shown) keeps the
+  samples already stored for the frame, which are exact for its key and
+  `ANTIALIAS_VERSION`; returning to the frame therefore neither rewrites
+  unchanged AA nor loses its samples. Such a return also reads the stored
+  samples on the render thread once the reused frame completes (only on the
+  viewport's fresh grid, where they can match) and binds them to the
+  interactive AA service, so a palette change in the same launch recolors
+  without a new AA pass. A return in Base only binds them hidden, so a later
+  switch to an AA mode reuses them instead of supersampling again. The header
+  repeats the frame key and
   grid and carries the AA-specific counts, bounded before allocation; samples
   whose memory would exceed the interactive AA sample cache budget
   (`fractal.aaCache.maxBytes`, 512 MiB by default) are rejected, and the whole

@@ -140,6 +140,7 @@ public final class FractalRenderService implements AutoCloseable {
     ) {
         submitRender(
                 frame,
+                false,
                 callbackExecutor,
                 onProgress,
                 null,
@@ -147,6 +148,22 @@ public final class FractalRenderService implements AutoCloseable {
                 onSuccess,
                 onError
         );
+    }
+
+    /**
+     * Starts a render without diagnostic timings that, when this service persists frames and
+     * {@code readStoredSamples} is set, also reads the AA samples stored for the frame once it
+     * completes, for {@link #takeRestoredRefinement}. A cancelled render reads nothing.
+     */
+    public void render(
+            RenderFrame frame,
+            boolean readStoredSamples,
+            Executor callbackExecutor,
+            Consumer<RenderProgressBatch> onProgress,
+            Consumer<RenderFrame> onSuccess,
+            Consumer<Throwable> onError
+    ) {
+        submitRender(frame, readStoredSamples, callbackExecutor, onProgress, null, null, onSuccess, onError);
     }
 
     /** Starts a render and reports calculation and per-tile timings. */
@@ -164,6 +181,7 @@ public final class FractalRenderService implements AutoCloseable {
 
         submitRender(
                 frame,
+                false,
                 callbackExecutor,
                 onProgress,
                 onCalculationComplete,
@@ -175,6 +193,7 @@ public final class FractalRenderService implements AutoCloseable {
 
     private synchronized void submitRender(
             RenderFrame frame,
+            boolean readStoredSamples,
             Executor callbackExecutor,
             Consumer<RenderProgressBatch> onProgress,
             LongConsumer onCalculationComplete,
@@ -191,7 +210,7 @@ public final class FractalRenderService implements AutoCloseable {
                 ? new RenderDiagnostics(renderId) : null;
         currentDiagnostics = diagnostics;
         if (diagnostics != null) diagnosticsListener.accept(diagnostics);
-        Runnable operation = () -> executeRender(renderId, frame, callbackExecutor, onProgress,
+        Runnable operation = () -> executeRender(renderId, frame, readStoredSamples, callbackExecutor, onProgress,
                 onCalculationComplete, onTileTimingComplete, onSuccess, onError, diagnostics);
         if (diagnostics == null) currentRender = coordinator.submit(operation);
         else {
@@ -212,6 +231,7 @@ public final class FractalRenderService implements AutoCloseable {
     private void executeRender(
             long renderId,
             RenderFrame frame,
+            boolean readStoredSamples,
             Executor callbackExecutor,
             Consumer<RenderProgressBatch> onProgress,
             LongConsumer onCalculationComplete,
@@ -257,6 +277,14 @@ public final class FractalRenderService implements AutoCloseable {
                 throw new IllegalStateException(
                         "Completed render contains invalid pixels"
                 );
+            }
+
+            if (readStoredSamples && backend instanceof PersistentFrameRenderBackend persistent) {
+                persistent.readStoredSamples(resultFrame, cancelled);
+                if (shouldCancel(renderId)) {
+                    progressBatcher.cancel();
+                    return;
+                }
             }
 
             if (onCalculationComplete != null) {

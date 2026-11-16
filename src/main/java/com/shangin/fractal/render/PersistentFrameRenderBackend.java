@@ -14,7 +14,9 @@ import java.util.function.Consumer;
  *
  * <p>The antialiasing stored with a restored frame is read on the render thread too, after
  * the frame's region is reported, and kept for the caller of the completed render to
- * {@linkplain #takeRestoredRefinement take}; a newer render discards it.
+ * {@linkplain #takeRestoredRefinement take}; a newer render discards it. A completed
+ * frame that was not restored can {@linkplain #readStoredSamples read} the AA samples
+ * stored for it the same way.
  */
 public final class PersistentFrameRenderBackend implements RenderBackend {
 
@@ -59,6 +61,21 @@ public final class PersistentFrameRenderBackend implements RenderBackend {
             store.saveWhenSettled(result);
         }
         return result;
+    }
+
+    /**
+     * Reads the AA samples stored for {@code frame}, a frame this backend just completed
+     * without restoring it, such as a cached frame shown again after the in-memory frame
+     * cache dropped its samples. They are handed out by {@link #takeRestoredRefinement} as
+     * AA without colors; nothing is kept on a miss or cancellation. Render thread only.
+     */
+    public void readStoredSamples(RenderFrame frame, BooleanSupplier cancelled) {
+        Objects.requireNonNull(frame);
+        Objects.requireNonNull(cancelled);
+        AntialiasSampleCache.Retained samples = store.loadStoredSamples(frame, cancelled);
+        if (samples != null && !cancelled.getAsBoolean()) {
+            keepRestored(frame, new RetainedRefinement(null, null, samples));
+        }
     }
 
     private void keepRestored(RenderFrame frame, RetainedRefinement refinement) {

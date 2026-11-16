@@ -63,8 +63,15 @@ public final class FractalRenderController implements AutoCloseable {
     /** A visible frame showing retained AA colors whose palette-independent samples were not retained. */
     private record UnsampledAntialias(RenderFrame frame, boolean deepZoom) {}
     private UnsampledAntialias unsampledAntialias;
-    /** A palette change to repeat once the pass still publishing the visible frame finishes. */
-    private ColoringSettings deferredResampleColoring;
+    /**
+     * A palette change to repeat once the pass still publishing the visible frame finishes:
+     * one that frame did not show yet, or one whose AA must be sampled again after the pass.
+     * It is repeated only while it is still the latest request of its recolor epoch.
+     *
+     * @param onApplied runs once it is published, if it was not published before
+     */
+    private record DeferredRecoloring(ColoringSettings settings, Runnable onApplied, long epoch, long request) {}
+    private DeferredRecoloring deferredRecoloring;
     /** Whether {@link #activeFrame} uses deep-zoom AA. */
     private boolean activeDeepZoom;
     private long resampleGeneration = -1;
@@ -114,6 +121,12 @@ public final class FractalRenderController implements AutoCloseable {
                                    RenderFrameCache frameCache) {
         this(surface, renderService, InteractiveAntialiasService::recolorCachedInto, frameCache,
                 new InteractiveAntialiasService());
+    }
+
+    /** Uses a caller-supplied recolor operation and frame cache, for example to order a recolor against a render. */
+    public FractalRenderController(FractalSurface surface, FractalRenderService renderService,
+                                   RecolorOperation recolorOperation, RenderFrameCache frameCache) {
+        this(surface, renderService, recolorOperation, frameCache, new InteractiveAntialiasService());
     }
 
     /** Uses caller-sized completed-frame and AA sample caches, for example to exercise their budgets. */
@@ -184,6 +197,8 @@ public final class FractalRenderController implements AutoCloseable {
             }
             int[] ready = acquireRecolorBuffer(frame.samplePlane().size());
             PaletteRecolorTiming timing;
+            // Read first: samples bound during the recolor may be missing from its colors.
+            long sampleBinding = antialiasService.sampleBinding();
             try {
                 timing = recolorOperation.apply(
                         antialiasService, frame, coloring, ready, paletteRecolorBackend);
@@ -210,12 +225,29 @@ public final class FractalRenderController implements AutoCloseable {
                     if (epoch == recolorEpoch.get()
                             && frame == activeFrame
                             && request > publishedRecolorSequence.get()) {
+                        if (antialiasService.sampleBinding() != sampleBinding) {
+                            // Samples bound meanwhile, such as those read for a returned frame,
+                            // are not in these colors: recolor again unless a newer change will.
+                            if (request == recolorSequence.get()) recolor(settings, onApplied);
+                            return;
+                        }
                         long presentationStarted = System.nanoTime();
-                        surface.applyRecolor(frame, ready, settings);
+                        boolean published = surface.applyRecolor(frame, ready, settings);
                         lastPaletteRecolorTiming.set(timing.withPublication(
                                 presentationStarted - queued, System.nanoTime() - presentationStarted));
                         publishedRecolorSequence.set(request);
-                        resampleAntialiasIfNeeded(frame, settings, true);
+                        if (!published) {
+                            // The visit still publishes this frame in its scene's palette, and
+                            // AA it binds later may change what the palette needs: recolor again
+                            // once it finishes, then check its AA.
+                            deferredRecoloring = new DeferredRecoloring(settings, onApplied, epoch, request);
+                            return;
+                        }
+                        // An earlier palette waiting for the visit is superseded by this one.
+                        if (deferredRecoloring != null && deferredRecoloring.request() < request) {
+                            deferredRecoloring = null;
+                        }
+                        resampleAntialiasIfNeeded(frame, settings, true, request);
                         onApplied.run();
                         if (request == recolorSequence.get()) replenishWidePreview();
                     }
@@ -328,7 +360,7 @@ public final class FractalRenderController implements AutoCloseable {
         // Hidden AA pixels belong to the visible frame only.
         hiddenRefinement = null;
         unsampledAntialias = null;
-        deferredResampleColoring = null;
+        deferredRecoloring = null;
 
         RenderFrame previousActiveFrame = activeFrame;
 
@@ -479,9 +511,15 @@ public final class FractalRenderController implements AutoCloseable {
          * --------------------------------
          */
 
+        // AA colors kept without their samples, which the frame cache dropped for its budget:
+        // the persistent store may still hold the samples, read once the frame completes.
+        // Base only binds them hidden, so switching to an AA mode later reuses them.
+        boolean readStoredSamples = carriedRefinement != null && carriedRefinement.samples() == null;
+
         surface.latency().mark("render_submit");
         renderService.render(
                 activeFrame,
+                readStoredSamples,
                 surface.latency().callbacks("base", Platform::runLater),
 
                 progress -> {
@@ -500,7 +538,8 @@ public final class FractalRenderController implements AutoCloseable {
                     frameCache.put(completedFrame);
                     // The new entry replaced its source's; keep the AA until this visit finishes its own.
                     if (carriedRefinement != null && completedFrame == targetFrame) {
-                        frameCache.retainRefinement(completedFrame, carriedRefinement);
+                        frameCache.retainRefinement(completedFrame,
+                                withStoredSamples(completedFrame, carriedRefinement));
                     } else if (completedFrame == targetFrame) {
                         renderService.takeRestoredRefinement(completedFrame).ifPresent(stored ->
                                 restoreStoredRefinement(completedFrame, stored, scene.coloring(), coloring,
@@ -628,21 +667,21 @@ public final class FractalRenderController implements AutoCloseable {
         if (activeFrame != null) spareFrameStorage.prepareFor(activeFrame.request());
         renderActivity.finish(renderGeneration);
         replenishWidePreview();
-        ColoringSettings deferred = deferredResampleColoring;
-        deferredResampleColoring = null;
-        if (deferred != null && activeFrame != null && (unsampledAntialias != null
-                && unsampledAntialias.frame() == activeFrame
-                || antialiasService.missesCandidates(activeFrame,
-                deferred.createStrategy(activeFrame.samplePlane()), activeDeepZoom))) {
+        DeferredRecoloring deferred = deferredRecoloring;
+        deferredRecoloring = null;
+        // A newer palette change, published or still pending, makes this one stale.
+        if (deferred != null && activeFrame != null && deferred.epoch() == recolorEpoch.get()
+                && deferred.request() == recolorSequence.get()) {
             // Publishes the palette on the finished frame, then samples any AA it still lacks.
-            recolor(deferred);
+            recolor(deferred.settings(), deferred.onApplied());
             return;
         }
         // A pass that skipped reused AA pixels may leave candidates of a steeper palette
         // untested. A pass that just ran in place is not repeated.
         CompletedRender displayed = surface.completedRender();
         if (renderGeneration != resampleGeneration && displayed != null && displayed.frame() == activeFrame) {
-            resampleAntialiasIfNeeded(activeFrame, displayed.scene().coloring(), false);
+            resampleAntialiasIfNeeded(activeFrame, displayed.scene().coloring(), false,
+                    publishedRecolorSequence.get());
         }
     }
 
@@ -726,7 +765,8 @@ public final class FractalRenderController implements AutoCloseable {
      * palette; existing samples are reused, so once finished, recoloring needs no AA pass.
      * Without a palette change, retained colors still fit and only missing candidates count.
      */
-    private void resampleAntialiasIfNeeded(RenderFrame frame, ColoringSettings settings, boolean paletteChanged) {
+    private void resampleAntialiasIfNeeded(RenderFrame frame, ColoringSettings settings, boolean paletteChanged,
+                                           long request) {
         // Base only shows no AA; returning to an AA mode restores or recalculates it.
         if (closed || frame != activeFrame || !antialiasService.cachedSamplesShown()) return;
         UnsampledAntialias tracked = unsampledAntialias;
@@ -745,10 +785,10 @@ public final class FractalRenderController implements AutoCloseable {
         CompletedRender displayed = surface.completedRender();
         boolean ownPassRunning = visibleBusy && !renderActivity.isCurrent(resampleGeneration);
         if (ownPassRunning || displayed == null || displayed.frame() != frame) {
-            deferredResampleColoring = settings;
+            deferredRecoloring = new DeferredRecoloring(settings, () -> {}, recolorEpoch.get(), request);
             return;
         }
-        deferredResampleColoring = null;
+        deferredRecoloring = null;
         long renderGeneration = renderActivity.beginRefinement();
         resampleGeneration = renderGeneration;
         visibleBusy = true;
@@ -798,6 +838,21 @@ public final class FractalRenderController implements AutoCloseable {
             unsampledAntialias = new UnsampledAntialias(frame, deepZoom);
             antialiasService.vouchForRestoredColors(frame, coloring, deepZoom);
         }
+    }
+
+    /**
+     * Rebinds the AA samples the persistent store read for a frame whose retained AA kept
+     * only its colors, so recoloring and later passes use them as if never dropped. Returns
+     * the retained AA with those samples, or unchanged without any. FX thread only.
+     */
+    private RetainedRefinement withStoredSamples(RenderFrame frame, RetainedRefinement carried) {
+        if (carried.samples() != null) return carried;
+        AntialiasSampleCache.Retained samples = renderService.takeRestoredRefinement(frame)
+                .map(RetainedRefinement::samples).orElse(null);
+        if (samples == null) return carried;
+        antialiasService.restoreSamples(frame, samples);
+        if (unsampledAntialias != null && unsampledAntialias.frame() == frame) unsampledAntialias = null;
+        return new RetainedRefinement(carried.pixels(), carried.coloring(), samples);
     }
 
     /**

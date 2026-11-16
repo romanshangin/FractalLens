@@ -529,7 +529,7 @@ class FractalSwitchFrameRetentionFxTest {
                 renderAndCapture(controller, surface, completed, julia);
                 assertNull(budget.refinementFor(mandelbrotFrame).orElseThrow().samples());
 
-                var deferredField = FractalRenderController.class.getDeclaredField("deferredResampleColoring");
+                var deferredField = FractalRenderController.class.getDeclaredField("deferredRecoloring");
                 deferredField.setAccessible(true);
                 var completions = new AtomicInteger();
                 var deferredAtVisitEnd = new AtomicReference<Boolean>();
