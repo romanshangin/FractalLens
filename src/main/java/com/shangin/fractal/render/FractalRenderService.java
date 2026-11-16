@@ -7,6 +7,7 @@ import com.shangin.fractal.gpu.PaletteRecolorBackend;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -89,6 +90,22 @@ public final class FractalRenderService implements AutoCloseable {
         this.progressScheduler = Objects.requireNonNull(progressScheduler);
         this.backend = Objects.requireNonNull(backend);
         this.gpuRuntime = Objects.requireNonNull(gpuRuntime);
+    }
+
+    /**
+     * Antialiasing stored in an earlier launch with {@code frame}, when the latest render
+     * restored that frame from the persistent frame store; handed out once.
+     */
+    public Optional<RetainedRefinement> takeRestoredRefinement(RenderFrame frame) {
+        return backend instanceof PersistentFrameRenderBackend persistent
+                ? persistent.takeRestoredRefinement(frame) : Optional.empty();
+    }
+
+    /** Stores a completed frame's finished antialiasing, when this service persists frames. */
+    public void saveRefinementWhenSettled(RenderFrame frame, RetainedRefinement refinement) {
+        if (backend instanceof PersistentFrameRenderBackend persistent) {
+            persistent.saveRefinementWhenSettled(frame, refinement);
+        }
     }
 
     /** Safe diagnostic snapshot for UI/logging; contains no native handles. */

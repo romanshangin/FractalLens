@@ -344,8 +344,13 @@ separately, outside the scope of this macOS acceptance.
   empty frame inside the normal render call; see
   [Stored completed frames](docs/architecture/SESSION_FORMAT.md#stored-completed-frames-p27-stage-b).
   Covered by portable unit tests only. Pan-reused frames (shifted grids) are
-  not stored. AA persistence, compression, measured
-  budgets, manual restart checks and the acceptance items below remain open.
+  not stored. AA persistence implemented, not accepted (2026-11-15): finished
+  AA colors with their coloring and the palette-independent AA samples are
+  stored beside the base frame under their own format and `ANTIALIAS_VERSION`
+  and restored with it, so an exact hit after a restart runs no candidate
+  detection or supersampling; covered by portable unit tests and a JavaFX
+  restart test on macOS. Compression, measured budgets, manual restart checks
+  and the acceptance items below remain open.
 - [ ] Use background, bounded I/O with lazy loading and explicit disk eviction.
   Prefer writing after frame completion instead of starting a large save at exit.
   Publish complete files atomically, validate metadata, lengths and integrity
@@ -358,6 +363,18 @@ separately, outside the scope of this macOS acceptance.
   alone are approximately 74 MiB without orbit-trap distances or 119 MiB with
   them, before masks, AA and other overhead. Compression gains and I/O latency
   require measurement; these sizes are arithmetic estimates, not RSS evidence.
+- [ ] **Investigate nondeterministic AA recalculation.** Found during AA
+  persistence verification (2026-11-15, macOS, deep Mandelbrot in Fast mode at
+  2592x1674): two AA passes over the same restored base frame produced
+  different colors at 1,687 pixels (up to 7/255 per channel), and two launches
+  with an empty frame store differed as well, so persistence is not the cause.
+  Find the source (for example the merge order of concurrent sample batches,
+  candidate selection that depends on tile completion order, or sample-cache
+  budget rejection), then make the AA output deterministic for an unchanged
+  frame, coloring and mode, or document and bound any accepted difference.
+  Add a regression test that compares repeated passes pixel by pixel, including
+  deep zoom. Correctness acceptance below compares restored AA with recalculated
+  AA and depends on this item.
 - [ ] **Correctness acceptance:** compare stored/restored samples and complete
   displayed frames with their source, including deep Mandelbrot and Julia,
   other presets, palette changes, all display modes and parameter changes.
