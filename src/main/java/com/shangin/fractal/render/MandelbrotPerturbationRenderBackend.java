@@ -894,7 +894,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     private static final int NOT_ESCAPED = 0;
     private static final int ESCAPED = 1;
     private static final int UNCERTAIN_ESCAPE = 2;
-    private static final int ERROR_EXPONENT_STEP = 256;
+    private static final long ERROR_EXPONENT_STEP = 256L;
     private static final double ERROR_MANTISSA_LIMIT = 0x1p256;
 
     /** Mutable complex value whose components share one binary exponent. */
