@@ -136,8 +136,13 @@ class MandelbrotPerturbationRenderBackendTest {
                 "a positive sub-double delta must not collapse back to c=2");
         assertEquals(1, frame.samplePlane().iterations(centerRow + 4),
                 "the right edge must retain its precise coordinate");
-        assertEquals(0, diagnostics.get().highPrecisionFallbackPixelCount(),
-                "scaled perturbation should avoid per-pixel BigDecimal iteration");
+        // Directly above and below c=2 the linear term cancels and |z|^2 - 4 is the square of the
+        // delta, far below the rounding bound of the stored reference: only those two pixels
+        // need exact iteration, which escapes them on the first iteration.
+        assertEquals(1, frame.samplePlane().iterations(2));
+        assertEquals(1, frame.samplePlane().iterations(2 * job.width() + 2));
+        assertEquals(2, diagnostics.get().highPrecisionFallbackPixelCount(),
+                "scaled perturbation should decide every other pixel");
     }
 
     @Test
@@ -315,6 +320,86 @@ class MandelbrotPerturbationRenderBackendTest {
     }
 
     @Test
+    void preciseSamplerDoesNotTreatAnUnderflowedSubpixelOffsetAsTheReference() {
+        // A third of a pixel is below the smallest double, so the offset from the reference
+        // converts to 0.0 although the sample is not the reference.
+        FractalSample[] samples = subpixelSampleAgainstHighPrecision("1e-330", "8e-330", true);
+        assertEquals(samples[0].escaped(), samples[1].escaped());
+        assertEquals(samples[0].iterations(), samples[1].iterations());
+    }
+
+    @Test
+    void preciseSamplerDoesNotDecideAnUncertainScaledEscapeAtTheAntennaTip() {
+        // The sample is exactly c = -2, whose orbit 0, -2, 2, 2, ... stays on the radius; the
+        // scaled-delta margin cancels to a rounding residue.
+        for (String[] frame : List.of(
+                new String[]{"3e-330", "18e-330"},
+                // The offset is subnormal rather than zero, so the delta starts much larger than
+                // its first error term.
+                new String[]{"2e-323", "12e-323"})) {
+            FractalSample[] samples = subpixelSampleAgainstHighPrecision(frame[0], frame[1], false);
+            assertFalse(samples[0].escaped(), frame[1]);
+            assertEquals(samples[0].escaped(), samples[1].escaped(), frame[1]);
+            assertEquals(samples[0].iterations(), samples[1].iterations(), frame[1]);
+        }
+    }
+
+    @Test
+    void scaledErrorBoundStaysTrackedWhileItsAbsoluteErrorIsInformative() {
+        // Beyond double range every pixel uses the scaled loop; on this orbit the bound relative
+        // to the delta exceeds the double range long before the absolute error matters.
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-0.8317528516858322713653476366999",
+                        "0.207813754242134522471317257011028", "1e-320"),
+                12, 8, 2_700);
+        for (int y = 0; y < job.height(); y += 3) {
+            for (int x = 0; x < job.width(); x += 3) {
+                double[] loss = MandelbrotPerturbationRenderBackend.scaledErrorBoundLoss(job, x, y);
+                if (!Double.isNaN(loss[0])) {
+                    assertTrue(Double.isFinite(loss[1]) && loss[1] > 1e-12,
+                            "bound dropped at iteration " + loss[0] + " with absolute error "
+                                    + loss[1] + " at " + x + "," + y);
+                }
+            }
+        }
+    }
+
+    /**
+     * Samples a third of a pixel right of the centre of a 3x3 frame at {@code -2 - offset}
+     * and returns the exact sample and the sampler's.
+     */
+    private static FractalSample[] subpixelSampleAgainstHighPrecision(
+            String offset, String scale, boolean offsetRoundsToZero) {
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport(new BigDecimal("-2").subtract(new BigDecimal(offset)).toPlainString(),
+                        "0", scale),
+                3, 3, 16);
+        PreciseRenderGrid grid = job.preciseGrid();
+        MandelbrotPerturbationRenderBackend.PreciseSampler sampler =
+                MandelbrotPerturbationRenderBackend.createPreciseSampler(
+                        job, () -> false).orElseThrow();
+        BigDecimal cReal = grid.realAt(1).add(grid.realStep().divide(
+                BigDecimal.valueOf(3), grid.mathContext()), grid.mathContext());
+        BigDecimal cImaginary = grid.imaginaryAt(1);
+        double offsetFromCentre = cReal.subtract(grid.realAt(1), grid.mathContext()).doubleValue();
+        assertTrue(Math.ulp(offsetFromCentre) * 16.0 > grid.realStep().doubleValue(),
+                "the offset must lose pixel resolution as a double");
+        if (offsetRoundsToZero) {
+            assertEquals(0.0, offsetFromCentre);
+        }
+
+        FractalSample actual = sampler.sample(cReal, cImaginary, () -> false);
+        HighPrecisionSample expected = highPrecisionSample(
+                cReal, cImaginary, grid.mathContext(), job.maxIterations());
+
+        assertNotNull(actual);
+        return new FractalSample[]{
+                new FractalSample(expected.iterations(), expected.escaped(), 0.0, 0.0), actual};
+    }
+
+    @Test
     void preciseSamplesDoNotDependOnSamplingOrderWhenGlitchesNeedRecoveryReferences() {
         // The antenna tip's centre orbit glitches over much of the frame.
         RenderJob job = new RenderJob(
@@ -350,6 +435,86 @@ class MandelbrotPerturbationRenderBackendTest {
             assertEquals(expected.escaped(), forwardSamples[index].escaped(), "pixel " + index);
             assertEquals(expected.smoothIterations(), forwardSamples[index].smoothIterations(), 1e-6,
                     "pixel " + index);
+        }
+    }
+
+    @Test
+    void baseSamplesDoNotDependOnTileOrderWhenGlitchesNeedRecoveryReferences() throws Exception {
+        // The antenna tip's centre orbit glitches over much of the frame.
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-2", "0", "1e-14"), 160, 96, 2_688);
+        RenderRegion top = new RenderRegion(0, 0, job.width(), job.height() / 2);
+        RenderRegion bottom = new RenderRegion(0, job.height() / 2, job.width(), job.height() - job.height() / 2);
+        RenderFrame forward = RenderFrame.create(job);
+        RenderFrame reordered = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(1, diagnostics::set)) {
+            backend.render(forward, () -> false, ignored -> {}, null);
+            assertTrue(forward.isComplete());
+            assertTrue(diagnostics.get().additionalReferenceOrbitCount() > 1,
+                    "the fixture must exercise recovery references");
+
+            // Calculate the bottom half first, then the top half, each in its own generation.
+            reordered.validity().markReady(top);
+            backend.render(reordered, () -> false, ignored -> {}, null);
+            reordered.validity().clear();
+            reordered.validity().markReady(bottom);
+            backend.render(reordered, () -> false, ignored -> {}, null);
+            assertTrue(reordered.isComplete());
+        }
+        try (MandelbrotPerturbationRenderBackend parallel = new MandelbrotPerturbationRenderBackend(4)) {
+            RenderFrame concurrent = RenderFrame.create(job);
+            parallel.render(concurrent, () -> false, ignored -> {}, null);
+            assertSameSamples(forward, concurrent, "multi-worker");
+        }
+        assertSameSamples(forward, reordered, "reordered");
+
+        assertMatchesHighPrecision(job, forward, "forward");
+    }
+
+    @Test
+    void escapeDecisionsWithinRoundingOfTheRadiusMatchHighPrecision() throws Exception {
+        // The escape radius crosses this frame: near x = 90, |z|^2 of the first iterations lies
+        // within double rounding of 4, so recovered pixels must not trust a perturbed decision.
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-2.000000000000001", "0", "7e-15"), 161, 97, 2_688);
+        for (int workers : new int[]{1, 4}) {
+            RenderFrame frame = RenderFrame.create(job);
+            try (MandelbrotPerturbationRenderBackend backend = new MandelbrotPerturbationRenderBackend(workers)) {
+                backend.render(frame, () -> false, ignored -> {}, null);
+            }
+            assertTrue(frame.isComplete());
+            assertMatchesHighPrecision(job, frame, workers + " workers");
+        }
+    }
+
+    private static void assertMatchesHighPrecision(RenderJob job, RenderFrame frame, String label) {
+        PreciseRenderGrid grid = job.preciseGrid();
+        for (int index = 0; index < frame.samplePlane().size(); index++) {
+            int x = index % job.width();
+            int y = index / job.width();
+            HighPrecisionSample expected = highPrecisionSample(
+                    grid.realAt(x), grid.imaginaryAt(y), grid.mathContext(), job.maxIterations());
+            String pixel = label + " pixel (" + x + ", " + y + ")";
+            assertEquals(expected.iterations(), frame.samplePlane().iterations(index), pixel);
+            assertEquals(expected.escaped(), frame.samplePlane().escaped(index), pixel);
+            assertEquals(expected.smoothIterations(), frame.samplePlane().smoothIterations(index), 1e-6, pixel);
+        }
+    }
+
+    private static void assertSameSamples(RenderFrame expected, RenderFrame actual, String label) {
+        for (int index = 0; index < expected.samplePlane().size(); index++) {
+            assertEquals(expected.samplePlane().iterations(index), actual.samplePlane().iterations(index),
+                    label + " iteration mismatch at " + index);
+            assertEquals(expected.samplePlane().escaped(index), actual.samplePlane().escaped(index),
+                    label + " escape mismatch at " + index);
+            assertEquals(Double.doubleToLongBits(expected.samplePlane().smoothIterations(index)),
+                    Double.doubleToLongBits(actual.samplePlane().smoothIterations(index)),
+                    label + " smooth mismatch at " + index);
         }
     }
 
@@ -507,8 +672,9 @@ class MandelbrotPerturbationRenderBackendTest {
                     .subtract(zi.multiply(zi, context), context).add(cReal, context);
             BigDecimal nextImaginary = zr.multiply(zi, context)
                     .multiply(BigDecimal.valueOf(2), context).add(cImaginary, context);
-            zr = nextReal;
-            zi = nextImaginary;
+            // Normalize zeros, whose scale would otherwise grow every iteration on the real axis.
+            zr = nextReal.signum() == 0 ? BigDecimal.ZERO : nextReal;
+            zi = nextImaginary.signum() == 0 ? BigDecimal.ZERO : nextImaginary;
             if (zr.multiply(zr, context).add(zi.multiply(zi, context)).compareTo(four) > 0) {
                 return new HighPrecisionSample(
                         iteration, true, zr.doubleValue(), zi.doubleValue());

@@ -58,6 +58,8 @@ benchmarks/**/tmp/fractallens-baseline-benchmark.lock
 /benchmarks/policies/*
 !/benchmarks/policies/p17-fresh-frame-preparation.json
 !/benchmarks/policies/viewport-precision-pr51.json
+!/benchmarks/policies/p27-deterministic-deep-base.json
+!/benchmarks/policies/p27-deterministic-deep-base-fx.json
 
 ### Claude Code ###
 .claude/settings.*.json

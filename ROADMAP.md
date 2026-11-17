@@ -386,10 +386,9 @@ separately, outside the scope of this macOS acceptance.
   sample a glitch-heavy Mandelbrot view (`-2`, `1e-14`) and a Julia recovery
   view in opposite orders, and compare repeated multi-worker deep and standard
   AA passes pixel by pixel; the order tests fail on the previous samplers. The
-  deep Mandelbrot base render still shares a scheduling-dependent reference
-  pool, so cold base frames of glitch-heavy views may differ slightly; see the
-  next item.
-- [ ] **Make deep Mandelbrot base rendering deterministic.** The perturbation
+  deep Mandelbrot base render then still shared a scheduling-dependent
+  reference pool; see the next item.
+- [x] **Make deep Mandelbrot base rendering deterministic.** The perturbation
   backend's shared recovery reference pool is filled in glitch-discovery order
   and capped at 64 references, so two cold renders of a glitch-heavy view can
   differ in a few pixels (seen as differing AA candidate counts after cold
@@ -397,6 +396,35 @@ separately, outside the scope of this macOS acceptance.
   coordinate-determined recovery choice like the deep AA samplers, measure
   first-visible latency and completion on glitch-heavy and BLA-friendly scenes
   against the current backend, and add a repeated-render pixel comparison.
+  Done (2026-11-16): a glitched base pixel uses the recovery reference of its
+  fixed lattice point, like the deep AA samplers (the origin point reuses the
+  primary orbit), then exact iteration. Scalar and scaled-delta perturbation
+  track a rounding bound on `z` while it stays within 1e-12 of `|z|` and send
+  escape decisions inside it to exact iteration; independent review found that
+  the lattice references otherwise accepted wrong first-iteration decisions near
+  the escape radius (161x97 at `-2.000000000000001`, `7e-15`: 388 wrong pixels
+  against 222 on the previous backend; none remain), and that deep AA samples
+  whose offset loses pixel resolution as a double were decided wrongly (now
+  scaled deltas with exact conversion). Stored frames and AA moved to version 3.
+  Portable tests require bit-identical samples across tile orders and worker
+  counts and compare complete glitch-heavy frames with exact iteration. In the
+  JavaFX pipeline (matrix 9.1-v4, which adds the antenna view `-2`, `1e-14` as
+  `deep-antenna`), completion passes non-inferiority on `deep-bla` and
+  `deep-glitch` (+1.9%), first visible publication keeps equal 3-5 ms medians
+  with inconclusive intervals, and on `deep-antenna` the previous backend
+  rendered a different frame on every render while the candidate rendered one
+  verified frame, 860 ms against 1,028 ms by median (exploratory). Frames
+  beyond double range cost about 14% more in screening. See the
+  [results](benchmarks/DEEP_BASE_DETERMINISM_RESULTS.md).
+- [ ] **Decide uncertain escapes in deep Mandelbrot perturbation.** Found while
+  making base rendering deterministic (2026-11-16): the BLA loop accepts an
+  escape decision even when `|z|^2` lies within rounding error of 4, and the
+  scalar and scaled loops stop checking once their rounding bound exceeds 1e-12
+  of `|z|` on long chaotic orbits, where they rely on the glitch criterion. Bound
+  the state error as the deep Julia sampler does, or treat near-radius
+  decisions as unreliable, and send them to recovery or exact iteration;
+  measure the cost on the deep matrix fixtures and compare complete frames
+  with exact iteration.
 - [ ] **Correctness acceptance:** compare stored/restored samples and complete
   displayed frames with their source, including deep Mandelbrot and Julia,
   other presets, palette changes, all display modes and parameter changes.

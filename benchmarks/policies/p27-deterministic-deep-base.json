@@ -1,0 +1,19 @@
+{
+  "version": "9.1-pairs-v1",
+  "purpose": "non_inferiority",
+  "sizes": "1512x982",
+  "process_pairs": 6,
+  "samples": 5,
+  "warmups": 3,
+  "timeout_seconds": 1800,
+  "runner": "headless",
+  "fixtures": "deep-glitch,deep-bla,deep-boundary",
+  "metrics": [
+    {"fixture": "deep-glitch", "step": "render", "metric": "first_new_region_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "deep-glitch", "step": "render", "metric": "backend_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "deep-bla", "step": "render", "metric": "first_new_region_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "deep-bla", "step": "render", "metric": "backend_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "deep-boundary", "step": "render", "metric": "first_new_region_ms", "role": "control", "max_ratio": 1.05},
+    {"fixture": "deep-boundary", "step": "render", "metric": "backend_ms", "role": "control", "max_ratio": 1.05}
+  ]
+}

@@ -265,10 +265,19 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   edge thresholds, phase encoding and color averaging) and must be incremented
   whenever such a change alters the AA stored for an unchanged frame and
   coloring; older AA is then discarded while its frames stay valid.
-  Both are 2 since deep recovery references became coordinate-determined
+  Both became 2 when deep recovery references became coordinate-determined
   (2026-11-15): version 1 holds deep Julia frames and deep AA computed with
   order-dependent recovery references, which a recalculation need not
   reproduce, so those entries are discarded and recalculated.
+  Both became 3 on 2026-11-16: deep Mandelbrot base frames followed with
+  coordinate-determined recovery references (version 2 frames used references
+  built in glitch-discovery order), and scalar perturbation, which recovery
+  uses for base frames and deep Mandelbrot AA, now sends escape decisions
+  within its rounding bound to exact iteration; deep AA samples whose offset
+  loses pixel resolution as a double use scaled deltas, whose loop, also used
+  by base frames beyond double range, now converts exactly and checks escape
+  decisions the same way. Version 2 entries are
+  discarded and recalculated.
 - **Loading.** Only an empty frame (no reused pixels) is restored, on the render
   thread inside the normal render call, so generations, cancellation and atomic
   publication are unchanged: the frame is published as one completed region.

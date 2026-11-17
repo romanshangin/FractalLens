@@ -74,6 +74,7 @@ no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism
 | Preview byte-budget QB2 retained at defaults on the measured Apple Silicon matrix: all timing, memory, availability, thermal and exact gates pass; active session and inhibitor cleanup verified | [Decision](WIDE_PREVIEW_VALIDATION.md#byte-budget-comparison-qb2-with-sleep-inhibition-2026-11-0910) | Selected numerical table in report |
 | Spare frame storage retained: 3024x1964 zoom-out preview after layout about 32% faster; SF1 inconclusive on one pan family, predeclared confirmatory SF2 passes with a ~2–3% pan cost inside the limits; ~77 MB extra live memory while a spare waits | [Results](SPARE_FRAME_STORAGE_RESULTS.md) | Selected numerical tables in report |
 | PR #51 viewport working-precision fix: no render speedup; camera arithmetic stops growing with session history; guard cost inconclusive | [Results](VIEWPORT_PRECISION_RESULTS.md) | [Paired summary](VIEWPORT_PRECISION_SUMMARY.csv), [policy](policies/viewport-precision-pr51.json) |
+| P2.7 deterministic deep Mandelbrot base and scalar escape check retained as correctness fixes: tile-order-independent samples; non-inferiority C3 passes 5 of 6 controls, `deep-glitch` first region inconclusive (+2% median); JavaFX completion passes on `deep-bla`/`deep-glitch`, first visible equal medians with inconclusive intervals; `main` renders the recovery-heavy antenna differently every time (exploratory only) | [Results](DEEP_BASE_DETERMINISM_RESULTS.md) | Selected numerical tables in report, [headless policy](policies/p27-deterministic-deep-base.json), [FX policy](policies/p27-deterministic-deep-base-fx.json) |
 
 Selected campaigns contain retained summaries/provenance only; omitted-input
 references do not imply availability. Historical failures/rejected candidates/
@@ -114,6 +115,7 @@ raw log file is included.
 - [BENCHMARK.md](BENCHMARK.md)
 - [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md)
 - [CPU_AA_OPTIMIZATION_RESULTS.md](CPU_AA_OPTIMIZATION_RESULTS.md)
+- [DEEP_BASE_DETERMINISM_RESULTS.md](DEEP_BASE_DETERMINISM_RESULTS.md)
 - [CPU_GPU_OPTIMIZATION_ANALYSIS.md](CPU_GPU_OPTIMIZATION_ANALYSIS.md)
 - [FORMULA_BENCHMARK.md](FORMULA_BENCHMARK.md)
 - [FORMULA_BENCHMARK_RESULTS.md](FORMULA_BENCHMARK_RESULTS.md)
@@ -221,6 +223,8 @@ raw log file is included.
 - [policies/p1-5-retained-vs-pre-fx.json](policies/p1-5-retained-vs-pre-fx.json)
 - [policies/p1-5-retained-vs-pre-headless.json](policies/p1-5-retained-vs-pre-headless.json)
 - [policies/p17-fresh-frame-preparation.json](policies/p17-fresh-frame-preparation.json)
+- [policies/p27-deterministic-deep-base-fx.json](policies/p27-deterministic-deep-base-fx.json)
+- [policies/p27-deterministic-deep-base.json](policies/p27-deterministic-deep-base.json)
 - [policies/prism-pipeline-fx-confirm.json](policies/prism-pipeline-fx-confirm.json)
 - [policies/prism-pipeline-fx.json](policies/prism-pipeline-fx.json)
 - [policies/prism-pipeline-latency-confirm.json](policies/prism-pipeline-latency-confirm.json)
