@@ -86,8 +86,12 @@ public final class PersistentFrameStore implements AutoCloseable {
      * Version 3: deep Mandelbrot base recovery references became coordinate-determined, and
      * scalar and scaled perturbation stopped trusting escape decisions within their rounding
      * bounds.
+     * Version 4: deep Mandelbrot reference orbits take the exact sign of their escape margin and
+     * continue briefly past their escape, BLA tracks the error bound and skips no escape test
+     * near the radius, decisions near the radius use the exact reference margin, and the
+     * bound stays tracked up to 1e-6.
      */
-    static final int CALCULATION_VERSION = 3;
+    static final int CALCULATION_VERSION = 4;
 
     private static final byte[] MAGIC = "FLFRAME\0".getBytes(StandardCharsets.US_ASCII);
     static final String SUFFIX = ".frame";
@@ -101,8 +105,10 @@ public final class PersistentFrameStore implements AutoCloseable {
      * Version 2: deep AA recovery references became coordinate-determined.
      * Version 3: deep Mandelbrot AA recovery stopped trusting escape decisions within its
      * rounding bound, and offsets that lose pixel resolution as doubles use scaled deltas.
+     * Version 4: deep Mandelbrot AA samples follow the escape decisions of calculation
+     * version 4, and recovery references settle samples only within their error bound.
      */
-    static final int ANTIALIAS_VERSION = 3;
+    static final int ANTIALIAS_VERSION = 4;
     private static final byte[] REFINEMENT_MAGIC = "FLAAREF\0".getBytes(StandardCharsets.US_ASCII);
     static final String REFINEMENT_SUFFIX = ".aa";
     private static final int MAX_PALETTE_STOPS = 4_096;

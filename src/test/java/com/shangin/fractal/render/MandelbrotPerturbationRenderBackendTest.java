@@ -401,10 +401,12 @@ class MandelbrotPerturbationRenderBackendTest {
 
     @Test
     void preciseSamplesDoNotDependOnSamplingOrderWhenGlitchesNeedRecoveryReferences() {
-        // The antenna tip's centre orbit glitches over much of the frame.
+        // Along the column through the antenna tip c = -2, escape decisions at the first
+        // iterations are too close to the radius for the primary reference, so those samples
+        // try the recovery references of their lattice points. Rows avoid the real axis.
         RenderJob job = new RenderJob(
                 FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
-                new Viewport("-2", "0", "1e-14"), 96, 64, 2_688);
+                new Viewport("-2", "0", "1e-30"), 97, 64, 2_688);
         PreciseRenderGrid grid = job.preciseGrid();
         List<BigDecimal[]> points = new ArrayList<>();
         for (int y = 0; y < job.height(); y++) {
@@ -440,10 +442,10 @@ class MandelbrotPerturbationRenderBackendTest {
 
     @Test
     void baseSamplesDoNotDependOnTileOrderWhenGlitchesNeedRecoveryReferences() throws Exception {
-        // The antenna tip's centre orbit glitches over much of the frame.
+        // As in the precise sampler test, the column through c = -2 needs recovery references.
         RenderJob job = new RenderJob(
                 FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
-                new Viewport("-2", "0", "1e-14"), 160, 96, 2_688);
+                new Viewport("-2", "0", "1e-30"), 161, 96, 2_688);
         RenderRegion top = new RenderRegion(0, 0, job.width(), job.height() / 2);
         RenderRegion bottom = new RenderRegion(0, job.height() / 2, job.width(), job.height() - job.height() / 2);
         RenderFrame forward = RenderFrame.create(job);
@@ -489,6 +491,127 @@ class MandelbrotPerturbationRenderBackendTest {
             }
             assertTrue(frame.isComplete());
             assertMatchesHighPrecision(job, frame, workers + " workers");
+        }
+    }
+
+    @Test
+    void referenceEscapingWithinRoundingOfTheRadiusMatchesHighPrecision() throws Exception {
+        // The reference pixel is c = -2 - 2e-59 i: |c|^2 exceeds 4 only by 4e-118, far below the
+        // precision of |c|^2, so it escapes at the first iteration although a rounded |Z|^2 is 4.
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-2", "0", "1e-14"), 161, 97, 2_688);
+        RenderFrame frame = RenderFrame.create(job);
+        try (MandelbrotPerturbationRenderBackend backend = new MandelbrotPerturbationRenderBackend(4)) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+        assertTrue(frame.isComplete());
+        int reference = 48 * job.width() + 80;
+        assertTrue(frame.samplePlane().escaped(reference));
+        assertEquals(1, frame.samplePlane().iterations(reference));
+        assertMatchesHighPrecisionOffTheChaoticAxis(job, frame, "reference tip");
+    }
+
+    @Test
+    void escapeDecisionsNextToAReferenceOnTheRadiusMatchHighPrecision() throws Exception {
+        // The reference is exactly c = -2, whose orbit 0, -2, 2, 2, ... stays on the radius. Above
+        // it, c = -2 + k 1e-32 i escapes at the first iteration by k^2 1e-64, which a perturbed
+        // |z|^2 of 4 cannot show, and BLA blocks, which skip the escape test, must not apply.
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-2", "0", "1e-30"), 41, 101, 2_688);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(4, diagnostics::set)) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+        assertTrue(frame.isComplete());
+        assertEquals(0, diagnostics.get().blaStepCount());
+        assertEquals(1, frame.samplePlane().iterations(10 * job.width() + 20));
+        assertMatchesHighPrecisionOffTheChaoticAxis(job, frame, "reference on the radius");
+    }
+
+    @Test
+    void blaEscapeDecisionsWithinRoundingOfTheRadiusMatchHighPrecision() throws Exception {
+        // Each centre puts pixel (x, 5) where |z|^2 differs from 4 by 1e-20 at its last iteration,
+        // above it in the first view and below it in the second: far below the rounding of a
+        // perturbed |z|^2, far above that of exact iteration. Both views use BLA; their error
+        // bounds at escape are several 1e-12.
+        String[][] views = {
+                {"0.0000000000000000000000000000001787798918960168729040299179319238425410726280037302416972418404709350",
+                        "4", "83", "true"},
+                {"0.0000000000000000000000000000003787798918960168729050803832839886066470982441966061203723867095301584",
+                        "2", "84", "true"},
+        };
+        for (String[] view : views) {
+            RenderJob job = new RenderJob(
+                    FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                    new Viewport(view[0], "1", "1e-30"), 21, 11, 137);
+            for (boolean blaEnabled : new boolean[]{true, false}) {
+                RenderFrame frame = RenderFrame.create(job);
+                AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+                try (MandelbrotPerturbationRenderBackend backend = new MandelbrotPerturbationRenderBackend(
+                        2, diagnostics::set, MandelbrotPerturbationRenderBackend.DEFAULT_REFERENCE_CACHE_BYTES,
+                        blaEnabled)) {
+                    backend.render(frame, () -> false, ignored -> {}, null);
+                }
+                assertTrue(frame.isComplete());
+                assertEquals(blaEnabled, diagnostics.get().blaStepCount() > 0);
+                int pixel = 5 * job.width() + Integer.parseInt(view[1]);
+                String label = (blaEnabled ? "BLA " : "scalar ") + view[1];
+                assertEquals(Integer.parseInt(view[2]), frame.samplePlane().iterations(pixel), label);
+                assertEquals(Boolean.parseBoolean(view[3]), frame.samplePlane().escaped(pixel), label);
+                assertMatchesHighPrecision(job, frame, label);
+            }
+        }
+    }
+
+    @Test
+    void recoveryReferencesSettleOnlyDecisionsWithinTheirErrorBound() throws Exception {
+        // As above, pixel (9, 5) has |z|^2 = 4 + 1e-20 at iteration 90. After a rebase the primary
+        // reference's bound (about 1.5e-8) cannot settle it, so the pixel goes to the recovery
+        // reference of its lattice point (here the primary orbit itself), whose fresh pass loses
+        // its bound before that iteration: a double decision from it would escape at 91, not 90.
+        RenderJob job = new RenderJob(
+                FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport("-0.000000000000000000000000000000003047029504756957101588867111832821100495914100161372801614232897612160",
+                        "1", "1e-30"), 21, 11, 137);
+        RenderFrame frame = RenderFrame.create(job);
+        AtomicReference<DeepZoomTimingStats> diagnostics = new AtomicReference<>();
+        try (MandelbrotPerturbationRenderBackend backend =
+                     new MandelbrotPerturbationRenderBackend(2, diagnostics::set)) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+        assertTrue(frame.isComplete());
+        int pixel = 5 * job.width() + 9;
+        assertEquals(90, frame.samplePlane().iterations(pixel));
+        assertTrue(frame.samplePlane().escaped(pixel));
+        assertTrue(diagnostics.get().highPrecisionFallbackPixelCount() > 0);
+        assertMatchesHighPrecision(job, frame, "recovery bound");
+    }
+
+    /**
+     * Compares every pixel with exact iteration except the real axis right of -2 at the antenna
+     * tip, where the orbit is chaotic for thousands of iterations and exact iteration at the grid
+     * precision itself differs from iteration at three times that precision.
+     */
+    private static void assertMatchesHighPrecisionOffTheChaoticAxis(RenderJob job, RenderFrame frame, String label) {
+        PreciseRenderGrid grid = job.preciseGrid();
+        BigDecimal tip = BigDecimal.valueOf(-2);
+        for (int index = 0; index < frame.samplePlane().size(); index++) {
+            int x = index % job.width();
+            int y = index / job.width();
+            if (grid.imaginaryAt(y).abs().compareTo(grid.imaginaryStep().movePointLeft(20)) < 0
+                    && grid.realAt(x).compareTo(tip) > 0) {
+                continue;
+            }
+            HighPrecisionSample expected = highPrecisionSample(
+                    grid.realAt(x), grid.imaginaryAt(y), grid.mathContext(), job.maxIterations());
+            String pixel = label + " pixel (" + x + ", " + y + ")";
+            assertEquals(expected.iterations(), frame.samplePlane().iterations(index), pixel);
+            assertEquals(expected.escaped(), frame.samplePlane().escaped(index), pixel);
+            assertEquals(expected.smoothIterations(), frame.samplePlane().smoothIterations(index), 1e-6, pixel);
         }
     }
 

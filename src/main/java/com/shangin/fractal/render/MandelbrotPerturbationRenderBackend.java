@@ -38,6 +38,14 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     /* A wide safety margin prevents a double shortcut from classifying a boundary pixel. */
     private static final double INTERIOR_SAFETY_MARGIN = 1e-12;
     private static final double GLITCH_RELATIVE_THRESHOLD = 1e-6;
+    /* |Z|^2 up to which an escaped reference orbit continues. */
+    private static final double ESCAPED_REFERENCE_LIMIT = 16.0;
+    /*
+     * Window of |z|^2 - 4 in which an untracked BLA pass hands the pixel to a pass that tracks
+     * the error bound. A tracked pass questions a decision only within 5 times an informative
+     * bound, at most 5e-6 (|zr| + |zi|) < 1.5e-5 near the radius, plus rounding.
+     */
+    private static final double TRACKED_PASS_WINDOW = 1e-4;
     private static final double UNIT_ROUNDOFF = 0x1p-53;
     /* Generous multiple of the unit roundoff for the few operations of one perturbation step. */
     private static final double STATE_ROUNDING = 16.0 * UNIT_ROUNDOFF;
@@ -47,8 +55,11 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
      * The worst-case state error grows with the orbit derivative, so on long chaotic orbits it
      * soon exceeds the state itself although perturbation still matches exact iteration. Beyond
      * this relative size it no longer separates decisions and the glitch criterion governs.
+     * Below it, decisions within the bound of the radius are settled exactly; they are rare
+     * enough at this size not to cost measurable time, while a bound of a few 1e-12 at an
+     * escape is common on long orbits that stay accurate.
      */
-    private static final double INFORMATIVE_STATE_ERROR = 1e-12;
+    private static final double INFORMATIVE_STATE_ERROR = 1e-6;
     /* Power of two so polling in the hot loop uses a cheap mask. */
     private static final int CANCELLATION_CHECK_INTERVAL = 32;
     private static final int RECOVERY_REFERENCE_CACHE_CAPACITY = 64;
@@ -515,14 +526,21 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             int maxIterations, MandelbrotBlaTable bla,
             BooleanSupplier cancelled
     ) {
-        return bla == null || !bla.supportsDelta(deltaCReal, deltaCImaginary)
-                ? perturbScalar(reference, deltaCReal, deltaCImaginary, onReference, maxIterations, cancelled)
-                : perturbWithBla(reference, deltaCReal, deltaCImaginary, maxIterations, bla, cancelled);
+        if (bla == null || !bla.supportsDelta(deltaCReal, deltaCImaginary)) {
+            return perturbScalar(reference, deltaCReal, deltaCImaginary, onReference, false, maxIterations, cancelled);
+        }
+        PerturbationResult result = perturbWithBlaUntracked(
+                reference, deltaCReal, deltaCImaginary, maxIterations, bla, cancelled);
+        return result != NEEDS_TRACKED_PASS ? result : perturbWithBla(reference, deltaCReal, deltaCImaginary,
+                onReference, maxIterations, bla, cancelled);
     }
 
     /**
      * Scalar perturbation from a recovery reference without BLA, unreliable when the offset
-     * from that reference does not keep pixel resolution as a double.
+     * from that reference does not keep pixel resolution as a double. The primary reference
+     * leaves a pixel to recovery when it cannot settle an escape decision near the radius, so a
+     * recovery result counts only while its error bound stays informative: a decision without
+     * that bound would guess the very decision the primary reference could not make.
      */
     private static PerturbationResult perturbFromRecovery(
             ReferenceOrbit reference, BigDecimal cReal, BigDecimal cImaginary,
@@ -540,19 +558,23 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         }
         return perturbScalar(reference, deltaReal, deltaImaginary,
                 exactDeltaReal.signum() == 0 && exactDeltaImaginary.signum() == 0,
-                maxIterations, cancelled);
+                true, maxIterations, cancelled);
     }
 
     /**
      * Scalar perturbation with a running bound on the absolute error of {@code z}. While that
      * bound is informative, an escape decision it cannot settle, with {@code |z|} within that
-     * error of the escape radius, is unreliable, so the caller recovers or iterates the pixel
+     * error of the escape radius, is decided from the reference's exact escape margin, or is
+     * unreliable when that cannot settle it either, so the caller recovers or iterates the pixel
      * exactly instead of guessing. A point exactly on its reference, as the caller establishes
-     * from exact coordinates, uses the reference's exact escape margin instead.
+     * from exact coordinates, uses the reference's exact escape margin alone.
+     *
+     * @param requireErrorBound whether the result is unreliable once the error bound stops
+     *         being informative, instead of relying on the glitch criterion from there
      */
     private static PerturbationResult perturbScalar(
             ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, boolean onReference,
-            int maxIterations, BooleanSupplier cancelled
+            boolean requireErrorBound, int maxIterations, BooleanSupplier cancelled
     ) {
         double[] referenceReals = reference.real();
         double[] referenceImaginaries = reference.imaginary();
@@ -614,15 +636,17 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 stateError = deltaError + UNIT_ROUNDOFF * (Math.abs(nextReferenceReal)
                         + Math.abs(nextReferenceImaginary) + absoluteState);
                 errorBounded = stateError <= INFORMATIVE_STATE_ERROR * Math.max(1.0, absoluteState);
-            }
-            // With | |z| - 2 | <= t, |z|^2 - 4 = (|z| - 2)(|z| + 2) stays within 5 t for t < 1.
-            if (errorBounded && Math.abs(magnitudeSquared - 4.0)
-                    <= 5.0 * stateError + ESCAPE_DECISION_ROUNDING * magnitudeSquared) {
-                if (!onReference) {
+                if (!errorBounded && requireErrorBound) {
                     return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
                 }
-                // z is exactly the reference, whose escape margin was calculated exactly.
-                escaped = reference.escapeMarginAt(referenceIteration).mantissa() > 0.0;
+            }
+            if (errorBounded && nearEscapeRadius(magnitudeSquared, stateError)) {
+                int decision = nearRadiusDecision(reference, referenceIteration, deltaReal, deltaImaginary,
+                        deltaError, onReference);
+                if (decision == UNCERTAIN_ESCAPE) {
+                    return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
+                }
+                escaped = decision == ESCAPED;
             }
             if (escaped) {
                 if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
@@ -652,7 +676,61 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 modifiedRebases, 0, 0);
     }
 
-    private static PerturbationResult perturbWithBla(
+    /**
+     * Whether a {@code |z|^2} whose {@code z} lies within {@code stateError} of the exact value
+     * may be on either side of the escape radius: with {@code | |z| - 2 | <= t},
+     * {@code |z|^2 - 4 = (|z| - 2)(|z| + 2)} stays within {@code 5 t} for {@code t < 1}.
+     */
+    private static boolean nearEscapeRadius(double magnitudeSquared, double stateError) {
+        return Math.abs(magnitudeSquared - 4.0)
+                <= 5.0 * stateError + ESCAPE_DECISION_ROUNDING * magnitudeSquared;
+    }
+
+    /**
+     * Decides {@code |Z + delta|^2 > 4} as the reference's exact margin
+     * {@code |Z|^2 - 4} plus {@code 2 Re(conj(Z) delta) + |delta|^2}, which keeps the
+     * resolution of the delta where {@code |z|^2} computed from {@code z} does not, or reports
+     * {@link #UNCERTAIN_ESCAPE} when the delta's error bound, the rounding of the stored reference
+     * or of this sum can change the sign. A point on its reference uses the margin alone.
+     */
+    private static int nearRadiusDecision(
+            ReferenceOrbit reference, int referenceIteration,
+            double deltaReal, double deltaImaginary, double deltaError, boolean onReference
+    ) {
+        ScaledValue exactMargin = reference.escapeMarginAt(referenceIteration);
+        if (onReference) {
+            return exactMargin.mantissa() > 0.0 ? ESCAPED : NOT_ESCAPED;
+        }
+        double margin = ScaledComplex.asDouble(exactMargin.mantissa(), exactMargin.exponent());
+        double referenceReal = reference.realAt(referenceIteration);
+        double referenceImaginary = reference.imaginaryAt(referenceIteration);
+        double linear = 2.0 * (referenceReal * deltaReal + referenceImaginary * deltaImaginary);
+        double quadratic = deltaReal * deltaReal + deltaImaginary * deltaImaginary;
+        double sum = margin + linear + quadratic;
+        double referenceAbs = Math.abs(referenceReal) + Math.abs(referenceImaginary);
+        double deltaAbs = Math.abs(deltaReal) + Math.abs(deltaImaginary);
+        // An error e of the delta changes the two delta terms by at most (2 |Z| + 2 |delta| + e) e;
+        // the stored Z is within u |Z| of the reference, which changes the linear term by at most
+        // 2 u |Z| |delta|. The margin converts with relative rounding and may underflow.
+        double uncertainty = (2.0 * (referenceAbs + deltaAbs) + deltaError) * deltaError
+                + 2.0 * UNIT_ROUNDOFF * referenceAbs * deltaAbs
+                + STATE_ROUNDING * (Math.abs(margin) + Math.abs(linear) + quadratic)
+                + Double.MIN_NORMAL;
+        if (!(Math.abs(sum) > uncertainty)) {
+            return UNCERTAIN_ESCAPE;
+        }
+        return sum > 0.0 ? ESCAPED : NOT_ESCAPED;
+    }
+
+    /**
+     * BLA perturbation without the error bound, whose bookkeeping costs about as much as the
+     * step itself. It returns {@link #NEEDS_TRACKED_PASS} at the first escape test within
+     * {@link #TRACKED_PASS_WINDOW} of the radius, which contains every decision that
+     * {@link #perturbWithBla} could question, and otherwise the same decisions. Blocks are
+     * taken only when their end is outside that window, so near the radius scalar steps reach
+     * the test. A separate loop keeps the bookkeeping out of this hot loop's compiled code.
+     */
+    private static PerturbationResult perturbWithBlaUntracked(
             ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, int maxIterations,
             MandelbrotBlaTable bla,
             BooleanSupplier cancelled
@@ -699,10 +777,8 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 double magnitudeSquared = nextZr * nextZr + nextZi * nextZi;
                 double deltaMagnitudeSquared = nextDeltaReal * nextDeltaReal
                         + nextDeltaImaginary * nextDeltaImaginary;
-                // Never report an escape at the end of a skipped block. Try a
-                // shorter block, then scalar steps near escape, preserving the
-                // exact iteration and orbit values used by smooth coloring.
-                if (Double.isFinite(magnitudeSquared) && magnitudeSquared <= 4.0
+                // Never report an escape at the end of a skipped block, as in perturbWithBla.
+                if (Double.isFinite(magnitudeSquared) && magnitudeSquared < 4.0 - TRACKED_PASS_WINDOW
                         && (magnitudeSquared >= glitchThresholds[nextReferenceIteration]
                             || magnitudeSquared < deltaMagnitudeSquared)) {
                     deltaReal = nextDeltaReal;
@@ -741,6 +817,9 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 return new PerturbationResult(null, iteration, false, modifiedRebases,
                         blaSteps, blaSkippedIterations);
             }
+            if (Math.abs(magnitudeSquared - 4.0) <= TRACKED_PASS_WINDOW) {
+                return NEEDS_TRACKED_PASS;
+            }
             if (magnitudeSquared > 4.0) {
                 if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                     return new PerturbationResult(null, iteration, false, modifiedRebases,
@@ -755,6 +834,198 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             if (magnitudeSquared < deltaMagnitudeSquared) {
                 deltaReal = zr;
                 deltaImaginary = zi;
+                referenceIteration = 0;
+                modifiedRebases++;
+            } else if (magnitudeSquared < glitchThresholds[referenceIteration]) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases,
+                        blaSteps, blaSkippedIterations);
+            }
+        }
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+            return new PerturbationResult(null, iteration, false, modifiedRebases,
+                    blaSteps, blaSkippedIterations);
+        }
+        return new PerturbationResult(
+                new FractalSample(iteration, false, zr, zi), iteration, true,
+                modifiedRebases, blaSteps, blaSkippedIterations);
+    }
+
+    /**
+     * Perturbation that skips iterations with BLA blocks where the delta is within their radius.
+     * This pass carries the scalar loop's error bound through both kinds of steps,
+     * including each block's own approximation error, and decides escapes near the radius as
+     * the scalar loop does; a block is taken only when the end of its skip is certainly inside
+     * the radius. Callers run {@link #perturbWithBlaUntracked} first.
+     */
+    private static PerturbationResult perturbWithBla(
+            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, boolean onReference,
+            int maxIterations, MandelbrotBlaTable bla,
+            BooleanSupplier cancelled
+    ) {
+        double[] referenceReals = reference.real();
+        double[] referenceImaginaries = reference.imaginary();
+        double[] glitchThresholds = reference.glitchThresholds();
+        int referenceLimit = reference.lastValidIteration();
+        double deltaCMagnitude = Math.abs(deltaCReal) + Math.abs(deltaCImaginary);
+        double deltaReal = 0.0;
+        double deltaImaginary = 0.0;
+        double zr = 0.0;
+        double zi = 0.0;
+        double absoluteState = 0.0;
+        // As in perturbScalar.
+        boolean errorBounded = true;
+        double deltaError = 0.0;
+        double stateError = 0.0;
+        int iteration = 0;
+        int referenceIteration = 0;
+        int modifiedRebases = 0;
+        int blaSteps = 0;
+        int blaSkippedIterations = 0;
+        int workSteps = 0;
+        orbit:
+        while (iteration < maxIterations) {
+            if ((workSteps++ & (CANCELLATION_CHECK_INTERVAL - 1)) == 0
+                    && (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted())) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases,
+                        blaSteps, blaSkippedIterations);
+            }
+            if (referenceIteration >= referenceLimit) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases,
+                        blaSteps, blaSkippedIterations);
+            }
+            double currentDeltaMagnitudeSquared = deltaReal * deltaReal
+                    + deltaImaginary * deltaImaginary;
+            // Every delta within the error bound must lie inside the block's radius.
+            double lookupMagnitudeSquared = currentDeltaMagnitudeSquared;
+            if (errorBounded && deltaError > 0.0) {
+                double reach = Math.sqrt(currentDeltaMagnitudeSquared) + deltaError;
+                lookupMagnitudeSquared = reach * reach;
+            }
+            MandelbrotBlaTable.Step block = bla.lookup(referenceIteration,
+                    lookupMagnitudeSquared, maxIterations - iteration);
+            while (block != null) {
+                double nextDeltaReal = block.aReal() * deltaReal
+                        - block.aImaginary() * deltaImaginary
+                        + block.bReal() * deltaCReal - block.bImaginary() * deltaCImaginary;
+                double nextDeltaImaginary = block.aReal() * deltaImaginary
+                        + block.aImaginary() * deltaReal
+                        + block.bReal() * deltaCImaginary + block.bImaginary() * deltaCReal;
+                int nextReferenceIteration = referenceIteration + block.length();
+                double nextReferenceReal = referenceReals[nextReferenceIteration];
+                double nextReferenceImaginary = referenceImaginaries[nextReferenceIteration];
+                double nextZr = nextReferenceReal + nextDeltaReal;
+                double nextZi = nextReferenceImaginary + nextDeltaImaginary;
+                double magnitudeSquared = nextZr * nextZr + nextZi * nextZi;
+                double deltaMagnitudeSquared = nextDeltaReal * nextDeltaReal
+                        + nextDeltaImaginary * nextDeltaImaginary;
+                boolean nextErrorBounded = errorBounded;
+                double nextDeltaError = 0.0;
+                double nextAbsoluteState = 0.0;
+                double nextStateError = 0.0;
+                if (errorBounded) {
+                    // The block's own error at the true delta, at most |delta| + e, the input error
+                    // amplified by |A|, and the rounding of evaluating the block.
+                    double deltaAbs = Math.abs(deltaReal) + Math.abs(deltaImaginary);
+                    double aAbs = Math.abs(block.aReal()) + Math.abs(block.aImaginary());
+                    double bAbs = Math.abs(block.bReal()) + Math.abs(block.bImaginary());
+                    nextDeltaError = block.deltaErrorFactor() * (deltaAbs + deltaError)
+                            + block.deltaCErrorFactor() * deltaCMagnitude
+                            + aAbs * deltaError
+                            + STATE_ROUNDING * (aAbs * deltaAbs + bAbs * deltaCMagnitude);
+                    nextAbsoluteState = Math.abs(nextZr) + Math.abs(nextZi);
+                    nextStateError = nextDeltaError + UNIT_ROUNDOFF * (Math.abs(nextReferenceReal)
+                            + Math.abs(nextReferenceImaginary) + nextAbsoluteState);
+                    nextErrorBounded = nextStateError
+                            <= INFORMATIVE_STATE_ERROR * Math.max(1.0, nextAbsoluteState);
+                }
+                // Never report an escape at the end of a skipped block. Try a
+                // shorter block, then scalar steps near escape, preserving the
+                // exact iteration and orbit values used by smooth coloring.
+                if (Double.isFinite(magnitudeSquared) && magnitudeSquared <= 4.0
+                        && !(nextErrorBounded && nearEscapeRadius(magnitudeSquared, nextStateError))
+                        && (magnitudeSquared >= glitchThresholds[nextReferenceIteration]
+                            || magnitudeSquared < deltaMagnitudeSquared)) {
+                    deltaReal = nextDeltaReal;
+                    deltaImaginary = nextDeltaImaginary;
+                    zr = nextZr;
+                    zi = nextZi;
+                    errorBounded = nextErrorBounded;
+                    deltaError = nextDeltaError;
+                    absoluteState = nextAbsoluteState;
+                    stateError = nextStateError;
+                    iteration += block.length();
+                    referenceIteration = nextReferenceIteration;
+                    blaSteps++;
+                    blaSkippedIterations += block.length();
+                    if (magnitudeSquared < deltaMagnitudeSquared) {
+                        deltaReal = zr;
+                        deltaImaginary = zi;
+                        deltaError = stateError;
+                        referenceIteration = 0;
+                        modifiedRebases++;
+                    }
+                    continue orbit;
+                }
+                block = bla.lookup(referenceIteration, lookupMagnitudeSquared,
+                        block.length() - 1);
+            }
+            double referenceReal = referenceReals[referenceIteration];
+            double referenceImaginary = referenceImaginaries[referenceIteration];
+            if (errorBounded) {
+                // As in perturbScalar.
+                double referenceAbs = Math.abs(referenceReal) + Math.abs(referenceImaginary);
+                double deltaAbs = Math.abs(deltaReal) + Math.abs(deltaImaginary);
+                deltaError = (2.0 * (absoluteState + stateError) + deltaError) * deltaError
+                        + STATE_ROUNDING * ((2.0 * referenceAbs + deltaAbs) * deltaAbs + deltaCMagnitude);
+            }
+            double nextDeltaReal = 2.0 * (referenceReal * deltaReal - referenceImaginary * deltaImaginary)
+                    + deltaReal * deltaReal - deltaImaginary * deltaImaginary + deltaCReal;
+            double nextDeltaImaginary = 2.0 * (referenceReal * deltaImaginary + referenceImaginary * deltaReal)
+                    + 2.0 * deltaReal * deltaImaginary + deltaCImaginary;
+            deltaReal = nextDeltaReal;
+            deltaImaginary = nextDeltaImaginary;
+            iteration++;
+            referenceIteration++;
+            double nextReferenceReal = referenceReals[referenceIteration];
+            double nextReferenceImaginary = referenceImaginaries[referenceIteration];
+            zr = nextReferenceReal + deltaReal;
+            zi = nextReferenceImaginary + deltaImaginary;
+            double magnitudeSquared = zr * zr + zi * zi;
+            if (!Double.isFinite(magnitudeSquared)) {
+                return new PerturbationResult(null, iteration, false, modifiedRebases,
+                        blaSteps, blaSkippedIterations);
+            }
+            boolean escaped = magnitudeSquared > 4.0;
+            if (errorBounded) {
+                absoluteState = Math.abs(zr) + Math.abs(zi);
+                stateError = deltaError + UNIT_ROUNDOFF * (Math.abs(nextReferenceReal)
+                        + Math.abs(nextReferenceImaginary) + absoluteState);
+                errorBounded = stateError <= INFORMATIVE_STATE_ERROR * Math.max(1.0, absoluteState);
+            }
+            if (errorBounded && nearEscapeRadius(magnitudeSquared, stateError)) {
+                int decision = nearRadiusDecision(reference, referenceIteration, deltaReal, deltaImaginary,
+                        deltaError, onReference);
+                if (decision == UNCERTAIN_ESCAPE) {
+                    return new PerturbationResult(null, iteration, false, modifiedRebases,
+                            blaSteps, blaSkippedIterations);
+                }
+                escaped = decision == ESCAPED;
+            }
+            if (escaped) {
+                if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+                    return new PerturbationResult(null, iteration, false, modifiedRebases,
+                            blaSteps, blaSkippedIterations);
+                }
+                return new PerturbationResult(
+                        new FractalSample(iteration, true, zr, zi), iteration, true,
+                        modifiedRebases, blaSteps, blaSkippedIterations);
+            }
+            double deltaMagnitudeSquared = deltaReal * deltaReal
+                    + deltaImaginary * deltaImaginary;
+            if (magnitudeSquared < deltaMagnitudeSquared) {
+                deltaReal = zr;
+                deltaImaginary = zi;
+                deltaError = stateError;
                 referenceIteration = 0;
                 modifiedRebases++;
             } else if (magnitudeSquared < glitchThresholds[referenceIteration]) {
@@ -1151,6 +1422,9 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         }
     }
 
+    /** Returned by an untracked BLA pass that reached an escape test near the radius. */
+    private static final PerturbationResult NEEDS_TRACKED_PASS = new PerturbationResult(null, 0, false, 0, 0, 0);
+
     private record PerturbationResult(
             FractalSample sample,
             int executedIterations,
@@ -1526,7 +1800,12 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
 
     long cachedReferenceBytes() { return referenceCache.retainedBytes(); }
 
-    /** High-precision centre orbit retained once for all tiles in one frame. */
+    /**
+     * High-precision centre orbit retained once for all tiles in one frame. An escaping orbit
+     * continues while {@code |Z| <= 4}: pixels next to a reference that escapes, for example
+     * by a margin far below the pixel spacing, follow it for an iteration or two before they
+     * escape themselves. {@code lastBoundedIteration} is the last iteration before it escaped.
+     */
     private record ReferenceOrbit(
             BigDecimal cReal,
             BigDecimal cImaginary,
@@ -1534,7 +1813,8 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             double[] imaginary,
             double[] glitchThresholds,
             ScaledValue[] escapeMargins,
-            int lastValidIteration
+            int lastValidIteration,
+            int lastBoundedIteration
     ) {
         static ReferenceOrbit create(
                 RenderJob job,
@@ -1566,6 +1846,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             BigDecimal zr = BigDecimal.ZERO;
             BigDecimal zi = BigDecimal.ZERO;
             int lastValidIteration = 0;
+            int lastBoundedIteration = -1;
             for (int iteration = 0; iteration < job.maxIterations(); iteration++) {
                 if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                     return null;
@@ -1584,27 +1865,44 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                         + referenceImaginary * referenceImaginary;
                 glitchThresholds[iteration + 1] = GLITCH_RELATIVE_THRESHOLD
                         * referenceMagnitudeSquared;
-                BigDecimal magnitudeSquared = zr.multiply(zr, context)
-                        .add(zi.multiply(zi, context), context);
-                escapeMargins[iteration + 1] = ScaledValue.fromBigDecimal(
-                        magnitudeSquared.subtract(FOUR, context));
+                BigDecimal margin = escapeMargin(zr, zi, context);
+                escapeMargins[iteration + 1] = ScaledValue.fromBigDecimal(margin);
                 lastValidIteration = iteration + 1;
-                if (magnitudeSquared.compareTo(FOUR) > 0) {
+                if (lastBoundedIteration < 0 && margin.signum() > 0) {
+                    lastBoundedIteration = iteration;
+                }
+                if (lastBoundedIteration >= 0 && referenceMagnitudeSquared > ESCAPED_REFERENCE_LIMIT) {
                     break;
                 }
             }
             return new ReferenceOrbit(
                     cReal, cImaginary, real, imaginary,
-                    glitchThresholds, escapeMargins, lastValidIteration);
+                    glitchThresholds, escapeMargins, lastValidIteration,
+                    lastBoundedIteration < 0 ? lastValidIteration : lastBoundedIteration);
+        }
+
+        /**
+         * {@code |z|^2 - 4} from the squares rounded to {@code context}, as exact iteration
+         * compares them, with an exact sign: rounding {@code |z|^2} first would turn a margin far
+         * below its precision, such as {@code |z|^2 = 4 + 4e-118}, into zero.
+         */
+        private static BigDecimal escapeMargin(BigDecimal zr, BigDecimal zi, MathContext context) {
+            BigDecimal realSquared = zr.multiply(zr, context);
+            BigDecimal imaginarySquared = zi.multiply(zi, context);
+            BigDecimal larger = realSquared.max(imaginarySquared);
+            BigDecimal smaller = realSquared.min(imaginarySquared);
+            // From 1 to 10^precision the larger square has at most precision fraction digits, so
+            // subtracting 4 is exact within two more digits. Otherwise the rounded partial is
+            // below -2 or huge, where the smaller square cannot change the sign.
+            BigDecimal partial = larger.subtract(FOUR,
+                    new MathContext(context.getPrecision() + 2, context.getRoundingMode()));
+            // One rounding of an exact sum keeps its sign.
+            return partial.add(smaller, context);
         }
 
         double realAt(int iteration) { return real[iteration]; }
         double imaginaryAt(int iteration) { return imaginary[iteration]; }
         ScaledValue escapeMarginAt(int iteration) { return escapeMargins[iteration]; }
-        int lastBoundedIteration() {
-            return escapeMargins[lastValidIteration].mantissa() > 0.0
-                    ? lastValidIteration - 1 : lastValidIteration;
-        }
         double cRealAsDouble() { return cReal.doubleValue(); }
         double cImaginaryAsDouble() { return cImaginary.doubleValue(); }
         long retainedBytes() {
