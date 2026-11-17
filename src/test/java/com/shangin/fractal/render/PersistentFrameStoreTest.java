@@ -9,6 +9,8 @@ import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.FractalSceneJson;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -17,16 +19,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class PersistentFrameStoreTest {
 
@@ -121,6 +126,39 @@ class PersistentFrameStoreTest {
         assertEquals(0, restored.calculated());
         assertEquals(List.of(new RenderRegion(0, 0, 40, 28)), restored.regions());
         assertSameSamples(source, restored.frame());
+    }
+
+    @ParameterizedTest
+    @EnumSource(FractalPreset.class)
+    void restoresEveryPresetBitIdenticallyWithoutCalculating(FractalPreset preset) throws Exception {
+        RenderJob job = job(FormulaDefinition.forPreset(preset, OrbitTrap.NONE), preset.defaultViewport(), 37, 23, 180);
+        RenderFrame source = calculateAndStore(job);
+
+        Restored restored = renderAgain(job);
+
+        assertEquals(0, restored.calculated());
+        assertSameSamples(source, restored.frame());
+    }
+
+    @Test
+    void restoresDeepJuliaFramesOnTheirExactDecimalGrid() throws Exception {
+        RenderJob job = job(FormulaDefinition.forPreset(FractalPreset.JULIA, OrbitTrap.NONE),
+                new Viewport("-0.035", "-0.493", "1e-16"), 24, 16, 3000);
+        RenderFrame source = RenderFrame.create(job);
+        try (PersistentFrameRenderBackend backend = new PersistentFrameRenderBackend(
+                new JuliaDeepZoomRenderBackend(), store())) {
+            backend.render(source, () -> false, ignored -> {}, null);
+        }
+        assertTrue(source.isComplete());
+
+        RenderFrame restored = RenderFrame.create(job);
+        try (PersistentFrameRenderBackend backend = new PersistentFrameRenderBackend(
+                new FailingBackend(), store())) {
+            backend.render(restored, () -> false, ignored -> {}, null);
+        }
+
+        assertTrue(restored.isComplete());
+        assertSameSamples(source, restored);
     }
 
     @Test
@@ -406,6 +444,58 @@ class PersistentFrameStoreTest {
                 backend.render(frame, () -> false, ignored -> {}, null);
                 assertTrue(frame.isComplete());
             }
+        }
+    }
+
+    @Test
+    void readOnlyStorageRestoresStoredFramesAndCalculatesNewOnes() throws Exception {
+        assumeTrue(directory.getFileSystem().supportedFileAttributeViews().contains("posix"),
+                "Directory write permissions need a POSIX file system");
+        RenderFrame source = calculateAndStore(mandelbrot());
+        Set<PosixFilePermission> writable = Files.getPosixFilePermissions(directory);
+        Files.setPosixFilePermissions(directory, Set.of(PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_EXECUTE));
+        try {
+            assumeTrue(!Files.isWritable(directory), "The test user can write a read-only directory");
+            Restored restored = renderAgain(mandelbrot());
+            assertEquals(0, restored.calculated());
+            assertSameSamples(source, restored.frame());
+
+            RenderJob other = job(MANDELBROT, new Viewport(-0.5, 0.0, 2.0), 40, 28, 200);
+            for (int attempt = 0; attempt < 2; attempt++) {
+                assertEquals(1, renderAgain(other).calculated(), "a frame that cannot be stored is calculated");
+            }
+        } finally {
+            Files.setPosixFilePermissions(directory, writable);
+        }
+        assertEquals(1, storedFiles().size());
+        try (Stream<Path> files = Files.list(directory)) {
+            assertTrue(files.noneMatch(file -> file.toString().endsWith(".tmp")));
+        }
+    }
+
+    @Test
+    void closingDuringAWriteLeavesEitherNoEntryOrAValidOne() throws Exception {
+        RenderJob job = job(MANDELBROT, new Viewport(-0.75, 0.1, 2.4), 1024, 768, 200);
+        RenderFrame source = RenderFrame.create(job);
+        try (DirectDoubleRenderBackend backend = new DirectDoubleRenderBackend()) {
+            backend.render(source, () -> false, ignored -> {}, null);
+        }
+        PersistentFrameStore store = store();
+        store.saveWhenSettled(source);
+        long start = System.nanoTime();
+        store.close();
+
+        assertTrue(System.nanoTime() - start < Duration.ofSeconds(4).toNanos(), "closing is bounded");
+        try (Stream<Path> files = Files.list(directory)) {
+            assertTrue(files.noneMatch(file -> file.toString().endsWith(".tmp")));
+        }
+        if (!storedFiles().isEmpty()) {
+            RenderFrame restored = RenderFrame.create(job);
+            try (PersistentFrameStore reader = store()) {
+                assertTrue(reader.load(restored, () -> false));
+            }
+            assertSameSamples(source, restored);
         }
     }
 

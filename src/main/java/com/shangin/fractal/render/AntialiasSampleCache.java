@@ -627,6 +627,15 @@ public final class AntialiasSampleCache {
          */
         public double completeThreshold() { return completeThreshold; }
 
+        /**
+         * Samples of a frame on which finished passes up to {@code completeThreshold}, at
+         * {@code colorScale}, found no AA candidate.
+         */
+        public static Retained empty(double colorScale, double completeThreshold) {
+            return restored(colorScale, completeThreshold, false, new int[0], new int[0], new float[0],
+                    new byte[0], new int[1], new short[0]);
+        }
+
         public Retained withCompleteThreshold(double threshold) {
             return Double.compare(threshold, completeThreshold) == 0 ? this
                     : new Retained(snapshot, colorScale, bytes, threshold, dropped);
@@ -666,7 +675,7 @@ public final class AntialiasSampleCache {
     }
 
     /**
-     * Retained samples rebuilt from validated stored entries: distinct pixels, 1 to 32
+     * Retained samples rebuilt from validated stored entries, possibly none: distinct pixels, 1 to 32
      * phases per entry, offsets ascending from zero to {@code phases.length}. The arrays
      * are adopted, not copied. For {@link PersistentFrameStore}.
      */
@@ -674,7 +683,7 @@ public final class AntialiasSampleCache {
                              int[] pixels, int[] masks, float[] strengths, byte[] deep,
                              int[] offsets, short[] phases) {
         int count = pixels.length;
-        if (count == 0 || masks.length != count || strengths.length != count || deep.length != count
+        if (masks.length != count || strengths.length != count || deep.length != count
                 || offsets.length != count + 1 || offsets[count] != phases.length) {
             throw new IllegalArgumentException("Stored AA entries are inconsistent");
         }

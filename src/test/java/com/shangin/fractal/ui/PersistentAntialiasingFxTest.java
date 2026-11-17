@@ -5,6 +5,7 @@ import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.controller.RenderStatus;
 import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.*;
 import javafx.application.Platform;
@@ -317,6 +318,47 @@ class PersistentAntialiasingFxTest {
                     "A palette change must recolor the restored AA samples exactly");
             assertEquals(0, aaProfile(restarted).samples(), "Recoloring restored samples needs no AA pass");
             assertFalse(visiblyBusy(restarted), "No AA pass may follow the recolor");
+        } finally {
+            restarted.close();
+        }
+    }
+
+    @Test
+    void aRestartedFrameWithoutAntialiasingCandidatesRecolorsWithoutTestingItsPixels() throws Exception {
+        // Inside the main cardioid: no pixel escapes, so no pixel is an AA candidate.
+        var scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                .withViewport(new Viewport("-0.1", "0", "0.05"))
+                .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.REFINED));
+        var fire = new ColoringSettings(PalettePreset.FIRE);
+
+        Launch reference = launch(false);
+        int[] expectedFire;
+        try {
+            renderAndCapture(reference, scene);
+            expectedFire = recolor(reference, fire);
+        } finally {
+            reference.close();
+        }
+
+        Launch first = launch(true);
+        int[] expected;
+        try {
+            expected = renderAndCapture(first, scene);
+            assertEquals((long) WIDTH * HEIGHT, aaProfile(first).testedPixels(), "The pass must test every pixel");
+            assertEquals(0, aaProfile(first).candidates(), "The fixture must have no AA candidate");
+        } finally {
+            first.close();
+        }
+        assertTrue(storedFiles(AA_SUFFIX) > 0, "A pass without candidates must still store its empty samples");
+
+        Launch restarted = launch(true);
+        try {
+            assertArrayEquals(expected, renderAndCapture(restarted, scene));
+            assertEquals(0, restarted.calculatedFrames().get(), "The base frame must be restored, not calculated");
+            assertEquals(0, aaProfile(restarted).testedPixels(), "The restored view needs no candidate detection");
+            assertArrayEquals(expectedFire, recolor(restarted, fire));
+            assertFalse(visiblyBusy(restarted), "No AA pass may follow the recolor");
+            assertEquals(0, aaProfile(restarted).testedPixels(), "The empty samples vouch for the new palette");
         } finally {
             restarted.close();
         }

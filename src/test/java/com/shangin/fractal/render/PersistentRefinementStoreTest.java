@@ -152,6 +152,35 @@ class PersistentRefinementStoreTest {
     }
 
     @Test
+    void restoresAnEmptySampleSetWithAndWithoutColors() throws Exception {
+        for (boolean colors : new boolean[] {false, true}) {
+            RenderJob job = job(colors ? -0.5 : -0.75);
+            RenderFrame frame = calculateAndStore(job, null);
+            RetainedRefinement withColors = refinement(frame, CUSTOM);
+            var empty = AntialiasSampleCache.Retained.empty(CUSTOM.colorScale(), 0.125);
+            RetainedRefinement stored = new RetainedRefinement(colors ? withColors.pixels() : null,
+                    colors ? CUSTOM : null, empty);
+            try (PersistentFrameStore store = store()) {
+                store.saveRefinementWhenSettled(frame, stored);
+            }
+            RetainedRefinement restored = restore(job);
+            assertNotNull(restored, "colors " + colors);
+            assertNotNull(restored.samples(), "An empty sample set is not AA stored without samples");
+            assertEquals(0, restored.samples().size());
+            assertEquals(0, restored.samples().phaseCount());
+            assertEquals(CUSTOM.colorScale(), restored.samples().colorScale());
+            assertEquals(0.125, restored.samples().completeThreshold());
+            assertFalse(restored.samples().dropped());
+            if (colors) {
+                assertEquals(CUSTOM, restored.coloring());
+                assertTrue(withColors.pixels().sameRefinedPixels(restored.pixels()));
+            } else {
+                assertNull(restored.pixels());
+            }
+        }
+    }
+
+    @Test
     void theBackendHandsOutRestoredAntialiasingOnceAndOnlyForItsFrame() throws Exception {
         RenderFrame source = calculateAndStore(job(-0.75), CUSTOM);
         RenderFrame restoredFrame = RenderFrame.create(job(-0.75));

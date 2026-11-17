@@ -838,6 +838,63 @@ class InteractiveAntialiasServiceTest {
     }
 
     @Test
+    void aPassWithoutCandidatesRetainsAnEmptySampleSetSoRecoloringNeedsNoPass() throws Exception {
+        AtomicInteger samples = new AtomicInteger();
+        FractalCalculator counting = new FractalCalculator((r, i, limit) -> {
+            samples.incrementAndGet();
+            return new FractalSample(1, true, 3, 0);
+        });
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0);
+        var fire = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.02, 0.5);
+        AntialiasSampleCache.Retained retained;
+        try (var original = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            RenderFrame frame = flatFrame(counting);
+            refineAndWait(original, frame, ice);
+            assertEquals(16, original.lastProfile().testedPixels());
+            assertEquals(0, samples.get(), "A flat frame has no AA candidate");
+            retained = original.retainSamples(frame);
+        }
+        assertNotNull(retained, "A finished pass without candidates is retained as an empty sample set");
+        assertEquals(0, retained.size());
+        assertFalse(retained.dropped());
+        assertEquals(0.02, retained.colorScale());
+        assertEquals(PaletteEdgeThresholds.sharedThreshold(false), retained.completeThreshold());
+
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            assertNull(service.retainSamples(flatFrame(counting)), "No pass has finished for this frame");
+            RenderFrame restored = flatFrame(counting);
+            service.restoreSamples(restored, retained);
+            assertFalse(service.missesCandidates(restored, fire, false),
+                    "The empty set vouches that another palette has no candidate either");
+            assertArrayEquals(AdaptivePngExportService.colorBaseFrame(restored.samplePlane(), fire),
+                    service.recolorCached(restored, fire));
+            assertSame(retained, service.retainSamples(restored));
+
+            // A pass at another color scale that finds no candidate either replaces what they vouch for.
+            var scaled = new SmoothPaletteColoring(PalettePreset.FIRE.palette(), 0.04, 0.5);
+            assertTrue(service.missesCandidates(restored, scaled, false));
+            refineAndWait(service, restored, scaled);
+            assertEquals(16, service.lastProfile().testedPixels());
+            var rescaled = service.retainSamples(restored);
+            assertEquals(0, rescaled.size());
+            assertEquals(0.04, rescaled.colorScale());
+            assertEquals(PaletteEdgeThresholds.sharedThreshold(false), rescaled.completeThreshold());
+            RenderFrame again = flatFrame(counting);
+            service.restoreSamples(again, rescaled);
+            assertFalse(service.missesCandidates(again, scaled, false),
+                    "The retained empty set must vouch for the latest pass's color scale");
+
+            // AA colors restored without samples prove nothing about the frame's candidates.
+            RenderFrame vouched = flatFrame(counting);
+            service.reuseFrame(flatFrame(counting), vouched, new PixelShift(0, 0));
+            service.vouchForRestoredColors(vouched, ice, false);
+            assertFalse(service.missesCandidates(vouched, ice, false));
+            assertNull(service.retainSamples(vouched));
+        }
+        assertEquals(0, samples.get());
+    }
+
+    @Test
     void restoredSamplesAreAdmittedBeforeShiftsAndNewSamplesAndDroppedForOtherFrames() throws Exception {
         var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.02, 0);
         FractalSample[] grid = new FractalSample[16];
@@ -1280,6 +1337,14 @@ class InteractiveAntialiasServiceTest {
         for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) {
             frame.fractalData().set(y * 4 + x, new FractalSample(1, (x + y) % 2 == 0, 3, 0));
         }
+        frame.validity().markReady(new RenderRegion(0, 0, 4, 4));
+        return frame;
+    }
+
+    private static RenderFrame flatFrame(FractalCalculator calculator) {
+        RenderFrame frame = RenderFrame.create(new RenderRequest(calculator,
+                FractalPreset.BURNING_SHIP.defaultViewport(), 4, 4, 20));
+        for (int index = 0; index < 16; index++) frame.fractalData().set(index, new FractalSample(1, true, 3, 0));
         frame.validity().markReady(new RenderRegion(0, 0, 4, 4));
         return frame;
     }
