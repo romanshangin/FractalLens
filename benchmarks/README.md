@@ -76,6 +76,7 @@ no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism
 | Spare frame storage retained: 3024x1964 zoom-out preview after layout about 32% faster; SF1 inconclusive on one pan family, predeclared confirmatory SF2 passes with a ~2–3% pan cost inside the limits; ~77 MB extra live memory while a spare waits | [Results](SPARE_FRAME_STORAGE_RESULTS.md) | Selected numerical tables in report |
 | PR #51 viewport working-precision fix: no render speedup; camera arithmetic stops growing with session history; guard cost inconclusive | [Results](VIEWPORT_PRECISION_RESULTS.md) | [Paired summary](VIEWPORT_PRECISION_SUMMARY.csv), [policy](policies/viewport-precision-pr51.json) |
 | P2.7 deterministic deep Mandelbrot base and scalar escape check retained as correctness fixes: tile-order-independent samples; non-inferiority C3 passes 5 of 6 controls, `deep-glitch` first region inconclusive (+2% median); JavaFX completion passes on `deep-bla`/`deep-glitch`, first visible equal medians with inconclusive intervals; `main` renders the recovery-heavy antenna differently every time (exploratory only) | [Results](DEEP_BASE_DETERMINISM_RESULTS.md) | Selected numerical tables in report, [headless policy](policies/p27-deterministic-deep-base.json), [FX policy](policies/p27-deterministic-deep-base-fx.json) |
+| P2.7 uncertain deep Mandelbrot escapes retained as correctness fixes: exact reference margins, continued escaped references, BLA error bounds and near-radius refusal, margin-based decisions; complete frames match exact iteration off chaotic orbits; paired completion passes on `deep-glitch`, inconclusive on `deep-bla`; first region inconclusive, about 0.1 ms later on `deep-bla`; exploratory antenna about 5x faster | [Results](UNCERTAIN_DEEP_ESCAPES_RESULTS.md) | Selected numerical tables in report, [headless policy](policies/p27-uncertain-deep-escapes.json) |
 
 Selected campaigns contain retained summaries/provenance only; omitted-input
 references do not imply availability. Historical failures/rejected candidates/
@@ -95,7 +96,7 @@ incomplete platform gates remain recorded.
 
 ## Retained file inventory
 
-The inventory lists the 128 selected evidence/protocol files, excluding this index. No
+The inventory lists the 135 selected evidence/protocol files, excluding this index. No
 raw log file is included.
 
 - [AA_MEMORY_VALIDATION.md](AA_MEMORY_VALIDATION.md)
@@ -145,6 +146,7 @@ raw log file is included.
 - [RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv](RETAINED_SNAPSHOT_PREPARATION_SAMPLES.csv)
 - [SERIES_APPROXIMATION_RESULTS.md](SERIES_APPROXIMATION_RESULTS.md)
 - [SPACE_SWITCH_VALIDATION.md](SPACE_SWITCH_VALIDATION.md)
+- [UNCERTAIN_DEEP_ESCAPES_RESULTS.md](UNCERTAIN_DEEP_ESCAPES_RESULTS.md)
 - [VALIDITY_MASK_OPTIMIZATION.md](VALIDITY_MASK_OPTIMIZATION.md)
 - [VIEWPORT_PRECISION_RESULTS.md](VIEWPORT_PRECISION_RESULTS.md)
 - [VIEWPORT_PRECISION_SUMMARY.csv](VIEWPORT_PRECISION_SUMMARY.csv)
@@ -226,6 +228,7 @@ raw log file is included.
 - [policies/p17-fresh-frame-preparation.json](policies/p17-fresh-frame-preparation.json)
 - [policies/p27-deterministic-deep-base-fx.json](policies/p27-deterministic-deep-base-fx.json)
 - [policies/p27-deterministic-deep-base.json](policies/p27-deterministic-deep-base.json)
+- [policies/p27-uncertain-deep-escapes.json](policies/p27-uncertain-deep-escapes.json)
 - [policies/prism-pipeline-fx-confirm.json](policies/prism-pipeline-fx-confirm.json)
 - [policies/prism-pipeline-fx.json](policies/prism-pipeline-fx.json)
 - [policies/prism-pipeline-latency-confirm.json](policies/prism-pipeline-latency-confirm.json)

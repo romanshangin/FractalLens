@@ -282,6 +282,12 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   by base frames beyond double range, now converts exactly and checks escape
   decisions the same way. Version 2 entries are
   discarded and recalculated.
+  Both became 4 on 2026-11-17: deep Mandelbrot escape decisions near the radius
+  changed (exact reference escape margins, reference orbits that continue past
+  their escape, BLA blocks that skip no escape test near the radius, decisions
+  from the exact reference margin, and recovery results only within their error
+  bound), so some version 3 pixels differ from a recalculation. Version 3
+  entries are discarded and recalculated.
   `REFINEMENT_FORMAT_VERSION` became 2 on 2026-11-16, when the AA header gained
   its samples flag; version 1 AA files are discarded and their AA recalculated
   on the next visit, while their frames stay valid.

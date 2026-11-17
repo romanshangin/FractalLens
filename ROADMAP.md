@@ -446,7 +446,7 @@ separately, outside the scope of this macOS acceptance.
   verified frame, 860 ms against 1,028 ms by median (exploratory). Frames
   beyond double range cost about 14% more in screening. See the
   [results](benchmarks/DEEP_BASE_DETERMINISM_RESULTS.md).
-- [ ] **Decide uncertain escapes in deep Mandelbrot perturbation.** Found while
+- [x] **Decide uncertain escapes in deep Mandelbrot perturbation.** Found while
   making base rendering deterministic (2026-11-16): the BLA loop accepts an
   escape decision even when `|z|^2` lies within rounding error of 4, and the
   scalar and scaled loops stop checking once their rounding bound exceeds 1e-12
@@ -455,6 +455,29 @@ separately, outside the scope of this macOS acceptance.
   decisions as unreliable, and send them to recovery or exact iteration;
   measure the cost on the deep matrix fixtures and compare complete frames
   with exact iteration.
+  Done (2026-11-17): reference orbits take the exact sign of `|Z|^2 - 4` (a
+  rounded margin made the antenna reference `-2 - 2e-59 i` escape at 62
+  instead of 1) and continue while `|Z| <= 4` after escaping; BLA blocks skip
+  no escape test where the reference is near the radius, bound their own
+  error, and a pixel whose untracked BLA pass reaches an escape test within
+  1e-4 of the radius is redone with the error bound; decisions inside the bound
+  are settled from the exact reference margin before recovery or exact
+  iteration; the bound stays informative up to 1e-6 instead of 1e-12, and
+  recovery results count only within their own bound. Stored frames and AA
+  moved to version 4. Complete 161x97 frames match exact iteration on
+  `deep-bla`, `deep-boundary` and `c = 2` at `1e-400`, and Newton-placed
+  near-radius pixels (wrong in 18 of 32 cases before) all match. A full Julia-style
+  rejection was not adopted: almost every `deep-glitch` pixel exceeds the bound
+  long before escape. Chaotic divergence of double iteration is unchanged and
+  is a limit of double paths, not of the escape decision: 9 of 15,617
+  `deep-glitch` pixels differ from exact iteration, like direct double
+  rendering at standard zoom. Timing (paired non-inferiority, 1512x982):
+  completion passes on `deep-glitch` (+0.8%) and is inconclusive on `deep-bla`
+  (B/A 0.995, interval to 1.052); first new region is inconclusive on both,
+  about 0.1 ms (4%) later on `deep-bla` with an interval above 1.0.
+  Exploratory: `deep-boundary` unchanged, the antenna view about 5 times faster
+  (872 to 163 ms) since almost no pixel needs exact iteration. See the
+  [results](benchmarks/UNCERTAIN_DEEP_ESCAPES_RESULTS.md).
 - [ ] **Correctness acceptance:** compare stored/restored samples and complete
   displayed frames with their source, including deep Mandelbrot and Julia,
   other presets, palette changes, all display modes and parameter changes.
