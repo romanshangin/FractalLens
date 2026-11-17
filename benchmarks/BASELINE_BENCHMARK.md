@@ -2,8 +2,8 @@
 
 > Publication: use a new output directory for fresh runs. Keep raw logs/diagnostics private; publish only reviewed summaries and necessary sanitized evidence. See [evidence provenance](../docs/development/PUBLICATION.md).
 
-Matrix version: `9.1-v3`. The reviewed [manifest](BASELINE_FIXTURES.csv)
-contains 26 sequences / 35 steps at each of 480x270, 1512x982 and 3024x1964.
+Matrix version: `9.1-v4`. The reviewed [manifest](BASELINE_FIXTURES.csv)
+contains 27 sequences / 36 steps at each of 480x270, 1512x982 and 3024x1964.
 `9.1-v2` differs from `9.1-v1` only by removing the two deterministic-jitter AA
 fixtures and the `pattern` column after the application dropped that sampling
 pattern; all other rows are identical apart from the matrix label. `9.1-v3`
@@ -11,7 +11,9 @@ differs from `9.1-v2` only in the decimal digits of derived pan, reverse, resize
 and drag coordinates (16 rows): views rebuilt from computed values no longer gain
 another guard-digit budget, so those values are shorter. The changes are far below
 one pixel; fixture identities, dimensions, caps and features are unchanged.
-Evidence recorded with `9.1-v1` or `9.1-v2` keeps that label. The paired analyzer
+`9.1-v4` adds only the `deep-antenna` fixture (three rows); every `9.1-v3` row is
+unchanged apart from the matrix label. Evidence recorded with `9.1-v1`, `9.1-v2`
+or `9.1-v3` keeps that label. The paired analyzer
 accepts frozen builds of any of these versions, but both sides of a campaign must
 share one manifest.
 Dimensions are **render pixels**, not logical window dimensions. Resize adds
@@ -44,6 +46,7 @@ are explicit in every manifest row.
 | Mandelbrot histogram/trap AA | Histogram construction and cross-trap orbit features; no smooth-cache substitution |
 | Deep glitch / deep glitch AA | Saved production stress coordinates at 1.6e-13, adaptive cap 2488; deep AA uses the production 2x2 then conditional 4x4 policy |
 | Deep BLA / deep boundary | BLA-friendly production reference at 1e-30, fixed 2700; mixed boundary control at c=i, fixed 137 |
+| Deep antenna | Antenna tip c=-2 at 1e-14, fixed 2688; the centre orbit glitches over much of the frame, so most pixels need recovery references or exact iteration |
 | Scaled exponent | c=2 at 1e-400, fixed 137; adjacent samples must remain distinct below double range |
 | Direct/deep/reverse | Same precise center at 1e-9 → 1.6e-13 → 1e-9, recalculating the adaptive cap on each zoom and recovering the retained direct frame on return |
 | Pan 5/25/90 | Integer shifts of floor(width × percentage / 100), with 95/75/10% nominal overlap |

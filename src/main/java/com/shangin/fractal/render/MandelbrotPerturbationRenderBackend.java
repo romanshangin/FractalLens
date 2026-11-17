@@ -5,6 +5,7 @@ import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalSample;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,9 +38,20 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
     /* A wide safety margin prevents a double shortcut from classifying a boundary pixel. */
     private static final double INTERIOR_SAFETY_MARGIN = 1e-12;
     private static final double GLITCH_RELATIVE_THRESHOLD = 1e-6;
+    private static final double UNIT_ROUNDOFF = 0x1p-53;
+    /* Generous multiple of the unit roundoff for the few operations of one perturbation step. */
+    private static final double STATE_ROUNDING = 16.0 * UNIT_ROUNDOFF;
+    /* Relative rounding of |z|^2 computed from its components. */
+    private static final double ESCAPE_DECISION_ROUNDING = 4.0 * UNIT_ROUNDOFF;
+    /*
+     * The worst-case state error grows with the orbit derivative, so on long chaotic orbits it
+     * soon exceeds the state itself although perturbation still matches exact iteration. Beyond
+     * this relative size it no longer separates decisions and the glitch criterion governs.
+     */
+    private static final double INFORMATIVE_STATE_ERROR = 1e-12;
     /* Power of two so polling in the hot loop uses a cheap mask. */
     private static final int CANCELLATION_CHECK_INTERVAL = 32;
-    private static final int MAX_ADDITIONAL_REFERENCES = 64;
+    private static final int RECOVERY_REFERENCE_CACHE_CAPACITY = 64;
     static final long DEFAULT_REFERENCE_CACHE_BYTES = 32L * 1024L * 1024L;
 
     private final ExecutorService workers;
@@ -154,7 +166,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             return frame;
         }
         ReferencePool referencePool = new ReferencePool(
-                frame.job(), grid.mathContext(), reference, bla);
+                frame.job(), grid, reference, bla);
 
         RenderDiagnostics.mark("planning_start");
         List<RenderRegion> queuedTiles = orderedTiles(frame.job()).stream()
@@ -494,28 +506,69 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         return bulbX * bulbX + imaginarySquared < 0.0625 - INTERIOR_SAFETY_MARGIN;
     }
 
+    /**
+     * @param onReference whether the point is exactly the reference, judged from exact
+     *         coordinates: a rounded offset of zero does not prove it
+     */
     private static PerturbationResult perturb(
-            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, int maxIterations,
-            MandelbrotBlaTable bla,
+            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, boolean onReference,
+            int maxIterations, MandelbrotBlaTable bla,
             BooleanSupplier cancelled
     ) {
         return bla == null || !bla.supportsDelta(deltaCReal, deltaCImaginary)
-                ? perturbScalar(reference, deltaCReal, deltaCImaginary, maxIterations, cancelled)
+                ? perturbScalar(reference, deltaCReal, deltaCImaginary, onReference, maxIterations, cancelled)
                 : perturbWithBla(reference, deltaCReal, deltaCImaginary, maxIterations, bla, cancelled);
     }
 
+    /**
+     * Scalar perturbation from a recovery reference without BLA, unreliable when the offset
+     * from that reference does not keep pixel resolution as a double.
+     */
+    private static PerturbationResult perturbFromRecovery(
+            ReferenceOrbit reference, BigDecimal cReal, BigDecimal cImaginary,
+            BigDecimal realStep, BigDecimal imaginaryStep, MathContext mathContext,
+            int maxIterations, BooleanSupplier cancelled
+    ) {
+        BigDecimal exactDeltaReal = cReal.subtract(reference.cReal(), mathContext);
+        BigDecimal exactDeltaImaginary = cImaginary.subtract(reference.cImaginary(), mathContext);
+        double deltaReal = exactDeltaReal.doubleValue();
+        double deltaImaginary = exactDeltaImaginary.doubleValue();
+        if (CoordinateDeltas.losesPixelResolution(exactDeltaReal, deltaReal, realStep)
+                || CoordinateDeltas.losesPixelResolution(
+                        exactDeltaImaginary, deltaImaginary, imaginaryStep)) {
+            return new PerturbationResult(null, 0, false, 0, 0, 0);
+        }
+        return perturbScalar(reference, deltaReal, deltaImaginary,
+                exactDeltaReal.signum() == 0 && exactDeltaImaginary.signum() == 0,
+                maxIterations, cancelled);
+    }
+
+    /**
+     * Scalar perturbation with a running bound on the absolute error of {@code z}. While that
+     * bound is informative, an escape decision it cannot settle, with {@code |z|} within that
+     * error of the escape radius, is unreliable, so the caller recovers or iterates the pixel
+     * exactly instead of guessing. A point exactly on its reference, as the caller establishes
+     * from exact coordinates, uses the reference's exact escape margin instead.
+     */
     private static PerturbationResult perturbScalar(
-            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, int maxIterations,
-            BooleanSupplier cancelled
+            ReferenceOrbit reference, double deltaCReal, double deltaCImaginary, boolean onReference,
+            int maxIterations, BooleanSupplier cancelled
     ) {
         double[] referenceReals = reference.real();
         double[] referenceImaginaries = reference.imaginary();
         double[] glitchThresholds = reference.glitchThresholds();
         int referenceLimit = reference.lastValidIteration();
+        double deltaCMagnitude = Math.abs(deltaCReal) + Math.abs(deltaCImaginary);
         double deltaReal = 0.0;
         double deltaImaginary = 0.0;
         double zr = 0.0;
         double zi = 0.0;
+        double absoluteState = 0.0;
+        // Bounds on the absolute error of the delta and of z, which also covers reference rounding,
+        // tracked only while they stay informative.
+        boolean errorBounded = true;
+        double deltaError = 0.0;
+        double stateError = 0.0;
         int iteration = 0;
         int referenceIteration = 0;
         int modifiedRebases = 0;
@@ -529,6 +582,14 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             }
             double referenceReal = referenceReals[referenceIteration];
             double referenceImaginary = referenceImaginaries[referenceIteration];
+            if (errorBounded) {
+                // An error e in delta becomes (2 z + e) e; rounding of the stored reference and
+                // of this step adds a few units of the operand magnitudes.
+                double referenceAbs = Math.abs(referenceReal) + Math.abs(referenceImaginary);
+                double deltaAbs = Math.abs(deltaReal) + Math.abs(deltaImaginary);
+                deltaError = (2.0 * (absoluteState + stateError) + deltaError) * deltaError
+                        + STATE_ROUNDING * ((2.0 * referenceAbs + deltaAbs) * deltaAbs + deltaCMagnitude);
+            }
             double nextDeltaReal = 2.0 * (referenceReal * deltaReal - referenceImaginary * deltaImaginary)
                     + deltaReal * deltaReal - deltaImaginary * deltaImaginary + deltaCReal;
             double nextDeltaImaginary = 2.0 * (referenceReal * deltaImaginary + referenceImaginary * deltaReal)
@@ -537,13 +598,33 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             deltaImaginary = nextDeltaImaginary;
             iteration++;
             referenceIteration++;
-            zr = referenceReals[referenceIteration] + deltaReal;
-            zi = referenceImaginaries[referenceIteration] + deltaImaginary;
+            double nextReferenceReal = referenceReals[referenceIteration];
+            double nextReferenceImaginary = referenceImaginaries[referenceIteration];
+            zr = nextReferenceReal + deltaReal;
+            zi = nextReferenceImaginary + deltaImaginary;
             double magnitudeSquared = zr * zr + zi * zi;
             if (!Double.isFinite(magnitudeSquared)) {
                 return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
             }
-            if (magnitudeSquared > 4.0) {
+            boolean escaped = magnitudeSquared > 4.0;
+            if (errorBounded) {
+                // |zr| + |zi| bounds |z| without a square root; each component carries the stored
+                // reference rounding and the rounding of this sum.
+                absoluteState = Math.abs(zr) + Math.abs(zi);
+                stateError = deltaError + UNIT_ROUNDOFF * (Math.abs(nextReferenceReal)
+                        + Math.abs(nextReferenceImaginary) + absoluteState);
+                errorBounded = stateError <= INFORMATIVE_STATE_ERROR * Math.max(1.0, absoluteState);
+            }
+            // With | |z| - 2 | <= t, |z|^2 - 4 = (|z| - 2)(|z| + 2) stays within 5 t for t < 1.
+            if (errorBounded && Math.abs(magnitudeSquared - 4.0)
+                    <= 5.0 * stateError + ESCAPE_DECISION_ROUNDING * magnitudeSquared) {
+                if (!onReference) {
+                    return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
+                }
+                // z is exactly the reference, whose escape margin was calculated exactly.
+                escaped = reference.escapeMarginAt(referenceIteration).mantissa() > 0.0;
+            }
+            if (escaped) {
                 if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                     return new PerturbationResult(null, iteration, false, modifiedRebases, 0, 0);
                 }
@@ -556,6 +637,7 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             if (magnitudeSquared < deltaMagnitudeSquared) {
                 deltaReal = zr;
                 deltaImaginary = zi;
+                deltaError = stateError;
                 referenceIteration = 0;
                 modifiedRebases++;
             } else if (magnitudeSquared < glitchThresholds[referenceIteration]) {
@@ -689,12 +771,30 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 modifiedRebases, blaSteps, blaSkippedIterations);
     }
 
-    /** Perturbation recurrence with a separate binary exponent for sub-double deltas. */
+    /**
+     * Perturbation recurrence with a separate binary exponent for sub-double deltas. Like the
+     * scalar loop it bounds the error of the delta while that bound is informative, and an
+     * escape decision within it is unreliable, so the caller iterates the point exactly.
+     */
     private static PerturbationResult perturbScaled(
             ReferenceOrbit reference,
             ScaledComplex deltaC,
             int maxIterations,
             BooleanSupplier cancelled
+    ) {
+        return perturbScaled(reference, deltaC, maxIterations, cancelled, null);
+    }
+
+    /**
+     * @param errorBoundLoss when not null, receives the iteration at which the error bound
+     *         stopped being tracked and the absolute error it then bounded, or stays untouched
+     */
+    private static PerturbationResult perturbScaled(
+            ReferenceOrbit reference,
+            ScaledComplex deltaC,
+            int maxIterations,
+            BooleanSupplier cancelled,
+            double[] errorBoundLoss
     ) {
         double[] referenceReals = reference.real();
         double[] referenceImaginaries = reference.imaginary();
@@ -717,7 +817,16 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             double deltaImaginary = delta.imaginaryAsDouble();
             zr = referenceReals[iteration] + deltaReal;
             zi = referenceImaginaries[iteration] + deltaImaginary;
-            if (delta.magnitudeEscapes(reference, iteration)) {
+            delta.limitError(zr, zi);
+            if (errorBoundLoss != null && Double.isNaN(errorBoundLoss[0]) && !delta.errorBounded()) {
+                errorBoundLoss[0] = iteration;
+                errorBoundLoss[1] = delta.absoluteError();
+            }
+            int escape = delta.escapeDecision(reference, iteration);
+            if (escape == UNCERTAIN_ESCAPE) {
+                return new PerturbationResult(null, iteration, false, 0, 0, 0);
+            }
+            if (escape == ESCAPED) {
                 if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                     return new PerturbationResult(null, iteration, false, 0, 0, 0);
                 }
@@ -757,19 +866,24 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             return new ScaledValue(mantissa, exponent);
         }
 
+        /** Rounds correctly, so the mantissa is within half a unit in the last place. */
         static ScaledValue fromBigDecimal(BigDecimal value) {
             if (value.signum() == 0) {
                 return ZERO;
             }
+            double approximate = value.doubleValue();
+            if (Double.isFinite(approximate) && Math.abs(approximate) >= Double.MIN_NORMAL) {
+                return fromDouble(approximate);
+            }
+            // Scale by an exact power of two into the normal range, then round once.
             int decimalExponent = value.precision() - value.scale() - 1;
-            double normalizedDecimal = value.movePointLeft(decimalExponent).doubleValue();
-            double rawBinaryExponent = decimalExponent * LOG2_10;
-            long binaryExponent = (long) Math.floor(rawBinaryExponent);
-            double mantissa = normalizedDecimal
-                    * Math.pow(2.0, rawBinaryExponent - binaryExponent);
-            int adjustment = Math.getExponent(mantissa);
-            return new ScaledValue(
-                    Math.scalb(mantissa, -adjustment), binaryExponent + adjustment);
+            int binaryExponent = Math.toIntExact((long) Math.floor(decimalExponent * LOG2_10));
+            BigDecimal scaled = binaryExponent < 0
+                    ? value.multiply(new BigDecimal(BigInteger.ONE.shiftLeft(-binaryExponent)))
+                    : value.multiply(new BigDecimal(BigInteger.valueOf(5).pow(binaryExponent)))
+                            .movePointLeft(binaryExponent);
+            ScaledValue normalized = fromDouble(scaled.doubleValue());
+            return new ScaledValue(normalized.mantissa(), normalized.exponent() + binaryExponent);
         }
 
         boolean isZero() {
@@ -777,11 +891,28 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         }
     }
 
+    private static final int NOT_ESCAPED = 0;
+    private static final int ESCAPED = 1;
+    private static final int UNCERTAIN_ESCAPE = 2;
+    private static final int ERROR_EXPONENT_STEP = 256;
+    private static final double ERROR_MANTISSA_LIMIT = 0x1p256;
+
     /** Mutable complex value whose components share one binary exponent. */
     private static final class ScaledComplex {
         private double real;
         private double imaginary;
         private long exponent;
+        // Bound r = errorMantissa * 2^errorExponent on the error of the value relative to
+        // |real| + |imaginary|, so it needs no rescaling with the value's exponent. On long
+        // orbits r can exceed the double range while the absolute error stays tiny, so the
+        // mantissa is rescaled by 2^256 steps. Tracked only while informative for z.
+        private double errorMantissa;
+        private long errorExponent;
+        // 16u * 2^-errorExponent and 2 * 2^-errorExponent, the constants of the bound in units
+        // of 2^errorExponent.
+        private double scaledRounding = STATE_ROUNDING;
+        private double scaledTwo = 2.0;
+        private boolean errorBounded = true;
 
         private ScaledComplex(double real, double imaginary, long exponent) {
             this.real = real;
@@ -818,17 +949,92 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                     linearReal, linearImaginary, linearExponent,
                     quadraticReal, quadraticImaginary, quadraticExponent,
                     deltaC.real, deltaC.imaginary, deltaC.exponent);
-            real = align(linearReal, linearExponent, commonExponent)
-                    + align(quadraticReal, quadraticExponent, commonExponent)
-                    + align(deltaC.real, deltaC.exponent, commonExponent);
-            imaginary = align(linearImaginary, linearExponent, commonExponent)
-                    + align(quadraticImaginary, quadraticExponent, commonExponent)
-                    + align(deltaC.imaginary, deltaC.exponent, commonExponent);
+            double alignedLinearReal = align(linearReal, linearExponent, commonExponent);
+            double alignedLinearImaginary = align(linearImaginary, linearExponent, commonExponent);
+            double alignedQuadraticReal = align(quadraticReal, quadraticExponent, commonExponent);
+            double alignedQuadraticImaginary = align(quadraticImaginary, quadraticExponent, commonExponent);
+            double alignedDeltaCReal = align(deltaC.real, deltaC.exponent, commonExponent);
+            double alignedDeltaCImaginary = align(deltaC.imaginary, deltaC.exponent, commonExponent);
+            real = alignedLinearReal + alignedQuadraticReal + alignedDeltaCReal;
+            imaginary = alignedLinearImaginary + alignedQuadraticImaginary + alignedDeltaCImaginary;
+            if (errorBounded) {
+                // With D = |delta| in L1 and relative error r, an error r D becomes
+                // 2 |Z| (r + 16u) D + ((2 + r) r + 16u) D^2 plus deltaC rounding. The products
+                // 2 Z delta and delta^2 cannot cancel in magnitude, so 2 |Z| D and D^2 are at most
+                // twice the L1 norms of their already aligned values. In units of 2^errorExponent
+                // with r = m 2^k: (r + 16u) = 2^k (m + 16u 2^-k) and
+                // (2 + r) r + 16u = 2^k ((2 2^-k + m) m 2^k + 16u 2^-k).
+                double m = errorMantissa;
+                double linearAbs = Math.abs(alignedLinearReal) + Math.abs(alignedLinearImaginary);
+                double quadraticAbs = Math.abs(alignedQuadraticReal) + Math.abs(alignedQuadraticImaginary);
+                double squared = (scaledTwo + m) * (m * quadraticAbs);
+                if (errorExponent != 0L) {
+                    squared = scale(squared, errorExponent);
+                }
+                double error = 2.0 * (m + scaledRounding) * linearAbs
+                        + 2.0 * (squared + scaledRounding * quadraticAbs)
+                        + scaledRounding * (Math.abs(alignedDeltaCReal) + Math.abs(alignedDeltaCImaginary));
+                double magnitude = Math.abs(real) + Math.abs(imaginary);
+                errorMantissa = error == 0.0 ? 0.0 : error / magnitude;
+                if (!(errorMantissa <= ERROR_MANTISSA_LIMIT)
+                        || (errorExponent != 0L && errorMantissa < 1.0 / ERROR_MANTISSA_LIMIT)) {
+                    rescaleError();
+                }
+            }
             exponent = commonExponent;
             normalize();
         }
 
-        boolean magnitudeEscapes(ReferenceOrbit reference, int iteration) {
+        private void rescaleError() {
+            if (!(errorMantissa <= Double.MAX_VALUE)) {
+                // Overflow of a bound kept below 2^256 needs an absolute error far above the
+                // informative limit, or a cancelled delta of zero.
+                errorBounded = false;
+                return;
+            }
+            // Whole steps of 2^256 bring the mantissa near 1, and back down once the bound
+            // shrinks, so the rounding constants keep their weight; the exponent stays >= 0.
+            long step = Math.max(-errorExponent,
+                    Math.floorDiv(Math.getExponent(errorMantissa), ERROR_EXPONENT_STEP) * ERROR_EXPONENT_STEP);
+            errorMantissa = Math.scalb(errorMantissa, (int) -step);
+            errorExponent += step;
+            scaledRounding = scale(STATE_ROUNDING, -errorExponent);
+            scaledTwo = scale(2.0, -errorExponent);
+        }
+
+        /**
+         * Stops tracking the error once its absolute size, from the delta and z as doubles,
+         * exceeds the informative limit.
+         */
+        void limitError(double zr, double zi) {
+            if (!errorBounded) {
+                return;
+            }
+            // The absolute error is m D 2^(k + exponent); below 2^-42 it is informative for any z.
+            double relativeMagnitude = errorMantissa * (Math.abs(real) + Math.abs(imaginary));
+            long absoluteExponent = errorExponent + exponent + Math.getExponent(relativeMagnitude);
+            if (absoluteExponent >= -42L && scale(relativeMagnitude, errorExponent + exponent)
+                    > INFORMATIVE_STATE_ERROR * Math.max(1.0, Math.abs(zr) + Math.abs(zi))) {
+                errorBounded = false;
+            }
+        }
+
+        /** Whether the error bound is still tracked, for tests. */
+        boolean errorBounded() {
+            return errorBounded;
+        }
+
+        /** The absolute error bound as a double, for tests. */
+        double absoluteError() {
+            return scale(errorMantissa * (Math.abs(real) + Math.abs(imaginary)), errorExponent + exponent);
+        }
+
+        /**
+         * Decides {@code |Z + delta|^2 > 4} from the exact reference margin, or reports
+         * {@link #UNCERTAIN_ESCAPE} when the bounded error of the delta and of the rounding
+         * here can change the sign.
+         */
+        int escapeDecision(ReferenceOrbit reference, int iteration) {
             ScaledValue referenceMargin = reference.escapeMarginAt(iteration);
             double referenceReal = reference.realAt(iteration);
             double referenceImaginary = reference.imaginaryAt(iteration);
@@ -837,19 +1043,44 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             long quadraticExponent = exponent * 2L;
             long commonExponent = referenceMargin.isZero() ? Long.MIN_VALUE
                     : referenceMargin.exponent();
-            if (linear != 0.0) {
+            // A bounded error of the linear term lives at the delta's exponent even when that
+            // term cancels to zero.
+            if (linear != 0.0 || (errorBounded && quadratic != 0.0)) {
                 commonExponent = Math.max(commonExponent, exponent);
             }
             if (quadratic != 0.0) {
                 commonExponent = Math.max(commonExponent, quadraticExponent);
             }
             if (commonExponent == Long.MIN_VALUE) {
-                return false;
+                return NOT_ESCAPED;
             }
-            double sum = align(referenceMargin.mantissa(), referenceMargin.exponent(), commonExponent)
-                    + align(linear, exponent, commonExponent)
-                    + align(quadratic, quadraticExponent, commonExponent);
-            return sum > 0.0;
+            double margin = align(referenceMargin.mantissa(), referenceMargin.exponent(), commonExponent);
+            double linearTerm = align(linear, exponent, commonExponent);
+            double quadraticTerm = align(quadratic, quadraticExponent, commonExponent);
+            double sum = margin + linearTerm + quadraticTerm;
+            if (errorBounded) {
+                // Same bounds as in advance: the linear term can cancel, so it takes 2 |Z| D
+                // explicitly, while D^2 is at most twice |delta|^2.
+                // With r = m 2^k, as in advance.
+                double m = errorMantissa;
+                double referenceAbs = Math.abs(referenceReal) + Math.abs(referenceImaginary);
+                double deltaAbs = Math.abs(real) + Math.abs(imaginary);
+                double quadraticAbs = Math.abs(quadraticTerm);
+                double squared = 2.0 * (scaledTwo + m) * (m * quadraticAbs);
+                if (errorExponent != 0L) {
+                    squared = scale(squared, 2L * errorExponent);
+                }
+                double uncertainty = STATE_ROUNDING * Math.abs(margin)
+                        + (m + scaledRounding) * align(2.0 * referenceAbs * deltaAbs,
+                                exponent + errorExponent, commonExponent)
+                        + squared + 2.0 * STATE_ROUNDING * quadraticAbs
+                        + ESCAPE_DECISION_ROUNDING
+                                * (Math.abs(margin) + Math.abs(linearTerm) + Math.abs(quadraticTerm));
+                if (Math.abs(sum) <= uncertainty) {
+                    return UNCERTAIN_ESCAPE;
+                }
+            }
+            return sum > 0.0 ? ESCAPED : NOT_ESCAPED;
         }
 
         double realAsDouble() {
@@ -902,6 +1133,11 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 return Math.copySign(Double.POSITIVE_INFINITY, mantissa);
             }
             return Math.scalb(mantissa, (int) shift);
+        }
+
+        /** {@code value * 2^shift} for any finite value, saturating to zero or infinity. */
+        private static double scale(double value, long shift) {
+            return Math.scalb(value, (int) Math.max(-4096L, Math.min(4096L, shift)));
         }
 
         private static double asDouble(double mantissa, long exponent) {
@@ -961,10 +1197,28 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
             return Optional.empty();
         }
         MathContext context = grid.mathContext();
-        return Optional.of(new PreciseSampler(job, context, primary, bla,
+        return Optional.of(new PreciseSampler(job, grid, context, primary, bla,
                 new RecoveryReferenceLattice<>(primary.cReal(), primary.cImaginary(),
-                        grid.realStep(), grid.imaginaryStep(), context, MAX_ADDITIONAL_REFERENCES,
-                        (real, imaginary, stop) -> ReferenceOrbit.create(job, real, imaginary, context, stop))));
+                        grid.realStep(), grid.imaginaryStep(), context, RECOVERY_REFERENCE_CACHE_CAPACITY,
+                        (real, imaginary, stop) -> real.compareTo(primary.cReal()) == 0
+                                && imaginary.compareTo(primary.cImaginary()) == 0
+                                ? primary : ReferenceOrbit.create(job, real, imaginary, context, stop))));
+    }
+
+    /**
+     * Runs the scaled-delta loop for one pixel from the primary reference and returns the
+     * iteration at which its error bound stopped being tracked and the absolute error it then
+     * bounded, both NaN when it stayed tracked, for tests.
+     */
+    static double[] scaledErrorBoundLoss(RenderJob job, int x, int y) {
+        PreciseRenderGrid grid = job.preciseGrid();
+        ReferenceOrbit primary = ReferenceOrbit.create(job, grid, () -> false);
+        ScaledComplex deltaC = ScaledComplex.from(
+                ScaledValue.fromBigDecimal(grid.realAt(x).subtract(primary.cReal(), grid.mathContext())),
+                ScaledValue.fromBigDecimal(grid.imaginaryAt(y).subtract(primary.cImaginary(), grid.mathContext())));
+        double[] loss = {Double.NaN, Double.NaN};
+        perturbScaled(primary, deltaC, job.maxIterations(), () -> false, loss);
+        return loss;
     }
 
     /**
@@ -978,15 +1232,20 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         private final ReferenceOrbit primary;
         private final MandelbrotBlaTable primaryBla;
         private final RecoveryReferenceLattice<ReferenceOrbit> recovery;
+        private final BigDecimal realStep;
+        private final BigDecimal imaginaryStep;
 
         private PreciseSampler(
                 RenderJob job,
+                PreciseRenderGrid grid,
                 MathContext mathContext,
                 ReferenceOrbit primary,
                 MandelbrotBlaTable primaryBla,
                 RecoveryReferenceLattice<ReferenceOrbit> recovery
         ) {
             this.job = job;
+            this.realStep = grid.realStep();
+            this.imaginaryStep = grid.imaginaryStep();
             this.mathContext = mathContext;
             this.primary = primary;
             this.primaryBla = primaryBla;
@@ -1006,26 +1265,37 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 return null;
             }
 
-            double deltaReal = cReal.subtract(primary.cReal(), mathContext).doubleValue();
-            double deltaImaginary = cImaginary.subtract(
-                    primary.cImaginary(), mathContext).doubleValue();
+            BigDecimal exactDeltaReal = cReal.subtract(primary.cReal(), mathContext);
+            BigDecimal exactDeltaImaginary = cImaginary.subtract(primary.cImaginary(), mathContext);
+            double deltaReal = exactDeltaReal.doubleValue();
+            double deltaImaginary = exactDeltaImaginary.doubleValue();
+            if (CoordinateDeltas.losesPixelResolution(exactDeltaReal, deltaReal, realStep)
+                    || CoordinateDeltas.losesPixelResolution(
+                            exactDeltaImaginary, deltaImaginary, imaginaryStep)) {
+                // A double offset would move the sample, possibly onto the reference.
+                PerturbationResult result = perturbScaled(primary, ScaledComplex.from(
+                                ScaledValue.fromBigDecimal(exactDeltaReal),
+                                ScaledValue.fromBigDecimal(exactDeltaImaginary)),
+                        job.maxIterations(), cancelled);
+                return result.reliable() ? result.sample() : calculateHighPrecision(
+                        cReal, cImaginary, mathContext, job.maxIterations(), cancelled);
+            }
             double real = primary.cRealAsDouble() + deltaReal;
             double imaginary = primary.cImaginaryAsDouble() + deltaImaginary;
             if (isSafelyInsideKnownInterior(real, imaginary)) {
                 return new FractalSample(job.maxIterations(), false, 0.0, 0.0);
             }
 
-            PerturbationResult result = perturb(
-                    primary, deltaReal, deltaImaginary, job.maxIterations(), primaryBla, cancelled);
+            PerturbationResult result = perturb(primary, deltaReal, deltaImaginary,
+                    exactDeltaReal.signum() == 0 && exactDeltaImaginary.signum() == 0,
+                    job.maxIterations(), primaryBla, cancelled);
             if (result.reliable()) {
                 return result.sample();
             }
             ReferenceOrbit reference = recovery.reference(deltaReal, deltaImaginary, cancelled);
             if (reference != null) {
-                result = perturb(reference,
-                        cReal.subtract(reference.cReal(), mathContext).doubleValue(),
-                        cImaginary.subtract(reference.cImaginary(), mathContext).doubleValue(),
-                        job.maxIterations(), null, cancelled);
+                result = perturbFromRecovery(reference, cReal, cImaginary, realStep, imaginaryStep,
+                        mathContext, job.maxIterations(), cancelled);
                 if (result.reliable()) {
                     return result.sample();
                 }
@@ -1040,35 +1310,58 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
         }
     }
 
-    /** Shared bounded set of references used to recover perturbation glitches. */
+    /**
+     * Primary reference plus the recovery references of a fixed lattice, shared by the workers
+     * of one generation. A glitched pixel uses the recovery reference of its lattice point, so its
+     * sample is a function of its coordinate, never of which tiles were calculated first.
+     */
     private static final class ReferencePool {
-        private final RenderJob job;
+        private final ReferenceOrbit primary;
+        private final RecoveryReferenceLattice<ReferenceOrbit> recovery;
         private final MathContext mathContext;
-        private final java.util.concurrent.CopyOnWriteArrayList<ReferenceOrbit> references =
-                new java.util.concurrent.CopyOnWriteArrayList<>();
-        private final AtomicInteger reservedAdditionalReferences = new AtomicInteger();
+        private final LongAdder additionalReferences = new LongAdder();
         private final LongAdder additionalReferenceNanos = new LongAdder();
         private final LongAdder modifiedRebases = new LongAdder();
         private final LongAdder blaSteps = new LongAdder();
         private final LongAdder blaSkippedIterations = new LongAdder();
         private final MandelbrotBlaTable primaryBla;
+        private final BigDecimal realStep;
+        private final BigDecimal imaginaryStep;
 
         private ReferencePool(
                 RenderJob job,
-                MathContext mathContext,
+                PreciseRenderGrid grid,
                 ReferenceOrbit primary,
                 MandelbrotBlaTable primaryBla
         ) {
-            this.job = job;
-            this.mathContext = mathContext;
+            this.primary = primary;
+            this.mathContext = grid.mathContext();
             this.primaryBla = primaryBla;
-            references.add(primary);
+            this.realStep = grid.realStep();
+            this.imaginaryStep = grid.imaginaryStep();
+            this.recovery = new RecoveryReferenceLattice<>(primary.cReal(), primary.cImaginary(),
+                    grid.realStep(), grid.imaginaryStep(), mathContext, RECOVERY_REFERENCE_CACHE_CAPACITY,
+                    (real, imaginary, stop) -> {
+                        // The origin lattice point is the primary reference: reuse its identical orbit.
+                        if (real.compareTo(primary.cReal()) == 0 && imaginary.compareTo(primary.cImaginary()) == 0) {
+                            return primary;
+                        }
+                        long started = System.nanoTime();
+                        ReferenceOrbit reference = ReferenceOrbit.create(job, real, imaginary, mathContext, stop);
+                        additionalReferenceNanos.add(System.nanoTime() - started);
+                        if (reference != null) additionalReferences.increment();
+                        return reference;
+                    });
         }
 
         ReferenceOrbit primary() {
-            return references.getFirst();
+            return primary;
         }
 
+        /**
+         * Perturbs from the primary reference, then from the recovery reference of the pixel's
+         * lattice point. An unreliable result leaves the pixel to exact iteration.
+         */
         PerturbationResult calculate(
                 BigDecimal cReal,
                 BigDecimal cImaginary,
@@ -1077,94 +1370,34 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                 int maxIterations,
                 BooleanSupplier cancelled
         ) {
-            int executed = 0;
-            int modifiedRebases = 0;
+            // CoordinateDeltas sends an exact offset that rounds to zero to the scaled path,
+            // so a zero offset here is exact.
             PerturbationResult primaryResult = perturb(
-                    primary(), primaryDeltaReal, primaryDeltaImaginary, maxIterations,
+                    primary, primaryDeltaReal, primaryDeltaImaginary,
+                    primaryDeltaReal == 0.0 && primaryDeltaImaginary == 0.0, maxIterations,
                     primaryBla, cancelled);
-            executed += primaryResult.executedIterations();
-            modifiedRebases += primaryResult.modifiedRebaseCount();
             if (primaryResult.reliable()) {
                 return primaryResult;
             }
-
-            for (ReferenceCandidate nearest : orderedAdditionalReferences(cReal, cImaginary)) {
-                PerturbationResult result = perturb(
-                        nearest.reference(), nearest.deltaReal(),
-                        nearest.deltaImaginary(), maxIterations, null, cancelled);
-                executed += result.executedIterations();
-                modifiedRebases += result.modifiedRebaseCount();
-                if (result.reliable()) {
-                    return new PerturbationResult(
-                            result.sample(), executed, true, modifiedRebases,
-                            primaryResult.blaStepCount(), primaryResult.blaSkippedIterationCount());
-                }
-            }
-
-            if (cancelled.getAsBoolean() || !reserveAdditionalReference()) {
-                return new PerturbationResult(null, executed, false, modifiedRebases,
+            int executed = primaryResult.executedIterations();
+            int rebases = primaryResult.modifiedRebaseCount();
+            ReferenceOrbit reference = recovery.reference(
+                    primaryDeltaReal, primaryDeltaImaginary, cancelled);
+            if (reference == null) {
+                return new PerturbationResult(null, executed, false, rebases,
                         primaryResult.blaStepCount(), primaryResult.blaSkippedIterationCount());
             }
-
-            /* Do not serialize high-precision orbit construction across workers. */
-            long started = System.nanoTime();
-            ReferenceOrbit additional = ReferenceOrbit.create(
-                    job, cReal, cImaginary, mathContext, cancelled);
-            additionalReferenceNanos.add(System.nanoTime() - started);
-            if (additional == null) {
-                return new PerturbationResult(null, executed, false, modifiedRebases,
-                        primaryResult.blaStepCount(), primaryResult.blaSkippedIterationCount());
-            }
-            references.add(additional);
-            PerturbationResult result = perturb(
-                    additional, 0.0, 0.0, maxIterations, null, cancelled);
+            PerturbationResult result = perturbFromRecovery(reference, cReal, cImaginary,
+                    realStep, imaginaryStep, mathContext, maxIterations, cancelled);
             return new PerturbationResult(
                     result.sample(), executed + result.executedIterations(),
-                    result.reliable(), modifiedRebases + result.modifiedRebaseCount(),
+                    result.reliable(), rebases + result.modifiedRebaseCount(),
                     primaryResult.blaStepCount(), primaryResult.blaSkippedIterationCount());
         }
 
-        private boolean reserveAdditionalReference() {
-            while (true) {
-                int reserved = reservedAdditionalReferences.get();
-                if (reserved >= MAX_ADDITIONAL_REFERENCES) {
-                    return false;
-                }
-                if (reservedAdditionalReferences.compareAndSet(reserved, reserved + 1)) {
-                    return true;
-                }
-            }
-        }
-
-        private List<ReferenceCandidate> orderedAdditionalReferences(
-                BigDecimal cReal,
-                BigDecimal cImaginary
-        ) {
-            List<ReferenceCandidate> candidates = new ArrayList<>(
-                    Math.max(0, references.size() - 1));
-            for (int index = 1; index < references.size(); index++) {
-                ReferenceOrbit reference = references.get(index);
-                double deltaReal = cReal.subtract(
-                        reference.cReal(), mathContext).doubleValue();
-                double deltaImaginary = cImaginary.subtract(
-                        reference.cImaginary(), mathContext).doubleValue();
-                double distance = deltaReal * deltaReal + deltaImaginary * deltaImaginary;
-                candidates.add(new ReferenceCandidate(
-                        reference, deltaReal, deltaImaginary, distance));
-            }
-            candidates.sort(Comparator.comparingDouble(ReferenceCandidate::distanceSquared));
-            return candidates;
-        }
-
-        private record ReferenceCandidate(
-                ReferenceOrbit reference,
-                double deltaReal,
-                double deltaImaginary,
-                double distanceSquared
-        ) {}
-
+        /** Recovery orbits built in this generation, counting rebuilds after eviction. */
         int additionalReferenceCount() {
-            return references.size() - 1;
+            return (int) Math.min(Integer.MAX_VALUE, additionalReferences.sum());
         }
 
         void recordWork(PerturbationResult result) {
@@ -1205,6 +1438,10 @@ public final class MandelbrotPerturbationRenderBackend implements RenderBackend 
                     .multiply(BigDecimal.valueOf(2), context).add(cImaginary, context);
             zr = nextReal;
             zi = nextImaginary;
+            // A zero keeps the scale of its operands, which would grow every iteration on the
+            // real axis and make the exact sum below ever longer.
+            if (zr.signum() == 0) zr = BigDecimal.ZERO;
+            if (zi.signum() == 0) zi = BigDecimal.ZERO;
             if (zr.multiply(zr, context).add(zi.multiply(zi, context)).compareTo(FOUR) > 0) {
                 return new FractalSample(
                         iteration, true, zr.doubleValue(), zi.doubleValue());

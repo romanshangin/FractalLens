@@ -37,7 +37,10 @@ Declare selected fixtures, render sizes,
 modes, warmups, samples, process pairs, timeout and every target/control metric.
 Targets require at least a 10% improvement (B/A <= 0.90); controls allow at most
 5% regression (B/A <= 1.05), following the proposed CPU criteria in
-[the optimization analysis](CPU_GPU_OPTIMIZATION_ANALYSIS.md). Stricter limits
+[the optimization analysis](CPU_GPU_OPTIMIZATION_ANALYSIS.md). `non_inferiority` compares
+two different builds on control metrics only, for a correctness change that
+claims no speedup; it may not declare targets, and its controls keep the same
+limit. Stricter limits
 are allowed. A result is scoped to
 these declared cases; it cannot establish a whole-matrix or whole-app benefit.
 

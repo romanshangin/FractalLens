@@ -86,8 +86,12 @@ class PairValidationTest(unittest.TestCase):
         self.set_matrix("9.1-v3")
         validate_campaign(self.root)
 
-    def test_rejects_unknown_matrix(self):
+    def test_accepts_matrix_with_antenna_fixture(self):
         self.set_matrix("9.1-v4")
+        validate_campaign(self.root)
+
+    def test_rejects_unknown_matrix(self):
+        self.set_matrix("9.1-v5")
         with self.assertRaisesRegex(ValueError, "Unknown fixture matrix"):
             validate_campaign(self.root)
 
@@ -188,6 +192,39 @@ class PairValidationTest(unittest.TestCase):
         result = summarize(self.root)
         self.assertEqual("pass", result["timing_verdict"])
         self.assertEqual("not_evaluated", result["production_promotion"])
+
+    def make_non_inferiority(self, candidate_identity="candidate"):
+        self.policy.update(purpose="non_inferiority",
+                           metrics=[dict(fixture="case", step="render", metric="backend_ms", role="control", max_ratio=1.05)])
+        write_json(self.root / "policy.json", self.policy)
+        digest = hashlib.sha256((self.root / "policy.json").read_bytes()).hexdigest()
+        for r in self.launches:
+            r["policy_sha256"] = digest
+        write_json(self.root / "launches.json", self.launches)
+        write_json(self.root / "build-B.json", dict(identity=candidate_identity, revision="revision"))
+
+    def test_non_inferiority_compares_different_builds_on_controls_only(self):
+        self.make_non_inferiority()
+        for pair in range(3):
+            self.change_rows(f"pair-{pair:02d}-B", lambda rows: [r.update(backend_ms="10.2") for r in rows])
+        result = summarize(self.root)
+        self.assertEqual("non_inferiority", result["purpose"])
+        self.assertEqual("pass", result["timing_verdict"])
+        self.assertEqual("not_evaluated", result["production_promotion"])
+
+    def test_non_inferiority_fails_a_regression_beyond_its_control_limit(self):
+        self.make_non_inferiority()
+        for pair in range(3):
+            self.change_rows(f"pair-{pair:02d}-B", lambda rows: [r.update(backend_ms="11") for r in rows])
+        self.assertEqual("fail", summarize(self.root)["timing_verdict"])
+
+    def test_non_inferiority_rejects_targets_and_identical_builds(self):
+        self.policy.update(purpose="non_inferiority")
+        with self.assertRaisesRegex(ValueError, "control metrics only"):
+            validate_policy(self.policy)
+        self.make_non_inferiority(candidate_identity="same")
+        with self.assertRaisesRegex(ValueError, "Build identity"):
+            validate_campaign(self.root)
 
     def make_configuration(self, pipelines=("es2", "mtl")):
         self.policy.update(purpose="configuration", runner="fx", modes="FAST",

@@ -16,8 +16,9 @@ from summarize_baseline_fx import SCOPES as FX_SCOPES, summarize as validate_fx
 
 KEY = ("fixture", "step", "width", "height")
 # 9.1-v2 removed the deterministic-jitter AA fixtures; 9.1-v3 shortened derived coordinate
-# digits after the viewport precision fix. Frozen builds of earlier versions remain valid inputs.
-MATRICES = {"9.1-v1", "9.1-v2", "9.1-v3"}
+# digits after the viewport precision fix; 9.1-v4 added the deep-antenna fixture. Frozen builds
+# of earlier versions remain valid inputs.
+MATRICES = {"9.1-v1", "9.1-v2", "9.1-v3", "9.1-v4"}
 # A configuration campaign compares one frozen build under two declared JVM settings.
 CONFIGURATION_OPTION = re.compile(r"-Dprism\.order=(es2|mtl|sw)")
 PIPELINE = re.compile(r"Initialized prism pipeline: com\.sun\.prism\.(\w+)\.\w+Pipeline")
@@ -36,7 +37,7 @@ def read(path):
 
 def validate_policy(p):
     require(p["version"] == "9.1-pairs-v1", "Unknown paired policy")
-    require(p["purpose"] in ("calibration", "candidate", "configuration"), "Unknown purpose")
+    require(p["purpose"] in ("calibration", "candidate", "configuration", "non_inferiority"), "Unknown purpose")
     require(p["runner"] in ("headless", "fx"), "Unknown runner")
     require(type(p["process_pairs"]) is int and p["process_pairs"] >= 3, "At least three fresh process pairs required")
     require(type(p["samples"]) is int and p["samples"] >= 1 and p["process_pairs"] * p["samples"] >= 30, "At least 30 measured pairs required")
@@ -71,10 +72,13 @@ def validate_policy(p):
         require(m["role"] in ("target", "control"), "Unknown metric role")
         limit = m["max_ratio"]
         require(isinstance(limit, (int, float)) and math.isfinite(limit) and 0 < limit <= (0.90 if m["role"] == "target" else 1.05), "Invalid or relaxed performance threshold")
-    # Non-inferiority of a configuration needs no improvement target.
+    # Non-inferiority of a configuration or of a build that claims no speedup needs no target.
     roles = {m["role"] for m in p["metrics"]}
-    require(roles == {"target", "control"} or (p["purpose"] == "configuration" and roles == {"control"}),
-            "Declare both target and control metrics")
+    if p["purpose"] == "non_inferiority":
+        require(roles == {"control"}, "A non-inferiority campaign declares control metrics only")
+    else:
+        require(roles == {"target", "control"} or (p["purpose"] == "configuration" and roles == {"control"}),
+                "Declare both target and control metrics")
 
 
 def validate_definition(policy, manifest):
@@ -133,7 +137,8 @@ def validate_campaign(directory, require_marker=True):
     validate_policy(policy)
     builds = {label: json.loads((directory / ("build-" + label + ".json")).read_text()) for label in "AB"}
     identical = builds["A"]["identity"] == builds["B"]["identity"]
-    require(identical == (policy["purpose"] != "candidate"), "Build identity conflicts with purpose")
+    require(identical == (policy["purpose"] not in ("candidate", "non_inferiority")),
+            "Build identity conflicts with purpose")
     launches = json.loads((directory / "launches.json").read_text())
     expected = [(pair, "AB" if pair % 2 == 0 else "BA", label)
                 for pair in range(policy["process_pairs"]) for label in ("AB" if pair % 2 == 0 else "BA")]

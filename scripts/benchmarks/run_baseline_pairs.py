@@ -72,6 +72,8 @@ def main():
         raise ValueError("A/A calibration requires identical compiled snapshots")
     if policy["purpose"] == "candidate" and manifests["A"]["identity"] == manifests["B"]["identity"]:
         raise ValueError("An identical snapshot cannot establish a candidate improvement")
+    if policy["purpose"] == "non_inferiority" and manifests["A"]["identity"] == manifests["B"]["identity"]:
+        raise ValueError("A non-inferiority comparison requires different compiled snapshots")
     if policy["purpose"] == "configuration" and manifests["A"]["identity"] != manifests["B"]["identity"]:
         raise ValueError("A configuration comparison requires identical compiled snapshots")
     java = args.java.resolve()

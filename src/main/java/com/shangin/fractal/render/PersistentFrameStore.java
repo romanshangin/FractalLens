@@ -83,8 +83,11 @@ public final class PersistentFrameStore implements AutoCloseable {
      * backend selection, precision policy or sample encoding change alters the samples
      * that the same key produces, so older entries are discarded instead of shown.
      * Version 2: deep Julia recovery references became coordinate-determined.
+     * Version 3: deep Mandelbrot base recovery references became coordinate-determined, and
+     * scalar and scaled perturbation stopped trusting escape decisions within their rounding
+     * bounds.
      */
-    static final int CALCULATION_VERSION = 2;
+    static final int CALCULATION_VERSION = 3;
 
     private static final byte[] MAGIC = "FLFRAME\0".getBytes(StandardCharsets.US_ASCII);
     static final String SUFFIX = ".frame";
@@ -96,8 +99,10 @@ public final class PersistentFrameStore implements AutoCloseable {
      * thresholds, phase encoding and color averaging. Increment it whenever a change alters
      * the AA colors or samples stored for an unchanged frame and coloring.
      * Version 2: deep AA recovery references became coordinate-determined.
+     * Version 3: deep Mandelbrot AA recovery stopped trusting escape decisions within its
+     * rounding bound, and offsets that lose pixel resolution as doubles use scaled deltas.
      */
-    static final int ANTIALIAS_VERSION = 2;
+    static final int ANTIALIAS_VERSION = 3;
     private static final byte[] REFINEMENT_MAGIC = "FLAAREF\0".getBytes(StandardCharsets.US_ASCII);
     static final String REFINEMENT_SUFFIX = ".aa";
     private static final int MAX_PALETTE_STOPS = 4_096;
