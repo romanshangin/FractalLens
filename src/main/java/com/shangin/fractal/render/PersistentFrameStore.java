@@ -93,7 +93,7 @@ public final class PersistentFrameStore implements AutoCloseable {
     static final String SUFFIX = ".frame";
 
     /** Layout of the antialiasing file stored beside a base frame. */
-    static final int REFINEMENT_FORMAT_VERSION = 1;
+    static final int REFINEMENT_FORMAT_VERSION = 2;
     /**
      * Version of the antialiasing semantics: subpixel sampling grids, candidate edge
      * thresholds, phase encoding and color averaging. Increment it whenever a change alters
@@ -463,8 +463,9 @@ public final class PersistentFrameStore implements AutoCloseable {
                 throw new InvalidEntryException("antialiasing does not match its frame");
             }
             boolean colors = header.stopCount() > 0;
-            boolean samples = header.entryCount() > 0;
+            boolean samples = header.samples();
             if (!colors && !samples
+                    || !samples && (header.entryCount() != 0 || header.phaseCount() != 0)
                     || colors && (header.stopCount() < 2 || header.stopCount() > MAX_PALETTE_STOPS)
                     || colors == header.palette().isEmpty() || colors == header.orbitTrap().isEmpty()
                     || header.entryCount() < 0 || header.entryCount() > size
@@ -476,7 +477,7 @@ public final class PersistentFrameStore implements AutoCloseable {
                     > maxSampleBytes) {
                 throw new InvalidEntryException("antialiasing samples exceed the memory limit");
             }
-            long payloadBytes = refinementPayloadBytes(size, header.stopCount(), header.entryCount(),
+            long payloadBytes = refinementPayloadBytes(size, header.stopCount(), samples, header.entryCount(),
                     header.phaseCount());
             if (header.payloadBytes() != payloadBytes
                     || channel.size() != channel.position() + payloadBytes) {
@@ -565,12 +566,13 @@ public final class PersistentFrameStore implements AutoCloseable {
             int stopCount = pixels == null ? 0 : coloring.paletteStops().size();
             int entryCount = samples == null ? 0 : samples.size();
             int phaseCount = samples == null ? 0 : samples.phaseCount();
-            if (stopCount == 0 && entryCount == 0 || stopCount > MAX_PALETTE_STOPS) {
+            if (stopCount == 0 && samples == null || stopCount > MAX_PALETTE_STOPS) {
                 return;
             }
-            long payloadBytes = refinementPayloadBytes(size, stopCount, entryCount, phaseCount);
+            long payloadBytes = refinementPayloadBytes(size, stopCount, samples != null, entryCount, phaseCount);
             ByteBuffer header = refinementHeaderBuffer(key, grid, job.width(), job.height(),
-                    pixels == null ? null : coloring, stopCount, entryCount, phaseCount, payloadBytes);
+                    pixels == null ? null : coloring, stopCount, samples != null, entryCount, phaseCount,
+                    payloadBytes);
             // Eviction would delete AA that does not fit with its frame, so it is not written.
             if (header.remaining() + payloadBytes + Files.size(frameFile) > maxBytes) {
                 return;
@@ -682,12 +684,13 @@ public final class PersistentFrameStore implements AutoCloseable {
         }
     }
 
-    private static long refinementPayloadBytes(int size, int stopCount, int entryCount, long phaseCount) {
+    private static long refinementPayloadBytes(int size, int stopCount, boolean samplesStored, int entryCount,
+                                               long phaseCount) {
         long colors = stopCount == 0 ? 0L
                 : Math.addExact(Math.multiplyExact((long) stopCount, Double.BYTES + Integer.BYTES)
                         + 2L * Double.BYTES + 1L,
                 Math.multiplyExact((long) size, Integer.BYTES + 1L));
-        long samples = entryCount == 0 ? 0L
+        long samples = !samplesStored ? 0L
                 : Math.addExact(2L * Double.BYTES + 1L
                         + Math.multiplyExact((long) entryCount, 3L * Integer.BYTES + 2L),
                 Math.multiplyExact(phaseCount, Short.BYTES));
@@ -696,14 +699,15 @@ public final class PersistentFrameStore implements AutoCloseable {
 
     private static ByteBuffer refinementHeaderBuffer(String key, String grid, int width, int height,
                                                      ColoringSettings coloring, int stopCount,
-                                                     int entryCount, int phaseCount, long payloadBytes) {
+                                                     boolean samples, int entryCount, int phaseCount,
+                                                     long payloadBytes) {
         byte[] keyBytes = key.getBytes(StandardCharsets.UTF_8);
         byte[] gridBytes = grid.getBytes(StandardCharsets.UTF_8);
         byte[] palette = (coloring == null ? "" : coloring.palette().name()).getBytes(StandardCharsets.UTF_8);
         byte[] orbitTrap = (coloring == null ? "" : coloring.orbitTrap().name()).getBytes(StandardCharsets.UTF_8);
         ByteBuffer header = ByteBuffer.allocate(REFINEMENT_MAGIC.length + 3 * Integer.BYTES
                 + 4 * Integer.BYTES + keyBytes.length + gridBytes.length + palette.length + orbitTrap.length
-                + 5 * Integer.BYTES + 2 * Long.BYTES);
+                + 6 * Integer.BYTES + 2 * Long.BYTES);
         header.put(REFINEMENT_MAGIC)
                 .putInt(REFINEMENT_FORMAT_VERSION)
                 .putInt(CALCULATION_VERSION)
@@ -715,6 +719,7 @@ public final class PersistentFrameStore implements AutoCloseable {
                 .putInt(width)
                 .putInt(height)
                 .putInt(stopCount)
+                .putInt(samples ? 1 : 0)
                 .putInt(entryCount)
                 .putInt(phaseCount)
                 .putLong(payloadBytes)
@@ -723,7 +728,7 @@ public final class PersistentFrameStore implements AutoCloseable {
     }
 
     private record RefinementHeader(String key, String grid, String palette, String orbitTrap, int width,
-                                    int height, int stopCount, int entryCount, int phaseCount,
+                                    int height, int stopCount, boolean samples, int entryCount, int phaseCount,
                                     long payloadBytes, long crc) {}
 
     private static RefinementHeader readRefinementHeader(FileChannel channel) throws IOException {
@@ -741,8 +746,15 @@ public final class PersistentFrameStore implements AutoCloseable {
         String grid = readText(channel);
         String palette = readText(channel);
         String orbitTrap = readText(channel);
-        ByteBuffer rest = readExactly(channel, 5 * Integer.BYTES + 2 * Long.BYTES);
-        return new RefinementHeader(key, grid, palette, orbitTrap, rest.getInt(), rest.getInt(), rest.getInt(),
+        ByteBuffer rest = readExactly(channel, 6 * Integer.BYTES + 2 * Long.BYTES);
+        int width = rest.getInt();
+        int height = rest.getInt();
+        int stopCount = rest.getInt();
+        int samples = rest.getInt();
+        if (samples != 0 && samples != 1) {
+            throw new InvalidEntryException("invalid antialiasing header");
+        }
+        return new RefinementHeader(key, grid, palette, orbitTrap, width, height, stopCount, samples == 1,
                 rest.getInt(), rest.getInt(), rest.getLong(), rest.getLong());
     }
 

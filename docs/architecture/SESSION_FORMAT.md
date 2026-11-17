@@ -215,7 +215,11 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   including pixels tested earlier that were not candidates, and supersamples
   only the new palette's candidates whose samples are not cached. Histogram and
   orbit-trap colorings have no samples, so their AA restores only for the same
-  coloring. A file is written only beside a stored base frame, after the visit's
+  coloring. A finished pass that found no candidate keeps an empty sample set
+  with its color scale and tested threshold, so such a frame (for example deep
+  Julia at `1e-16`) recolors after a restart or a fractal switch without
+  testing its pixels again; the header's samples flag tells an empty set from
+  AA stored without samples. A file is written only beside a stored base frame, after the visit's
   AA pass, with the same 1 s settle delay as frames; AA whose complete header,
   payload checksum included, equals the stored file's is not rewritten, so a
   restored visit that keeps its AA unchanged writes nothing. AA retained with
@@ -230,7 +234,7 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   without a new AA pass. A return in Base only binds them hidden, so a later
   switch to an AA mode reuses them instead of supersampling again. The header
   repeats the frame key and
-  grid and carries the AA-specific counts, bounded before allocation; samples
+  grid and carries the AA-specific counts and whether samples are stored, bounded before allocation; samples
   whose memory would exceed the interactive AA sample cache budget
   (`fractal.aaCache.maxBytes`, 512 MiB by default) are rejected, and the whole
   payload's length and CRC-32 are checked in a streaming pass before any array
@@ -278,6 +282,9 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   by base frames beyond double range, now converts exactly and checks escape
   decisions the same way. Version 2 entries are
   discarded and recalculated.
+  `REFINEMENT_FORMAT_VERSION` became 2 on 2026-11-16, when the AA header gained
+  its samples flag; version 1 AA files are discarded and their AA recalculated
+  on the next visit, while their frames stay valid.
 - **Loading.** Only an empty frame (no reused pixels) is restored, on the render
   thread inside the normal render call, so generations, cancellation and atomic
   publication are unchanged: the frame is published as one completed region.
@@ -302,8 +309,11 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   that does not fit keeps its frame without the AA when the frame alone fits,
   and AA without its frame is deleted. An AA write keeps its own frame, AA that
   does not fit the budget together with its frame is not written, and a frame
-  larger than the whole budget is not stored. The budget is provisional until
-  retained sizes and I/O latency are measured (ROADMAP P2.7). At 3024x1964 a
-  frame without orbit-trap distances takes about 74 MiB; AA colors add about
-  28 MiB, and AA samples 14 bytes per candidate pixel plus 2 bytes per subpixel
-  sample (an arithmetic estimate, not a measurement).
+  larger than the whole budget is not stored. At 3024x1964 a frame without
+  orbit-trap distances takes 73.6 MiB (118.9 MiB with them); AA colors add
+  about 28 MiB, and AA samples 14 bytes per candidate pixel plus 2 bytes per
+  subpixel sample (38 MiB of AA in all for the Refined home view), so the
+  budget keeps about nine such views with AA. Files are not compressed:
+  Deflate halves typical frames, but inflating them takes 8–10 times the
+  uncompressed read (see the
+  [Stage B validation](../../benchmarks/STAGE_B_PERSISTENCE_VALIDATION.md)).

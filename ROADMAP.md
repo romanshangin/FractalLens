@@ -349,20 +349,50 @@ separately, outside the scope of this macOS acceptance.
   stored beside the base frame under their own format and `ANTIALIAS_VERSION`
   and restored with it, so an exact hit after a restart runs no candidate
   detection or supersampling; covered by portable unit tests and a JavaFX
-  restart test on macOS. Compression, measured budgets, manual restart checks
-  and the acceptance items below remain open.
-- [ ] Use background, bounded I/O with lazy loading and explicit disk eviction.
+  restart test on macOS. macOS validation (2026-11-16, M3 Pro): the
+  predeclared restart limits pass at 1696x1188 and 3024x1964 for standard
+  Refined and deep Base only views (disk hits 14–35% of the cold miss
+  render, no base or AA work, bit-identical samples and ARGB, palette changes
+  exact without AA work); uniform Deflate compression is rejected and the
+  1 GiB budget retained; see the
+  [Stage B validation](benchmarks/STAGE_B_PERSISTENCE_VALIDATION.md).
+  Independent verification (2026-11-16) found it incomplete; see the open
+  items under correctness acceptance: a display scale (DPI) change between
+  launches and Windows and Linux validation.
+- [x] **Zero-candidate AA after a restart.** AA samples were kept only when a
+  pass supersampled at least one pixel, so a frame without AA candidates
+  (deep Julia at `1e-16`, 1696x1188) restored colors only, and its first
+  palette change after a restart tested every pixel again (270 ms there;
+  exact result). Done (2026-11-16): a finished pass without candidates keeps
+  an empty, complete sample set in memory and on disk
+  (`REFINEMENT_FORMAT_VERSION` 2); the same palette change after a restart
+  now takes about 21 ms with no AA work, with unchanged ARGB.
+- [x] Use background, bounded I/O with lazy loading and explicit disk eviction.
   Prefer writing after frame completion instead of starting a large save at exit.
   Publish complete files atomically, validate metadata, lengths and integrity
   before allocation, and reject incomplete, corrupt or incompatible entries.
   Cache misses, unavailable storage and write failures fall back to normal
   rendering without damaging scene persistence. Define bounded shutdown and
   cancellation; immutable snapshots must never mix render generations.
-- [ ] Establish memory/disk budgets from actual retained data, including AA,
+  Done (2026-11-16): a single background writer after a 1 s settle delay,
+  loading only inside the render of an exactly matching empty frame, LRU
+  disk eviction, atomic moves, bounded headers, lengths and CRC-32 checked
+  before allocation, fallback to calculation on misses, rejected entries
+  and unavailable or read-only storage, and a close bounded at 3 s (measured
+  at most 129 ms); see
+  [Stored completed frames](docs/architecture/SESSION_FORMAT.md#stored-completed-frames-p27-stage-b).
+- [x] Establish memory/disk budgets from actual retained data, including AA,
   temporary snapshots and loading buffers. At 3024x1964, direct CPU sample arrays
   alone are approximately 74 MiB without orbit-trap distances or 119 MiB with
   them, before masks, AA and other overhead. Compression gains and I/O latency
   require measurement; these sizes are arithmetic estimates, not RSS evidence.
+  Measured (2026-11-16): files match the estimates (73.6 MiB, 118.9 MiB with
+  orbit-trap distances, plus 38 MiB of AA for a Refined 3024x1964 view);
+  warm-cache reads take 17–36 ms at 3024x1964; peak RSS on a disk hit was
+  21–63% below the cold miss. Deflate halves typical frames but inflating
+  them takes 8–10 times the read, so compression is rejected; 1 GiB (about
+  nine such views with AA) is retained. See the
+  [Stage B validation](benchmarks/STAGE_B_PERSISTENCE_VALIDATION.md#disk-sizes-compression-and-read-latency).
 - [x] **Investigate nondeterministic AA recalculation.** Found during AA
   persistence verification (2026-11-15, macOS, deep Mandelbrot in Fast mode at
   2592x1674): two AA passes over the same restored base frame produced
@@ -435,11 +465,36 @@ separately, outside the scope of this macOS acceptance.
   interrupted/corrupt writes and read-only/unavailable storage. Run portable
   and relevant JavaFX tests plus manual switch/restart checks; report platform
   coverage separately.
-- [ ] **Performance acceptance:** predeclare limits and compare cold misses,
+  macOS status (2026-11-16): automated restarts of the production main view
+  matched samples and ARGB across store disabled, miss, hit and palette
+  changes for standard, deep Mandelbrot and deep Julia views with and without
+  Wide Preview; portable tests now also cover every preset, deep Julia,
+  read-only storage and close during a write. Independent verification
+  (2026-11-16, macOS only) reran the checks and the manual restart scenario,
+  and left two items open:
+  - [ ] **DPI change between launches.** Only same-scale resizes are
+    covered. Store a frame at one display scale, launch at another, and
+    confirm that the incompatible stored frame and its AA are not used and
+    the scene renders again correctly at the new scale.
+  - [ ] **Windows and Linux.** Rerun the portable and JavaFX persistence
+    tests and the manual restart scenario on Windows and Linux; until then
+    Stage B is validated on macOS only.
+- [x] **Performance acceptance:** predeclare limits and compare cold misses,
   warm memory hits and disk hits at realistic window sizes, including deep
   zoom. Measure switch/startup-to-visible latency, full completion, shutdown,
   peak RSS, retained memory and disk usage. Cache overhead must remain bounded;
   publish a retain/reject decision before marking either stage complete.
+  Stage B restart limits on macOS (2026-11-16): retained. Every predeclared
+  restart limit passed for cold misses and disk hits, each in a new JVM (the
+  deep 1696x1188 miss overhead after a predeclared confirmatory rerun);
+  closes took at most 129 ms. See the
+  [Stage B validation](benchmarks/STAGE_B_PERSISTENCE_VALIDATION.md).
+  Warm memory hits on the same scenarios (2026-11-16, returns within one
+  launch): every predeclared limit passed. Memory hits are exact and do no
+  base or AA work, with a store cost of −7.0% to +0.7%. Disk hits take
+  10.3–28.0% of the cold miss, and memory hits 47.6–124.6% of the disk hit
+  (deep differences are within one display refresh). Windows and Linux
+  measurements are separate.
 
 Preliminary engineering estimates, including tests and application checks:
 

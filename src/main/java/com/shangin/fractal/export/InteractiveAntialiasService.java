@@ -73,6 +73,13 @@ public final class InteractiveAntialiasService implements AutoCloseable {
      */
     private double completeThreshold = Double.POSITIVE_INFINITY;
     private double completeColorScale = Double.NaN;
+    /**
+     * True when the cached samples hold every candidate that the passes behind
+     * {@link #completeThreshold} selected, apart from rejections the cache tracks: false
+     * while that threshold rests on AA colors restored without samples. Only then does
+     * an empty cache prove that the frame has no candidates.
+     */
+    private boolean samplesCoverCompleteness;
     /** Changes whenever cached samples are bound to a frame, replaced or moved, see {@link #sampleBinding}. */
     private long sampleBinding;
     private volatile Profile lastProfile = Profile.EMPTY;
@@ -567,6 +574,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         if (cachedFrame != frame || !(coloring instanceof SmoothPaletteColoring smooth)) return;
         completeColorScale = smooth.colorScale();
         completeThreshold = PaletteEdgeThresholds.phaseThreshold(smooth.palette(), deepZoom);
+        samplesCoverCompleteness = false;
     }
 
     /**
@@ -591,6 +599,9 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             admitPendingSamples();
             if (sampleCache.rejections() == rejectionsAtStart) sampleCache.markComplete();
         }
+        // This pass sampled every candidate of the resulting threshold, or earlier passes did.
+        samplesCoverCompleteness = !skippedReusedPixels && (!sameScale || threshold <= completeThreshold)
+                || sameScale && samplesCoverCompleteness;
         if (!sameScale) {
             completeColorScale = coloring.colorScale();
             completeThreshold = skippedReusedPixels ? Double.POSITIVE_INFINITY : threshold;
@@ -605,6 +616,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private void forgetCompleteness() {
         completeThreshold = Double.POSITIVE_INFINITY;
         completeColorScale = Double.NaN;
+        samplesCoverCompleteness = false;
     }
 
     /** Caller owns this service's monitor. */
@@ -618,12 +630,23 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     /**
      * Palette-independent AA samples cached for {@code frame}, for retention beside the
      * completed frame, or {@code null} when the cache belongs to another frame or is empty.
+     * No samples are retained as an empty set for the latest finished passes' color scale
+     * and threshold when those passes found no candidate, so recoloring the frame after
+     * retention needs no pass either.
      */
     public synchronized AntialiasSampleCache.Retained retainSamples(RenderFrame frame) {
         Objects.requireNonNull(frame);
         if (cachedFrame != frame) return null;
         AntialiasSampleCache.Retained retained = pendingSamples != null ? pendingSamples : sampleCache.retain();
-        if (retained == null) return null;
+        if (retained == null || retained.size() == 0) {
+            // Restored empty samples stay pending through a pass without candidates, which
+            // may have changed the color scale they vouch for.
+            boolean dropped = retained != null ? retained.dropped() : sampleCache.dropped();
+            if (!samplesCoverCompleteness || dropped || completeThreshold == Double.POSITIVE_INFINITY) return null;
+            return retained != null && Double.compare(retained.colorScale(), completeColorScale) == 0
+                    ? retained.withCompleteThreshold(completeThreshold)
+                    : AntialiasSampleCache.Retained.empty(completeColorScale, completeThreshold);
+        }
         boolean vouched = Double.compare(completeColorScale, retained.colorScale()) == 0;
         return retained.withCompleteThreshold(vouched ? completeThreshold : Double.POSITIVE_INFINITY);
     }
@@ -644,6 +667,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         basePhaseCache = null;
         completeThreshold = retained.completeThreshold();
         completeColorScale = retained.colorScale();
+        samplesCoverCompleteness = true;
     }
 
     /** Creates the deep reference orbit once, when the first candidate needs new samples. */
