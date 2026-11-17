@@ -252,7 +252,13 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   limit. The viewport's working precision enters only through that grid, so a
   view restored from scene JSON hits the entry saved from the navigated view.
   The header repeats the full key and grid, which must match. Custom
-  (non-preset) formulas are not stored.
+  (non-preset) formulas are not stored. The display scale is not part of the
+  key: a restored view keeps its exact viewport, and the render size is the
+  window's logical size times the scale, rounded up to even pixels. With the
+  other key fields unchanged, a scale change misses only when it changes that
+  rounded render size; one that keeps it (such as a window half as wide at
+  twice the scale, or a slightly different scale that rounds to the same size)
+  yields the same grid and restores the stored frame and AA exactly.
 - **Pan limitation.** Only frames on their viewport's fresh grid, and their AA,
   are stored. A
   frame completed by pan reuse keeps the shifted grid of its source frame,
