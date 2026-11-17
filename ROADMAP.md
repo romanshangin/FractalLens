@@ -495,10 +495,29 @@ separately, outside the scope of this macOS acceptance.
   read-only storage and close during a write. Independent verification
   (2026-11-16, macOS only) reran the checks and the manual restart scenario,
   and left two items open:
-  - [ ] **DPI change between launches.** Only same-scale resizes are
+  - [x] **DPI change between launches.** Only same-scale resizes were
     covered. Store a frame at one display scale, launch at another, and
     confirm that the incompatible stored frame and its AA are not used and
     the scene renders again correctly at the new scale.
+    Done (2026-11-17, macOS, JavaFX test): a restored view keeps its exact
+    viewport, so the render size follows the display scale. Restarting the
+    same 160x100 pt window at another scale (1x to 2x, 2x to 1x, 1x to
+    1.5x, 1.25x to 1x) calculates and antialiases the view again, with
+    samples and ARGB identical to a launch without a store, and keeps the
+    first scale's entry, which a return to that scale restores without base
+    or AA work. A scale change that keeps the pixel size (320x200 pt at 1x
+    and 160x100 pt at 2x, either way, or 240x150 pt at 1x and 160x100 pt at
+    1.5x) has the same render grid and is an exact hit with no base or AA
+    work and identical samples and ARGB. A launch in a shown window, whose
+    surface takes the scale the window reports at startup, covers both cases
+    after a frame stored at the other scale (1x or 2x): every calculated and
+    every shown frame uses the window's scale and the exact restored viewport,
+    a frame stored at another render size is never shown, and a matching one
+    is the only frame shown, with its AA and no AA work; a check that applies
+    the window's scale late fails both. A miss depends on the rounded render size (logical size times
+    scale, up to even pixels), not on the scale itself. A launch after
+    changing the system display scale or on another physical display was not
+    run.
   - [ ] **Windows and Linux.** Rerun the portable and JavaFX persistence
     tests and the manual restart scenario on Windows and Linux; until then
     Stage B is validated on macOS only.
