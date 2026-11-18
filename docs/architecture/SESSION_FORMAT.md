@@ -31,7 +31,7 @@ malformed file, or an entry with a missing, non-decimal or non-positive value on
 makes the affected fractals open at their home views.
 
 Completed base frames are stored separately, in the platform cache directory
-(P2.7 Stage B, first increment). See
+(P2.7 Stage B, accepted on macOS). See
 [Stored completed frames](#stored-completed-frames-p27-stage-b).
 
 Application data is separate from the earlier private app; old sessions are never
