@@ -7,9 +7,14 @@ Uniform Deflate compression is rejected and the 1 GiB disk budget is
 retained. The zero-candidate recolor limitation found here was fixed and
 remeasured the same day (see below). Warm memory hits, disk hits and cold
 misses were then compared on the same scenarios within one launch, and
-every predeclared limit for them passed as well. Stage B stays open: a
-display scale (DPI) change between launches is not checked, and Windows and
+every predeclared limit for them passed as well. Stage B was left open: a
+display scale (DPI) change between launches was not checked, and Windows and
 Linux are not validated.**
+
+**Update, 2026-11-17: the DPI change between launches is covered by a JavaFX
+test (see `ROADMAP.md`, P2.7 correctness acceptance), and the owner accepted
+Stage B on macOS. Windows and Linux validation remains a separate open item;
+the results in this report are macOS only.**
 
 The checks measured the merged Stage B implementation on `main`
 (`d5123d4`, frame and AA store `CALCULATION_VERSION` and

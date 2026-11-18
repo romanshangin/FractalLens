@@ -175,7 +175,8 @@ not a rerun. Evidence selection and archive limits:
 
 ## Remaining work by function
 
-Execution order: finish outstanding P1.7 acceptance, then P2.7 render retention;
+Execution order: finish outstanding P1.7 acceptance; P2.7 render retention is
+accepted on macOS, and its Windows and Linux validation runs as a hardware check;
 CPU research (9.2–9.5) follows higher-priority gates, one bounded spike at a time.
 GPU research follows 9.6 -> 9.7 -> 9.9; API/hardware alternatives in 9.8 stay last.
 Hardware checks may run when equipment is available. Completed P0.3 does not
@@ -330,7 +331,7 @@ separately, outside the scope of this macOS acceptance.
   define how Julia parameter edits, history and current application render
   settings interact with restored scenes. Retain compatible AA data alongside
   its base frame, with explicit ownership and eviction accounting.
-- [ ] **Stage B: persist completed results across launches.** Store numerical
+- [x] **Stage B: persist completed results across launches (macOS acceptance).** Store numerical
   base samples and the original render grid, including exact decimal values,
   offsets and symmetry metadata; a PNG alone cannot support palette changes or
   exact navigation reuse. Add AA persistence after base-frame persistence.
@@ -359,6 +360,10 @@ separately, outside the scope of this macOS acceptance.
   Independent verification (2026-11-16) found it incomplete; see the open
   items under correctness acceptance: a display scale (DPI) change between
   launches and Windows and Linux validation.
+  Accepted on macOS (2026-11-17, owner decision): with the DPI item done, the
+  correctness and performance acceptance below pass on macOS. As for Stage A,
+  Windows and Linux validation is outside this macOS acceptance and stays open
+  as its own item below.
 - [x] **Zero-candidate AA after a restart.** AA samples were kept only when a
   pass supersampled at least one pixel, so a frame without AA candidates
   (deep Julia at `1e-16`, 1696x1188) restored colors only, and its first
@@ -478,7 +483,7 @@ separately, outside the scope of this macOS acceptance.
   Exploratory: `deep-boundary` unchanged, the antenna view about 5 times faster
   (872 to 163 ms) since almost no pixel needs exact iteration. See the
   [results](benchmarks/UNCERTAIN_DEEP_ESCAPES_RESULTS.md).
-- [ ] **Correctness acceptance:** compare stored/restored samples and complete
+- [x] **Correctness acceptance (macOS):** compare stored/restored samples and complete
   displayed frames with their source, including deep Mandelbrot and Julia,
   other presets, palette changes, all display modes and parameter changes.
   Cover exact hits, eviction/misses, pan in all directions, zero/no overlap,
@@ -494,7 +499,8 @@ separately, outside the scope of this macOS acceptance.
   Wide Preview; portable tests now also cover every preset, deep Julia,
   read-only storage and close during a write. Independent verification
   (2026-11-16, macOS only) reran the checks and the manual restart scenario,
-  and left two items open:
+  and left two items open: the DPI change below, and Windows and Linux,
+  now tracked as a separate item after performance acceptance.
   - [x] **DPI change between launches.** Only same-scale resizes were
     covered. Store a frame at one display scale, launch at another, and
     confirm that the incompatible stored frame and its AA are not used and
@@ -518,9 +524,6 @@ separately, outside the scope of this macOS acceptance.
     scale, up to even pixels), not on the scale itself. A launch after
     changing the system display scale or on another physical display was not
     run.
-  - [ ] **Windows and Linux.** Rerun the portable and JavaFX persistence
-    tests and the manual restart scenario on Windows and Linux; until then
-    Stage B is validated on macOS only.
 - [x] **Performance acceptance:** predeclare limits and compare cold misses,
   warm memory hits and disk hits at realistic window sizes, including deep
   zoom. Measure switch/startup-to-visible latency, full completion, shutdown,
@@ -537,6 +540,11 @@ separately, outside the scope of this macOS acceptance.
   10.3–28.0% of the cold miss, and memory hits 47.6–124.6% of the disk hit
   (deep differences are within one display refresh). Windows and Linux
   measurements are separate.
+- [ ] **Windows and Linux validation.** Rerun the portable and JavaFX
+  persistence tests and the manual switch/restart scenario on Windows and
+  Linux desktops, and repeat the Stage A and Stage B timing and memory checks
+  there. Until then Stages A and B are validated on macOS only; CI runs the
+  portable suite on Ubuntu, macOS and Windows but no JavaFX or manual checks.
 
 Preliminary engineering estimates, including tests and application checks:
 
