@@ -35,6 +35,7 @@ import java.util.function.Consumer;
 /** Native macOS menus, with an in-window fallback on other desktop platforms. */
 final class MainMenuBar extends MenuBar {
     private final SceneActions sceneActions;
+    private final SceneGalleryWindow gallery;
     private final javafx.event.EventHandler<javafx.stage.WindowEvent> hiddenHandler = event -> close();
     private final ToggleGroup fractals = new ToggleGroup();
     private MenuItem undo;
@@ -86,6 +87,7 @@ final class MainMenuBar extends MenuBar {
         this.stage = stage;
         this.fractalView = fractalView;
         sceneActions = new SceneActions(stage, fractalView, bookmarks, this::parameterSheetOpen);
+        gallery = new SceneGalleryWindow(stage, fractalView, this::parameterSheetOpen);
         stage.addEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN, hiddenHandler);
         FractalPreset initialFractal = initialScene.fractal();
         currentFractal = initialFractal;
@@ -205,11 +207,15 @@ final class MainMenuBar extends MenuBar {
     }
 
     private void updateDestinations(FractalPreset preset) {
-        goTo.getItems().setAll(FractalDestination.forPreset(preset).stream()
+        goTo.getItems().setAll(command(SceneGalleryWindow.MENU_TITLE,
+                shortcut(KeyCode.G, KeyCombination.SHIFT_DOWN), gallery::show), new SeparatorMenuItem());
+        goTo.getItems().addAll(FractalDestination.forPreset(preset).stream()
                 .map(destination -> command(destination.name(), null,
                         () -> fractalView.goTo(destination.viewport())))
                 .toList());
     }
+
+    SceneGalleryWindow gallery() { return gallery; }
 
     private void requestWindowClose() {
         var request = new javafx.stage.WindowEvent(stage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST);
@@ -384,6 +390,7 @@ final class MainMenuBar extends MenuBar {
         observeTextInput(null);
         FractalDialogs.close(stage);
         sceneActions.close();
+        gallery.close();
         if (juliaSheet != null) juliaSheet.close();
         if (settingsSheet != null) settingsSheet.close();
         closed = true;

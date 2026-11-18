@@ -1,0 +1,163 @@
+{
+  "catalogVersion": 1,
+  "entries": [
+    {
+      "id": "mandelbrot-seahorse-valley",
+      "name": "Seahorse Valley",
+      "description": "The cleft between the main cardioid and the period-2 bulb, lined with curled seahorse tails.",
+      "fractal": "MANDELBROT",
+      "viewport": {"centerReal": "-0.75", "centerImaginary": "0.1", "scale": "0.15"},
+      "coloring": {"palette": "ICE"}
+    },
+    {
+      "id": "mandelbrot-seahorse",
+      "name": "Seahorse",
+      "description": "A single seahorse from the valley: a double spiral whose arms repeat the whole pattern.",
+      "fractal": "MANDELBROT",
+      "viewport": {"centerReal": "-0.741444", "centerImaginary": "0.168525", "scale": "0.016"},
+      "coloring": {"palette": "TWILIGHT"}
+    },
+    {
+      "id": "mandelbrot-elephant-valley",
+      "name": "Elephant Valley",
+      "description": "The eastern edge of the main cardioid near its cusp, where spirals resemble rows of elephant trunks.",
+      "fractal": "MANDELBROT",
+      "viewport": {"centerReal": "0.271787", "centerImaginary": "-0.005557", "scale": "0.0021"},
+      "coloring": {"palette": "DESERT"}
+    },
+    {
+      "id": "mandelbrot-zoom-sequence",
+      "name": "Spiral Zoom Target",
+      "description": "The center of a widely shared Mandelbrot zoom animation near Seahorse Valley, magnified about 24 billion times with a raised iteration limit.",
+      "fractal": "MANDELBROT",
+      "viewport": {"centerReal": "-0.743643887037158704752191506114774", "centerImaginary": "0.131825904205311970493132056385139", "scale": "1e-10"},
+      "iterations": {"baseIterations": 1000, "iterationsPerZoomLevel": 100},
+      "coloring": {"palette": "FIRE"}
+    },
+    {
+      "id": "mandelbrot-misiurewicz-i",
+      "name": "Branch Point at c = i (Deep Zoom)",
+      "description": "The preperiodic point c = i magnified 10^24 times. Branches keep repeating at every depth; this view uses high-precision rendering.",
+      "fractal": "MANDELBROT",
+      "viewport": {"centerReal": "0", "centerImaginary": "1", "scale": "2.4e-24"},
+      "coloring": {"palette": "AURORA", "histogramColoring": true}
+    },
+    {
+      "id": "julia-dragon-spiral",
+      "name": "Dragon Spiral",
+      "description": "A spiral arm of the Julia set for c = -0.8 + 0.156i, the default Julia constant.",
+      "fractal": "JULIA",
+      "viewport": {"centerReal": "-0.1", "centerImaginary": "-0.45", "scale": "0.14"},
+      "juliaParameters": {"real": -0.8, "imaginary": 0.156},
+      "coloring": {"palette": "PLASMA"}
+    },
+    {
+      "id": "julia-douady-rabbit",
+      "name": "Douady Rabbit",
+      "description": "The Julia set for the center of the period-3 bulb. Its interior regions meet three at a time, like ears and a head.",
+      "fractal": "JULIA",
+      "viewport": {"centerReal": "0", "centerImaginary": "0", "scale": "2.4"},
+      "juliaParameters": {"real": -0.12256116687665, "imaginary": 0.74486176661974},
+      "coloring": {"palette": "CORAL"}
+    },
+    {
+      "id": "julia-san-marco",
+      "name": "San Marco Dragon",
+      "description": "The Julia set for c = -0.75: a chain of bulbs along the real axis, named after the domes of St Mark's Basilica.",
+      "fractal": "JULIA",
+      "viewport": {"centerReal": "0", "centerImaginary": "0", "scale": "2"},
+      "juliaParameters": {"real": -0.75, "imaginary": 0},
+      "coloring": {"palette": "BLUE_GOLD"}
+    },
+    {
+      "id": "julia-dendrite",
+      "name": "Dendrite",
+      "description": "For c = i the Julia set has no interior: it is a branching tree that encloses no area.",
+      "fractal": "JULIA",
+      "viewport": {"centerReal": "0", "centerImaginary": "0", "scale": "2.6"},
+      "juliaParameters": {"real": 0, "imaginary": 1},
+      "coloring": {"palette": "ICE", "histogramColoring": true}
+    },
+    {
+      "id": "julia-dendrite-branch-deep",
+      "name": "Dendrite Branch Point (Deep Zoom)",
+      "description": "The point z = i of the dendrite magnified 10^20 times. The same branching reappears at every depth; this view uses high-precision rendering.",
+      "fractal": "JULIA",
+      "viewport": {"centerReal": "0", "centerImaginary": "1", "scale": "2.4e-20"},
+      "juliaParameters": {"real": 0, "imaginary": 1},
+      "coloring": {"palette": "EMERALD", "histogramColoring": true}
+    },
+    {
+      "id": "multibrot-right-cusp",
+      "name": "Right Cusp",
+      "description": "One of the two cusps of the cubic Multibrot's main body, on the positive real axis.",
+      "fractal": "MULTIBROT_CUBIC",
+      "viewport": {"centerReal": "0.3849001794597505", "centerImaginary": "0", "scale": "0.12"},
+      "coloring": {"palette": "AMETHYST"}
+    },
+    {
+      "id": "multibrot-upper-island",
+      "name": "Upper Period-2 Island",
+      "description": "The bulb around c = i, whose critical orbit alternates between 0 and i.",
+      "fractal": "MULTIBROT_CUBIC",
+      "viewport": {"centerReal": "0", "centerImaginary": "1", "scale": "0.5"},
+      "coloring": {"palette": "SUNSET"}
+    },
+    {
+      "id": "multibrot-junction-valley",
+      "name": "Junction Valley",
+      "description": "The narrow cleft where the period-2 bulb touches the main body near c = 0.77i, fringed with fine filaments.",
+      "fractal": "MULTIBROT_CUBIC",
+      "viewport": {"centerReal": "0.025", "centerImaginary": "0.7698", "scale": "0.04"},
+      "coloring": {"palette": "COPPER"}
+    },
+    {
+      "id": "burning-ship-little-ship",
+      "name": "Little Ship",
+      "description": "The best-known Burning Ship detail: a smaller ship with masts and rigging on the antenna near -1.75.",
+      "fractal": "BURNING_SHIP",
+      "viewport": {"centerReal": "-1.75", "centerImaginary": "0.035", "scale": "0.09"},
+      "coloring": {"palette": "FIRE"}
+    },
+    {
+      "id": "burning-ship-ship-detail",
+      "name": "Ship Detail",
+      "description": "A closer look at the little ship's hull and masts.",
+      "fractal": "BURNING_SHIP",
+      "viewport": {"centerReal": "-1.7443359375", "centerImaginary": "0.017451171875", "scale": "0.008"},
+      "coloring": {"palette": "COPPER"}
+    },
+    {
+      "id": "burning-ship-coastal-ridges",
+      "name": "Coastal Ridges",
+      "description": "Jagged, angular ridges along the edge of the main ship, produced by the absolute values in the Burning Ship formula.",
+      "fractal": "BURNING_SHIP",
+      "viewport": {"centerReal": "-0.75", "centerImaginary": "1.15", "scale": "0.3"},
+      "coloring": {"palette": "SUNSET", "histogramColoring": true}
+    },
+    {
+      "id": "tricorn-western-branch",
+      "name": "Western Branch",
+      "description": "The branch extending west from the Tricorn body along the real axis.",
+      "fractal": "TRICORN",
+      "viewport": {"centerReal": "-1.25", "centerImaginary": "0", "scale": "0.625"},
+      "coloring": {"palette": "EMERALD"}
+    },
+    {
+      "id": "tricorn-western-miniature",
+      "name": "Western Miniature",
+      "description": "A small three-cornered copy of the Tricorn on its western branch.",
+      "fractal": "TRICORN",
+      "viewport": {"centerReal": "-1.756", "centerImaginary": "0", "scale": "0.1"},
+      "coloring": {"palette": "TWILIGHT"}
+    },
+    {
+      "id": "tricorn-off-axis-branch",
+      "name": "Off-axis Branch",
+      "description": "A branch above the real axis where the Tricorn's characteristic wavy edges are clearest.",
+      "fractal": "TRICORN",
+      "viewport": {"centerReal": "-0.85", "centerImaginary": "0.145", "scale": "0.08333333333333333"},
+      "coloring": {"palette": "AURORA"}
+    }
+  ]
+}

@@ -1361,6 +1361,41 @@ class FractalResizeFxTest {
     }
 
     @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = InteractiveRenderMode.class, names = {"BASE_ONLY", "FAST"})
+    void histogramColoringIsAppliedWhenALaterFrameCompletes(InteractiveRenderMode mode) throws Exception {
+        FractalSurface surface = fx(FractalSurface::new);
+        FractalRenderController controller = fx(() -> new FractalRenderController(surface));
+        var ice = new com.shangin.fractal.scene.ColoringSettings(PalettePreset.ICE);
+        var histogram = new com.shangin.fractal.scene.ColoringSettings(ice.palette(), ice.paletteStops(),
+                ice.colorScale(), ice.offset(), true, com.shangin.fractal.coloring.OrbitTrap.NONE);
+        FractalScene first = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE);
+        // A later, different frame: only the first frame after startup was recolored before the fix.
+        FractalScene later = first.withViewport(new Viewport("-0.75", "0.1", "0.6")).withColoring(histogram);
+        try {
+            fx(() -> {
+                surface.resize(80, 60);
+                surface.resizeBuffer(80, 60);
+                return null;
+            });
+            renderStandard(surface, controller, first, mode);
+            renderStandard(surface, controller, later, mode);
+            assertEquals(later.viewport(), fx(() -> surface.completedRender().scene().viewport()));
+            int[] expected = basePixels(surface);
+            int[] shown = pixels(surface);
+            int same = 0;
+            for (int i = 0; i < expected.length; i++) if (expected[i] == shown[i]) same++;
+            if (mode == InteractiveRenderMode.BASE_ONLY) {
+                assertArrayEquals(expected, shown, "Base only shows the histogram colors of the completed frame");
+            } else {
+                // Antialiasing replaces only edge pixels; every other pixel keeps the histogram base color.
+                assertTrue(same > expected.length * 3 / 4, "Histogram base colors shown: " + same + " of " + expected.length);
+            }
+        } finally {
+            fx(() -> { controller.close(); return null; });
+        }
+    }
+
+    @ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"smooth", "histogram", "orbit-trap"})
     void baseOnlyKeepsFinishedAntialiasingForEveryColoring(String coloringName) throws Exception {
         FractalSurface surface = fx(FractalSurface::new);

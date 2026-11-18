@@ -68,9 +68,17 @@ public record ColoringSettings(
         );
     }
 
+    /**
+     * Whether colors depend on the whole completed frame (histogram coloring), so pixels
+     * colored progressively with {@link #createStrategy()} must be colored again on completion.
+     */
+    public boolean dependsOnCompletedFrame() {
+        return orbitTrap == OrbitTrap.NONE && histogramColoring;
+    }
+
     /** Builds the optional second-pass mapping once the whole frame is available. */
     public ColoringStrategy createStrategy(SamplePlane data) {
-        return orbitTrap == OrbitTrap.NONE && histogramColoring
+        return dependsOnCompletedFrame()
                 ? new HistogramPaletteColoring(createPalette(), offset, data)
                 : createStrategy();
     }

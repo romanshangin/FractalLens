@@ -58,10 +58,13 @@ class FractalDestinationsFxTest {
                     for (var preset : FractalPreset.values()) {
                         fractal.getItems().get(preset.ordinal()).fire();
                         var destinations = FractalDestination.forPreset(preset);
-                        assertEquals(destinations.size(), go.getItems().size());
+                        // The gallery command and its separator precede the fractal's destinations.
+                        assertEquals(SceneGalleryWindow.MENU_TITLE, go.getItems().get(0).getText());
+                        assertInstanceOf(javafx.scene.control.SeparatorMenuItem.class, go.getItems().get(1));
+                        assertEquals(destinations.size() + 2, go.getItems().size());
                         for (int i = 0; i < destinations.size(); i++) {
-                            assertEquals(destinations.get(i).name(), go.getItems().get(i).getText());
-                            go.getItems().get(i).fire();
+                            assertEquals(destinations.get(i).name(), go.getItems().get(i + 2).getText());
+                            go.getItems().get(i + 2).fire();
                             assertEquals(destinations.get(i).viewport(), actual.get());
                         }
                         view.resetView();
