@@ -43,9 +43,9 @@ export type WorkflowResult = {
 };
 
 export const ROLES = {
-  IMPLEMENT: { skill: 'implement-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['READY_FOR_REVIEW', 'BLOCKED'] },
-  IMPLEMENT_FIXES: { skill: 'implement-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['READY_FOR_REVIEW', 'BLOCKED'] },
-  REVIEW: { skill: 'review-task', model: 'gpt-6.1-sol', effort: 'medium', sandbox: 'read-only', escalation: 'never', statuses: ['CLEAN', 'FINDINGS', 'INCOMPLETE'] },
+  IMPLEMENT: { skill: 'implement-task', model: 'gpt-6.2-sol', effort: 'medium', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['READY_FOR_REVIEW', 'BLOCKED'] },
+  IMPLEMENT_FIXES: { skill: 'implement-task', model: 'gpt-6.2-sol', effort: 'medium', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['READY_FOR_REVIEW', 'BLOCKED'] },
+  REVIEW: { skill: 'review-task', model: 'gpt-6.2-astra', effort: 'medium', sandbox: 'read-only', escalation: 'never', statuses: ['CLEAN', 'FINDINGS', 'INCOMPLETE'] },
   VERIFY: { skill: 'verify-task', model: 'gpt-6-luna', effort: 'medium', sandbox: 'workspace-write', escalation: 'never', statuses: ['PASS', 'FAIL', 'INCOMPLETE'] },
   DELIVER: { skill: 'deliver-task', model: 'gpt-6-luna', effort: 'low', sandbox: 'workspace-write', escalation: 'allowed', statuses: ['DELIVERED', 'BLOCKED', 'INCOMPLETE'] },
 } as const;
