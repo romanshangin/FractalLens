@@ -483,6 +483,13 @@ only `.agents/skills/`. A new skill also needs its symlink (exactly
 Claude, `agents/openai.yaml` for Codex).
 `scripts/orchestration/task-orchestrator.ts` runs the whole workflow with Codex
 (default) or `--executor claude`.
+When an agent starts a workflow stage in a separate session outside the
+orchestrator (for example a Claude Code session started for `review-task`,
+`verify-task` or `deliver-task`), it starts that session with the stage's model
+and reasoning effort from the orchestrator: `CLAUDE_MODELS` for Claude Code,
+`ROLES` for Codex, as listed in `docs/development/TASK_ORCHESTRATOR.md` ("Roles
+and transitions"). Read the current values there rather than copying them. If the
+session cannot be started with them, report the model and effort it actually uses.
 
 This file holds all agent instructions. `CLAUDE.md` only imports it
 (`@AGENTS.md`) so every Claude Code session loads it, including those that cannot

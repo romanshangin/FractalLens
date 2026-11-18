@@ -724,10 +724,12 @@ test('CLI dry-run plans roles without executing Codex; invalid flags exit nonzer
     assert.equal(result.status, 0, result.stderr);
     const plan = JSON.parse(result.stdout);
     assert.equal(plan.verificationRequired, !skip);
-    assert.equal(plan.stages[0].model, 'gpt-6.1-sol');
-    assert.equal(plan.stages[1].model, 'gpt-6.1-sol');
-    assert.equal(plan.stages.at(-1).model, 'gpt-6-luna');
-    assert.deepEqual(plan.stages.map((item: { stage: string }) => item.stage), skip ? ['IMPLEMENT', 'REVIEW', 'DELIVER'] : ['IMPLEMENT', 'REVIEW', 'VERIFY', 'DELIVER']);
+    assert.deepEqual(plan.stages.map(({ stage, model }: { stage: Stage; model: string }) => [stage, model]), [
+      ['IMPLEMENT', 'gpt-6.2-sol'],
+      ['REVIEW', 'gpt-6.2-astra'],
+      ...(skip ? [] : [['VERIFY', 'gpt-6-luna']]),
+      ['DELIVER', 'gpt-6-luna'],
+    ]);
     assert.equal(plan.executor, 'codex');
   }
   const claude = spawnSync(process.execPath, [script, '--task', 'Synthetic', '--dry-run', '--executor', 'claude', '--claude', 'must-not-be-invoked'], { encoding: 'utf8' });

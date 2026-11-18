@@ -82,8 +82,8 @@ which can advance afterward.
 
 | Stage | Skill | Codex model | Claude Code model | Reasoning effort | Sandbox | Escalation |
 | --- | --- | --- | --- | --- | --- | --- |
-| IMPLEMENT / IMPLEMENT_FIXES | `implement-task` | `gpt-6.1-sol` | `claude-opus-5-5` | medium | workspace-write | allowed |
-| REVIEW | `review-task` | `gpt-6.1-sol` | `claude-opus-5-5` | medium | read-only | never |
+| IMPLEMENT / IMPLEMENT_FIXES | `implement-task` | `gpt-6.2-sol` | `claude-opus-5-5` | medium | workspace-write | allowed |
+| REVIEW | `review-task` | `gpt-6.2-astra` | `claude-opus-5-5` | medium | read-only | never |
 | VERIFY | `verify-task` | `gpt-6-luna` | `claude-sonnet-5-5` | medium | workspace-write | never |
 | DELIVER | `deliver-task` | `gpt-6-luna` | `claude-sonnet-5-5` | low | workspace-write | allowed |
 
