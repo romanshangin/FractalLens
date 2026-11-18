@@ -42,7 +42,7 @@ AppKit integration must degrade safely elsewhere.
 | `docs/platform/MACOS_RUN.md` | macOS launch and application identity |
 | `docs/platform/MACOS_UI.md` | Current UI behavior and native/JavaFX boundary |
 | `docs/platform/GPU_RUNTIME.md` | GPU scope, runtime flags and CPU fallback |
-| `docs/architecture/SESSION_FORMAT.md`, `PNG_EXPORT.md` | Scene file format, history, bookmarks; export pipeline |
+| `docs/architecture/SESSION_FORMAT.md`, `PNG_EXPORT.md`, `SCENE_GALLERY.md` | Scene file format, history, bookmarks; export pipeline; Interesting Places catalog |
 | `docs/development/CI.md`, `TASK_ORCHESTRATOR.md`, `PUBLICATION.md` | CI, task workflow orchestration, evidence publication |
 | `docs/packaging/RUNTIME_PACKAGING.md` | jlink/jpackage DMG/EXE runtime artifacts |
 | `benchmarks/README.md`, relevant `*_BENCHMARK.md`, `*_VALIDATION.md`, `*_RESULTS.md` | Measurement protocols and evidence |
@@ -71,7 +71,7 @@ Java packages live under `src/main/java/com/shangin/fractal/` (see
 
 | Path | Contents |
 | --- | --- |
-| `src/main/macos/` | AppKit bridge (`FractalContextMenu.m`, `FractalApplicationMenu.m`, `FractalParameterSheet.m`, `FractalStatusBadge.m`), Dock launcher `FractalLauncher.c`, `Info.plist` |
+| `src/main/macos/` | AppKit bridge (`FractalContextMenu.m`, `FractalApplicationMenu.m`, `FractalParameterSheet.m`, `FractalStatusBadge.m`, `FractalGalleryPanel.m`), Dock launcher `FractalLauncher.c`, `Info.plist` |
 | `src/main/resources/com/shangin/fractal/` | App icons, GLSL compute shaders (`gpu/*.comp`), JavaFX CSS |
 | `src/test/java/` | JUnit tests mirroring main packages; benchmark mains (`*Benchmark.java`) |
 | `docs/` | `architecture/`, `development/`, `platform/`, `packaging/` documents |

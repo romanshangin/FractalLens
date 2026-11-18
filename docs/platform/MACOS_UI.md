@@ -127,6 +127,7 @@ The native JavaFX regression checks can be run with
 | Edit | Standard text editing commands for focused text fields |
 | View | Zoom In (⌘+, also ⌘=), Zoom Out (⌘−), Reset View (⌘0), Go to Coordinates… (⌘L), Enter/Exit Full Screen (⌃⌘F) |
 | Fractal | Mandelbrot, Julia, Multibrot, Burning Ship, Tricorn |
+| Go to | Interesting Places… (⌘⇧G), then the curated views of the current fractal |
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette, Reset Colors to Defaults |
 | Render | Edit Julia Parameters… |
 | Window | Minimize (⌘M), Zoom |
@@ -256,7 +257,15 @@ required. Disabling only the parent menu lets AppKit validation leave child item
 inactive after the JavaFX parent is re-enabled.
 
 Deep AA is available only in deep zoom. Histogram/orbit traps disable palette
-animation; navigation/scene changes stopping it clear its checkmark. After a
+animation; navigation/scene changes stopping it clear its checkmark. Histogram
+Coloring depends on the whole frame: progressive tiles show the plain palette, and
+the completed frame is colored again from its own histogram, including in Base only
+(earlier, Base only frames after the first kept the plain palette). Known
+limitation: after a pan in Base, then antialiasing or Antialiased display,
+antialiased pixels carried over from the previous frame keep that frame's
+histogram colors, so the overlap can differ slightly from newly revealed areas.
+These colors are kept with the frame's finished antialiasing, so they also return
+when the view is revisited, including from stored frames after a restart. After a
 completed frame, export captures the scene through independent width/height and
 system-save dialogs, then renders off-screen. Active **Cancel Export PNG** remains
 available during navigation. Completion is inline/nonmodal; errors use alerts.
@@ -316,6 +325,39 @@ loading screen until the Julia frame completes. Each is one history step, so Und
 returns to the exact source Mandelbrot scene and Redo reopens the Julia set. A live
 Julia preview is not part of these actions.
 
+### Interesting Places
+
+Go to → Interesting Places… (⌘⇧G) opens a nonmodal window listing curated places
+grouped by fractal, in Fractal menu order. Each card shows a preview, the place's
+name and a short description. The window opens immediately; a progress indicator
+stands in for the catalog until it loads and for each preview until it renders in
+the background. Previews are base-quality renders of the place with its own
+palette at the window's display scale and stay cached for the rest of the run, so
+reopening the window on the same display shows them at once. Hiding the window
+stops pending previews.
+
+On macOS with the AppKit bridge the window is a native panel (`FractalGalleryPanel.m`,
+`MacGalleryPanel`): a resizable child panel of the main window, centered over it,
+with an `NSCollectionView` whose sections are the fractals. The first place starts
+selected; arrow keys move the selection, a click selects, and Return, Enter or a
+double click opens the selected place. Selection, text and backgrounds use system
+colors, so the panel follows light and dark appearance, and long descriptions show
+in full as a tooltip. Elsewhere, or if the native panel cannot be created, a
+JavaFX window shows the same content: clicking a card, or pressing Return or Space
+on the focused card, opens the place.
+
+Opening a place closes the window and is one history step with the same behavior
+as restoring a bookmark: the current render is cancelled, the loading screen covers
+a fractal change, Undo returns to the previous scene and Redo reopens the place. A
+place that cannot be rendered at the current size shows an error and leaves the
+window open. The place sets the fractal, exact viewport, Julia constant, iterations
+and coloring, so Settings then shows the place's iteration values; the antialiasing
+modes chosen in Settings are kept. The window's hint states this. Bookmarks are not
+read or changed. Escape, Close or the window's close button dismisses the window.
+If the catalog cannot be loaded the window shows an error; invalid entries are left
+out with a notice. Catalog format, sources and validation:
+[Interesting Places gallery](../architecture/SCENE_GALLERY.md).
+
 ## Design references and implementation boundary
 
 - [Designing for macOS](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos/)
@@ -325,7 +367,8 @@ Julia preview is not part of these actions.
 
 This is a JavaFX implementation with native macOS menus, window controls, and
 file chooser. Settings, Julia Parameters and Add Bookmark use native
-AppKit sheets with JavaFX fallback. The coordinate and gradient editors use JavaFX controls, not
+AppKit sheets with JavaFX fallback, and Interesting Places a native AppKit panel
+with a JavaFX fallback window. The coordinate and gradient editors use JavaFX controls, not
 AppKit or SwiftUI. Scene controls are grouped under their task menus; there
 are currently no separate application-wide preferences.
 
@@ -1007,6 +1050,7 @@ messages through AppKit when the bridge is available:
 | Close while exporting (including system Quit) | Asynchronous `NSAlert` decision; Return/Escape defaults to returning | JavaFX owner-modal decision |
 | Edit Palette | Nonmodal native panel with position fields, color wells, add/remove and live gradient preview | Nonmodal JavaFX editor with the same preview |
 | Help | Nonmodal native scrollable text panel | Nonmodal JavaFX Help window |
+| Interesting Places | Nonmodal resizable child `NSPanel` with an `NSCollectionView` of places by fractal; previews rendered in Java at the panel's backing scale | Nonmodal JavaFX window with the same content |
 | PNG destination / overwrite decision | JavaFX `FileChooser` system save panel | Platform system save panel |
 | Export progress / completion | Existing in-window status | Same |
 

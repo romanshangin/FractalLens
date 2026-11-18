@@ -1168,9 +1168,18 @@ public class FractalView extends StackPane {
         java.util.Objects.requireNonNull(replacement);
         // Validate sharing against the selected formula's existing precision gate before mutation.
         FractalCamera candidate = new FractalCamera(replacement.fractal(), replacement.viewport());
+        int renderWidth = fractalSurface.renderWidthFor((int) getWidth());
+        int renderHeight = fractalSurface.renderHeightFor((int) getHeight());
         candidate.goTo(replacement.viewport(), Math.max(2, (int) getWidth()),
-                Math.max(2, (int) getHeight()), fractalSurface.renderWidthFor((int) getWidth()),
-                fractalSurface.renderHeightFor((int) getHeight()));
+                Math.max(2, (int) getHeight()), renderWidth, renderHeight);
+        // The camera checks coordinates only; the backends also depend on formula and coloring,
+        // for example deep Mandelbrot rendering has no orbit traps.
+        if (!renderController.supports(replacement,
+                new RenderTarget(Math.max(2, renderWidth), Math.max(2, renderHeight)))) {
+            throw new IllegalArgumentException(
+                    "This scene cannot be rendered: its formula and coloring are not supported "
+                            + "at this zoom and render size.");
+        }
         recordScene();
         history.record(replacement);
         restoreScene(replacement);

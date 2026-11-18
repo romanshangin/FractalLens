@@ -156,6 +156,16 @@ public final class FractalRenderController implements AutoCloseable {
             System.getLogger(FractalRenderController.class.getName())
                     .log(System.Logger.Level.ERROR, "Render failed", error);
 
+    /**
+     * Whether the render backends support the scene's formula, coloring and viewport at
+     * the target grid, so a scene can be rejected before it replaces the current one.
+     */
+    public boolean supports(FractalScene scene, RenderTarget target) {
+        return renderService.supports(new RenderJob(FormulaDefinition.forScene(scene), scene.viewport(),
+                target.width(), target.height(), scene.iterations().maxIterations(
+                        scene.fractal().defaultViewport().scaleExact(), scene.viewport().scaleExact())));
+    }
+
     public void cancelCurrent() {
         widePreview.cancel();
         visibleBusy = true;
@@ -583,8 +593,11 @@ public final class FractalRenderController implements AutoCloseable {
                         return;
                     }
 
+                    // Progressive tiles use the frame-independent coloring; a histogram needs the
+                    // completed frame, so those pixels are colored again before promotion.
                     if (initialFramePending
-                            || completedFrame.request().approximateCoverage().isPresent()) {
+                            || completedFrame.request().approximateCoverage().isPresent()
+                            || scene.coloring().dependsOnCompletedFrame()) {
                         surface.displayReadyPixelsPreservingRefinement(
                                 completedFrame,
                                 completedColoring

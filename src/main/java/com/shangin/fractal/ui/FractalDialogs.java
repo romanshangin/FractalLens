@@ -468,6 +468,8 @@ final class FractalDialogs {
                 + "On a trackpad, pinch to zoom and scroll with two fingers to pan.\n\n"
                 + "Use View to zoom, reset the view, enter coordinates and zoom, or go full screen.\n"
                 + "Choose a formula in Fractal, then use Go to for interesting places in that fractal.\n"
+                + "Go to → Interesting Places… shows curated places in every fractal with previews; "
+                + "open one to switch to it, and Undo to return.\n"
                 + "Each fractal returns to the view it was last left at, also after a restart; "
                 + "choosing the active fractal again resets its view.\n"
                 + "Choose a palette in Color.\n"

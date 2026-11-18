@@ -138,8 +138,9 @@ other platforms or native presentation failure.
 View → Copy Scene Preset (shortcut + Shift+C) copies versioned scene JSON;
 Apply Scene Preset from Clipboard (shortcut + Shift+V) validates before mutation.
 Share text or scene/bookmark JSON contents; no dimensions/machine paths. Version 1
-is accepted; unsupported versions, malformed values or formula-precision violations
-leave scene/history intact. Validate against future target at current dimensions,
+is accepted; unsupported versions, malformed values, formula-precision violations
+or scenes the render backends cannot draw at the current size (for example deep
+Mandelbrot with an orbit trap) leave scene/history intact. Validate against future target at current dimensions,
 including pending resize. Apply/restore is undoable, cancels gestures/recolor/stale
 renders, restores decimal camera exactly and synchronizes menus/title.
 

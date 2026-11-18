@@ -83,3 +83,22 @@
     -fx-background-color: -fx-accent;
     -fx-text-fill: -dialog-accent-text;
 }
+.fractal-dialog .gallery-card {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-padding: 6;
+}
+/* The border keeps hover visible in light appearance, where the input color is near the window color. */
+.fractal-dialog .gallery-card:hover { -fx-background-color: -dialog-input; -fx-border-color: -dialog-border; }
+.fractal-dialog .gallery-card:armed { -fx-background-color: derive(-dialog-input, -8%); }
+.fractal-dialog .gallery-card:focused, .fractal-dialog .gallery-card:focused:hover { -fx-border-color: -fx-accent; }
+.fractal-dialog .gallery-preview {
+    -fx-background-color: -dialog-input;
+    -fx-background-radius: 4;
+    -fx-border-color: -dialog-border;
+    -fx-border-radius: 4;
+}
+.fractal-dialog .gallery-card-title { -fx-font-weight: bold; -fx-fill: -dialog-text; }
+.fractal-dialog .gallery-card-description { -fx-fill: -dialog-muted; }

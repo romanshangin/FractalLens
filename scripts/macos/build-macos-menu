@@ -11,4 +11,5 @@ xcrun --sdk macosx clang -dynamiclib -fobjc-arc -Wall -Wextra -Werror \
     "$project_dir/src/main/macos/FractalApplicationMenu.m" \
     "$project_dir/src/main/macos/FractalParameterSheet.m" \
     "$project_dir/src/main/macos/FractalStatusBadge.m" \
+    "$project_dir/src/main/macos/FractalGalleryPanel.m" \
     -o "$output_dir/com/shangin/fractal/ui/native/libfractal-menu.dylib"

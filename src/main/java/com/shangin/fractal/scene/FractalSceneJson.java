@@ -86,7 +86,7 @@ public final class FractalSceneJson {
             throw new IllegalArgumentException("Scene JSON exceeds the 1 MiB limit");
         }
         try {
-            Map<String, Object> root = object(new Parser(json).parse(), "root");
+            Map<String, Object> root = object(parse(json), "root");
             int version = integer(required(root, "schemaVersion"), "schemaVersion");
             return switch (version) {
                 case 1 -> readVersion1(root);
@@ -98,6 +98,11 @@ public final class FractalSceneJson {
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("Invalid scene JSON", exception);
         }
+    }
+
+    /** Parses JSON text into maps, lists, strings, {@link BigDecimal} numbers, booleans and null. */
+    static Object parse(String json) {
+        return new Parser(json).parse();
     }
 
     private static FractalScene readVersion1(Map<String, Object> root) {
@@ -185,7 +190,7 @@ public final class FractalSceneJson {
                 decimalNumber(required(object, "imaginary"), "julia imaginary"));
     }
 
-    private static Viewport viewport(Map<String, Object> root) {
+    static Viewport viewport(Map<String, Object> root) {
         Map<String, Object> viewport = object(required(root, "viewport"), "viewport");
         return new Viewport(
                 decimalString(required(viewport, "centerReal"), "centerReal"),
@@ -193,7 +198,7 @@ public final class FractalSceneJson {
                 decimalString(required(viewport, "scale"), "scale"));
     }
 
-    private static Object required(Map<String, Object> object, String name) {
+    static Object required(Map<String, Object> object, String name) {
         if (!object.containsKey(name)) {
             throw new IllegalArgumentException("Missing required field: " + name);
         }
@@ -201,7 +206,7 @@ public final class FractalSceneJson {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> object(Object value, String name) {
+    static Map<String, Object> object(Object value, String name) {
         if (!(value instanceof Map<?, ?> map)) {
             throw new IllegalArgumentException(name + " must be an object");
         }
@@ -209,14 +214,14 @@ public final class FractalSceneJson {
     }
 
     @SuppressWarnings("unchecked")
-    private static List<Object> array(Object value, String name) {
+    static List<Object> array(Object value, String name) {
         if (!(value instanceof List<?> list)) {
             throw new IllegalArgumentException(name + " must be an array");
         }
         return (List<Object>) list;
     }
 
-    private static String string(Object value, String name) {
+    static String string(Object value, String name) {
         if (!(value instanceof String text)) {
             throw new IllegalArgumentException(name + " must be a string");
         }
@@ -233,7 +238,7 @@ public final class FractalSceneJson {
         }
     }
 
-    private static int integer(Object value, String name) {
+    static int integer(Object value, String name) {
         if (!(value instanceof BigDecimal number)) {
             throw new IllegalArgumentException(name + " must be a number");
         }
@@ -244,7 +249,7 @@ public final class FractalSceneJson {
         }
     }
 
-    private static double decimalNumber(Object value, String name) {
+    static double decimalNumber(Object value, String name) {
         if (!(value instanceof BigDecimal number)) {
             throw new IllegalArgumentException(name + " must be a number");
         }
@@ -255,7 +260,7 @@ public final class FractalSceneJson {
         return result;
     }
 
-    private static boolean bool(Object value, String name) {
+    static boolean bool(Object value, String name) {
         if (!(value instanceof Boolean result)) {
             throw new IllegalArgumentException(name + " must be a boolean");
         }
@@ -270,7 +275,7 @@ public final class FractalSceneJson {
         return (int) Long.parseLong(text.substring(1), 16);
     }
 
-    private static <T extends Enum<T>> T enumValue(Class<T> type, String value, String name) {
+    static <T extends Enum<T>> T enumValue(Class<T> type, String value, String name) {
         try {
             return Enum.valueOf(type, value);
         } catch (IllegalArgumentException exception) {

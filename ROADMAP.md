@@ -243,6 +243,34 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   Validate fixtures against the current renderer, version the bundled catalog
   and keep user bookmarks independent of catalog updates. Cover missing/invalid
   entries, navigation, visible loading and supported render/export modes.
+  Implemented (2026-11-17), awaiting review and owner acceptance: Go to →
+  Interesting Places…, 19 places in a versioned bundled catalog with
+  background-rendered previews, shown in a native AppKit panel on macOS with a
+  JavaFX fallback window; see
+  [Interesting Places gallery](docs/architecture/SCENE_GALLERY.md). Every
+  place is tested with interactive antialiasing and PNG export. Light
+  appearance was checked only by forcing the window's color scheme in a
+  snapshot, not by switching the system appearance; real keyboard use and
+  Windows/Linux runs are not yet checked.
+- [ ] **Histogram-consistent colors during interaction:** with Histogram
+  Coloring, progressive tiles use the plain palette until the frame completes,
+  and wide preview always does, so every zoom and pan shows a color jump and pan
+  edges differ from the histogram-colored center. Color progressive tiles and
+  wide-preview pixels with the previous completed frame's histogram while palette,
+  offset and orbit trap are unchanged; define how the smooth-iteration range shift
+  on deeper zoom is handled (values above the old maximum must not clamp to the
+  palette end until completion). The completion recolor stays authoritative (Base
+  only completion recolor fixed with the Interesting Places gallery). Also resolve
+  antialiased pixels reused across a pan in Base, then antialiasing and
+  Antialiased display: they keep the previous frame's histogram colors because
+  completion recoloring and the AA pass skip them, so the completed frame mixes
+  two mappings, and the mixed AA colors are retained with the frame and restored
+  on revisits, including stored frames after a restart; recolor or recompute them,
+  keep retained and stored AA consistent, and cover the overlap and a revisit with
+  tests. Preserve
+  stale-generation, atomic-publication and AA-reuse rules; accept only with pixel
+  tests for progressive tiles and wide preview, before/after screenshots and
+  gesture-to-visible latency within the control budget.
 - [ ] **Comparison mode:** show two independently configured views side by side
   for formulas, Julia parameters, palettes or display quality. Offer explicit
   linking of compatible viewports; define coordinate/camera mapping and reject

@@ -339,6 +339,11 @@ public final class FractalRenderService implements AutoCloseable {
         return !isCurrent(renderId) || Thread.currentThread().isInterrupted();
     }
 
+    /** Whether the configured backends can render the job; selection is cheap and side-effect free. */
+    public boolean supports(RenderJob job) {
+        return backend.supports(Objects.requireNonNull(job));
+    }
+
     @Override
     public synchronized void close() {
         markCancellationRequested();
