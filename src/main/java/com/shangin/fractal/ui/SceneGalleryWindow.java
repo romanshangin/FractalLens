@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -52,8 +53,11 @@ final class SceneGalleryWindow implements AutoCloseable {
     private boolean catalogFailed;
     private boolean catalogLoading;
     private Presentation presentation;
-    /** Identifies the shown presentation; hiding or closing it discards pending results. */
-    private volatile long session;
+    /**
+     * Identifies the shown presentation; hiding or closing it discards pending results.
+     * Advanced on the FX thread and read by the gallery thread.
+     */
+    private final AtomicLong session = new AtomicLong();
     private volatile boolean closed;
 
     /** Supplies the catalog on the gallery thread. */
@@ -152,19 +156,23 @@ final class SceneGalleryWindow implements AutoCloseable {
 
     /** Previews from the CPU render backends. */
     static PreviewRenderer cpuPreviewRenderer() {
-        ScenePreviewRenderer renderer = new ScenePreviewRenderer();
-        return new PreviewRenderer() {
-            @Override
-            public int[] render(FractalScene scene, int width, int height, BooleanSupplier cancelled)
-                    throws InterruptedException {
-                return renderer.render(scene, width, height, cancelled);
-            }
+        return new CpuPreviewRenderer();
+    }
 
-            @Override
-            public void close() {
-                renderer.close();
-            }
-        };
+    /** Owns its {@link ScenePreviewRenderer} and closes it with itself. */
+    private static final class CpuPreviewRenderer implements PreviewRenderer {
+        private final ScenePreviewRenderer renderer = new ScenePreviewRenderer();
+
+        @Override
+        public int[] render(FractalScene scene, int width, int height, BooleanSupplier cancelled)
+                throws InterruptedException {
+            return renderer.render(scene, width, height, cancelled);
+        }
+
+        @Override
+        public void close() {
+            renderer.close();
+        }
     }
 
     boolean isShowing() { return presentation != null && presentation.isShowing(); }
@@ -186,16 +194,16 @@ final class SceneGalleryWindow implements AutoCloseable {
             presentation.toFront();
             return;
         }
-        long current = ++session;
+        long current = session.incrementAndGet();
         presentation = presentationFactory.show(owner, new Listener() {
             @Override public void open(String id) {
-                if (session == current) SceneGalleryWindow.this.open(id);
+                if (session.get() == current) SceneGalleryWindow.this.open(id);
             }
 
             @Override public void hidden() {
-                if (session != current) return;
+                if (session.get() != current) return;
                 presentation = null;
-                session++;
+                session.incrementAndGet();
             }
         });
         if (catalogFailed) presentation.showError(LOAD_ERROR);
@@ -223,7 +231,7 @@ final class SceneGalleryWindow implements AutoCloseable {
                 catalogFailed = result == null;
                 if (!isShowing()) return;
                 if (catalogFailed) presentation.showError(LOAD_ERROR);
-                else showCatalog(session);
+                else showCatalog(session.get());
             });
         });
     }
@@ -252,18 +260,18 @@ final class SceneGalleryWindow implements AutoCloseable {
         int width = size[0];
         int height = size[1];
         worker.execute(() -> {
-            if (session != requested || closed) return;
+            if (session.get() != requested || closed) return;
             int[] pixels;
             try {
                 if (renderer == null) renderer = rendererFactory.get();
-                pixels = renderer.render(entry.scene(), width, height, () -> session != requested || closed);
+                pixels = renderer.render(entry.scene(), width, height, () -> session.get() != requested || closed);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 return;
             } catch (RuntimeException failure) {
                 LOG.log(System.Logger.Level.WARNING, "Gallery preview failed for " + entry.id(), failure);
                 Platform.runLater(() -> {
-                    if (session == requested && !closed && presentation != null) presentation.showPreviewFailed(entry);
+                    if (session.get() == requested && !closed && presentation != null) presentation.showPreviewFailed(entry);
                 });
                 return;
             }
@@ -272,7 +280,7 @@ final class SceneGalleryWindow implements AutoCloseable {
                 if (closed) return;
                 // A completed preview stays valid for later sessions; publish only to the requester.
                 previews.put(previewKey(entry, size), new Preview(pixels, width, height));
-                if (session == requested && presentation != null) presentation.showPreview(entry, pixels, width, height);
+                if (session.get() == requested && presentation != null) presentation.showPreview(entry, pixels, width, height);
             });
         });
     }
@@ -295,7 +303,7 @@ final class SceneGalleryWindow implements AutoCloseable {
     private void dismiss() {
         Presentation shown = presentation;
         presentation = null;
-        session++;
+        session.incrementAndGet();
         if (shown != null) shown.close();
     }
 
