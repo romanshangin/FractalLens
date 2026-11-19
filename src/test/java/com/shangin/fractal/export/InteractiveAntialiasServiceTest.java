@@ -509,6 +509,135 @@ class InteractiveAntialiasServiceTest {
         }
     }
 
+    @Test
+    void histogramPassAfterAPanReusesShiftedSamplesAndPublishesAFreshPassExactly() throws Exception {
+        var source = renderedFrame(new com.shangin.fractal.math.Viewport(
+                "-0.743643887037151", "0.13182590420533", "0.024"), 160, 100);
+        var units = source.request().viewport().imaginaryUnitsPerPixelExact(100);
+        var panned = new RenderJob(source.job().formula(), source.request().viewport().pan(
+                units.multiply(java.math.BigDecimal.valueOf(24)), units.multiply(java.math.BigDecimal.valueOf(-7))),
+                160, 100, 300);
+        FrameReuseResult reuse = new FrameReusePlanner().plan(source, null, panned).result();
+        assertTrue(reuse.reused(), "The fixture must reuse the source frame");
+        RenderFrame target = reuse.frame();
+        try (var backend = new DirectDoubleRenderBackend()) {
+            backend.render(target, () -> false, ignored -> {}, null);
+        }
+        var palette = PalettePreset.ICE.palette();
+        var sourceColoring = new com.shangin.fractal.coloring.HistogramPaletteColoring(palette, 0.0, source.samplePlane());
+        var targetColoring = new com.shangin.fractal.coloring.HistogramPaletteColoring(palette, 0.0, target.samplePlane());
+
+        int[] fresh;
+        long freshSamples;
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            fresh = refinedColors(service, target, targetColoring);
+            freshSamples = service.lastProfile().samples();
+        }
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            refinedColors(service, source, sourceColoring);
+            service.reuseFrame(source, target, reuse.shift().orElseThrow());
+            int[] afterPan = refinedColors(service, target, targetColoring);
+            long panSamples = service.lastProfile().samples();
+
+            assertArrayEquals(fresh, afterPan, "Shifted samples must publish exactly what a fresh pass does");
+            assertTrue(freshSamples > 0, "The fixture must contain AA candidates");
+            assertTrue(panSamples < freshSamples / 2,
+                    "Only revealed candidates may be sampled again: " + panSamples + " of " + freshSamples);
+        }
+    }
+
+    @Test
+    void histogramSamplesFollowSuccessivePansWithoutAPassBetweenThem() throws Exception {
+        var source = renderedFrame(new com.shangin.fractal.math.Viewport(
+                "-0.743643887037151", "0.13182590420533", "0.024"), 160, 100);
+        RenderFrame middle = panned(source, 30, 9);
+        // The second pan brings back pixels the first one moved out of the frame.
+        RenderFrame target = panned(middle, -12, -4);
+        var palette = PalettePreset.ICE.palette();
+        var targetColoring = new com.shangin.fractal.coloring.HistogramPaletteColoring(palette, 0.0, target.samplePlane());
+
+        int[] fresh;
+        long freshSamples;
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            fresh = refinedColors(service, target, targetColoring);
+            freshSamples = service.lastProfile().samples();
+        }
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            refinedColors(service, source,
+                    new com.shangin.fractal.coloring.HistogramPaletteColoring(palette, 0.0, source.samplePlane()));
+            service.reuseFrame(source, middle, shiftBetween(source, middle));
+            service.reuseFrame(middle, target, shiftBetween(middle, target));
+            assertArrayEquals(fresh, refinedColors(service, target, targetColoring));
+            assertTrue(service.lastProfile().samples() < freshSamples / 2,
+                    service.lastProfile().samples() + " of " + freshSamples + " samples calculated again");
+        }
+    }
+
+    private static RenderFrame panned(RenderFrame source, int pixelsX, int pixelsY) throws InterruptedException {
+        var units = source.request().viewport().imaginaryUnitsPerPixelExact(source.request().height());
+        var job = new RenderJob(source.job().formula(), source.request().viewport().pan(
+                units.multiply(java.math.BigDecimal.valueOf(pixelsX)), units.multiply(java.math.BigDecimal.valueOf(pixelsY))),
+                source.request().width(), source.request().height(), source.request().maxIterations());
+        FrameReuseResult reuse = new FrameReusePlanner().plan(source, null, job).result();
+        assertTrue(reuse.reused(), "The fixture must reuse its source frame");
+        try (var backend = new DirectDoubleRenderBackend()) {
+            backend.render(reuse.frame(), () -> false, ignored -> {}, null);
+        }
+        return reuse.frame();
+    }
+
+    private static PixelShift shiftBetween(RenderFrame source, RenderFrame target) {
+        return new PixelShift((int) (source.renderGrid().offsetX() - target.renderGrid().offsetX()),
+                (int) (source.renderGrid().offsetY() - target.renderGrid().offsetY()));
+    }
+
+    @Test
+    void histogramSamplesDoNotFollowAReuseThatMovesTheGridOrigin() throws Exception {
+        var source = renderedFrame(new com.shangin.fractal.math.Viewport(
+                "-0.743643887037151", "0.13182590420533", "0.024"), 96, 64);
+        var palette = PalettePreset.ICE.palette();
+        var coloring = new com.shangin.fractal.coloring.HistogramPaletteColoring(palette, 0.0, source.samplePlane());
+        // A frame of the same viewport calculated on its own grid, not a reuse of the source.
+        RenderFrame other = renderedFrame(source.request().viewport(), 96, 64);
+        try (var service = new InteractiveAntialiasService(new AntialiasSampleCache(), true)) {
+            refinedColors(service, source, coloring);
+            long first = service.lastProfile().samples();
+            service.reuseFrame(source, other, new PixelShift(1, 0));
+            refinedColors(service, other, coloring);
+            assertEquals(first, service.lastProfile().samples(),
+                    "Samples of a grid with another origin offset must be calculated again");
+        }
+    }
+
+    private static RenderFrame renderedFrame(com.shangin.fractal.math.Viewport viewport, int width, int height)
+            throws InterruptedException {
+        RenderFrame frame = RenderFrame.create(new RenderJob(FormulaDefinition.forPreset(FractalPreset.MANDELBROT,
+                com.shangin.fractal.coloring.OrbitTrap.NONE), viewport, width, height, 300));
+        try (var backend = new DirectDoubleRenderBackend()) {
+            backend.render(frame, () -> false, ignored -> {}, null);
+        }
+        return frame;
+    }
+
+    private static int[] refinedColors(InteractiveAntialiasService service, RenderFrame frame,
+                                       com.shangin.fractal.coloring.ColoringStrategy coloring)
+            throws InterruptedException {
+        int width = frame.samplePlane().width();
+        int[] colors = new int[frame.samplePlane().size()];
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        service.refine(frame, coloring, RefinedPixelSnapshot.empty(width, frame.samplePlane().height()),
+                Runnable::run, (region, tile) -> {
+                    for (int row = 0; row < region.height(); row++) {
+                        System.arraycopy(tile, row * region.width(), colors,
+                                (region.y() + row) * width + region.x(), region.width());
+                    }
+                }, completed::countDown, failure::set);
+        assertTrue(completed.await(15, TimeUnit.SECONDS));
+        assertNull(failure.get());
+        return colors;
+    }
+
     private static void refineWholeFrame(InteractiveAntialiasService service, RenderFrame frame,
                                          SmoothPaletteColoring coloring) throws InterruptedException {
         refineWholeFrame(service, frame, coloring, false);

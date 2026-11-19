@@ -30,6 +30,7 @@
   "benchmarks/GPU_RENDER_BENCHMARK_RESULTS.md",
   "benchmarks/GPU_RESIDENCY_8_6_DECISION.md",
   "benchmarks/GPU_RESIDENT_SPIKE_RESULTS.md",
+  "benchmarks/HISTOGRAM_AA_REUSE_RESULTS.md",
   "benchmarks/INTERACTION_LATENCY.md",
   "benchmarks/INTERACTION_LATENCY_PAN_CONTROL_SUMMARY.csv",
   "benchmarks/INTERACTION_LATENCY_RESULTS.md",

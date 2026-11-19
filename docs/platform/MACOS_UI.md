@@ -258,14 +258,34 @@ inactive after the JavaFX parent is re-enabled.
 
 Deep AA is available only in deep zoom. Histogram/orbit traps disable palette
 animation; navigation/scene changes stopping it clear its checkmark. Histogram
-Coloring depends on the whole frame: progressive tiles show the plain palette, and
-the completed frame is colored again from its own histogram, including in Base only
-(earlier, Base only frames after the first kept the plain palette). Known
-limitation: after a pan in Base, then antialiasing or Antialiased display,
-antialiased pixels carried over from the previous frame keep that frame's
-histogram colors, so the overlap can differ slightly from newly revealed areas.
-These colors are kept with the frame's finished antialiasing, so they also return
-when the view is revisited, including from stored frames after a restart. After a
+Coloring depends on the whole frame. While a frame is calculated, its progressive
+tiles, the pixels reused across a pan and the wide-preview reserve are all colored
+with the histogram of the last completed frame of the same fractal (under the
+current palette and offset), so a zoom or pan shows no color jump and revealed edges
+match the reused center. Smooth-iteration values outside that histogram's range, such
+as the higher values of a deeper zoom, do not clamp to a palette end: the palette
+position continues linearly beyond the range at one palette sweep per range width,
+wrapping like the offset. When every escaped pixel of the completed frame has the same
+value, that value keeps its color and other values continue from it at the smooth
+palette's color scale. Before any frame of the fractal has completed, or when it had
+no escaped pixels, progressive tiles use the plain palette. A reserve colored with an
+older histogram is hidden when a frame completes and returns once the idle reserve is
+colored with the new one, so a gesture in between shows no reserve rather than edges
+in another mapping. The completed frame is then colored again from its own
+histogram, including in Base only, and this completion recolor is authoritative; a
+window shrink that crops a completed frame therefore completes through it instead of
+synchronously.
+Antialiased pixels carried across a pan or resize in Base, then antialiasing or
+Antialiased display show the previous frame's histogram until completion; the
+completed frame drops them and antialiases those pixels again under its own
+histogram (AA copied unchanged from the displayed frame of the same grid and coloring,
+for example on Reset View in the home view, is kept). That pass reuses the subpixel
+samples and distance tests of the previous frame's histogram pass in standard zoom,
+so it samples only newly revealed candidates, while its colors stay exactly those of
+a fresh pass ([measurement](../../benchmarks/HISTOGRAM_AA_REUSE_RESULTS.md)).
+The completed frame therefore never mixes two mappings, and the AA retained with it
+and stored beside it is consistent on revisits. AA stored by earlier builds is discarded once
+(`ANTIALIAS_VERSION` 5), because it could hold such mixed colors. After a
 completed frame, export captures the scene through independent width/height and
 system-save dialogs, then renders off-screen. Active **Cancel Export PNG** remains
 available during navigation. Completion is inline/nonmodal; errors use alerts.
@@ -737,7 +757,9 @@ While Color Cycling is active, the controller cancels reserve work once, hides
 its raster and suspends all reserve replenishment/recoloring. Visible palette
 animation continues. Stopping the cycle resumes the reserve with the last
 palette actually applied to the visible frame; navigation cancels obsolete work
-through the normal generation boundary. A complete reserve is recolored and
+through the normal generation boundary. With Histogram Coloring the reserve is
+colored with the completed visible frame's histogram, see Histogram Coloring
+above. A complete reserve is recolored and
 published once without creating a calculation backend or rebuilding deep orbits.
 The surface reuses one WritableImage and one upload array when the coarse grid
 size is unchanged, including across palette invalidation and cycling pauses.

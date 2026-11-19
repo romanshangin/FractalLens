@@ -548,6 +548,26 @@ public final class AdaptivePngExportService implements AutoCloseable {
         return accumulator.result().color();
     }
 
+    /**
+     * Colors stored sample values like {@link #colorSamples}: {@code smooth[from..from + length)}
+     * with escape flags in {@code escapedMask}, for colorings that read only those values.
+     */
+    static int colorSampleValues(
+            double[] smooth,
+            int from,
+            int length,
+            int escapedMask,
+            ColoringStrategy coloring,
+            int maxIterations
+    ) {
+        ColorAccumulator accumulator = new ColorAccumulator();
+        for (int index = 0; index < length; index++) {
+            accumulator.add(coloring.color(0, smooth[from + index], (escapedMask >>> index & 1) != 0,
+                    maxIterations));
+        }
+        return accumulator.result().color();
+    }
+
     private static SampleResult sampleGrid(
             FractalCalculator calculator,
             ColoringStrategy coloring,

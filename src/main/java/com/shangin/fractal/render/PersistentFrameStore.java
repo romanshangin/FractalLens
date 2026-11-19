@@ -107,8 +107,10 @@ public final class PersistentFrameStore implements AutoCloseable {
      * rounding bound, and offsets that lose pixel resolution as doubles use scaled deltas.
      * Version 4: deep Mandelbrot AA samples follow the escape decisions of calculation
      * version 4, and recovery references settle samples only within their error bound.
+     * Version 5: histogram AA colors no longer keep pixels shifted from another frame,
+     * which earlier versions stored with that frame's mapping.
      */
-    static final int ANTIALIAS_VERSION = 4;
+    static final int ANTIALIAS_VERSION = 5;
     private static final byte[] REFINEMENT_MAGIC = "FLAAREF\0".getBytes(StandardCharsets.US_ASCII);
     static final String REFINEMENT_SUFFIX = ".aa";
     private static final int MAX_PALETTE_STOPS = 4_096;

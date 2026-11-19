@@ -1,6 +1,7 @@
 package com.shangin.fractal.export;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
+import com.shangin.fractal.coloring.HistogramPaletteColoring;
 import com.shangin.fractal.coloring.PaletteEdgeThresholds;
 import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.gpu.PaletteRecolorBackend;
@@ -52,6 +53,8 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     private final ExecutorService workers;
     private final AtomicLong generation = new AtomicLong();
     private final AntialiasSampleCache sampleCache;
+    /** Samples and distance tests of histogram passes on {@link #cachedFrame}, which follow its pans. */
+    private final HistogramSampleStore histogramSamples = new HistogramSampleStore(HistogramSampleStore.DEFAULT_MAX_BYTES);
     private final boolean profiling;
     private RenderFrame cachedFrame;
     /**
@@ -178,6 +181,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         synchronized (this) {
             if (cachedFrame != frame) {
                 sampleCache.clear();
+                histogramSamples.clear();
                 pendingSamples = null;
                 sampleBinding++;
                 cachedFrame = frame;
@@ -229,8 +233,25 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             long cacheStarted = profiling ? System.nanoTime() : 0;
             AntialiasSampleCache.Snapshot retained;
             long rejectionsAtStart;
+            HistogramSampleStore.View histogramView = null;
+            // Deep samples depend on the reference orbit, so a pan cannot keep them exact.
+            boolean histogramPass = !deepZoom && coloring instanceof HistogramPaletteColoring;
+            HistogramSampleStore.Move histogramMove = null;
+            if (histogramPass) {
+                synchronized (this) {
+                    if (shouldCancel(refinementId) || cachedFrame != frame) return;
+                    histogramMove = histogramSamples.prepareMove();
+                }
+                // Moving the values of a pan takes a frame-sized pass, so it runs without the lock.
+                if (histogramMove != null) histogramMove.compute();
+            }
             synchronized (this) {
                 if (shouldCancel(refinementId) || cachedFrame != frame) return;
+                if (histogramPass) {
+                    histogramSamples.install(histogramMove);
+                    histogramSamples.bind(data.width(), data.height(), frame.request().maxIterations());
+                    histogramView = histogramSamples.view();
+                }
                 rejectionsAtStart = sampleCache.rejections();
                 retained = coloring instanceof SmoothPaletteColoring smooth
                         ? cachedSnapshot(smooth) : AntialiasSampleCache.Snapshot.EMPTY;
@@ -246,6 +267,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     : null;
             List<Future<?>> tasks = new ArrayList<>();
 
+            HistogramSampleStore.View histogram = histogramView;
             for (RenderRegion tile : orderedTiles(frame, reusedPixels)) {
                 tasks.add(workers.submit(() -> refineTile(
                         refinementId,
@@ -260,6 +282,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         callbackExecutor,
                         onTileReady,
                         preciseSampler,
+                        histogram,
                         profile
                 )));
             }
@@ -306,9 +329,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
             Executor callbackExecutor,
             BiConsumer<RenderRegion, int[]> onTileReady,
             LazyPreciseSampler preciseSampler,
+            HistogramSampleStore.View histogram,
             MutableProfile profile
     ) {
         SamplePlane data = frame.samplePlane();
+        HistogramSampleStore.Batch histogramBatch = histogram == null ? null : new HistogramSampleStore.Batch();
         RenderGrid grid = frame.renderGrid();
         FractalCalculator calculator = preciseSampler == null
                 ? frame.job().formula().createDirectCalculator()
@@ -354,10 +379,24 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                 double edgeStrength = Double.NaN;
                 boolean candidate;
                 if (smooth == null) {
-                    candidate = deepZoom
-                            ? isDeepSupersamplingCandidate(data, baseColors, x, y)
-                            : AdaptivePngExportService.isSupersamplingCandidate(
-                            calculator, grid, frame.request().maxIterations(), data, baseColors, x, y);
+                    if (deepZoom) {
+                        candidate = isDeepSupersamplingCandidate(data, baseColors, x, y);
+                    } else if (histogram != null) {
+                        // The same test as isSupersamplingCandidate, with a stored distance test.
+                        candidate = AdaptivePngExportService.isBaseEdge(data, baseColors, x, y);
+                        if (!candidate) {
+                            Boolean stored = histogram.distanceEdge(frameIndex);
+                            if (stored == null) {
+                                stored = AdaptivePngExportService.isDistanceEstimateEdge(
+                                        calculator, grid, frame.request().maxIterations(), x, y);
+                                histogramBatch.recordDistanceEdge(frameIndex, stored);
+                            }
+                            candidate = stored;
+                        }
+                    } else {
+                        candidate = AdaptivePngExportService.isSupersamplingCandidate(
+                                calculator, grid, frame.request().maxIterations(), data, baseColors, x, y);
+                    }
                 } else {
                     // Decide on the stored float, so recoloring shows exactly the sampled pixels.
                     edgeStrength = (float) edgeStrength(calculator, grid, frame.request().maxIterations(),
@@ -372,6 +411,11 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                     continue;
                 }
                 if (profiling) candidates++;
+
+                if (histogram != null && histogram.hasSamples(frameIndex)) {
+                    tileColors[tileIndex] = histogram.color(frameIndex, coloring, frame.request().maxIterations());
+                    continue;
+                }
 
                 long samplingStarted = profiling ? System.nanoTime() : 0;
                 int sampleGridSize = preciseSampler == null ? SAMPLE_GRID : deepSampleGridSize(data, x, y);
@@ -408,6 +452,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
                         continue;
                     }
                 }
+                if (histogramBatch != null) histogramBatch.addSamples(frameIndex, samples);
                 tileColors[tileIndex] = AdaptivePngExportService.colorSamples(
                         samples, coloring, frame.request().maxIterations());
                 if (profiling) cacheColorNanos += System.nanoTime() - cacheStarted;
@@ -422,6 +467,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         if (shouldCancel(refinementId)) {
             return;
         }
+        if (histogramBatch != null && !commitHistogramTile(refinementId, frame, histogram, histogramBatch)) return;
         if (batch != null && !batch.isEmpty()) {
             long mergeStarted = profiling ? System.nanoTime() : 0;
             if (!commitTile(refinementId, frame, batch)) return;
@@ -444,6 +490,14 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         if (shouldCancel(refinementId) || cachedFrame != frame) return false;
         if (!batch.isEmpty()) admitPendingSamples();
         sampleCache.merge(batch);
+        return true;
+    }
+
+    private synchronized boolean commitHistogramTile(long refinementId, RenderFrame frame,
+                                                     HistogramSampleStore.View view,
+                                                     HistogramSampleStore.Batch batch) {
+        if (shouldCancel(refinementId) || cachedFrame != frame) return false;
+        histogramSamples.commit(view, batch);
         return true;
     }
 
@@ -660,6 +714,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
         Objects.requireNonNull(frame);
         Objects.requireNonNull(retained);
         sampleCache.clear();
+        if (cachedFrame != frame) histogramSamples.clear();
         pendingSamples = retained;
         sampleBinding++;
         cachedFrame = frame;
@@ -725,6 +780,18 @@ public final class InteractiveAntialiasService implements AutoCloseable {
     /** Transfers cached AA samples along the exact pixel shift used for frame reuse. */
     public synchronized void reuseFrame(RenderFrame source, RenderFrame target, PixelShift shift) {
         // Shifted samples keep their completeness; the next pass accounts for exposed pixels.
+        RenderGrid from = source.renderGrid();
+        RenderGrid to = target.renderGrid();
+        // Histogram values stay exact only where the target keeps the source grid's origin.
+        if (cachedFrame != source || from.originReal() != to.originReal()
+                || from.originImaginary() != to.originImaginary() || from.realStep() != to.realStep()
+                || from.imaginaryStep() != to.imaginaryStep() || from.conjugateHeight() != to.conjugateHeight()
+                || to.offsetX() - from.offsetX() != -shift.dx() || to.offsetY() - from.offsetY() != -shift.dy()) {
+            histogramSamples.clear();
+        } else {
+            histogramSamples.shift(source.samplePlane().width(), target.samplePlane().width(),
+                    target.samplePlane().height(), shift, target.request().maxIterations());
+        }
         if (cachedFrame != source) {
             forgetCompleteness();
             sampleCache.clear();
@@ -1118,6 +1185,7 @@ public final class InteractiveAntialiasService implements AutoCloseable {
 
     @Override
     public synchronized void close() {
+        histogramSamples.clear();
         generation.incrementAndGet();
         cancelCurrentFuture();
         coordinator.shutdownNow();
