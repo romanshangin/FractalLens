@@ -85,7 +85,7 @@ final class HistogramSampleStore {
     /** Prepares storage for a frame of this size and iteration limit, clearing values of any other. */
     void bind(int width, int height, int maxIterations) {
         if (shiftPending) {
-            Move move = prepareMove();
+            Move move = pendingMove();
             move.compute();
             install(move);
         }
@@ -251,10 +251,13 @@ final class HistogramSampleStore {
      * returns {@code null} when none is pending. Caller owns the lock.
      */
     Move prepareMove() {
-        return shiftPending
-                ? new Move(version, blockOf, entryOf, distanceEdges, width, height,
-                pendingWidth, pendingHeight, pendingDx, pendingDy)
-                : null;
+        return shiftPending ? pendingMove() : null;
+    }
+
+    /** Caller owns the lock and has checked that a shift is pending. */
+    private Move pendingMove() {
+        return new Move(version, blockOf, entryOf, distanceEdges, width, height,
+                pendingWidth, pendingHeight, pendingDx, pendingDy);
     }
 
     /** Applies a computed move unless the values changed since it was prepared. Caller owns the lock. */
