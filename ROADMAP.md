@@ -271,6 +271,36 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   stale-generation, atomic-publication and AA-reuse rules; accept only with pixel
   tests for progressive tiles and wide preview, before/after screenshots and
   gesture-to-visible latency within the control budget.
+  Implemented (2026-11-18), awaiting review and owner acceptance: progressive
+  tiles, pan-reused pixels and the wide-preview reserve use the last completed
+  frame's histogram of the same fractal; values outside its range continue the
+  palette position linearly (one sweep per range width) instead of clamping. The
+  completed frame drops AA pixels shifted from another frame and antialiases them
+  again under its own histogram, and a crop on window shrink is colored from its
+  own histogram instead of completing synchronously; `ANTIALIAS_VERSION` 5
+  discards stored AA that could mix mappings. See [Histogram Coloring](docs/platform/MACOS_UI.md).
+  `HistogramInteractionColorsFxTest` covers progressive tiles, wide preview, the
+  pan overlap in both AA modes, revisits and the crop. Not yet done: before/after
+  screenshots and a gesture-to-visible latency comparison against the control;
+  a pan with Histogram Coloring recolors the whole frame's AA after completion
+  (see the sample reuse below, which limits new samples to revealed candidates). Independent verification
+  (2026-11-18, macOS arm64, 2400x1520, Histogram Coloring and Wide preview, one
+  screen-observed series of 10 pans per build against `main`): the first preview
+  is unchanged (~34 ms), the completed frame grows from 137 to 161 ms in Base
+  only, from 133 to 351 ms in Base, then antialiasing, and from 161 to 350 ms in
+  Antialiased display; the base build shows a seam at the pan border that the
+  candidate removes. No numeric budget is defined, so the latency acceptance
+  stays with the owner. `BaselineInputBenchmark`'s control now refines shifted
+  histogram AA again. Then (2026-11-18) histogram AA passes keep their subpixel
+  samples and distance tests across pans and publish bit-exactly what a fresh pass
+  would. Completion after a pan dropped by about 75% (about 610 to about 140 ms at
+  2400x1520, two ABBA pairs, gates not run; against `main`, which keeps the
+  seam, independent verification measured completion 151 → 252 ms in FAST,
+  161 → 252 ms in REFINED and 149 → 150 ms in Base only; the owner accepted
+  this remaining cost on 2026-11-18); see
+  [Histogram AA sample reuse](benchmarks/HISTOGRAM_AA_REUSE_RESULTS.md). Review fixes: a reserve of the
+  older histogram is hidden until colored again, AA of an unchanged displayed grid
+  is kept, and a single-value histogram keeps its color during interaction.
 - [ ] **Comparison mode:** show two independently configured views side by side
   for formulas, Julia parameters, palettes or display quality. Offer explicit
   linking of compatible viewports; define coordinate/camera mapping and reject

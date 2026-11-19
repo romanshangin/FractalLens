@@ -1,6 +1,7 @@
 package com.shangin.fractal.controller;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
+import com.shangin.fractal.coloring.HistogramPaletteColoring;
 import com.shangin.fractal.export.InteractiveAntialiasService;
 import com.shangin.fractal.gpu.PaletteRecolorBackend;
 import com.shangin.fractal.gpu.PaletteRecolorTiming;
@@ -78,6 +79,12 @@ public final class FractalRenderController implements AutoCloseable {
     private RenderFrame activeFrame;
     private RenderFrame retainedFrame;
     private boolean initialFramePending = true;
+    /**
+     * Histogram mapping of the last completed visible frame of {@link #formulaDefinition}:
+     * pixels shown before the next frame completes use its distribution, see
+     * {@link ColoringSettings#createProgressiveStrategy}. FX thread only.
+     */
+    private HistogramPaletteColoring completedHistogram;
     /** Keeps fresh frame allocation off the FX thread between render start and the preview. */
     private final SpareFrameStorage spareFrameStorage = new SpareFrameStorage();
     private final FrameReusePlanner frameReusePlanner = new FrameReusePlanner(spareFrameStorage::create);
@@ -200,6 +207,7 @@ public final class FractalRenderController implements AutoCloseable {
         long epoch = recolorEpoch.get();
         long request = recolorSequence.incrementAndGet();
         ColoringStrategy coloring = settings.createStrategy(frame.samplePlane());
+        rememberCompletedHistogram(coloring);
         recolorExecutor.execute(() -> {
             if (epoch != recolorEpoch.get() || Thread.currentThread().isInterrupted()) return;
             if (!recolorBufferSlots.tryAcquire()) {
@@ -315,6 +323,8 @@ public final class FractalRenderController implements AutoCloseable {
             formulaDefinition = requestedFormula;
             activeFrame = null;
             retainedFrame = null;
+            // Another fractal's distribution would not match this one's colors.
+            completedHistogram = null;
         }
 
         Viewport viewport = scene.viewport();
@@ -323,7 +333,7 @@ public final class FractalRenderController implements AutoCloseable {
         deepZoomChangedHandler.accept(deepZoom);
         InteractiveRenderMode presentationMode =
                 DeepZoomRenderPolicy.presentationMode(scene, target);
-        ColoringStrategy coloring = scene.coloring().createStrategy();
+        ColoringStrategy coloring = scene.coloring().createProgressiveStrategy(completedHistogram);
         boolean refinedDisplay = presentationMode == InteractiveRenderMode.REFINED;
         boolean baseOnly = !presentationMode.antialiases();
         FrameProgress frameProgress = new FrameProgress(renderGeneration, presentationMode,
@@ -396,6 +406,14 @@ public final class FractalRenderController implements AutoCloseable {
         surface.latency().mark("reuse_planned");
         RenderFrame sourceFrame = reuseSelection.sourceFrame();
         FrameReuseResult reuseResult = reuseSelection.result();
+        // A complete copy of the displayed grid has the same samples, so the same histogram:
+        // AA pixels copied from it already show this frame's mapping.
+        CompletedRender displayedBefore = surface.completedRender();
+        boolean copiesDisplayedMapping = sourceFrame != null && reuseResult.reused()
+                && sourceFrame.isComplete()
+                && RenderFrameCache.sameCalculatedFrame(sourceFrame.request(), renderRequest)
+                && displayedBefore != null && displayedBefore.frame() == sourceFrame
+                && displayedBefore.scene().coloring().equals(scene.coloring());
 
         RenderFrame targetFrame =
                 reuseResult.frame();
@@ -480,6 +498,10 @@ public final class FractalRenderController implements AutoCloseable {
 
         }
 
+        // AA pixels shifted from another frame show that frame's histogram mapping.
+        boolean refinementFromOtherFrame = imageReused && !copiesDisplayedMapping
+                && surface.refinedPixelCount(targetFrame) > 0;
+
         // Retained AA colors fit only the unshifted grid and the coloring that produced them.
         if (!imageReused && !baseOnly && carriedRefinement != null
                 && carriedRefinement.showsColorsFor(scene.coloring())) {
@@ -503,8 +525,10 @@ public final class FractalRenderController implements AutoCloseable {
         frameProgress.reused(activeFrame.validity().readyPixelCount(),
                 baseOnly ? 0 : surface.refinedPixelCount(activeFrame));
 
-        // A crop of a completed image is ready synchronously, including its AA.
+        // A crop of a completed image is ready synchronously, including its AA. A histogram
+        // of the crop differs from its source's, so it is colored again on completion instead.
         if (preserveIterationLimit && imageReused && targetFrame.isComplete()
+                && !scene.coloring().dependsOnCompletedFrame()
                 && (!refinedDisplay || surface.hasCompleteRefinement(targetFrame))) {
             surface.completeProgressiveRender(targetFrame, scene);
             frameCache.put(targetFrame);
@@ -546,6 +570,11 @@ public final class FractalRenderController implements AutoCloseable {
                     frameProgress.baseComplete();
 
                     frameCache.put(completedFrame);
+                    // A histogram maps this frame's samples differently, so AA pixels shifted
+                    // from the source frame would mix two mappings: they are antialiased again.
+                    if (refinementFromOtherFrame && scene.coloring().dependsOnCompletedFrame()) {
+                        surface.dropStagingRefinement(completedFrame);
+                    }
                     // The new entry replaced its source's; keep the AA until this visit finishes its own.
                     if (carriedRefinement != null && completedFrame == targetFrame) {
                         frameCache.retainRefinement(completedFrame,
@@ -558,6 +587,7 @@ public final class FractalRenderController implements AutoCloseable {
 
                     ColoringStrategy completedColoring =
                             scene.coloring().createStrategy(completedFrame.samplePlane());
+                    rememberCompletedHistogram(completedColoring);
 
                     if (refinedDisplay) {
                         surface.beginRefinedRender(completedFrame);
@@ -701,10 +731,24 @@ public final class FractalRenderController implements AutoCloseable {
     private void replenishWidePreview() {
         if (closed || visibleBusy || widePreviewColorCycling || previewRequest == null
                 || !widePreviewSettings.enabled()) return;
-        widePreview.request(previewRequest, previewScene.coloring(), widePreviewSettings,
+        widePreview.request(previewRequest,
+                previewScene.coloring().createProgressiveStrategy(completedHistogram), widePreviewSettings,
                 surface::displayWidePreview,
                 error -> System.getLogger(FractalRenderController.class.getName())
                         .log(System.Logger.Level.WARNING, "Wide preview failed", error));
+    }
+
+    /**
+     * Keeps the histogram mapping of the completed active frame for the next interaction.
+     * The reserve shown was colored with the previous mapping, so it is hidden until the
+     * idle reserve is colored again with this one; a gesture before that shows no reserve
+     * rather than edges in another mapping.
+     */
+    private void rememberCompletedHistogram(ColoringStrategy completedColoring) {
+        if (completedColoring instanceof HistogramPaletteColoring histogram && histogram != completedHistogram) {
+            completedHistogram = histogram;
+            surface.clearWidePreview();
+        }
     }
 
     /** A completed visible frame whose scene differs only in antialiasing needs no new samples. */

@@ -312,7 +312,11 @@ public final class BaselineInputBenchmark {
             var coloring = r.actual.coloring(control);
             new FractalColorizer().color(control.samplePlane(), IntBuffer.wrap(expected), coloring);
             var validity = new ValidityMask(width, height);
-            if (r.source != null) {
+            // A histogram of another grid maps the samples differently, so the UI antialiases
+            // AA pixels shifted from it again; only an unchanged grid keeps them.
+            boolean keepsSourceAa = r.actual.colors() != BaselineFixtures.Colors.HISTOGRAM
+                    || r.source != null && RenderFrameCache.sameCalculatedFrame(r.source.job(), r.frame.job());
+            if (r.source != null && keepsSourceAa) {
                 if (reuse.reused()) {
                     var shift = reuse.shift().orElseThrow();
                     validity.copyShiftedFrom(r.sourcePixels.validity(), shift);

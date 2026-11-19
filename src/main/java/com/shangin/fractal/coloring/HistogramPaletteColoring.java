@@ -8,6 +8,9 @@ import java.util.Objects;
  * Frame-dependent tonal mapping based on the cumulative distribution of
  * escaped smooth-iteration values. Geometry sampling remains the
  * responsibility of the antialiasing pipeline.
+ *
+ * <p>A completed frame's mapping also colors the pixels of the next frame
+ * while that frame is calculated, see {@link #forProgressivePixels}.
  */
 public final class HistogramPaletteColoring implements ColoringStrategy {
 
@@ -19,6 +22,13 @@ public final class HistogramPaletteColoring implements ColoringStrategy {
     private final double minimum;
     private final double scale;
     private final double[] cumulative;
+    /** Whether values outside the distribution's range continue the mapping instead of clamping. */
+    private final boolean extendsRange;
+    /**
+     * Palette positions per smooth iteration that continue a distribution with a single
+     * escaped value, which has no range width to continue at; zero otherwise.
+     */
+    private final double singleValueSlope;
 
     public HistogramPaletteColoring(Palette palette, double offset, SamplePlane data) {
         this(palette, offset, data, DEFAULT_BIN_COUNT);
@@ -44,6 +54,8 @@ public final class HistogramPaletteColoring implements ColoringStrategy {
             }
         }
 
+        extendsRange = false;
+        singleValueSlope = 0.0;
         minimum = escapedCount == 0 ? 0.0 : min;
         scale = escapedCount == 0 || max <= min ? 0.0 : binCount / (max - min);
         cumulative = new double[binCount];
@@ -61,6 +73,42 @@ public final class HistogramPaletteColoring implements ColoringStrategy {
             running += cumulative[bin];
             cumulative[bin] = running / escapedCount;
         }
+    }
+
+    private HistogramPaletteColoring(Palette palette, double offset, HistogramPaletteColoring distribution,
+                                     double singleValueSlope) {
+        this.palette = Objects.requireNonNull(palette);
+        this.offset = offset;
+        minimum = distribution.minimum;
+        scale = distribution.scale;
+        cumulative = distribution.cumulative;
+        extendsRange = true;
+        this.singleValueSlope = singleValueSlope;
+    }
+
+    /**
+     * Colors the pixels of a frame that is still being calculated, such as progressive
+     * tiles and wide-preview pixels after a pan or zoom, with this completed frame's
+     * distribution under {@code palette} and {@code offset}, so they match the colors
+     * shown until the new frame completes and computes its own distribution.
+     *
+     * <p>Values outside this distribution's range, such as the higher smooth iterations
+     * of a deeper zoom, do not clamp to the palette ends: the position continues
+     * linearly beyond 0 and 1 at the distribution's mean slope, one palette sweep per
+     * width of its range, and wraps like any offset position. A frame whose escaped
+     * pixels all share one value has no range width: that value keeps its completed
+     * position, and other values continue from it at {@code colorScale} positions per
+     * smooth iteration, the slope of the frame-independent smooth palette.
+     *
+     * @param colorScale palette positions per smooth iteration of the smooth palette
+     * @return the progressive coloring, or {@code null} when this frame has no escaped
+     *         pixel whose colors interaction could keep
+     */
+    public HistogramPaletteColoring forProgressivePixels(Palette palette, double offset, double colorScale) {
+        if (cumulative[cumulative.length - 1] == 0.0) {
+            return null;
+        }
+        return new HistogramPaletteColoring(palette, offset, this, scale == 0.0 ? colorScale : 0.0);
     }
 
     @Override
@@ -89,15 +137,20 @@ public final class HistogramPaletteColoring implements ColoringStrategy {
      * continuous and avoids introducing visible tonal bands.
      */
     private double cumulativePosition(double value) {
-        if (!Double.isFinite(value) || scale == 0.0) {
+        if (!Double.isFinite(value)) {
             return cumulative[0];
+        }
+        if (scale == 0.0) {
+            return cumulative[0] + (value - minimum) * singleValueSlope;
         }
         double coordinate = (value - minimum) * scale;
         if (coordinate <= 0.0) {
-            return 0.0;
+            return extendsRange ? coordinate / cumulative.length : 0.0;
         }
         if (coordinate >= cumulative.length) {
-            return cumulative[cumulative.length - 1];
+            return extendsRange
+                    ? 1.0 + (coordinate - cumulative.length) / cumulative.length
+                    : cumulative[cumulative.length - 1];
         }
 
         int bin = (int) coordinate;

@@ -20,7 +20,7 @@ import java.util.function.Supplier;
  * never reads/reuses a frame until its backend and all registered workers return.
  */
 public final class WidePreviewService implements AutoCloseable {
-    private record Work(long generation, RenderJob visible, ColoringSettings coloring,
+    private record Work(long generation, RenderJob visible, ColoringStrategy coloring,
                         WidePreviewSettings settings, Consumer<WidePreviewSnapshot> publish,
                         Consumer<Throwable> failure) {}
     private record Publication(Work work, WidePreviewSnapshot snapshot) {}
@@ -57,8 +57,19 @@ public final class WidePreviewService implements AutoCloseable {
         this.backendFactory = Objects.requireNonNull(backendFactory);
     }
 
-    /** Caller submits only after visible rendering and AA have completed. Latest work wins. */
-    public synchronized void request(RenderJob visible, ColoringSettings coloring,
+    /** Colors the reserve with the frame-independent coloring of {@code coloring}. */
+    public void request(RenderJob visible, ColoringSettings coloring,
+                        WidePreviewSettings settings,
+                        Consumer<WidePreviewSnapshot> publish, Consumer<Throwable> failure) {
+        request(visible, coloring.createStrategy(), settings, publish, failure);
+    }
+
+    /**
+     * Caller submits only after visible rendering and AA have completed. Latest work wins.
+     * {@code coloring} colors the reserve on the worker thread, so it must be immutable,
+     * such as a histogram mapping carried from the completed visible frame.
+     */
+    public synchronized void request(RenderJob visible, ColoringStrategy coloring,
                                      WidePreviewSettings settings,
                                      Consumer<WidePreviewSnapshot> publish, Consumer<Throwable> failure) {
         Objects.requireNonNull(visible);
@@ -166,10 +177,8 @@ public final class WidePreviewService implements AutoCloseable {
     private void publish(Work work, WidePreviewPlan plan, RenderFrame frame, long started) {
         if (obsolete(work) || frame.validity().readyPixelCount() == 0) return;
         int[] colors = new int[plan.job().width() * plan.job().height()];
-        // Histogram mapping remains the smooth progressive mapping in a partial reserve.
-        ColoringStrategy coloring = work.coloring.createStrategy();
         new FractalColorizer().colorReadyPixels(frame.samplePlane(), IntBuffer.wrap(colors),
-                coloring, frame.validity(), null);
+                work.coloring, frame.validity(), null);
         if (obsolete(work)) return;
         publication.set(new Publication(work,
                 new WidePreviewSnapshot(plan, colors, frame.validity().readyPixelCount(), System.nanoTime() - started)));

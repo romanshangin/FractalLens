@@ -790,6 +790,16 @@ public final class FractalSurface extends Region {
         return true;
     }
 
+    /**
+     * Stops protecting the AA pixels on {@code frame}'s staging frame, so base coloring
+     * replaces them and the next AA pass recalculates them. Other frames keep theirs.
+     */
+    public void dropStagingRefinement(RenderFrame frame) {
+        if (stagingRenderFrame == frame && stagingRefinementValidity != null) {
+            stagingRefinementValidity.clear();
+        }
+    }
+
     public void invalidateRefinement() {
         if (displayedRefinementValidity != null) {
             displayedRefinementValidity.clear();

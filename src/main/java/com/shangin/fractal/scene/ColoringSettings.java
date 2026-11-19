@@ -76,6 +76,22 @@ public record ColoringSettings(
         return orbitTrap == OrbitTrap.NONE && histogramColoring;
     }
 
+    /**
+     * Coloring for pixels shown before their frame completes: progressive tiles, reused
+     * pixels and wide-preview pixels. Histogram coloring uses the distribution of
+     * {@code completedReference}, the last completed frame's histogram mapping, with this
+     * palette and offset, so interaction keeps the colors of that frame until the new
+     * frame completes and {@link #createStrategy(SamplePlane)} colors it again. Without a
+     * usable reference, and for frame-independent colorings, this is {@link #createStrategy()}.
+     */
+    public ColoringStrategy createProgressiveStrategy(HistogramPaletteColoring completedReference) {
+        if (dependsOnCompletedFrame() && completedReference != null) {
+            ColoringStrategy carried = completedReference.forProgressivePixels(createPalette(), offset, colorScale);
+            if (carried != null) return carried;
+        }
+        return createStrategy();
+    }
+
     /** Builds the optional second-pass mapping once the whole frame is available. */
     public ColoringStrategy createStrategy(SamplePlane data) {
         return dependsOnCompletedFrame()

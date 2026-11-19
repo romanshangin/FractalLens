@@ -49,6 +49,23 @@ class BaselineInputBenchmarkTest {
     }
 
     @ParameterizedTest @EnumSource(value = InteractiveRenderMode.class, names = {"REFINED", "FAST"})
+    void histogramPanControlAntialiasesShiftedPixelsAgain(InteractiveRenderMode mode) throws Exception {
+        // Large enough that the drag keeps most of the frame, so shifted AA pixels exist.
+        var fixture = BaselineFixtures.matrix(320, 200).stream()
+                .filter(f -> f.id().equals("mandelbrot-histogram-aa")).findFirst().orElseThrow();
+        try (var ui = fx(Ui::new)) {
+            ui.seed(fixture.steps().getFirst(), mode);
+            var r = measure(ui, fixture, fixture.steps().getFirst(), mode, "drag", 1);
+            assertTrue(r.changed);
+            assertTrue(r.sourcePixels.validity().readyPixelCount() > 0, "The source must contain AA pixels to shift");
+            assertTrue(new FrameReusePlanner().plan(r.source, null, r.frame.job()).result().reused(),
+                    "The pan must reuse the source frame");
+            // The completed frame shows only its own histogram, so the control recomputes shifted AA.
+            verify(r);
+        }
+    }
+
+    @ParameterizedTest @EnumSource(value = InteractiveRenderMode.class, names = {"REFINED", "FAST"})
     void refinedPublicationAndActualAaPolicyAreExplicit(InteractiveRenderMode mode) throws Exception {
         var fixture = fixture("julia-aa-regular");
         try (var ui = fx(Ui::new)) {

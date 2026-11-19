@@ -295,6 +295,11 @@ that session file; Surefire also points `XDG_CACHE_HOME` and `LOCALAPPDATA` into
   from the exact reference margin, and recovery results only within their error
   bound), so some version 3 pixels differ from a recalculation. Version 3
   entries are discarded and recalculated.
+  `ANTIALIAS_VERSION` became 5 on 2026-11-18: with Histogram Coloring, AA pixels
+  shifted from another frame are antialiased again under the completed frame's
+  own histogram instead of keeping the source frame's mapping, so version 4 AA
+  colors can differ from a recalculation; version 4 AA is discarded and
+  recalculated while its frames stay valid.
   `REFINEMENT_FORMAT_VERSION` became 2 on 2026-11-16, when the AA header gained
   its samples flag; version 1 AA files are discarded and their AA recalculated
   on the next visit, while their frames stay valid.

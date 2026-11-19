@@ -99,7 +99,11 @@ them around a new reference orbit is a different floating-point path. The ARGB
 control independently colors/refines that frame and shifts the *previously
 verified* source pixels according to the reuse planner.
 This preserves the UI's retained-AA policy: image-space candidate neighborhoods
-at the old border can differ from a fresh all-empty AA pass. No output tolerance
+at the old border can differ from a fresh all-empty AA pass. With Histogram
+Coloring the UI keeps source AA pixels only on an unchanged calculated grid; on
+any other grid the completed frame antialiases them again under its own
+histogram (2026-11-18), so the control shifts no source pixels there and refines
+the whole frame. No output tolerance
 or fingerprint-only acceptance is used. The next sequence step starts only after
 its predecessor passes. `SUCCESS` is written only if every control passes.
 
