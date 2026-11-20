@@ -686,6 +686,18 @@ public final class FractalRenderController implements AutoCloseable {
             surface.prepareWidePreview(previewRequest, displayedColoring, previewScene.iterations(), widePreviewSettings);
             replenishWidePreview();
         }
+        if (!cycling) reconcilePalette(displayedColoring);
+    }
+
+    /**
+     * Stopping palette animation cancels palette work in flight, which may include a palette
+     * the user chose meanwhile. The scene's palette is authoritative: when the frame on screen
+     * shows another one, recolor it.
+     */
+    private void reconcilePalette(ColoringSettings sceneColoring) {
+        CompletedRender displayed = surface.completedRender();
+        if (displayed != null && displayed.scene().coloring().equals(sceneColoring)) return;
+        recolor(sceneColoring);
     }
 
     /** Applies the preview policy: invalidates old work and pixels without disturbing exact rendering. */
