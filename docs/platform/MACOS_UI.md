@@ -757,7 +757,9 @@ While Color Cycling is active, the controller cancels reserve work once, hides
 its raster and suspends all reserve replenishment/recoloring. Visible palette
 animation continues. Stopping the cycle resumes the reserve with the last
 palette actually applied to the visible frame; navigation cancels obsolete work
-through the normal generation boundary. With Histogram Coloring the reserve is
+through the normal generation boundary. Stopping also cancels palette work in
+flight, so a palette chosen during the cycle may not be shown yet; the scene's
+palette wins, and the visible frame is recolored with it when it shows another one. With Histogram Coloring the reserve is
 colored with the completed visible frame's histogram, see Histogram Coloring
 above. A complete reserve is recolored and
 published once without creating a calculation backend or rebuilding deep orbits.
