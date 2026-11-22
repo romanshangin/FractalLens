@@ -1,10 +1,11 @@
 # Qodana acceptance baseline
 
-Baseline: 51 reviewed findings, source `90ee4bef187f985980c87f2f74dfc52468fa3039`,
+Baseline: 61 reviewed findings (51 from source `90ee4bef187f985980c87f2f74dfc52468fa3039`,
+ten added for the Julia preview kernel, see below),
 Qodana Community 2026.2.3 (QDJVM-262.11550). Sanitized derivative retains relative
 locations/fingerprints, omits machine IDs, absolute paths, invocation metadata/logs.
 
-Accepted contracts: 33 owner/stack-managed resources, five supported JavaFX
+Accepted contracts: 43 owner/stack-managed resources, five supported JavaFX
 reflection accesses, four Optional APIs, three bounded polls, three record
 validation assignments, two exact divisions by two (resolved in code, see
 below), one short-write loop.
@@ -89,6 +90,30 @@ its fingerprint. Instead of migrating it, the loop now adds up the returned byte
 counts. It still writes until every byte is written. The baseline entry stays in the
 file and becomes resolved (`absent`), which the gate allows; no new contract was
 accepted.
+
+## Reviewed Julia preview kernel (PR #86, 2026-11-22)
+
+PR #86, `7c90457d09d956c142ad251c7e9383ca41b180e2`, added the opt-in
+`VulkanJuliaPreviewKernel`. Its first CI analysis found 47 unchanged plus 12 new:
+
+- Ten `AutoCloseableResource` in `VulkanJuliaPreviewKernel.java` at lines
+  76/83/91/138/139/210/220/221/265/342. They are the same owner/stack-managed pattern
+  as the accepted entries of the other Vulkan kernels: `.get(i)` views of LWJGL
+  structs allocated on a `MemoryStack` that the enclosing `try` frees, and the
+  kernel's own `Buffer`, owned by its `buffers` array and closed in `close()`.
+  Accepted as ten new instances of the existing contract (33 → 43); no new contract.
+- One `AutoCloseableResource` at `VulkanComputeSession.java:98`: the accepted line-97
+  entry (`queues.get(0)`) shifted by the new `juliaPreviewKernel` field, with the same
+  rule/message/column and code. Its location and fingerprints were migrated.
+- One `EmptyStatementBody` in `JuliaGpuRenderer` (the deferred-close wait loop) was
+  fixed in code instead of accepted.
+
+Pinned-image local analysis on a disposable clone of `7c90457` reproduced the same
+47 + 12. With the code fix and the migrated baseline on a fresh disposable clone:
+58 unchanged, zero new, `executionSuccessful: true`, exit 0 (the three entries
+already resolved before this PR stay `absent`). `scripts/quality/check_qodana.py`
+accepted all 58. Local evidence only, not the GitHub run; raw logs/reports stay
+private.
 
 ## Acceptance and report handling
 

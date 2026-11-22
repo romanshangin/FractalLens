@@ -172,9 +172,9 @@ final class JuliaGpuRenderer implements AutoCloseable {
         }
         Thread closer = new Thread(() -> {
             try {
-                while (!worker.awaitTermination(1, TimeUnit.SECONDS)) {
-                    // A native fence wait is not interruptible; keep waiting for it to drain.
-                }
+                // A native fence wait is not interruptible; keep waiting for it to drain.
+                boolean drained = false;
+                while (!drained) drained = worker.awaitTermination(1, TimeUnit.SECONDS);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
             } finally {

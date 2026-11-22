@@ -599,15 +599,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanComputeSession.java"
                 },
                 "region": {
-                  "startLine": 97,
+                  "startLine": 98,
                   "startColumn": 27
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "fcf63f3a21db382a",
-            "equalIndicator/v1": "5afd5460c6011a1772163b187df7bbcb0f15d476b23489c33426baf77def6798"
+            "equalIndicator/v2": "6090c55860354dbb",
+            "equalIndicator/v1": "cfcd4fc6521e99771cbba7720d94623d0519f9c216e3e2f277ddebb18d24c8d6"
           }
         },
         {
@@ -1283,6 +1283,256 @@
           "partialFingerprints": {
             "equalIndicator/v2": "1b128cfb4e1808b6",
             "equalIndicator/v1": "8a91b75167f53d982ecd031df0eb668b38a4b75c5cea72e1fa8a22b9545d9d32"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorSetLayoutBinding' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 76,
+                  "startColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "0aa91eb7c9c16dd1",
+            "equalIndicator/v1": "e61fbe0d5059bdd898c3e52aa36a5fb1819dabbca5f44a4ece93bbb0d84a0ef6"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkPushConstantRange' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 83,
+                  "startColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "39b77598e2444c7a",
+            "equalIndicator/v1": "da6b903d0dd55055694e73beed560399e887c88a195990576ec159c48bc72f90"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorPoolSize' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 91,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "48787fc04b54261d",
+            "equalIndicator/v1": "6ece5595d7d194eedf2b659dd167ad55b9f1dc9e951ed3dfd2e2642ea3613642"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkComputePipelineCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 138,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "2ab183d8aba1e348",
+            "equalIndicator/v1": "d91d89c79166399d464b8e0734debb85f40efca4aea7804cc6f5376992fd1253"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkPipelineShaderStageCreateInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 139,
+                  "startColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "27f6c1bfd2c8c04f",
+            "equalIndicator/v1": "c9cddc02d79e65025f1ade5f3b1dab16595fe87eaf815afe2180789ecd964708"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'Buffer' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 210,
+                  "startColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "4900fa115399023f",
+            "equalIndicator/v1": "63a87386a45e9790ee7e51764b920d12a0a76c7c52ddc440133f693a229f806f"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkDescriptorBufferInfo' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 220,
+                  "startColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "763657b36db4cccd",
+            "equalIndicator/v1": "1287cd2ced1c577db6e3260a8ce2adf2f702e3673a85ac26be39a2ebe1b30890"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkWriteDescriptorSet' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 221,
+                  "startColumn": 31
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "d88b7280ffa55cbe",
+            "equalIndicator/v1": "b856fa7482bb0f50084db680933e8ea5355def662e84912e98242164b9cf1e62"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkMemoryBarrier' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 265,
+                  "startColumn": 24
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "30d47785a292626a",
+            "equalIndicator/v1": "b157b618cd747d9ae8ed66b2111d86cd8ccd6b927d33ee68ddfb87e6f4efa511"
+          }
+        },
+        {
+          "ruleId": "AutoCloseableResource",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "'VkMappedMemoryRange' used without 'try'-with-resources statement"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
+                },
+                "region": {
+                  "startLine": 342,
+                  "startColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "equalIndicator/v2": "700ad10b07915eec",
+            "equalIndicator/v1": "aac2acffb45e2859c39d87d644c7590710a02cd48b487de071752a2e340eccc4"
           }
         }
       ]
