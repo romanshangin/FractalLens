@@ -258,6 +258,12 @@
                 <fractal.mainClass>com.shangin.fractal/com.shangin.fractal.ui.GpuResidentRenderBenchmark</fractal.mainClass>
             </properties>
         </profile>
+        <profile>
+            <id>gpu-julia-benchmark</id>
+            <properties>
+                <fractal.mainClass>com.shangin.fractal/com.shangin.fractal.ui.GpuJuliaBenchmark</fractal.mainClass>
+            </properties>
+        </profile>
         <!-- MoltenVK is bundled in lwjgl-vulkan's macOS native artifact. -->
         <profile>
             <id>gpu-macos</id>
@@ -331,6 +337,7 @@
                         <include>**/PaletteRecolorNativeTest.java</include>
                         <include>**/GpuMandelbrotRenderBackendNativeTest.java</include>
                         <include>**/GpuResidentMandelbrotNativeTest.java</include>
+                        <include>**/GpuJuliaNativeTest.java</include>
                     </includes>
                     <systemPropertyVariables>
                         <fractal.gpu.enabled>true</fractal.gpu.enabled>

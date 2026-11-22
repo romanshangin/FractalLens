@@ -210,6 +210,9 @@ public class FractalView extends StackPane {
         showLoadingScreen(false);
         renderController.setOnRenderStatusChanged(status -> {
             modeIndicator.setRenderStatus(status);
+            // A failed frame, including a failed Julia GPU palette frame, ends palette animation
+            // instead of retrying every tick.
+            if (status.state() == RenderStatus.State.FAILED && colorCycling) stopColorCyclingForSceneChange();
             if (loadingScreen != null && (status.state() == RenderStatus.State.COMPLETE
                     || status.state() == RenderStatus.State.FAILED)) {
                 // On failure expose the existing error indicator instead of leaving a stuck splash.
@@ -1244,6 +1247,47 @@ public class FractalView extends StackPane {
 
     public boolean hasCompletedFrame() {
         return fractalSurface.hasCompletedFrame();
+    }
+
+    /** Export needs exact samples; an approximate Julia GPU frame has none. */
+    public boolean hasExportableFrame() {
+        return fractalSurface.completedRender() != null;
+    }
+
+    /** Whether the visible frame is an approximate Julia GPU frame. */
+    public boolean showsJuliaGpuFrame() {
+        return renderController.showsJuliaGpuFrame();
+    }
+
+    public boolean isJuliaGpuAvailable() {
+        return renderController.isJuliaGpuAvailable();
+    }
+
+    public boolean juliaGpu() {
+        return renderController.juliaGpu();
+    }
+
+    /** Receives false when a GPU refusal turns the Julia GPU mode off. */
+    void setOnJuliaGpuChanged(Consumer<Boolean> handler) {
+        renderController.setOnJuliaGpuChanged(handler);
+    }
+
+    /**
+     * Renders supported Julia scenes only with the approximate GPU kernel. The mode is a
+     * display setting: it is not part of the scene, history or saved session.
+     */
+    public void setJuliaGpu(boolean enabled) {
+        if (enabled == renderController.juliaGpu()) return;
+        dismissContextMenu();
+        stopColorCyclingForSceneChange();
+        renderController.setJuliaGpu(enabled);
+        if (scene.fractal() == FractalPreset.JULIA) {
+            renderController.cancelCurrent();
+            fractalSurface.invalidateRefinement();
+            // The same scene in another renderer: keep its iteration limit, which a resize
+            // may have preserved, so the switch changes only how the frame is rendered.
+            recalculate(true);
+        }
     }
 
     void setExportStatus(String message) {

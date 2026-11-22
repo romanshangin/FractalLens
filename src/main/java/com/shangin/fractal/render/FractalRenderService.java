@@ -113,6 +113,24 @@ public final class FractalRenderService implements AutoCloseable {
         return gpuRuntime.capabilityReport();
     }
 
+    /**
+     * Whether the runtime can currently run the approximate Julia preview kernel. Never
+     * waits for native work, so the JavaFX thread may call it; the answer can be stale
+     * and {@link #renderJuliaPreview} re-checks it.
+     */
+    public boolean isJuliaPreviewAvailable() {
+        return gpuRuntime.isUsableSnapshotFor(com.shangin.fractal.gpu.GpuNumericCapability.FLOAT32);
+    }
+
+    /**
+     * Runs the approximate Julia preview kernel synchronously; empty requests the CPU path.
+     * The colors are a transient approximate frame, never a CPU-reference result.
+     */
+    public Optional<com.shangin.fractal.gpu.GpuJuliaPreviewResult> renderJuliaPreview(
+            com.shangin.fractal.gpu.GpuJuliaPreviewRequest request) throws InterruptedException {
+        return gpuRuntime.renderJuliaPreview(Objects.requireNonNull(request));
+    }
+
     /** Shares the runtime-owned palette backend without exposing native handles. */
     public PaletteRecolorBackend paletteRecolorBackend() {
         return new PaletteRecolorBackend(gpuRuntime);

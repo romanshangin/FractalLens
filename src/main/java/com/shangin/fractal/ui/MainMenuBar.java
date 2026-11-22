@@ -62,6 +62,8 @@ final class MainMenuBar extends MenuBar {
     private final Menu render = new Menu("Render");
     private final CheckMenuItem animation = new CheckMenuItem("Animate Palette");
     private final CheckMenuItem histogram = new CheckMenuItem("Histogram Coloring");
+    static final String JULIA_GPU_TITLE = "Julia GPU";
+    private final CheckMenuItem juliaGpu = new CheckMenuItem(JULIA_GPU_TITLE);
     private final ToggleGroup palettes = new ToggleGroup();
     private final ToggleGroup orbitTraps = new ToggleGroup();
     private List<ColorStop> paletteStops;
@@ -145,7 +147,16 @@ final class MainMenuBar extends MenuBar {
                 command("Edit Palette…", shortcut(KeyCode.P, KeyCombination.SHIFT_DOWN), this::showPalette),
                 new SeparatorMenuItem(), trap, histogram, animation,
                 new SeparatorMenuItem(), command("Reset Colors to Defaults", null, this::resetColors));
-        render.getItems().setAll(command("Edit Julia Parameters…", null, this::showJuliaParameters));
+        juliaGpu.setOnAction(event -> {
+            fractalView.setJuliaGpu(juliaGpu.isSelected());
+            updateAvailability();
+        });
+        fractalView.setOnJuliaGpuChanged(enabled -> {
+            juliaGpu.setSelected(enabled);
+            updateAvailability();
+        });
+        render.getItems().setAll(command("Edit Julia Parameters…", null, this::showJuliaParameters),
+                new SeparatorMenuItem(), juliaGpu);
         Menu window = new Menu("Window", null,
                 command("Minimize", shortcut(KeyCode.M), () -> stage.setIconified(true)),
                 command("Zoom", null, () -> stage.setMaximized(!stage.isMaximized())));
@@ -235,11 +246,14 @@ final class MainMenuBar extends MenuBar {
         // when only the parent is re-enabled after rendering.
         setCommandsDisabled(color, rendering);
         setCommandsDisabled(render, rendering);
-        export.setDisable(!exporting && !fractalView.hasCompletedFrame());
+        export.setDisable(!exporting && !fractalView.hasExportableFrame());
         animation.setDisable(rendering || histogram.isSelected() || orbitTrap != OrbitTrap.NONE);
         render.getItems().stream()
                 .filter(item -> "Edit Julia Parameters…".equals(item.getText()))
                 .forEach(item -> item.setDisable(rendering || currentFractal != FractalPreset.JULIA));
+        // A mode switch, not a scene edit: available whenever Julia is shown and the GPU works.
+        juliaGpu.setDisable(currentFractal != FractalPreset.JULIA
+                || !juliaGpu.isSelected() && !fractalView.isJuliaGpuAvailable());
     }
 
     private static void setCommandsDisabled(Menu menu, boolean disabled) {

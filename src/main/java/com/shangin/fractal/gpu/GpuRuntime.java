@@ -41,6 +41,15 @@ public interface GpuRuntime extends AutoCloseable {
         return capabilityReport().supports(capability);
     }
 
+    /**
+     * Like {@link #isUsableFor} but never waits for native work in progress, so the
+     * JavaFX thread can call it. The answer may be stale: the work itself re-checks
+     * availability and falls back.
+     */
+    default boolean isUsableSnapshotFor(GpuNumericCapability capability) {
+        return isUsableFor(capability);
+    }
+
     /** Completes bounded readback before returning; false requests CPU fallback without publishing samples. */
     default boolean calculateMandelbrot(MandelbrotBatch batch) throws InterruptedException {
         if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Calculation cancelled");
@@ -51,6 +60,17 @@ public interface GpuRuntime extends AutoCloseable {
     default java.util.Optional<GpuResidentMandelbrotResult> renderResidentMandelbrot(
             GpuResidentMandelbrotRequest request) throws InterruptedException {
         if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Resident render cancelled");
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * Approximate uncertified FP32 Julia preview returning ARGB only; empty requests
+     * the caller's CPU path. The colors are a transient preview and never a
+     * CPU-reference or certified frame.
+     */
+    default java.util.Optional<GpuJuliaPreviewResult> renderJuliaPreview(GpuJuliaPreviewRequest request)
+            throws InterruptedException {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Julia preview cancelled");
         return java.util.Optional.empty();
     }
 

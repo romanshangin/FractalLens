@@ -65,6 +65,16 @@ final class RenderActivityTracker {
         return false;
     }
 
+    /**
+     * Marks the shown, already completed frame as failed, for example after a failed
+     * palette frame. Returns false while a render is active, which owns the status.
+     */
+    boolean failCompleted() {
+        if (active) return false;
+        publish(RenderStatus.State.FAILED, 0);
+        return true;
+    }
+
     boolean isCurrent(long renderGeneration) {
         return active && renderGeneration == generation;
     }

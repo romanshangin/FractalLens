@@ -1,0 +1,875 @@
+package com.shangin.fractal.ui;
+
+import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.controller.FractalRenderController;
+import com.shangin.fractal.controller.RenderStatus;
+import com.shangin.fractal.formula.FractalPreset;
+import com.shangin.fractal.gpu.FakeJuliaPreviewRuntime;
+import com.shangin.fractal.math.Viewport;
+import com.shangin.fractal.render.*;
+import com.shangin.fractal.scene.*;
+import javafx.application.Platform;
+import javafx.scene.Scene;
+import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuItem;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelFormat;
+import javafx.scene.layout.BorderPane;
+import javafx.stage.Stage;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+
+import java.util.Arrays;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/** Render > Julia GPU: approximate GPU frames replace the CPU render for supported Julia scenes. */
+@EnabledIfSystemProperty(named = "fractal.fx.tests", matches = "true")
+class JuliaGpuModeFxTest {
+    private static final int WIDTH = 80;
+    private static final int HEIGHT = 60;
+    private static final FractalScene JULIA = FractalScene.create(FractalPreset.JULIA, PalettePreset.ICE)
+            .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY));
+
+    @BeforeAll
+    static void startFx() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        Platform.startup(() -> { Platform.setImplicitExit(false); started.countDown(); });
+        assertTrue(started.await(15, TimeUnit.SECONDS));
+    }
+
+    @AfterAll
+    static void stopFx() {
+        Platform.exit();
+    }
+
+    @Test
+    void gpuModeShowsOnlyTheGpuFrameAndRecolorsItOnTheGpu() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            int expected = FakeJuliaPreviewRuntime.expectedColor(JULIA.coloring(), -0.8);
+            assertSolid(expected, fixture.displayed());
+            assertEquals(0, fixture.backend.calls.get(), "GPU mode must not start the CPU render");
+            assertEquals(1, fixture.runtime.calls());
+            assertNull(fx(() -> fixture.surface.completedRender()), "A GPU frame has no exact samples");
+            assertTrue(fx(() -> fixture.surface.hasCompletedFrame()));
+            assertTrue(fx(() -> fixture.controller.showsJuliaGpuFrame()));
+            assertEquals(RenderStatus.State.COMPLETE, fixture.status.get().state());
+
+            ColoringSettings fire = new ColoringSettings(PalettePreset.values()[1]);
+            CountDownLatch applied = new CountDownLatch(1);
+            fixture.controller(controller -> controller.recolor(fire, applied::countDown));
+            assertTrue(applied.await(15, TimeUnit.SECONDS));
+            assertSolid(FakeJuliaPreviewRuntime.expectedColor(fire, -0.8), fixture.displayed());
+            assertEquals(2, fixture.runtime.calls());
+            assertEquals(0, fixture.backend.calls.get());
+
+            // Turning the mode off renders the exact CPU frame again.
+            fixture.controller(controller -> controller.setJuliaGpu(false));
+            fixture.render(JULIA.withColoring(fire));
+            assertEquals(1, fixture.backend.calls.get());
+            assertNotNull(fx(() -> fixture.surface.completedRender()));
+            assertFalse(fx(() -> fixture.controller.showsJuliaGpuFrame()));
+            assertNotEquals(FakeJuliaPreviewRuntime.expectedColor(fire, -0.8), fixture.displayed()[0]);
+        }
+    }
+
+    @Test
+    void unsupportedScenesAndOtherFractalsStayOnCpu() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            var histogram = JULIA.withColoring(new ColoringSettings(PalettePreset.ICE,
+                    com.shangin.fractal.coloring.SmoothPaletteColoring.DEFAULT_COLOR_SCALE, 0, true));
+            fixture.render(histogram);
+            fixture.render(FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                    .withAntialiasing(new AntialiasSettings(InteractiveRenderMode.BASE_ONLY)));
+            // Neighboring pixels collapse to one FP32 coordinate here: the kernel refuses it.
+            fixture.render(JULIA.withViewport(new Viewport("0.3", "0.2", "1e-9")));
+            assertEquals(3, fixture.backend.calls.get());
+            assertEquals(0, fixture.runtime.started());
+            assertNotNull(fx(() -> fixture.surface.completedRender()));
+        }
+    }
+
+    @Test
+    void refusedKernelFallsBackToTheCpuFrameOnce() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.runtime.setEmptyResult(true);
+            fixture.render(JULIA);
+            assertEquals(1, fixture.runtime.calls());
+            assertEquals(1, fixture.backend.calls.get());
+            assertNotNull(fx(() -> fixture.surface.completedRender()));
+            assertEquals(RenderStatus.State.COMPLETE, fixture.status.get().state());
+            fixture.render(JULIA.withViewport(new Viewport("0.1", "0", "2.4")));
+            assertEquals(1, fixture.runtime.calls(), "An unavailable kernel is not retried");
+            assertEquals(2, fixture.backend.calls.get());
+        }
+    }
+
+    @Test
+    void kernelFailureFailsTheRender() throws Exception {
+        try (var fixture = new Fixture()) {
+            AtomicReference<Throwable> reported = new AtomicReference<>();
+            fixture.controller(controller -> {
+                controller.setJuliaGpu(true);
+                controller.setOnRenderError(reported::set);
+            });
+            fixture.runtime.setFailure(new IllegalStateException("injected"));
+            fixture.startRender(JULIA);
+            // FAILED is published before the error handler runs in the same FX task.
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.FAILED
+                    && reported.get() != null);
+            assertEquals("injected", reported.get().getMessage());
+            assertEquals(0, fixture.backend.calls.get());
+        }
+    }
+
+    @Test
+    void afterAFailedSceneRenderPaletteChangesNeitherResubmitNorReportAgain() throws Exception {
+        try (var fixture = new Fixture()) {
+            AtomicInteger errors = new AtomicInteger();
+            fixture.controller(controller -> {
+                controller.setJuliaGpu(true);
+                controller.setOnRenderError(error -> errors.incrementAndGet());
+                controller.setColorCycling(true, JULIA.coloring());
+            });
+            fixture.runtime.setFailure(new IllegalStateException("injected"));
+            fixture.startRender(JULIA);
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.FAILED && errors.get() > 0);
+            int started = fixture.runtime.started();
+            // The failure persists: neither a palette change nor stopping the animation may
+            // resubmit the failed scene and report the failure again.
+            ColoringSettings fire = new ColoringSettings(PalettePreset.FIRE);
+            fixture.controller(controller -> {
+                controller.recolor(fire);
+                controller.cancelRecolor();
+                controller.setColorCycling(false, fire);
+            });
+            // A resubmission would reach the worker within milliseconds; wait for it to show.
+            Thread.sleep(300);
+            fx(() -> null);
+            assertEquals(started, fixture.runtime.started(), "The failed scene was resubmitted to the GPU");
+            assertEquals(1, errors.get());
+            assertEquals(RenderStatus.State.FAILED, fixture.status.get().state());
+            assertFalse(fx(() -> fixture.surface.hasCompletedFrame()), "A frame of the failed scene was shown");
+            // The next render tries again.
+            fixture.runtime.setFailure(null);
+            fixture.render(JULIA.withColoring(fire));
+            assertSolid(FakeJuliaPreviewRuntime.expectedColor(fire, -0.8), fixture.displayed());
+        }
+    }
+
+    @Test
+    void supersededGpuFrameIsNeverShown() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.runtime.setGated(true);
+            fixture.startRender(JULIA);
+            awaitCondition(() -> fixture.runtime.started() == 1);
+            var replacement = JULIA.withJuliaParameters(new JuliaParameters(-0.123, 0.745));
+            fixture.startRender(replacement);
+            fixture.runtime.release();
+            // The first frame finished after it was superseded; the second is still gated.
+            awaitCondition(() -> fixture.runtime.started() == 2);
+            fx(() -> null);
+            fx(() -> null);
+            int stale = FakeJuliaPreviewRuntime.expectedColor(JULIA.coloring(), -0.8);
+            assertFalse(fx(() -> fixture.surface.hasCompletedFrame()) && fixture.displayed()[0] == stale,
+                    "A superseded GPU frame was shown");
+            assertEquals(RenderStatus.State.RENDERING, fixture.status.get().state());
+            fixture.runtime.release();
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.COMPLETE);
+            assertSolid(FakeJuliaPreviewRuntime.expectedColor(JULIA.coloring(), -0.123), fixture.displayed());
+        }
+    }
+
+    @Test
+    void slowGpuStillShowsAnimatedPaletteFrames() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            fixture.runtime.setGated(true);
+            ColoringSettings ocean = new ColoringSettings(PalettePreset.OCEAN);
+            ColoringSettings fire = new ColoringSettings(PalettePreset.FIRE);
+            ColoringSettings plasma = new ColoringSettings(PalettePreset.PLASMA);
+            CountDownLatch oceanShown = new CountDownLatch(1);
+            CountDownLatch plasmaShown = new CountDownLatch(1);
+            AtomicInteger fireShown = new AtomicInteger();
+            // Palette ticks arrive faster than the GPU finishes a frame.
+            fixture.controller(controller -> controller.recolor(ocean, oceanShown::countDown));
+            awaitCondition(() -> fixture.runtime.started() == 2);
+            fixture.controller(controller -> {
+                controller.recolor(fire, fireShown::incrementAndGet);
+                controller.recolor(plasma, plasmaShown::countDown);
+            });
+            fixture.runtime.release();
+            assertTrue(oceanShown.await(15, TimeUnit.SECONDS), "The finished frame must be shown");
+            assertSolid(FakeJuliaPreviewRuntime.expectedColor(ocean, -0.8), fixture.displayed());
+            awaitCondition(() -> fixture.runtime.started() == 3);
+            fixture.runtime.release();
+            assertTrue(plasmaShown.await(15, TimeUnit.SECONDS));
+            assertSolid(FakeJuliaPreviewRuntime.expectedColor(plasma, -0.8), fixture.displayed());
+            assertEquals(3, fixture.runtime.calls(), "Only the latest queued palette is rendered");
+            assertEquals(0, fireShown.get());
+        }
+    }
+
+    @Test
+    void stoppingAnimationDropsThePaletteFrameInFlight() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            int shown = FakeJuliaPreviewRuntime.expectedColor(JULIA.coloring(), -0.8);
+            fixture.runtime.setGated(true);
+            AtomicInteger applied = new AtomicInteger();
+            fixture.controller(controller -> controller.recolor(new ColoringSettings(PalettePreset.OCEAN),
+                    applied::incrementAndGet));
+            awaitCondition(() -> fixture.runtime.started() == 2);
+            fixture.controller(FractalRenderController::cancelRecolor);
+            fixture.runtime.release();
+            awaitCondition(() -> fixture.runtime.calls() == 2);
+            fx(() -> null);
+            fx(() -> null);
+            assertSolid(shown, fixture.displayed());
+            assertEquals(0, applied.get());
+        }
+    }
+
+    @Test
+    void cancelledRequestThatHasNotStartedNeverRuns() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.runtime.setGated(true);
+            fixture.startRender(JULIA);
+            awaitCondition(() -> fixture.runtime.started() == 1);
+            // Queued behind the running frame, then cancelled by switching the mode off.
+            fixture.startRender(JULIA.withJuliaParameters(new JuliaParameters(-0.123, 0.745)));
+            fixture.controller(controller -> controller.setJuliaGpu(false));
+            fixture.startRender(JULIA);
+            fixture.runtime.release();
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.COMPLETE);
+            awaitCondition(() -> fixture.runtime.calls() == 1);
+            fx(() -> null);
+            assertEquals(1, fixture.runtime.started(), "A cancelled queued request reached the GPU");
+            assertNotNull(fx(() -> fixture.surface.completedRender()));
+        }
+    }
+
+    @Test
+    void closingNeverWaitsForTheGpuOnTheFxThread() throws Exception {
+        var fixture = new Fixture();
+        try {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.runtime.setGated(true);
+            fixture.startRender(JULIA);
+            awaitCondition(() -> fixture.runtime.started() == 1);
+            long started = System.nanoTime();
+            fixture.controller(FractalRenderController::close);
+            assertTrue(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(2),
+                    "Closing waited for the running GPU frame on the FX thread");
+            assertFalse(fixture.runtime.closed(), "The runtime closed under a running native call");
+        } finally {
+            fixture.runtime.release();
+        }
+        awaitCondition(fixture.runtime::closed);
+        fixture.close();
+    }
+
+    @Test
+    void animatingAndStoppingThePaletteOnAGpuFrameKeepsNavigationWorking() throws Exception {
+        try (var window = new MainWindow()) {
+            window.enableJuliaGpu();
+            int framesBefore = window.runtime.calls();
+            fx(() -> { window.view.setColorCycling(true); return null; });
+            awaitCondition(() -> window.runtime.calls() >= framesBefore + 2);
+            fx(() -> { window.view.setColorCycling(false); return null; });
+            fx(() -> { window.view.setColorCycling(true); return null; });
+            awaitCondition(() -> window.runtime.calls() >= framesBefore + 4);
+            int beforeZoom = window.runtime.calls();
+            fx(() -> { window.view.zoom(true); return null; });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame())
+                    && window.runtime.calls() > beforeZoom);
+            fx(() -> { window.view.setColorCycling(false); return null; });
+            assertTrue(fx(window.view::showsJuliaGpuFrame));
+        }
+    }
+
+    @Test
+    void gpuRefusalTurnsTheModeOffInTheMenu() throws Exception {
+        try (var window = new MainWindow()) {
+            window.runtime.setEmptyResult(true);
+            CheckMenuItem juliaGpu = window.juliaGpuItem();
+            fx(() -> { juliaGpu.setSelected(true); juliaGpu.fire(); return null; });
+            awaitCondition(() -> window.runtime.calls() >= 1
+                    && fx(() -> window.view.hasExportableFrame() && window.view.isLatencyIdle()));
+            assertFalse(fx(juliaGpu::isSelected), "The menu still shows the refused mode as active");
+            assertTrue(fx(juliaGpu::isDisable), "The refused mode must not stay available");
+            assertFalse(fx(window.view::juliaGpu));
+            assertFalse(fx(() -> window.item("File", "Export PNG…").isDisable()));
+        }
+    }
+
+    @Test
+    void cpuFallbackAfterResizeKeepsTheGpuIterationLimit() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            FractalScene zoomed = JULIA.withViewport(new Viewport("0", "0", "1.2"));
+            fixture.render(zoomed);
+            int gpuLimit = fx(() -> fixture.lastIterations.get());
+            Viewport widerDefault = new Viewport("0", "0", "1.2");
+            int recalculated = zoomed.iterations().maxIterations(widerDefault.scaleExact(),
+                    zoomed.viewport().scaleExact());
+            assertNotEquals(recalculated, gpuLimit, "The fixture must change the recalculated limit");
+
+            // A resize keeps the pixel scale and the limit; the GPU then refuses the kernel.
+            fixture.runtime.setEmptyResult(true);
+            fx(() -> {
+                fixture.surface.resize(2 * WIDTH, 2 * HEIGHT);
+                fixture.surface.resizeBuffer(2 * WIDTH, 2 * HEIGHT);
+                return null;
+            });
+            fixture.startRender(zoomed, 2 * WIDTH, 2 * HEIGHT, widerDefault, true);
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.COMPLETE
+                    && fx(() -> fixture.surface.completedRender()) != null);
+            assertEquals(gpuLimit, (int) fx(() -> fixture.surface.completedRender().frame().request().maxIterations()),
+                    "The CPU fallback recalculated the iteration limit");
+            assertEquals(1, fixture.backend.calls.get());
+        }
+    }
+
+    @Test
+    void panningOnTheGpuAfterAFailedPaletteFrameKeepsThePreservedLimit() throws Exception {
+        try (var fixture = new Fixture()) {
+            int preserved = resizeThenFailAPaletteFrame(fixture);
+            // A pan keeps the pixel scale and the limit; the GPU works again.
+            fixture.runtime.setFailure(null);
+            fixture.startRender(ZOOMED.withViewport(ZOOMED.viewport().shiftedByPixels(5, 0, 2 * WIDTH, 2 * HEIGHT)),
+                    2 * WIDTH, 2 * HEIGHT, WIDER_DEFAULT, true);
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.COMPLETE);
+            assertEquals(preserved, fixture.runtime.lastMaxIterations(), "The pan recalculated the limit");
+        }
+    }
+
+    @Test
+    void turningJuliaGpuOffAfterAFailedPaletteFrameKeepsThePreservedLimit() throws Exception {
+        try (var fixture = new Fixture()) {
+            int preserved = resizeThenFailAPaletteFrame(fixture);
+            fixture.controller(controller -> controller.setJuliaGpu(false));
+            fixture.startRender(ZOOMED, 2 * WIDTH, 2 * HEIGHT, WIDER_DEFAULT, true);
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.COMPLETE
+                    && fx(() -> fixture.surface.completedRender()) != null);
+            assertEquals(preserved, (int) fx(() -> fixture.surface.completedRender().frame().request().maxIterations()),
+                    "The CPU frame recalculated the limit");
+        }
+    }
+
+    private static final FractalScene ZOOMED = JULIA.withViewport(new Viewport("0", "0", "1.2"));
+    private static final Viewport WIDER_DEFAULT = new Viewport("0", "0", "1.2");
+
+    /** GPU frame at a preserved limit after a resize, then a failed palette frame; returns that limit. */
+    private static int resizeThenFailAPaletteFrame(Fixture fixture) throws Exception {
+        fixture.controller(controller -> controller.setJuliaGpu(true));
+        fixture.render(ZOOMED);
+        int preserved = fixture.runtime.lastMaxIterations();
+        int recalculated = ZOOMED.iterations().maxIterations(WIDER_DEFAULT.scaleExact(), ZOOMED.viewport().scaleExact());
+        assertNotEquals(recalculated, preserved, "The fixture must change the recalculated limit");
+        fx(() -> {
+            fixture.surface.resize(2 * WIDTH, 2 * HEIGHT);
+            fixture.surface.resizeBuffer(2 * WIDTH, 2 * HEIGHT);
+            return null;
+        });
+        fixture.startRender(ZOOMED, 2 * WIDTH, 2 * HEIGHT, WIDER_DEFAULT, true);
+        awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.COMPLETE);
+        assertEquals(preserved, fixture.runtime.lastMaxIterations());
+        fixture.runtime.setFailure(new IllegalStateException("injected"));
+        fixture.controller(controller -> controller.recolor(new ColoringSettings(PalettePreset.OCEAN)));
+        awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.FAILED);
+        fx(() -> null);
+        return preserved;
+    }
+
+    @Test
+    void refusalOfASupersededRequestStillTurnsTheModeOff() throws Exception {
+        try (var fixture = new Fixture()) {
+            AtomicReference<Boolean> changed = new AtomicReference<>();
+            fixture.controller(controller -> {
+                controller.setJuliaGpu(true);
+                controller.setOnJuliaGpuChanged(changed::set);
+            });
+            fixture.runtime.setGated(true);
+            fixture.startRender(JULIA);
+            awaitCondition(() -> fixture.runtime.started() == 1);
+            fixture.runtime.setEmptyResult(true);
+            // A resize starts: the running request is superseded before it reports the refusal.
+            fixture.controller(FractalRenderController::cancelCurrent);
+            fixture.runtime.release();
+            awaitCondition(() -> Boolean.FALSE.equals(changed.get()));
+            assertFalse(fx(() -> fixture.controller.juliaGpu()));
+            assertEquals(0, fixture.backend.calls.get(), "The superseded scene must not render again");
+            fixture.render(JULIA);
+            assertEquals(1, fixture.backend.calls.get());
+            assertEquals(1, fixture.runtime.started());
+        }
+    }
+
+    @Test
+    void failedPaletteFrameFailsOnceAndStopsRetrying() throws Exception {
+        try (var fixture = new Fixture()) {
+            AtomicInteger errors = new AtomicInteger();
+            fixture.controller(controller -> {
+                controller.setJuliaGpu(true);
+                controller.setOnRenderError(error -> errors.incrementAndGet());
+            });
+            fixture.render(JULIA);
+            fixture.runtime.setFailure(new IllegalStateException("injected"));
+            fixture.controller(controller -> controller.recolor(new ColoringSettings(PalettePreset.OCEAN)));
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.FAILED && errors.get() > 0);
+            fx(() -> null);
+            assertEquals(1, errors.get());
+            int calls = fixture.runtime.calls();
+            fixture.controller(controller -> {
+                controller.recolor(new ColoringSettings(PalettePreset.FIRE));
+                controller.recolor(new ColoringSettings(PalettePreset.PLASMA));
+            });
+            fx(() -> null);
+            fx(() -> null);
+            assertEquals(calls, fixture.runtime.started(), "A failed palette frame was retried");
+            assertEquals(1, errors.get());
+            assertEquals(RenderStatus.State.FAILED, fixture.status.get().state());
+        }
+    }
+
+    @Test
+    void paletteAnimationStopsWhenAGpuPaletteFrameFails() throws Exception {
+        try (var window = new MainWindow()) {
+            window.enableJuliaGpu();
+            CheckMenuItem animation = (CheckMenuItem) fx(() -> window.item("Color", "Animate Palette"));
+            int before = window.runtime.calls();
+            fx(() -> { animation.setSelected(true); animation.fire(); return null; });
+            awaitCondition(() -> window.runtime.calls() >= before + 2);
+            window.runtime.setFailure(new IllegalStateException("injected"));
+            awaitCondition(() -> !fx(animation::isSelected));
+            int afterFailure = window.runtime.started();
+            // Several animation ticks: none may reach the GPU again.
+            Thread.sleep(300);
+            fx(() -> null);
+            assertEquals(afterFailure, window.runtime.started(), "Palette animation kept retrying the GPU");
+        }
+    }
+
+    @Test
+    void refusalAfterAStoppedAnimationRestoresTheShownSceneOnCpu() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            fixture.runtime.setGated(true);
+            fixture.controller(controller -> controller.recolor(new ColoringSettings(PalettePreset.OCEAN)));
+            awaitCondition(() -> fixture.runtime.started() == 2);
+            fixture.runtime.setEmptyResult(true);
+            // Animate Palette stops while the palette frame runs; no render follows.
+            fixture.controller(FractalRenderController::cancelRecolor);
+            fixture.runtime.release();
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.COMPLETE
+                    && fx(() -> fixture.surface.completedRender()) != null);
+            assertEquals(JULIA.coloring(), fx(() -> fixture.surface.completedRender().scene().coloring()),
+                    "The CPU frame must show the palette that was on screen");
+            assertFalse(fx(() -> fixture.controller.showsJuliaGpuFrame()));
+            assertFalse(fx(() -> fixture.controller.juliaGpu()));
+            assertEquals(1, fixture.backend.calls.get());
+        }
+    }
+
+    @Test
+    void refusedPaletteFrameRecordsItsPaletteAfterTheCpuFrame() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            fixture.runtime.setEmptyResult(true);
+            ColoringSettings shifted = new ColoringSettings(PalettePreset.ICE,
+                    com.shangin.fractal.coloring.SmoothPaletteColoring.DEFAULT_COLOR_SCALE, 0.5);
+            AtomicReference<ColoringSettings> shownWhenApplied = new AtomicReference<>();
+            AtomicInteger applied = new AtomicInteger();
+            fixture.controller(controller -> controller.recolor(shifted, () -> {
+                applied.incrementAndGet();
+                var completed = fixture.surface.completedRender();
+                shownWhenApplied.set(completed == null ? null : completed.scene().coloring());
+            }));
+            awaitCondition(() -> applied.get() == 1);
+            fx(() -> null);
+            // Recorded once the CPU frame with that palette is on screen, not before.
+            assertEquals(shifted, shownWhenApplied.get(), "The palette must be recorded with its CPU frame");
+            awaitCondition(() -> fixture.status.get().state() == RenderStatus.State.COMPLETE);
+            assertEquals(1, applied.get());
+            assertEquals(1, fixture.backend.calls.get());
+        }
+    }
+
+    @Test
+    void refusedPaletteIsRecordedWhenTheBaseFrameShowsEvenIfAntialiasingIsCancelled() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            FractalScene antialiased = JULIA.withAntialiasing(new AntialiasSettings(InteractiveRenderMode.FAST));
+            fixture.render(antialiased);
+            fixture.runtime.setEmptyResult(true);
+            ColoringSettings shifted = new ColoringSettings(PalettePreset.ICE,
+                    com.shangin.fractal.coloring.SmoothPaletteColoring.DEFAULT_COLOR_SCALE, 0.5);
+            AtomicInteger applied = new AtomicInteger();
+            AtomicReference<RenderStatus.State> stateAtCancel = new AtomicReference<>();
+            CountDownLatch cancelled = new CountDownLatch(1);
+            fixture.controller(controller -> {
+                controller.recolor(shifted, applied::incrementAndGet);
+                // Polls on the FX thread: it cancels in the first task after the base CPU frame is
+                // published, ahead of any antialiasing result posted later.
+                Runnable[] poll = new Runnable[1];
+                poll[0] = () -> {
+                    if (fixture.surface.completedRender() == null) {
+                        Platform.runLater(poll[0]);
+                        return;
+                    }
+                    stateAtCancel.set(fixture.status.get().state());
+                    controller.cancelCurrent();
+                    cancelled.countDown();
+                };
+                Platform.runLater(poll[0]);
+            });
+            assertTrue(cancelled.await(15, TimeUnit.SECONDS));
+            fx(() -> null);
+            assertEquals(RenderStatus.State.RENDERING, stateAtCancel.get(),
+                    "The fixture must cancel before antialiasing completes");
+            assertEquals(shifted, fx(() -> fixture.surface.completedRender().scene().coloring()));
+            assertEquals(1, applied.get(), "The palette shown on the base CPU frame was not recorded");
+        }
+    }
+
+    @Test
+    void switchingJuliaGpuKeepsTheIterationLimitAResizePreserved() throws Exception {
+        try (var window = new MainWindow()) {
+            FractalSurface surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().stream()
+                    .filter(FractalSurface.class::isInstance).findFirst().orElseThrow());
+            for (int i = 0; i < 2; i++) {
+                fx(() -> { window.view.zoom(true); return null; });
+                awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.hasExportableFrame()));
+            }
+            int widthBefore = fx(() -> surface.completedRender().frame().request().width());
+            fx(() -> {
+                window.stage.setWidth(window.stage.getWidth() * 1.5);
+                window.stage.setHeight(window.stage.getHeight() * 1.5);
+                return null;
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && surface.completedRender() != null
+                    && surface.completedRender().frame().request().width() > widthBefore));
+            int preserved = fx(() -> surface.completedRender().frame().request().maxIterations());
+            int recalculated = fx(() -> {
+                FractalScene scene = window.view.sceneSnapshot();
+                Viewport defaultViewport = new FractalCamera(FractalPreset.JULIA)
+                        .defaultViewport((int) window.view.getWidth(), (int) window.view.getHeight());
+                return scene.iterations().maxIterations(defaultViewport.scaleExact(), scene.viewport().scaleExact());
+            });
+            assertNotEquals(recalculated, preserved, "The fixture must change the recalculated limit");
+
+            window.enableJuliaGpu();
+            assertEquals(preserved, window.runtime.lastMaxIterations(), "Turning Julia GPU on changed the limit");
+            CheckMenuItem juliaGpu = window.juliaGpuItem();
+            fx(() -> { juliaGpu.setSelected(false); juliaGpu.fire(); return null; });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.hasExportableFrame()));
+            assertEquals(preserved, (int) fx(() -> surface.completedRender().frame().request().maxIterations()),
+                    "Turning Julia GPU off changed the limit");
+        }
+    }
+
+    @Test
+    void stoppingAnimationKeepsAPaletteChosenWhileItsFrameRuns() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            fixture.controller(controller -> controller.setColorCycling(true, JULIA.coloring()));
+            fixture.runtime.setGated(true);
+            ColoringSettings tick = new ColoringSettings(PalettePreset.ICE,
+                    com.shangin.fractal.coloring.SmoothPaletteColoring.DEFAULT_COLOR_SCALE, 0.25);
+            ColoringSettings fire = new ColoringSettings(PalettePreset.FIRE);
+            fixture.controller(controller -> controller.recolor(tick));
+            awaitCondition(() -> fixture.runtime.started() == 2);
+            // The user picks Fire, then stops the animation while frames are still running:
+            // the same calls FractalView makes for a palette choice and for stopping.
+            fixture.controller(controller -> {
+                controller.cancelRecolor();
+                controller.recolor(fire);
+                controller.cancelRecolor();
+                controller.setColorCycling(false, fire);
+            });
+            fixture.runtime.setGated(false);
+            fixture.runtime.release();
+            int expected = FakeJuliaPreviewRuntime.expectedColor(fire, -0.8);
+            awaitCondition(() -> fixture.displayed().length > 0 && fixture.displayed()[0] == expected);
+            assertSolid(expected, fixture.displayed());
+        }
+    }
+
+    @Test
+    void stoppingAnimationAfterAPaletteChoiceShowsTheScenesPalette() throws Exception {
+        try (var window = new MainWindow()) {
+            window.enableJuliaGpu();
+            FractalSurface surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().stream()
+                    .filter(FractalSurface.class::isInstance).findFirst().orElseThrow());
+            CheckMenuItem animation = (CheckMenuItem) fx(() -> window.item("Color", "Animate Palette"));
+            MenuItem fire = fx(() -> ((Menu) window.item("Color", "Palette")).getItems().stream()
+                    .filter(item -> PalettePreset.FIRE.toString().equals(item.getText())).findFirst().orElseThrow());
+            int before = window.runtime.calls();
+            fx(() -> { animation.setSelected(true); animation.fire(); return null; });
+            awaitCondition(() -> window.runtime.calls() >= before + 2);
+            window.runtime.setGated(true);
+            int started = window.runtime.started();
+            awaitCondition(() -> window.runtime.started() > started);
+            fx(() -> { ((javafx.scene.control.RadioMenuItem) fire).setSelected(true); fire.fire(); return null; });
+            fx(() -> { animation.setSelected(false); animation.fire(); return null; });
+            window.runtime.setGated(false);
+            window.runtime.release();
+            awaitCondition(() -> fx(() -> {
+                int[] shown = displayed(surface);
+                return shown.length > 0 && shown[0] == FakeJuliaPreviewRuntime.expectedColor(
+                        window.view.sceneSnapshot().coloring(), -0.8);
+            }));
+            FractalScene scene = fx(window.view::sceneSnapshot);
+            assertEquals(PalettePreset.FIRE, scene.coloring().palette());
+            int expected = FakeJuliaPreviewRuntime.expectedColor(scene.coloring(), -0.8);
+            int[] shown = fx(() -> displayed(surface));
+            for (int pixel : shown) assertEquals(expected, pixel, "The frame does not show the scene's palette");
+        }
+    }
+
+    private static int[] displayed(FractalSurface surface) {
+        Image image = ((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage();
+        if (image == null) return new int[0];
+        int width = (int) image.getWidth(), height = (int) image.getHeight();
+        int[] pixels = new int[width * height];
+        image.getPixelReader().getPixels(0, 0, width, height, PixelFormat.getIntArgbInstance(), pixels, 0, width);
+        return pixels;
+    }
+
+    /** A main window around the fake GPU runtime, showing Julia. */
+    private static final class MainWindow implements AutoCloseable {
+        final FakeJuliaPreviewRuntime runtime = new FakeJuliaPreviewRuntime();
+        Stage stage;
+        FractalView view;
+        MainMenuBar menuBar;
+
+        MainWindow() throws Exception {
+            var bookmarks = java.nio.file.Files.createTempDirectory("fractallens-julia-gpu-bookmarks");
+            fx(() -> {
+                stage = new Stage();
+                view = new FractalView(JULIA, false, new FractalRenderService(new CountingBackend(), runtime));
+                menuBar = new MainMenuBar(stage, view, JULIA, () -> {},
+                        new com.shangin.fractal.app.BookmarkStore(bookmarks));
+                BorderPane root = new BorderPane(view);
+                root.setTop(menuBar);
+                stage.setScene(new Scene(root, 320, 240));
+                stage.show();
+                return null;
+            });
+            awaitCondition(() -> fx(() -> view.hasExportableFrame() && view.isLatencyIdle()));
+        }
+
+        MenuItem item(String menu, String title) {
+            return JuliaGpuModeFxTest.item(menuBar, menu, title);
+        }
+
+        CheckMenuItem juliaGpuItem() throws Exception {
+            return (CheckMenuItem) fx(() -> item("Render", MainMenuBar.JULIA_GPU_TITLE));
+        }
+
+        void enableJuliaGpu() throws Exception {
+            CheckMenuItem juliaGpu = juliaGpuItem();
+            fx(() -> { juliaGpu.setSelected(true); juliaGpu.fire(); return null; });
+            awaitCondition(() -> fx(() -> view.showsJuliaGpuFrame() && view.isLatencyIdle()));
+        }
+
+        @Override public void close() throws Exception {
+            fx(() -> {
+                if (menuBar != null) menuBar.close();
+                if (view != null) view.close();
+                if (stage != null) stage.close();
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void renderMenuTogglesJuliaGpuOnlyForJuliaAndDisablesExport() throws Exception {
+        var runtime = new FakeJuliaPreviewRuntime();
+        var backend = new CountingBackend();
+        var bookmarks = java.nio.file.Files.createTempDirectory("fractallens-julia-gpu-bookmarks");
+        Stage[] stage = new Stage[1];
+        FractalView[] view = new FractalView[1];
+        MainMenuBar[] menuBar = new MainMenuBar[1];
+        try {
+            fx(() -> {
+                stage[0] = new Stage();
+                view[0] = new FractalView(JULIA, false, new FractalRenderService(backend, runtime));
+                menuBar[0] = new MainMenuBar(stage[0], view[0], JULIA, () -> {},
+                        new com.shangin.fractal.app.BookmarkStore(bookmarks));
+                BorderPane root = new BorderPane(view[0]);
+                root.setTop(menuBar[0]);
+                stage[0].setScene(new Scene(root, 320, 240));
+                stage[0].show();
+                return null;
+            });
+            awaitCondition(() -> fx(() -> view[0].hasExportableFrame()) && !fx(() -> item(menuBar[0],
+                    "Render", MainMenuBar.JULIA_GPU_TITLE).isDisable()));
+            CheckMenuItem juliaGpu = (CheckMenuItem) fx(() -> item(menuBar[0], "Render", MainMenuBar.JULIA_GPU_TITLE));
+            MenuItem export = fx(() -> item(menuBar[0], "File", "Export PNG…"));
+            assertFalse(fx(juliaGpu::isSelected));
+            assertFalse(fx(export::isDisable));
+
+            fx(() -> { juliaGpu.setSelected(true); juliaGpu.fire(); return null; });
+            awaitCondition(() -> fx(() -> view[0].showsJuliaGpuFrame() && view[0].isLatencyIdle()));
+            assertTrue(fx(juliaGpu::isSelected));
+            assertTrue(fx(export::isDisable), "Approximate GPU frames cannot be exported");
+            assertTrue(runtime.calls() >= 1);
+
+            fx(() -> { juliaGpu.setSelected(false); juliaGpu.fire(); return null; });
+            awaitCondition(() -> fx(() -> view[0].hasExportableFrame() && view[0].isLatencyIdle()));
+            assertFalse(fx(export::isDisable));
+
+            fx(() -> { view[0].setFractal(FractalPreset.MANDELBROT); return null; });
+            awaitCondition(() -> fx(() -> view[0].hasExportableFrame() && view[0].isLatencyIdle()));
+            assertTrue(fx(juliaGpu::isDisable), "Julia GPU applies only to Julia");
+
+            // Without a usable GPU the switch is unavailable even for Julia.
+            runtime.setAvailable(false);
+            fx(() -> { view[0].setFractal(FractalPreset.JULIA); return null; });
+            awaitCondition(() -> fx(() -> view[0].hasExportableFrame() && view[0].isLatencyIdle()));
+            assertTrue(fx(juliaGpu::isDisable), "Julia GPU needs a usable GPU runtime");
+        } finally {
+            fx(() -> {
+                if (menuBar[0] != null) menuBar[0].close();
+                if (view[0] != null) view[0].close();
+                if (stage[0] != null) stage[0].close();
+                return null;
+            });
+        }
+    }
+
+    private static MenuItem item(MainMenuBar menuBar, String menu, String title) {
+        return menuBar.getMenus().stream().filter(candidate -> menu.equals(candidate.getText()))
+                .findFirst().orElseThrow().getItems().stream()
+                .filter(candidate -> title.equals(candidate.getText()))
+                .findFirst().orElseThrow();
+    }
+
+    private static void assertSolid(int expected, int[] pixels) {
+        assertEquals(WIDTH * HEIGHT, pixels.length);
+        for (int i = 0; i < pixels.length; i++) {
+            if (pixels[i] != expected) fail("Pixel " + i + " is " + Integer.toHexString(pixels[i])
+                    + ", expected " + Integer.toHexString(expected));
+        }
+    }
+
+    /** Controller and surface around a counting CPU backend and the fake GPU runtime. */
+    private static final class Fixture implements AutoCloseable {
+        final FakeJuliaPreviewRuntime runtime = new FakeJuliaPreviewRuntime();
+        final CountingBackend backend = new CountingBackend();
+        final FractalSurface surface;
+        final FractalRenderController controller;
+        final AtomicReference<RenderStatus> status = new AtomicReference<>();
+        final AtomicReference<Integer> lastIterations = new AtomicReference<>();
+
+        Fixture() throws Exception {
+            surface = fx(FractalSurface::new);
+            controller = fx(() -> new FractalRenderController(surface, new FractalRenderService(backend, runtime)));
+            fx(() -> {
+                controller.setWidePreviewSettings(WidePreviewSettings.DISABLED);
+                controller.setOnRenderStatusChanged(status::set);
+                controller.setOnIterationsChanged(lastIterations::set);
+                surface.resize(WIDTH, HEIGHT);
+                surface.resizeBuffer(WIDTH, HEIGHT);
+                return null;
+            });
+        }
+
+        void controller(Consumer<FractalRenderController> action) throws Exception {
+            fx(() -> { action.accept(controller); return null; });
+        }
+
+        void startRender(FractalScene scene) throws Exception {
+            startRender(scene, WIDTH, HEIGHT, scene.fractal().defaultViewport(), false);
+        }
+
+        void startRender(FractalScene scene, int width, int height, Viewport defaultViewport,
+                         boolean preserveIterationLimit) throws Exception {
+            fx(() -> {
+                controller.cancelCurrent();
+                controller.render(scene, new RenderTarget(width, height, RenderPriority.center()),
+                        defaultViewport, preserveIterationLimit);
+                return null;
+            });
+        }
+
+        void render(FractalScene scene) throws Exception {
+            startRender(scene);
+            awaitCondition(() -> status.get().state() == RenderStatus.State.COMPLETE);
+            fx(() -> null);
+        }
+
+        int[] displayed() throws Exception {
+            return fx(() -> {
+                Image image = ((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage();
+                if (image == null) return new int[0];
+                int width = (int) image.getWidth(), height = (int) image.getHeight();
+                int[] pixels = new int[width * height];
+                image.getPixelReader().getPixels(0, 0, width, height, PixelFormat.getIntArgbInstance(),
+                        pixels, 0, width);
+                return pixels;
+            });
+        }
+
+        @Override public void close() throws Exception {
+            fx(() -> { controller.close(); return null; });
+        }
+    }
+
+    /** Direct CPU rendering that counts calculated frames. */
+    private static final class CountingBackend implements RenderBackend {
+        private final DirectDoubleRenderBackend direct = new DirectDoubleRenderBackend();
+        final AtomicInteger calls = new AtomicInteger();
+
+        @Override
+        public RenderFrame render(RenderFrame frame, BooleanSupplier cancelled, Consumer<RenderRegion> region,
+                                  Consumer<TileTimingStats> timings) throws InterruptedException {
+            calls.incrementAndGet();
+            return direct.render(frame, cancelled, region, timings);
+        }
+
+        @Override public boolean supports(RenderJob job) { return direct.supports(job); }
+        @Override public void close() { direct.close(); }
+    }
+
+    /** Polls from the test thread; {@code condition} reads FX state through {@link #fx}. */
+    private static void awaitCondition(Callable<Boolean> condition) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        while (System.nanoTime() < deadline) {
+            if (condition.call()) return;
+            fx(() -> null);
+        }
+        throw new AssertionError("Condition not reached within 15 s");
+    }
+
+    private static <T> T fx(Callable<T> action) throws Exception {
+        FutureTask<T> task = new FutureTask<>(action);
+        Platform.runLater(task);
+        return task.get(15, TimeUnit.SECONDS);
+    }
+}

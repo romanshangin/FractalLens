@@ -78,6 +78,7 @@ no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism
 | PR #51 viewport working-precision fix: no render speedup; camera arithmetic stops growing with session history; guard cost inconclusive | [Results](VIEWPORT_PRECISION_RESULTS.md) | [Paired summary](VIEWPORT_PRECISION_SUMMARY.csv), [policy](policies/viewport-precision-pr51.json) |
 | P2.7 deterministic deep Mandelbrot base and scalar escape check retained as correctness fixes: tile-order-independent samples; non-inferiority C3 passes 5 of 6 controls, `deep-glitch` first region inconclusive (+2% median); JavaFX completion passes on `deep-bla`/`deep-glitch`, first visible equal medians with inconclusive intervals; `main` renders the recovery-heavy antenna differently every time (exploratory only) | [Results](DEEP_BASE_DETERMINISM_RESULTS.md) | Selected numerical tables in report, [headless policy](policies/p27-deterministic-deep-base.json), [FX policy](policies/p27-deterministic-deep-base-fx.json) |
 | P2.7 uncertain deep Mandelbrot escapes retained as correctness fixes: exact reference margins, continued escaped references, BLA error bounds and near-radius refusal, margin-based decisions; complete frames match exact iteration off chaotic orbits; paired completion passes on `deep-glitch`, inconclusive on `deep-bla`; first region inconclusive, about 0.1 ms later on `deep-bla`; exploratory antenna about 5x faster | [Results](UNCERTAIN_DEEP_ESCAPES_RESULTS.md) | Selected numerical tables in report, [headless policy](policies/p27-uncertain-deep-escapes.json) |
+| GPU Julia: certified FP32 base pass rejected and removed (exact, but 1.45–2.90x slower than CPU in every 300-iteration case on M3 Pro); approximate FP32 preview kernel retained as a preview capability at 300 iterations (3024x1964 median 2.75–12.87 ms, 5.3–42x faster than CPU, ≤1.36% of pixels off by more than one channel level, ≤2.61% differing at all), inconclusive at 1000 iterations | [Results](GPU_JULIA_RESULTS.md) | Selected numerical tables in report |
 
 Selected campaigns contain retained summaries/provenance only; omitted-input
 references do not imply availability. Historical failures/rejected candidates/
@@ -97,7 +98,7 @@ incomplete platform gates remain recorded.
 
 ## Retained file inventory
 
-The inventory lists the 135 selected evidence/protocol files, excluding this index. No
+The inventory lists the 136 selected evidence/protocol files, excluding this index. No
 raw log file is included.
 
 - [AA_MEMORY_VALIDATION.md](AA_MEMORY_VALIDATION.md)
@@ -127,6 +128,7 @@ raw log file is included.
 - [GPU_FP32_NATIVE_RESULTS.csv](GPU_FP32_NATIVE_RESULTS.csv)
 - [GPU_FP32_PRECISION.md](GPU_FP32_PRECISION.md)
 - [GPU_FP32_PRECISION_RESULTS.csv](GPU_FP32_PRECISION_RESULTS.csv)
+- [GPU_JULIA_RESULTS.md](GPU_JULIA_RESULTS.md)
 - [GPU_RENDER_BENCHMARK_8_5_RESULTS.md](GPU_RENDER_BENCHMARK_8_5_RESULTS.md)
 - [GPU_RENDER_BENCHMARK_RESULTS.md](GPU_RENDER_BENCHMARK_RESULTS.md)
 - [GPU_RESIDENCY_8_6_DECISION.md](GPU_RESIDENCY_8_6_DECISION.md)
