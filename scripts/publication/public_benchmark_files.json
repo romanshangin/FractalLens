@@ -26,6 +26,7 @@
   "benchmarks/GPU_FP32_NATIVE_RESULTS.csv",
   "benchmarks/GPU_FP32_PRECISION.md",
   "benchmarks/GPU_FP32_PRECISION_RESULTS.csv",
+  "benchmarks/GPU_JULIA_RESULTS.md",
   "benchmarks/GPU_RENDER_BENCHMARK_8_5_RESULTS.md",
   "benchmarks/GPU_RENDER_BENCHMARK_RESULTS.md",
   "benchmarks/GPU_RESIDENCY_8_6_DECISION.md",

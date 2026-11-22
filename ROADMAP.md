@@ -237,6 +237,18 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   JavaFX fallback menu tests. Owner accepted delivery with remaining gaps: native
   menu in light appearance, a real keyboard-invoked menu and real Windows/Linux
   runs. A live Julia preview remains a separately bounded follow-up.
+- [ ] **Live Julia preview from a Mandelbrot point:** show the Julia set for the
+  point under the pointer while dragging, then replace it with the exact frame.
+  GPU groundwork done: an approximate FP32 Julia preview kernel renders
+  3024x1964 at 300 iterations in 2.75–12.87 ms on M3 Pro, 5.3–42x faster than
+  CPU (≤2.61% of pixels differ, ≤1.36% by more than one channel level); a
+  certified FP32 Julia base pass was exact
+  but slower than CPU and was removed. Render > Julia GPU already renders
+  supported Julia frames only on the GPU (approximate, no export).
+  [Results](benchmarks/GPU_JULIA_RESULTS.md). Remaining: UI and gesture design,
+  kernel warm-up (~120 ms first call), JavaFX publication, CPU fallback without
+  a GPU, an iteration/resolution policy for 1000-iteration scenes, and
+  gesture-to-visible latency acceptance.
 - [ ] **Interesting-places gallery:** ship a curated set of named scenes with
   descriptions and previews, grouped by fractal. Open entries through the same
   scene/history pipeline as bookmarks; preserve exact coordinates and parameters.

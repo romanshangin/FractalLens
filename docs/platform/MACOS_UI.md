@@ -129,7 +129,7 @@ The native JavaFX regression checks can be run with
 | Fractal | Mandelbrot, Julia, Multibrot, Burning Ship, Tricorn |
 | Go to | Interesting Places… (⌘⇧G), then the curated views of the current fractal |
 | Color | Palette presets, Edit Palette… (⌘⇧P), Orbit Trap, Histogram Coloring, Animate Palette, Reset Colors to Defaults |
-| Render | Edit Julia Parameters… |
+| Render | Edit Julia Parameters…, Julia GPU |
 | Window | Minimize (⌘M), Zoom |
 | Help | FractalLens Help, including pointer and keyboard navigation, the render status badge, Render Settings and Navigation |
 
@@ -163,6 +163,34 @@ changed iterations or a changed render mode restarts the render, while the
 Navigation choice never does. Iteration settings are edited in Settings… for every
 fractal. Edit Julia Parameters is enabled only for Julia when rendering is idle. See
 [Render settings (P2.6)](#render-settings-p26).
+
+### Julia GPU
+
+**Render > Julia GPU** is a checkable mode, enabled while Julia is shown and the
+GPU runtime can run the approximate Julia kernel (also while a frame renders).
+When it is on, supported Julia frames are rendered only on the GPU in one pass,
+calculation and palette coloring included; the CPU render does not run. The
+image is approximate: pixels on the set boundary can differ from the exact
+frame. At 300 iterations in the
+[measured scenes](../../benchmarks/GPU_JULIA_RESULTS.md) up to 2.61% of
+pixels differ in at least one color channel and up to 1.36% by more than one
+channel level; at 1000 iterations up to 7.21% and 5.25%. A GPU frame has no
+samples, so it has no antialiasing, is not put into the frame cache and cannot
+be exported: Export PNG is disabled
+while it is shown. Palette changes and Animate Palette render the frame again
+on the GPU. Pan, zoom and resize show the usual transformed preview, then the
+new GPU frame.
+
+Scenes the kernel does not support render on CPU as usual even with the mode
+on: deep zoom, views whose neighboring pixels round to one FP32 coordinate,
+Histogram Coloring, orbit traps and more than 10,000 iterations. If the GPU
+refuses the kernel at run time, the frame renders on CPU at the same iteration
+limit, the mode turns off and the menu item becomes unavailable for the rest of
+the session. If a GPU palette frame fails, the status shows Failed once and
+Animate Palette stops. The mode is not part of the scene: it is
+not recorded in history, bookmarks or the saved session, and it starts off.
+Turning it off renders the exact CPU frame. See
+[GPU runtime](GPU_RUNTIME.md#julia-gpu-paths).
 
 Other platforms use their shortcut modifier instead of Command. Focused-canvas
 arrows pan after zooming; Page Up/Down zoom centrally, Home resets. Pointer-centered

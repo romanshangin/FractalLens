@@ -23,6 +23,7 @@ selected. The CPU backends remain usable if native initialization fails.
 | --- | --- | --- |
 | Palette recoloring (8.2) | FP32 for AA; 64-wide workgroup, four storage buffers, 32-byte push constants | Implemented and tested on M3 Pro; opt-in, parallel CPU fallback |
 | Limited base-pass spike (8.3) | FP32 certificate + CPU recovery; two storage buffers, 16-byte push constants, 64-wide groups | Integrated and opt-in; Mandelbrot smooth coloring, 1–1000 iterations; precision-selecting CPU fallback |
+| Julia GPU (approximate) | Uncertified FP32; three storage buffers, 48-byte push constants, 8x8 groups | Opt-in Render > Julia GPU mode; ARGB only, no samples; CPU stays the default and fallback |
 | Direct-double equivalent arithmetic | Explicit `shaderFloat64` support, enabled at device creation | Direct-double CPU; feature support alone is not a conformance guarantee |
 | Deep zoom | A separate precision-preserving implementation | CPU Mandelbrot perturbation; no GPU deep-zoom mode |
 
@@ -35,7 +36,7 @@ max workgroup invocations/storage buffer. Only **selected** capabilities gate wo
 
 `FractalRenderService` owns `GpuRuntime`, hiding Vulkan from controller/JavaFX.
 Native calls: `VulkanComputeSession`, `VulkanPaletteKernel`, `VulkanMandelbrotKernel`,
-`VulkanLibraryLease`. Refcounted loader keeps runtimes independent; borrow external
+`VulkanJuliaPreviewKernel`, `VulkanLibraryLease`. Refcounted loader keeps runtimes independent; borrow external
 loaders. Initialization rolls back partial resources. Shutdown waits for device,
 destroys logical device/instance, releases loader; known-lost devices destroy
 without recovery wait.
@@ -153,6 +154,84 @@ also fails: 54 seahorse outliers, max channel error 189. Emulation removed.
 GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv (private archive:
 `benchmarks/GPU_RESIDENT_DOUBLE_SINGLE_RESULTS.csv`).
 
+## Julia GPU paths
+
+Julia calculation stays on CPU; the only Julia GPU path is an approximate
+preview that shares the runtime owner and CPU fallback rules. [Results and decisions](../../benchmarks/GPU_JULIA_RESULTS.md).
+
+A certified FP32 Julia base pass (interval enclosure of z0 and of the binary64
+c, exact CPU recovery) was implemented and measured, then removed: it was
+exact in every frame but 1.45–2.90x slower than CPU at 300 iterations on M3
+Pro, because boundary rejects carry most of the Julia work. The certified GPU
+base pass remains Mandelbrot-only.
+
+**Approximate kernel.** `GpuRuntime.renderJuliaPreview` with a
+`GpuJuliaPreviewRequest` runs `julia-preview.comp` in `VulkanJuliaPreviewKernel`:
+raw FP32 iteration (with an exact-repeat periodicity exit that cannot change
+the FP32 result), smooth palette lookup through `PaletteOffset`, and ARGB
+readback only. Requests require a Julia job without orbit traps, 1–10,000
+iterations, an FP32-representable grid (`MandelbrotPrecisionGate.supportsGrid`)
+and a smooth gradient palette. The result is not certified: boundary pixels
+can differ by the full color range. No caller may cache, export or record it as
+a CPU-reference or certified frame. Whether it is replaced by an exact frame is
+the caller's contract: the planned live preview from a Mandelbrot point must
+replace it with the CPU frame once the pointer stops, while the Julia GPU mode
+below keeps it on screen by the user's explicit choice. Buffers (axes, resident 65,536-color palette, ARGB) are reused while the
+size and palette stay the same and are bounded by
+`fractal.gpu.juliaPreview.maxBytes` (128 MiB default); on a resize every buffer
+whose size changes is freed before any replacement is allocated, so the budget
+never counts an old buffer beside a new one. Submission is
+synchronous and drained before return; cancellation discards the output.
+Empty results request the caller's CPU path.
+
+**Render > Julia GPU (GPU only).** `FractalRenderController` routes supported
+Julia scenes to `JuliaGpuRenderer` instead of the CPU render while the mode is
+on; the approximate frame stays on screen and no CPU frame replaces it. The
+renderer owns one worker thread. Only the latest request runs: cancellation
+(a new scene, Animate Palette stopping, the mode switching off) drops a request
+that has not started, and the FX thread shows a result only while its sequence
+is current, so no superseded frame is published. At most one palette frame is
+in flight: palette changes that arrive meanwhile collapse into the latest, which
+is submitted when the frame returns, so a GPU slower than the animation timer
+still shows each frame it finishes. Stopping the animation cancels palette
+work in flight, including a palette chosen meanwhile; the scene's palette then
+wins, and a GPU frame showing or producing another palette is rendered again. `FractalSurface` shows the ARGB as a
+complete frame without a `CompletedRender`: it has no samples, AA, cache entry
+or export. The FX thread decides eligibility with
+`GpuRuntime.isUsableSnapshotFor`, which never waits for the runtime monitor
+held during native work; the worker re-checks availability. Unsupported scenes
+use the CPU path. An empty result, even from a superseded request, turns the
+mode off and notifies the menu. The current request then renders its scene on
+CPU, keeping the GPU job's iteration limit (a resize may have preserved it), and
+runs the latest palette's callback, which records an animated palette in the
+scene and history, once that CPU frame is published (in Base, then
+antialiasing, when the base frame appears, before antialiasing that may still
+be cancelled). A superseded request renders
+again only when just palette work was cancelled (Animate Palette stopped, no
+render follows): the CPU then shows the GPU frame's scene with the palette that
+was on screen. After a scene cancellation it never returns to the old frame.
+A kernel failure fails the render; a failed palette frame after the scene
+completed sets `FAILED` once. After either failure, palette changes (including
+the reconcile when Animate Palette stops on `FAILED`) do nothing until the next
+render, so the failed frame is neither resubmitted, shown under a `FAILED`
+status, nor reported again. The latest GPU job's iteration limit is kept apart
+from that state, so a later resize, pan or mode switch still preserves it. Closing the controller never waits for the GPU on the FX
+thread: the service and runtime close at once when no GPU frame runs, otherwise
+on a non-daemon background thread after it drains, so the JVM does not exit
+before the service closes and persists pending frames. Visible behavior is in
+[macOS interface](MACOS_UI.md#julia-gpu).
+
+```sh
+JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true' ./mvnw -Pgpu-julia-benchmark javafx:run
+```
+
+`GpuJuliaBenchmark` is off-screen: it compares direct CPU and the preview to
+ARGB in alternating order and records preview color deviations. The recorded
+campaign used an earlier three-backend revision that also measured the removed
+certified path. Options: `fractal.juliaBenchmark.sizes`,
+`.scenes` (`dendrite,spiral,rabbit,dust,sweep`), `.iterations`, `.warmup`,
+`.samples`, `.output`.
+
 ## Palette recoloring integration
 
 `PaletteRecolorBackend` is owned through `FractalRenderService`, so the
@@ -242,7 +321,9 @@ mvn -Pgpu-smoke test
 
 No GPU fails this gate, never skips. Covers two runtimes/independent teardown,
 full reopen, simulated loss, ordinary/deep CPU; integrated Mandelbrot dispatch,
-recovery/pan reuse, shared palette, default-service opt-in/loss/reopen; actual
+recovery/pan reuse, shared palette, default-service opt-in/loss/reopen; the Julia
+preview within one color level on at least 95% of pixels (five constants), buffer
+reallocation, palette change, injected loss and reopen; actual
 palette kernels across presets/wraps, exact base/one-level AA, zero repeat uploads,
 AA/scale/size/palette invalidation and dispatch cleanup/reopen.
 

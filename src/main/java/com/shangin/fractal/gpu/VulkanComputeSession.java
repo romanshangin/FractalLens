@@ -28,6 +28,7 @@ final class VulkanComputeSession implements GpuSession {
     private VulkanPaletteKernel paletteKernel;
     private VulkanMandelbrotKernel mandelbrotKernel;
     private VulkanResidentMandelbrotKernel residentMandelbrotKernel;
+    private VulkanJuliaPreviewKernel juliaPreviewKernel;
     private List<GpuDevice> devices = List.of();
     private GpuDevice selectedDevice;
 
@@ -258,6 +259,10 @@ final class VulkanComputeSession implements GpuSession {
                         residentMandelbrotKernel.close();
                         residentMandelbrotKernel = null;
                     }
+                    if (juliaPreviewKernel != null) {
+                        juliaPreviewKernel.close();
+                        juliaPreviewKernel = null;
+                    }
                     if (paletteKernel != null) {
                         paletteKernel.close();
                         paletteKernel = null;
@@ -310,6 +315,19 @@ final class VulkanComputeSession implements GpuSession {
             return residentMandelbrotKernel.render(request);
         } catch (LinkageError failure) {
             throw new GpuException("Resident Mandelbrot dependency unavailable: " + failure.getMessage(), false);
+        }
+    }
+
+    @Override
+    public GpuJuliaPreviewResult renderJuliaPreview(GpuJuliaPreviewRequest request) throws InterruptedException {
+        try {
+            if (juliaPreviewKernel == null) {
+                juliaPreviewKernel = VulkanJuliaPreviewKernel.open(
+                        device, physical, queue, selectedDevice.computeQueueFamily());
+            }
+            return juliaPreviewKernel.render(request);
+        } catch (LinkageError failure) {
+            throw new GpuException("Julia preview dependency unavailable: " + failure.getMessage(), false);
         }
     }
 }

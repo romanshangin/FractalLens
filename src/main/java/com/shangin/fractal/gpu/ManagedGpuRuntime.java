@@ -12,7 +12,8 @@ final class ManagedGpuRuntime implements GpuRuntime {
     private final GpuDevice selectedDevice;
     private GpuSession session;
     private boolean executing;
-    private GpuRuntimeState state = GpuRuntimeState.AVAILABLE;
+    /** Written under the monitor; volatile so availability snapshots read it without waiting. */
+    private volatile GpuRuntimeState state = GpuRuntimeState.AVAILABLE;
     private String detail = "Compute device ready; palette kernel is opt-in.";
 
     private ManagedGpuRuntime(GpuPlatform platform, GpuSession session) {
@@ -44,6 +45,12 @@ final class ManagedGpuRuntime implements GpuRuntime {
     @Override
     public synchronized GpuCapabilityReport capabilityReport() {
         return new GpuCapabilityReport(platform, state, devices, Optional.of(selectedDevice), detail);
+    }
+
+    /** Reads the volatile state without the monitor held during native work. */
+    @Override
+    public boolean isUsableSnapshotFor(GpuNumericCapability capability) {
+        return state == GpuRuntimeState.AVAILABLE && selectedDevice.supports(capability);
     }
 
     @Override
@@ -89,6 +96,15 @@ final class ManagedGpuRuntime implements GpuRuntime {
         Objects.requireNonNull(request);
         return runOrFallback(GpuNumericCapability.FLOAT32,
                 () -> java.util.Optional.of(session.renderResidentMandelbrot(request)),
+                java.util.Optional::empty);
+    }
+
+    @Override
+    public java.util.Optional<GpuJuliaPreviewResult> renderJuliaPreview(GpuJuliaPreviewRequest request)
+            throws InterruptedException {
+        Objects.requireNonNull(request);
+        return runOrFallback(GpuNumericCapability.FLOAT32,
+                () -> java.util.Optional.of(session.renderJuliaPreview(request)),
                 java.util.Optional::empty);
     }
 

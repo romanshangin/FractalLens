@@ -474,6 +474,8 @@ final class FractalDialogs {
                 + "choosing the active fractal again resets its view.\n"
                 + "Choose a palette in Color.\n"
                 + "For Julia, edit both constant components in Render; Reset to Defaults restores -0.8 and 0.156 before Apply.\n"
+                + "Render → Julia GPU renders Julia on the GPU in one fast pass. The image is approximate "
+                + "near the set boundary and cannot be exported; turn it off for the exact image.\n"
                 + "In Mandelbrot, right-click a point and choose Open Julia Set Here to open the Julia set for that point; "
                 + "Open Julia Set Here at Same Zoom centers it on that point at the current zoom. "
                 + "Undo returns to the Mandelbrot view.\n"

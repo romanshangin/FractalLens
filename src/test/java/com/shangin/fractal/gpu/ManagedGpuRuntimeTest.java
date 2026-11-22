@@ -117,6 +117,33 @@ class ManagedGpuRuntimeTest {
     }
 
     @Test
+    void availabilitySnapshotNeverWaitsForNativeWorkInProgress() throws Exception {
+        FakeSession session = new FakeSession();
+        CountDownLatch working = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try (GpuRuntime runtime = open(session); var worker = Executors.newSingleThreadExecutor()) {
+            var work = worker.submit(() -> runtime.runOrFallback(FLOAT32, () -> {
+                working.countDown();
+                assertTrue(release.await(10, TimeUnit.SECONDS));
+                return "gpu";
+            }, () -> "cpu"));
+            assertTrue(working.await(5, TimeUnit.SECONDS));
+            var probe = Executors.newSingleThreadExecutor();
+            try {
+                // The monitor is held by the running work; the snapshot must still answer.
+                assertTrue(probe.submit(() -> runtime.isUsableSnapshotFor(FLOAT32)).get(2, TimeUnit.SECONDS));
+                assertFalse(probe.submit(() -> runtime.isUsableSnapshotFor(FLOAT64)).get(2, TimeUnit.SECONDS));
+            } finally {
+                release.countDown();
+                probe.shutdownNow();
+            }
+            assertEquals("gpu", work.get(5, TimeUnit.SECONDS));
+            runtime.handleDeviceLoss(new GpuException("lost", true));
+            assertFalse(runtime.isUsableSnapshotFor(FLOAT32));
+        }
+    }
+
+    @Test
     void cancellationAndProgrammingErrorsAreNotSwallowedAsGpuFailures() throws Exception {
         try (GpuRuntime runtime = open(new FakeSession())) {
             assertThrows(InterruptedException.class, () -> runtime.runOrFallback(FLOAT32,

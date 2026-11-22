@@ -18,4 +18,7 @@ interface GpuSession {
             GpuResidentMandelbrotRequest request) throws InterruptedException {
         throw new GpuException("Resident Mandelbrot spike unavailable", false);
     }
+    default GpuJuliaPreviewResult renderJuliaPreview(GpuJuliaPreviewRequest request) throws InterruptedException {
+        throw new GpuException("Julia preview kernel unavailable", false);
+    }
 }

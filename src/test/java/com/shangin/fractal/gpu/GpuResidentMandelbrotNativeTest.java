@@ -36,6 +36,13 @@ class GpuResidentMandelbrotNativeTest {
                 int[] gpuColors = new int[width * height];
                 var resident = runtime.renderResidentMandelbrot(
                         new GpuResidentMandelbrotRequest(job, grid, coloring, gpuColors));
+                if (Boolean.getBoolean("fractal.gpu.expectUnavailable")) {
+                    // Without Vulkan the experimental path reports no frame; production keeps CPU.
+                    assertNotEquals(GpuRuntimeState.AVAILABLE, runtime.capabilityReport().state());
+                    assertFalse(runtime.isUsableFor(GpuNumericCapability.FLOAT32));
+                    assertTrue(resident.isEmpty(), runtime.capabilityReport().toString());
+                    continue;
+                }
                 assertTrue(resident.isPresent(), runtime.capabilityReport().toString());
                 GpuResidentMandelbrotResult result = resident.orElseThrow();
                 assertSame(gpuColors, result.colors());

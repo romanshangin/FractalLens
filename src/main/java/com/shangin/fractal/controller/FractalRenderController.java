@@ -110,6 +110,58 @@ public final class FractalRenderController implements AutoCloseable {
     private final AtomicReference<PaletteRecolorTiming> lastPaletteRecolorTiming =
             new AtomicReference<>();
 
+    /** Julia GPU mode: approximate GPU frames replace the CPU render for supported Julia scenes. */
+    private final JuliaGpuRenderer juliaGpu;
+    private boolean juliaGpuEnabled;
+    /** Receives mode changes the controller makes itself, such as after a GPU refusal. */
+    private Consumer<Boolean> juliaGpuChangedHandler = ignored -> {};
+    /**
+     * The latest GPU scene, shown or being produced; null while the CPU path owns the
+     * frame. Its coloring is the latest requested palette. FX thread only, like the rest.
+     */
+    private GpuRender gpuRender;
+    /**
+     * The job of the latest GPU render, kept apart from {@link #gpuRender} so a failure that
+     * clears the GPU scene does not lose the iteration limit a resize preserved. A later
+     * resize, pan or mode switch keeps it, as it keeps a CPU frame's; cleared by the CPU path.
+     */
+    private RenderJob gpuLimitJob;
+    /** Increments for every GPU submission and invalidation. */
+    private long gpuSequence;
+    /** Whether the submission of {@link #gpuSequence} has not returned yet. */
+    private boolean gpuInFlight;
+    /** Generation completed by the next current GPU frame, or -1. */
+    private long gpuGeneration = -1;
+    /** Runs once the GPU frame of {@link #gpuSequence} with a palette change is shown. */
+    private Runnable gpuOnApplied;
+    /**
+     * A palette change that arrived while a GPU frame was in flight. Only the latest is
+     * kept; it is submitted with {@link #gpuRender}'s coloring once that frame returns,
+     * so a slow GPU still shows every frame it finishes during palette animation.
+     */
+    private Runnable pendingGpuRecolor;
+    /**
+     * Whether the last GPU invalidation cancelled only palette work (cancelRecolor), so no
+     * render follows; any scene cancellation or new submission clears it.
+     */
+    private boolean gpuPaletteOnlyCancel;
+    /** The scene of the GPU frame on screen, with the palette it actually shows. */
+    private FractalScene gpuShownScene;
+    /**
+     * After a GPU refusal, the palette callback of the latest requested palette, which the
+     * CPU fallback shows: it runs once that render's frame is published, for its generation only.
+     */
+    private Runnable fallbackAppliedRequest;
+    private FallbackApplied fallbackApplied;
+
+    private record FallbackApplied(long generation, Runnable onApplied) {}
+
+    private record GpuRender(FractalScene scene, RenderTarget target, Viewport defaultViewport, RenderJob job) {
+        GpuRender withColoring(ColoringSettings coloring) {
+            return new GpuRender(scene.withColoring(coloring), target, defaultViewport, job);
+        }
+    }
+
     public FractalRenderController(FractalSurface surface) {
         this(surface, new FractalRenderService());
     }
@@ -153,6 +205,34 @@ public final class FractalRenderController implements AutoCloseable {
         this.recolorOperation = Objects.requireNonNull(recolorOperation);
         renderService.setDiagnosticsListener(diagnostics -> surface.latency().attachDiagnostics(diagnostics.completion()));
         this.paletteRecolorBackend = renderService.paletteRecolorBackend();
+        this.juliaGpu = new JuliaGpuRenderer(renderService, Platform::runLater);
+    }
+
+    /**
+     * Enables the Julia GPU mode. Supported Julia scenes are then rendered only by the
+     * approximate GPU preview kernel: no samples, AA, cache entries or exportable frame.
+     * Unsupported scenes (deep zoom, histogram, orbit traps, unavailable GPU) stay on CPU.
+     * The caller renders again to apply the change. FX thread only.
+     */
+    public void setJuliaGpu(boolean enabled) {
+        juliaGpuEnabled = enabled;
+    }
+
+    /** Called with false when the GPU refuses the kernel and the controller turns the mode off. */
+    public void setOnJuliaGpuChanged(Consumer<Boolean> handler) {
+        juliaGpuChangedHandler = Objects.requireNonNull(handler);
+    }
+
+    public boolean juliaGpu() { return juliaGpuEnabled; }
+
+    /** Whether the GPU runtime can run the Julia GPU kernel now; never waits for native work. */
+    public boolean isJuliaGpuAvailable() {
+        return !closed && renderService.isJuliaPreviewAvailable();
+    }
+
+    /** Whether the visible frame came from the approximate Julia GPU kernel. FX thread only. */
+    public boolean showsJuliaGpuFrame() {
+        return gpuRender != null && surface.hasCompletedFrame() && surface.completedRender() == null;
     }
 
     private Consumer<BigDecimal> zoomChangedHandler = ignored -> {};
@@ -174,6 +254,7 @@ public final class FractalRenderController implements AutoCloseable {
     }
 
     public void cancelCurrent() {
+        invalidateGpuFrames();
         widePreview.cancel();
         visibleBusy = true;
         recolorEpoch.incrementAndGet();
@@ -185,6 +266,12 @@ public final class FractalRenderController implements AutoCloseable {
     /** Invalidates palette-only work without cancelling fractal or AA rendering. */
     public void cancelRecolor() {
         recolorEpoch.incrementAndGet();
+        pendingGpuRecolor = null;
+        // A GPU palette frame in flight is dropped; a GPU render of a new scene continues.
+        if (gpuInFlight && gpuGeneration < 0) {
+            invalidateGpuFrames();
+            gpuPaletteOnlyCancel = true;
+        }
     }
 
     /** Coalesced, double-buffered recolor of base and cached AA samples. */
@@ -195,10 +282,23 @@ public final class FractalRenderController implements AutoCloseable {
     public void recolor(ColoringSettings settings, Runnable onApplied) {
         Objects.requireNonNull(settings);
         Objects.requireNonNull(onApplied);
+        if (gpuRender != null) {
+            // An approximate GPU frame has no samples to recolor: render it again with the palette.
+            gpuRender = gpuRender.withColoring(settings);
+            previewScene = gpuRender.scene();
+            if (gpuInFlight) {
+                pendingGpuRecolor = onApplied;
+            } else {
+                submitGpu(gpuRender, onApplied);
+            }
+            return;
+        }
         if (previewScene != null && !widePreviewColorCycling) {
             widePreview.cancel();
             previewScene = previewScene.withColoring(settings);
-            surface.prepareWidePreview(previewRequest, settings, previewScene.iterations(), widePreviewSettings);
+            if (previewRequest != null) {
+                surface.prepareWidePreview(previewRequest, settings, previewScene.iterations(), widePreviewSettings);
+            }
         }
         RenderFrame frame = activeFrame;
         if (frame == null || !frame.isComplete()) {
@@ -312,6 +412,10 @@ public final class FractalRenderController implements AutoCloseable {
         surface.latency().renderStarted();
         progressHandler.accept(0.0);
         long renderGeneration = renderActivity.begin();
+        // Only the fallback render that was asked for it inherits the palette callback.
+        fallbackApplied = fallbackAppliedRequest == null ? null
+                : new FallbackApplied(renderGeneration, fallbackAppliedRequest);
+        fallbackAppliedRequest = null;
         recolorEpoch.incrementAndGet();
         antialiasService.cancelCurrent();
 
@@ -351,6 +455,9 @@ public final class FractalRenderController implements AutoCloseable {
         // compatible even if the resized default viewport changes zoom policy.
         if (preserveIterationLimit && activeFrame != null) {
             maxIterations = activeFrame.request().maxIterations();
+        } else if (preserveIterationLimit && gpuLimitJob != null
+                && gpuLimitJob.formula().equals(formulaDefinition)) {
+            maxIterations = gpuLimitJob.maxIterations();
         }
         zoomChangedHandler.accept(zoomFactor);
         iterationsChangedHandler.accept(maxIterations);
@@ -369,6 +476,16 @@ public final class FractalRenderController implements AutoCloseable {
                                 && scene.coloring().orbitTrap() == com.shangin.fractal.coloring.OrbitTrap.NONE
                                 ? SampleAccuracy.CERTIFIED_FP32 : SampleAccuracy.CPU_REFERENCE
                 );
+
+        if (juliaGpuEnabled && !deepZoom && juliaGpu.supports(renderRequest, scene.coloring())) {
+            renderOnGpu(scene, target, defaultViewport, renderRequest, renderGeneration);
+            return;
+        }
+        // The CPU path owns the frame from here; late GPU results must not replace it.
+        invalidateGpuFrames();
+        gpuRender = null;
+        gpuShownScene = null;
+        gpuLimitJob = null;
 
         previewRequest = renderRequest;
         surface.prepareWidePreview(renderRequest, scene.coloring(), scene.iterations(), widePreviewSettings);
@@ -531,6 +648,7 @@ public final class FractalRenderController implements AutoCloseable {
                 && !scene.coloring().dependsOnCompletedFrame()
                 && (!refinedDisplay || surface.hasCompleteRefinement(targetFrame))) {
             surface.completeProgressiveRender(targetFrame, scene);
+            applyFallbackPalette(renderGeneration);
             frameCache.put(targetFrame);
             initialFramePending = false;
             finishRender(renderGeneration);
@@ -608,6 +726,7 @@ public final class FractalRenderController implements AutoCloseable {
                                             completedFrame,
                                             scene
                                     );
+                                    applyFallbackPalette(renderGeneration);
                                     retainRefinement(completedFrame, scene.coloring());
                                     initialFramePending = false;
                                     finishRender(renderGeneration);
@@ -616,6 +735,7 @@ public final class FractalRenderController implements AutoCloseable {
                                     surface.displayReadyPixelsPreservingRefinement(
                                             completedFrame, completedColoring);
                                     surface.completeProgressiveRender(completedFrame, scene);
+                                    applyFallbackPalette(renderGeneration);
                                     initialFramePending = false;
                                     reportFailure(renderGeneration, error);
                                 }
@@ -639,6 +759,8 @@ public final class FractalRenderController implements AutoCloseable {
                             completedFrame,
                             scene
                     );
+                    // The base frame is on screen now, before any antialiasing that may be cancelled.
+                    applyFallbackPalette(renderGeneration);
 
                     if (baseOnly) {
                         finishRender(renderGeneration);
@@ -674,6 +796,133 @@ public final class FractalRenderController implements AutoCloseable {
         );
     }
 
+    /**
+     * Replaces the CPU render with one approximate GPU frame. Samples of the previous
+     * CPU frame are dropped from reuse: the GPU frame has none, so a later CPU render
+     * starts from the completed-frame cache or a fresh frame.
+     */
+    private void renderOnGpu(FractalScene scene, RenderTarget target, Viewport defaultViewport,
+                             RenderJob job, long renderGeneration) {
+        renderService.cancelCurrent();
+        previewRequest = null;
+        surface.clearWidePreview();
+        surface.invalidateRefinement();
+        hiddenRefinement = null;
+        unsampledAntialias = null;
+        deferredRecoloring = null;
+        activeFrame = null;
+        retainedFrame = null;
+        gpuGeneration = renderGeneration;
+        gpuLimitJob = job;
+        submitGpu(new GpuRender(scene, target, defaultViewport, job), null);
+    }
+
+    private void submitGpu(GpuRender render, Runnable onApplied) {
+        gpuRender = render;
+        gpuOnApplied = onApplied;
+        gpuInFlight = true;
+        gpuPaletteOnlyCancel = false;
+        long sequence = ++gpuSequence;
+        juliaGpu.submit(new JuliaGpuRenderer.Request(sequence, render.job(), render.scene().coloring()),
+                new JuliaGpuRenderer.Listener() {
+                    @Override public void rendered(JuliaGpuRenderer.Request request, int[] colors) {
+                        try {
+                            if (closed || request.sequence() != gpuSequence) return;
+                            gpuInFlight = false;
+                            // False only after a resize, whose own render replaces this frame.
+                            if (surface.displayApproximateFrame(render.scene(), request.job().width(),
+                                    request.job().height(), colors)) {
+                                gpuShownScene = render.scene();
+                                initialFramePending = false;
+                                progressHandler.accept(1.0);
+                                Runnable applied = gpuOnApplied;
+                                gpuOnApplied = null;
+                                long generation = gpuGeneration;
+                                gpuGeneration = -1;
+                                if (generation >= 0) finishRender(generation);
+                                if (applied != null) applied.run();
+                            }
+                            Runnable recolorApplied = pendingGpuRecolor;
+                            pendingGpuRecolor = null;
+                            if (recolorApplied != null && !closed && gpuRender != null && !gpuInFlight) {
+                                submitGpu(gpuRender, recolorApplied);
+                            }
+                        } finally {
+                            juliaGpu.release(colors);
+                        }
+                    }
+
+                    @Override public void unavailable(JuliaGpuRenderer.Request request) {
+                        if (closed) return;
+                        // The runtime is disabled now, even when the request was superseded: turn
+                        // the mode off rather than show it as active.
+                        if (juliaGpuEnabled) {
+                            System.getLogger(FractalRenderController.class.getName()).log(
+                                    System.Logger.Level.WARNING, "Julia GPU kernel unavailable; rendering on CPU");
+                            juliaGpuEnabled = false;
+                            juliaGpuChangedHandler.accept(false);
+                        }
+                        GpuRender latest = gpuRender;
+                        // The CPU path already owns the frame after a newer CPU render.
+                        if (latest == null) return;
+                        // The CPU render keeps the GPU job's iteration limit (gpuLimitJob), which a
+                        // resize may have preserved; the CPU path then clears the GPU state.
+                        if (request.sequence() == gpuSequence) {
+                            // Show the latest requested palette and record it once that CPU frame
+                            // finishes, as a successful GPU frame would have.
+                            Runnable applied = pendingGpuRecolor != null ? pendingGpuRecolor : gpuOnApplied;
+                            invalidateGpuFrames();
+                            fallbackAppliedRequest = applied;
+                            render(latest.scene(), latest.target(), latest.defaultViewport(), true);
+                            return;
+                        }
+                        // A newer GPU request reports for itself, and a cancelled scene (a resize
+                        // or pan whose render follows) must not return to the superseded frame.
+                        if (gpuInFlight || !gpuPaletteOnlyCancel) return;
+                        // Only palette work was cancelled (Animate Palette stopped): no render
+                        // replaces the approximate frame, so show its scene and palette exactly.
+                        FractalScene shown = gpuShownScene == null ? latest.scene()
+                                : latest.scene().withColoring(gpuShownScene.coloring());
+                        invalidateGpuFrames();
+                        render(shown, latest.target(), latest.defaultViewport(), true);
+                    }
+
+                    @Override public void failed(JuliaGpuRenderer.Request request, Throwable error) {
+                        if (closed || request.sequence() != gpuSequence) return;
+                        long generation = gpuGeneration;
+                        invalidateGpuFrames();
+                        // Without gpuRender later palette changes are no-ops until the next render,
+                        // so neither a palette change nor stopping a running animation (the view
+                        // stops it on FAILED) can resubmit the failed frame, silently show it under
+                        // a FAILED status or report the failure again.
+                        gpuRender = null;
+                        gpuShownScene = null;
+                        if (generation >= 0) {
+                            // The scene render failed.
+                            reportFailure(generation, error);
+                            return;
+                        }
+                        // A palette frame failed after the scene completed: report it once as a
+                        // failed frame.
+                        if (renderActivity.failCompleted()) errorHandler.accept(error);
+                    }
+                });
+    }
+
+    /**
+     * Drops queued and in-flight GPU work: a request that has not started never runs,
+     * and a running one is not published. The displayed GPU frame stays visible.
+     */
+    private void invalidateGpuFrames() {
+        gpuSequence++;
+        gpuPaletteOnlyCancel = false;
+        gpuInFlight = false;
+        gpuGeneration = -1;
+        gpuOnApplied = null;
+        pendingGpuRecolor = null;
+        juliaGpu.cancelPending();
+    }
+
     /** Suspends hidden reserve recoloring while the visible palette is animated. FX-thread only. */
     public void setColorCycling(boolean cycling, ColoringSettings displayedColoring) {
         Objects.requireNonNull(displayedColoring);
@@ -683,7 +932,11 @@ public final class FractalRenderController implements AutoCloseable {
         surface.clearWidePreview();
         if (!cycling && previewScene != null) {
             previewScene = previewScene.withColoring(displayedColoring);
-            surface.prepareWidePreview(previewRequest, displayedColoring, previewScene.iterations(), widePreviewSettings);
+            // A Julia GPU frame has no wide-preview request.
+            if (previewRequest != null) {
+                surface.prepareWidePreview(previewRequest, displayedColoring, previewScene.iterations(),
+                        widePreviewSettings);
+            }
             replenishWidePreview();
         }
         if (!cycling) reconcilePalette(displayedColoring);
@@ -692,9 +945,16 @@ public final class FractalRenderController implements AutoCloseable {
     /**
      * Stopping palette animation cancels palette work in flight, which may include a palette
      * the user chose meanwhile. The scene's palette is authoritative: when the frame on screen
-     * shows another one, recolor it.
+     * shows another one, recolor it. A Julia GPU frame has no samples to recolor; it compares
+     * the GPU frame on screen, or the one still being produced, and renders it again.
      */
     private void reconcilePalette(ColoringSettings sceneColoring) {
+        if (gpuRender != null) {
+            ColoringSettings target = gpuInFlight ? gpuRender.scene().coloring()
+                    : gpuShownScene == null ? null : gpuShownScene.coloring();
+            if (!sceneColoring.equals(target)) recolor(sceneColoring, () -> {});
+            return;
+        }
         CompletedRender displayed = surface.completedRender();
         if (displayed != null && displayed.scene().coloring().equals(sceneColoring)) return;
         recolor(sceneColoring);
@@ -720,6 +980,7 @@ public final class FractalRenderController implements AutoCloseable {
         visibleBusy = false;
         // The next fresh frame of this size, such as a zoom-out, takes this storage.
         if (activeFrame != null) spareFrameStorage.prepareFor(activeFrame.request());
+        applyFallbackPalette(renderGeneration);
         renderActivity.finish(renderGeneration);
         replenishWidePreview();
         DeferredRecoloring deferred = deferredRecoloring;
@@ -738,6 +999,18 @@ public final class FractalRenderController implements AutoCloseable {
             resampleAntialiasIfNeeded(activeFrame, displayed.scene().coloring(), false,
                     publishedRecolorSequence.get());
         }
+    }
+
+    /**
+     * Records the palette of a CPU fallback once its frame is published, before any
+     * antialiasing that may still be cancelled. Runs once, for that render generation only.
+     */
+    private void applyFallbackPalette(long renderGeneration) {
+        FallbackApplied applied = fallbackApplied;
+        if (applied == null || applied.generation() != renderGeneration
+                || !renderActivity.isCurrent(renderGeneration)) return;
+        fallbackApplied = null;
+        applied.onApplied().run();
     }
 
     private void replenishWidePreview() {
@@ -1073,8 +1346,12 @@ public final class FractalRenderController implements AutoCloseable {
         surface.clearWidePreview();
         recolorEpoch.incrementAndGet();
         recolorExecutor.shutdownNow();
+        invalidateGpuFrames();
         antialiasService.close();
-        renderService.close();
+        // Nothing may wait for the GPU here, on the FX thread: the service, and with it the
+        // runtime, closes at once when no GPU frame runs, otherwise after it drains.
+        renderService.cancelCurrent();
+        juliaGpu.close(renderService::close);
         spareFrameStorage.close();
         renderActivity.cancel();
     }

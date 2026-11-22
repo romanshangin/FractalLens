@@ -169,10 +169,12 @@ public class MainView extends BorderPane {
             setExportStatus("PNG export cancelled.");
             return;
         }
-        if (!fractalView.hasCompletedFrame()) {
+        if (!fractalView.hasExportableFrame()) {
             showError(
                     "Export unavailable",
-                    "Wait for the first image to finish rendering before exporting."
+                    fractalView.showsJuliaGpuFrame()
+                            ? "Julia GPU images are approximate. Turn off Render > Julia GPU to export."
+                            : "Wait for the first image to finish rendering before exporting."
             );
             return;
         }

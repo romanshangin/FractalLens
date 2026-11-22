@@ -1,0 +1,73 @@
+#version 450
+// Preview-only Julia frame: uncertified FP32 iteration, smooth palette coloring
+// and ARGB output in one dispatch. Results are approximate near the set
+// boundary and must never replace a CPU-reference or certified frame.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(std430, binding = 0) readonly buffer Axes { float axes[]; };
+layout(std430, binding = 1) readonly buffer Palette { uint palette[]; };
+layout(std430, binding = 2) writeonly buffer Colors { uint colors[]; };
+layout(push_constant) uniform Settings {
+    uint width;
+    uint height;
+    uint limit;
+    float colorScale;
+    float cReal;
+    float cImaginary;
+    uint whole;
+    int ascendingBias;
+    uint ascendingLast;
+    int descendingBias;
+    uint descendingLast;
+} p;
+
+const uint INSIDE_COLOR = 0xff000000u;
+
+uint phaseCode(float value) {
+    float scaled = value * p.colorScale;
+    float wrapped = scaled - floor(scaled * 0.5) * 2.0;
+    return uint(clamp(floor(wrapped * 32768.0 + 0.5), 0.0, 65535.0));
+}
+
+uint colorFor(uint phase) {
+    uint x = (phase + p.whole) & 65535u;
+    int index;
+    if (x < 32768u) {
+        index = int(2u * x) + p.ascendingBias - (x > p.ascendingLast ? 1 : 0);
+    } else {
+        uint t = 65535u - x;
+        index = int(2u * t) + p.descendingBias - (t > p.descendingLast ? 1 : 0);
+    }
+    return palette[clamp(index, 0, 65535)];
+}
+
+void main() {
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+    if (x >= p.width || y >= p.height) return;
+    float zr = axes[x], zi = axes[p.width + y];
+    // An exactly repeated FP32 state can never escape in this same FP32
+    // recurrence, so the periodicity exit preserves the raw FP32 result.
+    float savedReal = zr, savedImaginary = zi;
+    uint period = 1u, nextSave = 2u;
+    uint iteration = 0u;
+    bool escaped = false;
+    for (; iteration < p.limit; iteration++) {
+        float squaredReal = zr * zr, squaredImaginary = zi * zi;
+        if (squaredReal + squaredImaginary > 4.0) { escaped = true; break; }
+        zi = (2.0 * zr) * zi + p.cImaginary;
+        zr = squaredReal - squaredImaginary + p.cReal;
+        if (zr == savedReal && zi == savedImaginary) break;
+        if (++period == nextSave) {
+            savedReal = zr;
+            savedImaginary = zi;
+            nextSave *= 2u;
+        }
+    }
+    uint pixel = y * p.width + x;
+    if (!escaped) {
+        colors[pixel] = INSIDE_COLOR;
+        return;
+    }
+    float smoothIteration = float(iteration) + 1.0 - log2(0.5 * log(zr * zr + zi * zi));
+    colors[pixel] = colorFor(phaseCode(smoothIteration));
+}

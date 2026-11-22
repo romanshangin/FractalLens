@@ -234,7 +234,9 @@ class MacSystemMenuFxTest {
         for (MenuItem item : menu.getItems()) {
             if (item instanceof SeparatorMenuItem) continue;
             String itemPath = path + "/" + item.getText();
-            boolean unavailable = busy || "Edit Julia Parameters…".equals(item.getText());
+            // The fixture shows Mandelbrot, so Julia-only commands stay unavailable.
+            boolean unavailable = busy || "Edit Julia Parameters…".equals(item.getText())
+                    || MainMenuBar.JULIA_GPU_TITLE.equals(item.getText());
             assertEquals(item instanceof Menu ? false : unavailable, item.isDisable(), itemPath);
             assertEquals(item instanceof Menu || !unavailable, AppKitMenuProbe.enabled(itemPath),
                     "Native state must match without hovering or reopening: " + itemPath);

@@ -338,6 +338,28 @@ public final class FractalSurface extends Region {
         promoteStagingFrame(renderFrame, scene);
     }
 
+    /**
+     * Shows a complete approximate frame from the Julia GPU kernel. It has no samples,
+     * so {@link #completedRender()} stays empty: the frame is never recolored from
+     * samples, refined, reused for pan or exported. Returns false, showing nothing,
+     * when the surface was resized after the frame was requested.
+     */
+    public boolean displayApproximateFrame(FractalScene scene, int width, int height, int[] colors) {
+        Objects.requireNonNull(scene);
+        Objects.requireNonNull(colors);
+        if (width != renderWidth || height != renderHeight || colors.length != width * height) {
+            return false;
+        }
+        if (stagingFrame == null || !stagingFrame.matches(width, height)) {
+            stagingFrame = new SurfaceBuffer(width, height);
+            stagingRefinementValidity = new ValidityMask(width, height);
+        }
+        stagingFrame.publish(colors);
+        stagingRefinementValidity.clear();
+        promoteStagingFrame(null, scene);
+        return true;
+    }
+
     /** Shows preserved refined pixels and prepares the overlay for new AA tiles. */
     public void beginRefinedRender(RenderFrame frame) {
         if (stagingFrame == null || stagingRenderFrame != frame) {
