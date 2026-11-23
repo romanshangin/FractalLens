@@ -888,9 +888,11 @@ public final class FractalRenderController implements AutoCloseable {
         juliaGpu.submit(new JuliaGpuRenderer.Request(
                         sequence, render.job(), render.scene().coloring(), render.exploringJulia()),
                 new JuliaGpuRenderer.Listener() {
-                    @Override public void rendered(JuliaGpuRenderer.Request request, int[] colors) {
+                    @Override public void rendered(JuliaGpuRenderer.Request request, int[] colors,
+                                                   JuliaGpuRenderer.FrameTiming timing) {
                         try {
                             if (closed || request.sequence() != gpuSequence) return;
+                            recordGpuTiming(timing);
                             gpuInFlight = false;
                             // False only after a resize, whose own render replaces this frame.
                             if (surface.displayApproximateFrame(render.scene(), request.job().width(),
@@ -976,6 +978,24 @@ public final class FractalRenderController implements AutoCloseable {
                         if (renderActivity.failCompleted()) errorHandler.accept(error);
                     }
                 });
+    }
+
+    /** Records the worker's stage costs for the current render when latency recording is on. FX thread. */
+    private void recordGpuTiming(JuliaGpuRenderer.FrameTiming timing) {
+        var latency = surface.latency();
+        if (!latency.isEnabled()) return;
+        long ready = timing.readyNanos();
+        var gpu = timing.gpu();
+        latency.measured("gpu_worker_start", timing.startNanos(), 0);
+        latency.measured("gpu_call", ready, timing.callNanos());
+        latency.measured("gpu_setup", ready, gpu.setupNanos());
+        latency.measured("gpu_upload", ready, gpu.uploadNanos());
+        latency.measured("gpu_dispatch", ready, gpu.dispatchNanos());
+        latency.measured("gpu_readback", ready, gpu.readbackNanos());
+        latency.measured("gpu_kernel_total", ready, gpu.totalNanos());
+        if (timing.cpuFilterNanos() > 0) latency.measured("bright_filter", ready, timing.cpuFilterNanos());
+        latency.measured("gpu_ready", ready, 0);
+        latency.measured("gpu_callback", System.nanoTime(), 0);
     }
 
     /**

@@ -31,6 +31,8 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
     private final AtomicInteger started = new AtomicInteger();
     private volatile boolean closed;
     private volatile int lastMaxIterations;
+    private volatile boolean lastFilterBrightPoints;
+    private volatile boolean gpuFilterRefused;
 
     /** The solid color a frame of this coloring and constant receives. */
     public static int expectedColor(ColoringSettings coloring, double cReal) {
@@ -54,6 +56,10 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
     public boolean closed() { return closed; }
     /** Iteration limit of the last frame the fake calculated. */
     public int lastMaxIterations() { return lastMaxIterations; }
+    /** Whether the last calculated frame asked for the bright-point pass. */
+    public boolean lastFilterBrightPoints() { return lastFilterBrightPoints; }
+    /** Returns filter requests unfiltered, like a kernel whose filtered buffer exceeds its budget. */
+    public void refuseGpuFilter(boolean refused) { gpuFilterRefused = refused; }
 
     private static final GpuDevice DEVICE = new GpuDevice("fake", "1.1", 0, 0, 0, 1024, 1L << 30,
             java.util.Set.of(GpuNumericCapability.FLOAT32));
@@ -92,6 +98,7 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
         }
         calls.incrementAndGet();
         lastMaxIterations = request.maxIterations();
+        lastFilterBrightPoints = request.filterBrightPoints();
         if (failure != null) throw failure;
         if (!available || emptyResult || request.width() > maxFrameWidth) {
             available = false;
@@ -105,7 +112,13 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
         } else {
             java.util.Arrays.fill(request.colors(), color);
         }
-        return Optional.of(new GpuJuliaPreviewResult(request.colors(), 0, 0, 1, 0, 1, 0));
+        boolean filtered = request.filterBrightPoints() && !gpuFilterRefused;
+        if (filtered) {
+            // The real kernel's GPU pass matches this CPU reference bit for bit.
+            int[] raw = request.colors().clone();
+            JuliaBrightPointFilter.apply(raw, request.colors(), request.width(), request.height());
+        }
+        return Optional.of(new GpuJuliaPreviewResult(request.colors(), 0, 0, 1, 0, 1, 0, filtered));
     }
 
     @Override public synchronized void close() {

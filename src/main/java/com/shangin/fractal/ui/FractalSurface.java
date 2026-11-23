@@ -349,9 +349,13 @@ public final class FractalSurface extends Region {
             stagingFrame = new SurfaceBuffer(width, height);
             stagingRefinementValidity = new ValidityMask(width, height);
         }
+        long copyStart = System.nanoTime();
         stagingFrame.publish(colors);
+        long copied = System.nanoTime();
+        latency.measured("approximate_copy", copied, copied - copyStart);
         stagingRefinementValidity.clear();
         promoteStagingFrame(null, scene);
+        latency.frame("approximate_publish");
         return true;
     }
 

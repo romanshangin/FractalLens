@@ -15,7 +15,9 @@ import java.util.Objects;
  * Whole-frame Julia preview request. The kernel iterates in uncertified FP32
  * and returns ARGB colors only, so the result is approximate near the set
  * boundary. Callers must treat it as a transient preview: never cache, export
- * or record it as a CPU-reference or certified frame.
+ * or record it as a CPU-reference or certified frame. With
+ * {@code filterBrightPoints} the kernel also dims isolated near-white pixels
+ * on the GPU, exactly as {@link JuliaBrightPointFilter} does on the CPU.
  */
 public final class GpuJuliaPreviewRequest {
     static final int MAX_ITERATIONS = 10_000;
@@ -27,8 +29,15 @@ public final class GpuJuliaPreviewRequest {
     private final float cReal;
     private final float cImaginary;
     private final int[] colors;
+    private final boolean filterBrightPoints;
 
     public GpuJuliaPreviewRequest(RenderJob job, RenderGrid grid, SmoothPaletteColoring coloring, int[] colors) {
+        this(job, grid, coloring, colors, false);
+    }
+
+    public GpuJuliaPreviewRequest(RenderJob job, RenderGrid grid, SmoothPaletteColoring coloring, int[] colors,
+                                  boolean filterBrightPoints) {
+        this.filterBrightPoints = filterBrightPoints;
         this.job = Objects.requireNonNull(job);
         this.grid = Objects.requireNonNull(grid);
         this.coloring = Objects.requireNonNull(coloring);
@@ -88,6 +97,7 @@ public final class GpuJuliaPreviewRequest {
     GradientPalette palette() { return palette; }
     PaletteOffset offset() { return offset; }
     int[] colors() { return colors; }
+    boolean filterBrightPoints() { return filterBrightPoints; }
 
     void writeAxes(FloatBuffer target) {
         for (int x = 0; x < width(); x++) target.put((float) grid.realAt(x));

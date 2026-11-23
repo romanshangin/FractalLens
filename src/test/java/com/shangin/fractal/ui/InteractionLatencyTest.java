@@ -115,4 +115,33 @@ class InteractionLatencyTest {
         assertTrue(trace.stop().isEmpty());
     }
 
+    @Test void animationFramesPublishEveryFrameWithTheirOwnRenderIdentity() {
+        var trace = new InteractionLatency();
+        List<InteractionLatency.Event> publications = new ArrayList<>();
+        trace.arm(publications::add);
+        trace.renderStarted(); trace.frame("approximate_publish"); // before any input, as on opening
+        trace.input("map_drag"); trace.renderStarted();
+        trace.input("map_drag"); // arrives while the render is still running
+        trace.frame("approximate_publish");
+        trace.renderStarted(); trace.frame("approximate_publish");
+        assertEquals(List.of(0L, 1L, 2L), publications.stream().map(InteractionLatency.Event::input).toList());
+        assertEquals(List.of(1L, 2L, 3L), publications.stream().map(InteractionLatency.Event::render).toList());
+        assertEquals(3, trace.stop().stream().filter(e -> e.stage().equals("approximate_publish")).count());
+    }
+
+    @Test void measuredDurationsKeepTheCurrentRenderAndTheirEndTime() {
+        AtomicLong clock = new AtomicLong(100);
+        var trace = new InteractionLatency(clock::get);
+        trace.measured("gpu_dispatch", 50, 7);
+        trace.arm(ignored -> {});
+        trace.input("map_drag"); trace.renderStarted();
+        trace.measured("gpu_dispatch", 90, 7);
+        var event = trace.stop().stream().filter(e -> e.stage().equals("gpu_dispatch")).findFirst().orElseThrow();
+        assertEquals(90, event.nanos());
+        assertEquals(7, event.durationNanos());
+        assertEquals(1, event.input());
+        assertEquals(1, event.render());
+        assertTrue(new InteractionLatency().stop().isEmpty());
+    }
+
 }

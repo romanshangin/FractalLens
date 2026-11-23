@@ -1,4 +1,4 @@
-package com.shangin.fractal.controller;
+package com.shangin.fractal.gpu;
 
 import org.junit.jupiter.api.Test;
 

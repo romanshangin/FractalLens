@@ -15,12 +15,15 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /**
  * Approximate whole-frame Julia preview: one dispatch calculates and colors
- * every pixel, and only ARGB crosses back to the host. Owned and serialized by
+ * every pixel, an optional second dispatch in the same submission dims isolated
+ * bright points, and only ARGB crosses back to the host. Owned and serialized by
  * the GPU runtime; it never participates in certified backend selection.
  */
 final class VulkanJuliaPreviewKernel implements AutoCloseable {
     private static final int LOCAL_SIZE = 8;
-    private static final int DESCRIPTORS = 3;
+    /** Axes, palette, colors and the bright-point output (allocated only while filtering). */
+    private static final int DESCRIPTORS = 4;
+    private static final int FILTERED = 3;
     private static final int PUSH_CONSTANT_BYTES = 48;
     private static final int PALETTE_WORDS = 65_536;
     private final VkDevice device;
@@ -31,10 +34,13 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
     private final long budget = Long.getLong("fractal.gpu.juliaPreview.maxBytes", 128L * 1024 * 1024);
     private long maxStorage;
     private int maxGroupsX, maxGroupsY;
-    private long descriptorLayout, descriptorPool, descriptorSet, pipelineLayout, pipeline, commandPool, fence;
+    private long descriptorLayout, descriptorPool, descriptorSet, pipelineLayout, pipeline, filterPipeline;
+    private long commandPool, fence;
     private VkCommandBuffer command;
     private boolean closed, deviceLost;
     private GradientPalette residentPalette;
+    /** Size of a filtered-output buffer the budget refused; such frames are returned unfiltered. */
+    private int refusedFilteredBytes;
 
     private VulkanJuliaPreviewKernel(VkDevice device, VkPhysicalDevice physical, VkQueue queue, int family) {
         this.device = device;
@@ -85,7 +91,8 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
                     .pSetLayouts(stack.longs(descriptorLayout)).pPushConstantRanges(ranges), null, handle),
                     "preview pipeline layout");
             pipelineLayout = handle.get(0);
-            createPipeline(stack);
+            pipeline = createPipeline(stack, "julia-preview.comp");
+            filterPipeline = createPipeline(stack, "julia-bright-filter.comp");
 
             VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(1, stack);
             poolSizes.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(DESCRIPTORS);
@@ -111,25 +118,24 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
         }
     }
 
-    private void createPipeline(MemoryStack stack) {
+    private long createPipeline(MemoryStack stack, String name) {
         long compiler = shaderc_compiler_initialize();
         if (compiler == 0) throw new GpuException("Cannot initialize shaderc", false);
         long result = 0, module = 0;
         try {
             String source;
-            try (var input = VulkanJuliaPreviewKernel.class.getResourceAsStream("julia-preview.comp")) {
-                if (input == null) throw new GpuException("Missing julia-preview.comp resource", false);
+            try (var input = VulkanJuliaPreviewKernel.class.getResourceAsStream(name)) {
+                if (input == null) throw new GpuException("Missing " + name + " resource", false);
                 source = new String(input.readAllBytes(), StandardCharsets.UTF_8);
             } catch (IOException failure) {
-                throw new GpuException("Cannot read Julia preview shader: " + failure.getMessage(), false);
+                throw new GpuException("Cannot read Julia preview shader " + name + ": " + failure.getMessage(), false);
             }
-            result = shaderc_compile_into_spv(compiler, source, shaderc_compute_shader,
-                    "julia-preview.comp", "main", 0);
+            result = shaderc_compile_into_spv(compiler, source, shaderc_compute_shader, name, "main", 0);
             if (result == 0 || shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success) {
-                throw new GpuException("Julia preview shader compilation failed: "
+                throw new GpuException("Julia preview shader " + name + " compilation failed: "
                         + (result == 0 ? "no result" : shaderc_result_get_error_message(result)), false);
             }
-            ByteBuffer code = CompiledShader.requireBytes(shaderc_result_get_bytes(result), "julia-preview.comp");
+            ByteBuffer code = CompiledShader.requireBytes(shaderc_result_get_bytes(result), name);
             LongBuffer handle = stack.callocLong(1);
             check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default()
                     .pCode(code), null, handle), "preview shader module");
@@ -140,8 +146,10 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
                     .module(module).pName(stack.UTF8("main"));
             handle.put(0, 0);
             int status = vkCreateComputePipelines(device, VK_NULL_HANDLE, info, null, handle);
-            pipeline = handle.get(0); // A partial creation still needs destruction on failure.
-            check(status, "preview compute pipeline");
+            long created = handle.get(0);
+            if (status != VK_SUCCESS && created != 0) vkDestroyPipeline(device, created, null);
+            check(status, "preview compute pipeline " + name);
+            return created;
         } finally {
             if (module != 0) vkDestroyShaderModule(device, module, null);
             if (result != 0) shaderc_result_release(result);
@@ -155,8 +163,12 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
         if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Julia preview cancelled");
         long started = System.nanoTime();
         try {
+            int colorBytes = bytes(request.pixelCount());
             ensureBuffers(bytes((long) request.width() + request.height()), PALETTE_WORDS * Integer.BYTES,
-                    bytes(request.pixelCount()));
+                    colorBytes, request.filterBrightPoints() ? colorBytes : 0);
+            // The filtered output is optional: a frame that fits the budget only without it
+            // is returned unfiltered, and the caller filters it on the CPU.
+            boolean filtered = request.filterBrightPoints() && buffers[FILTERED] != null;
             long allocated = System.nanoTime();
             request.writeAxes(buffers[0].mapped.asFloatBuffer());
             buffers[0].flush();
@@ -166,17 +178,18 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
                 residentPalette = request.palette();
             }
             long uploaded = System.nanoTime();
-            dispatch(request);
+            dispatch(request, filtered);
             long dispatched = System.nanoTime();
             // Cancellation after submission still drains the fence first; the output is then discarded.
             if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Julia preview cancelled");
-            buffers[2].invalidate();
-            buffers[2].ints().get(request.colors());
+            Buffer output = buffers[filtered ? FILTERED : 2];
+            output.invalidate();
+            output.ints().get(request.colors());
             long done = System.nanoTime();
             long nativeBytes = 0;
-            for (Buffer buffer : buffers) nativeBytes += buffer.allocationBytes;
+            for (Buffer buffer : buffers) if (buffer != null) nativeBytes += buffer.allocationBytes;
             return new GpuJuliaPreviewResult(request.colors(), allocated - started, uploaded - allocated,
-                    dispatched - uploaded, done - dispatched, done - started, nativeBytes);
+                    dispatched - uploaded, done - dispatched, done - started, nativeBytes, filtered);
         } catch (GpuException failure) {
             deviceLost |= failure.deviceLost();
             throw failure;
@@ -195,6 +208,8 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
      * Frees every buffer whose size changes before allocating any replacement, so the
      * budget only ever counts buffers the new frame keeps; otherwise a resize could count
      * the old, larger color buffer beside the new axes and refuse a frame that fits.
+     * A size of zero means the frame does not use that buffer. The filtered output is
+     * allocated last and only within the budget; otherwise it stays absent.
      */
     private void ensureBuffers(int... sizes) {
         for (int index = 0; index < DESCRIPTORS; index++) {
@@ -204,20 +219,51 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
                 if (index == 1) residentPalette = null;
             }
         }
+        if (sizes[FILTERED] != refusedFilteredBytes) refusedFilteredBytes = 0;
         for (int index = 0; index < DESCRIPTORS; index++) {
-            if (buffers[index] == null) {
+            if (buffers[index] == null && sizes[index] > 0) {
                 if (index == 1) residentPalette = null;
+                if (index == FILTERED && (sizes[index] == refusedFilteredBytes || !fitsBudget(sizes[index]))) {
+                    refusedFilteredBytes = sizes[index];
+                    continue;
+                }
                 buffers[index] = new Buffer(sizes[index]);
             }
         }
     }
 
-    private void dispatch(GpuJuliaPreviewRequest request) {
+    /** Whether a buffer of {@code bytes} would fit the budget beside the allocated buffers. */
+    private boolean fitsBudget(int bytes) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer out = stack.callocLong(1);
+            check(vkCreateBuffer(device, VkBufferCreateInfo.calloc(stack).sType$Default().size(bytes)
+                    .usage(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).sharingMode(VK_SHARING_MODE_EXCLUSIVE),
+                    null, out), "create preview buffer");
+            long handle = out.get(0);
+            try {
+                VkMemoryRequirements requirements = VkMemoryRequirements.calloc(stack);
+                vkGetBufferMemoryRequirements(device, handle, requirements);
+                return withinBudget(requirements.size());
+            } finally {
+                vkDestroyBuffer(device, handle, null);
+            }
+        }
+    }
+
+    private boolean withinBudget(long allocationBytes) {
+        long total = allocationBytes;
+        for (Buffer buffer : buffers) if (buffer != null) total += buffer.allocationBytes;
+        return budget > 0 && total <= budget;
+    }
+
+    private void dispatch(GpuJuliaPreviewRequest request, boolean filtered) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(DESCRIPTORS, stack);
             for (int i = 0; i < DESCRIPTORS; i++) {
+                // Without filtering the unused output binding aliases the colors; no dispatch reads it.
+                Buffer buffer = buffers[i] != null ? buffers[i] : buffers[2];
                 VkDescriptorBufferInfo.Buffer info = VkDescriptorBufferInfo.calloc(1, stack);
-                info.get(0).buffer(buffers[i].handle).offset(0).range(buffers[i].bytes);
+                info.get(0).buffer(buffer.handle).offset(0).range(buffer.bytes);
                 writes.get(i).sType$Default().dstSet(descriptorSet).dstBinding(i)
                         .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(1).pBufferInfo(info);
             }
@@ -243,6 +289,13 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
                 throw new GpuException("Julia preview dispatch exceeds group-count limits", false);
             }
             vkCmdDispatch(command, groupsX, groupsY, 1);
+            if (filtered) {
+                barrier(stack, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+                vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, filterPipeline);
+                vkCmdPushConstants(command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
+                vkCmdDispatch(command, groupsX, groupsY, 1);
+            }
             barrier(stack, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT,
                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
             check(vkEndCommandBuffer(command), "end preview command");
@@ -277,6 +330,7 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
         if (fence != 0) { vkDestroyFence(device, fence, null); fence = 0; }
         if (commandPool != 0) { vkDestroyCommandPool(device, commandPool, null); commandPool = 0; }
         if (pipeline != 0) { vkDestroyPipeline(device, pipeline, null); pipeline = 0; }
+        if (filterPipeline != 0) { vkDestroyPipeline(device, filterPipeline, null); filterPipeline = 0; }
         if (pipelineLayout != 0) { vkDestroyPipelineLayout(device, pipelineLayout, null); pipelineLayout = 0; }
         if (descriptorPool != 0) { vkDestroyDescriptorPool(device, descriptorPool, null); descriptorPool = 0; }
         if (descriptorLayout != 0) { vkDestroyDescriptorSetLayout(device, descriptorLayout, null); descriptorLayout = 0; }
@@ -300,9 +354,7 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
                 VkMemoryRequirements requirements = VkMemoryRequirements.calloc(stack);
                 vkGetBufferMemoryRequirements(device, handle, requirements);
                 allocationBytes = requirements.size();
-                long total = allocationBytes;
-                for (Buffer buffer : buffers) if (buffer != null) total += buffer.allocationBytes;
-                if (budget <= 0 || total > budget) {
+                if (!withinBudget(allocationBytes)) {
                     throw new GpuException("Julia preview allocation budget exceeded", false);
                 }
                 VkPhysicalDeviceMemoryProperties props = VkPhysicalDeviceMemoryProperties.calloc(stack);

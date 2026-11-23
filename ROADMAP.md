@@ -249,6 +249,21 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   on target hardware. See
   [GPU Julia results](benchmarks/GPU_JULIA_RESULTS.md) and the follow-up for
   [direct GPU presentation](#98-keep-hardware-and-api-alternatives-conditional).
+  Measured on the M3 Pro Retina display (2026-11-23,
+  [results](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md)), with no acceptance
+  threshold yet: warm drag input reaches a published frame in 12–21 ms median
+  (26–32 ms p95) at 2400x1520 and 3360x2000, 300 and 1000 iterations, with frames
+  every 10–17 ms. The first frame after opening takes about 170 ms (kernel
+  creation about 100 ms), and a gesture started at once waits up to about 130 ms.
+  Clicks and drags across the measured 72-point path take 7–10 s to settle at the
+  selected point because the pacing slows near changing edges; owner decision
+  pending. The bright-point filter then moved to a second GPU pass (retained,
+  bit-exact against the CPU reference): at 3360x2000 the software frame fell from
+  about 12.4 to 6.6 ms and now fits one 120 Hz pulse, drag input → pulse improved
+  up to 46%, and settling took 8–32% less time; the first frame after opening the
+  map became slower (cold about 160 → 260 ms, n = 3). Still open: acceptance
+  thresholds, earlier kernel warm-up, physical input and display timing, other
+  hardware.
 - [ ] **Interesting-places gallery:** ship a curated set of named scenes with
   descriptions and previews, grouped by fractal. Open entries through the same
   scene/history pipeline as bookmarks; preserve exact coordinates and parameters.
@@ -950,6 +965,14 @@ Windows and Intel/AMD Mac work stays in 8.7/8.8.
   frame times against the current path on supported hardware. Keep the existing
   image path where direct presentation is unavailable and keep PNG export
   independent of presentation.
+  Measured 2026-11-23 (M3 Pro, [results](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md)):
+  at 3360x2000 readback, `PixelBuffer` copy and Prism painting cost about 4 ms of
+  a 12.5 ms frame (about 2 ms at 2400x1520), GPU dispatch about 6.5 ms and the
+  CPU bright-point filter about 3.5 ms. The GPU-side bright-point filter was then
+  measured and retained: the frame is about 6.5 ms and fits one 120 Hz pulse,
+  with readback and copy about 1.7 ms and Prism painting about 2 ms. Direct
+  presentation stays inconclusive and not prototyped: it could save at most a
+  few milliseconds.
 - [ ] Keep CUDA, OpenCL/SYCL, Java-to-GPU compilers, WebGPU/OpenGL and multiword
   GPU arithmetic as explicitly unmeasured alternatives in the analysis. Reopen
   one only with a supported hardware matrix and a materially different measured

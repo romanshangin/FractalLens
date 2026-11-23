@@ -29,7 +29,8 @@ final class JuliaGpuRendererExitProbe {
         FractalScene scene = FractalScene.create(FractalPreset.JULIA, PalettePreset.ICE);
         RenderJob job = new RenderJob(FormulaDefinition.forScene(scene), scene.viewport(), 64, 48, 100);
         renderer.submit(new JuliaGpuRenderer.Request(1, job, scene.coloring(), false), new JuliaGpuRenderer.Listener() {
-            @Override public void rendered(JuliaGpuRenderer.Request request, int[] colors) {}
+            @Override public void rendered(JuliaGpuRenderer.Request request, int[] colors,
+                                             JuliaGpuRenderer.FrameTiming timing) {}
             @Override public void unavailable(JuliaGpuRenderer.Request request) {}
             @Override public void failed(JuliaGpuRenderer.Request request, Throwable error) {}
         });

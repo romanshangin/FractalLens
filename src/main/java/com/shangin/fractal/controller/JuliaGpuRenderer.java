@@ -5,6 +5,7 @@ import com.shangin.fractal.coloring.SmoothPaletteColoring;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.gpu.GpuJuliaPreviewRequest;
 import com.shangin.fractal.gpu.GpuJuliaPreviewResult;
+import com.shangin.fractal.gpu.JuliaBrightPointFilter;
 import com.shangin.fractal.render.FractalRenderService;
 import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.render.RenderJob;
@@ -36,9 +37,21 @@ final class JuliaGpuRenderer implements AutoCloseable {
         }
     }
 
+    /**
+     * Host wall-clock costs of one frame on the worker, for opt-in latency diagnostics.
+     * {@code startNanos} is when the worker took the request; {@code gpu} holds the
+     * kernel's setup, upload, dispatch (including the bright-point pass) and readback
+     * times; {@code callNanos} spans the whole runtime call, including session or
+     * kernel creation on first use; {@code cpuFilterNanos} is the CPU bright-point
+     * filter, zero unless the GPU pass could not run; {@code readyNanos} is when the
+     * result was offered to the result executor.
+     */
+    record FrameTiming(GpuJuliaPreviewResult gpu, long startNanos, long callNanos, long cpuFilterNanos,
+                       long readyNanos) {}
+
     /** Receives the outcome on the result executor. Colors must be returned with {@link #release}. */
     interface Listener {
-        void rendered(Request request, int[] colors);
+        void rendered(Request request, int[] colors, FrameTiming timing);
         void unavailable(Request request);
         void failed(Request request, Throwable error);
     }
@@ -105,28 +118,36 @@ final class JuliaGpuRenderer implements AutoCloseable {
     private void run(Pending pending) {
         Request request = pending.request();
         Listener listener = pending.listener();
+        long startNanos = System.nanoTime();
         int[] colors = null;
         try {
             colors = acquire(request.job().width() * request.job().height());
             SmoothPaletteColoring coloring = strategy(request.coloring()).orElseThrow(
                     () -> new IllegalArgumentException("Julia GPU requires smooth palette coloring"));
+            long callStart = System.nanoTime();
             Optional<GpuJuliaPreviewResult> result = renderService.renderJuliaPreview(new GpuJuliaPreviewRequest(
                     request.job(), RenderGrid.from(request.job().viewport(), request.job().width(),
-                    request.job().height()), coloring, colors));
+                    request.job().height()), coloring, colors, request.filterBrightPoints()));
+            long callNanos = System.nanoTime() - callStart;
             if (result.isEmpty()) {
                 release(colors);
                 resultExecutor.execute(() -> listener.unavailable(request));
                 return;
             }
-            if (request.filterBrightPoints()) {
+            long cpuFilterNanos = 0;
+            if (request.filterBrightPoints() && !result.get().brightPointsFiltered()) {
+                // The GPU pass did not fit the memory budget; apply the same filter here.
+                long filterStart = System.nanoTime();
                 int[] filtered = acquire(colors.length);
                 JuliaBrightPointFilter.apply(colors, filtered, request.job().width(), request.job().height());
                 release(colors);
                 colors = filtered;
+                cpuFilterNanos = System.nanoTime() - filterStart;
             }
             int[] rendered = colors;
             colors = null;
-            resultExecutor.execute(() -> listener.rendered(request, rendered));
+            var timing = new FrameTiming(result.get(), startNanos, callNanos, cpuFilterNanos, System.nanoTime());
+            resultExecutor.execute(() -> listener.rendered(request, rendered, timing));
         } catch (InterruptedException interrupted) {
             release(colors);
             Thread.currentThread().interrupt();

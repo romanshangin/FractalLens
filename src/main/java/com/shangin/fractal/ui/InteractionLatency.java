@@ -115,6 +115,23 @@ public final class InteractionLatency {
         if (event != null && token.input == input && input > 0) publication.accept(event);
     }
 
+    /**
+     * Records and publishes every occurrence of a continuous-animation frame. Unlike
+     * {@link #mark}, a frame whose render started before the latest input is still
+     * published: it keeps its own input/render identity, so it cannot be attributed
+     * to a later input.
+     */
+    public void frame(String stage) {
+        if (!enabled) return;
+        Event event = add(token, stage, 0);
+        if (event != null) publication.accept(event);
+    }
+
+    /** Records a duration measured elsewhere, for example on a worker, under the current render. */
+    public void measured(String stage, long endNanos, long durationNanos) {
+        if (enabled) addAt(token, stage, endNanos, durationNanos);
+    }
+
     /** Records a software pulse or screen observation with the publication's identity. */
     public void observed(Event source, String suffix) {
         if (enabled) add(new Token(source.epoch, source.input, source.render), source.stage + suffix, 0);

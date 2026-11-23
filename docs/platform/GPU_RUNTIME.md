@@ -176,7 +176,16 @@ can differ by the full color range. No caller may cache, export or record it as
 a CPU-reference or certified frame. Whether it is replaced by an exact frame is
 the caller's contract: the planned live preview from a Mandelbrot point must
 replace it with the CPU frame once the pointer stops, while the Julia GPU mode
-below keeps it on screen by the user's explicit choice. Buffers (axes, resident 65,536-color palette, ARGB) are reused while the
+below keeps it on screen by the user's explicit choice. With
+`filterBrightPoints` (Explore Julia Parameters) a second dispatch in the same
+submission runs `julia-bright-filter.comp`, which dims isolated near-white
+pixels exactly as the CPU reference `JuliaBrightPointFilter` (bit-exact native
+check), and only the filtered frame is read back. The filtered output doubles
+the ARGB memory and is optional: when it would exceed the budget below, the
+kernel returns the unfiltered frame with `brightPointsFiltered` false and
+`JuliaGpuRenderer` applies the CPU reference instead, so a frame that fits
+without the filter never disables the runtime. Buffers (axes, resident
+65,536-color palette, ARGB and, while filtering, the filtered ARGB) are reused while the
 size and palette stay the same and are bounded by
 `fractal.gpu.juliaPreview.maxBytes` (128 MiB default); on a resize every buffer
 whose size changes is freed before any replacement is allocated, so the budget
