@@ -1304,8 +1304,8 @@ Within the map, speed is limited to 210 logical points per second and each frame
 at most 2.52 points. Drag events replace the destination. Releasing the pointer finishes
 the remaining motion to the drop position before recording the scene.
 Movement under four map points from the press remains a click.
-The Julia GPU kernel renders at full canvas resolution. A local filter dims
-isolated near-white pixels before publication. Pointer updates coalesce while a
+The Julia GPU kernel renders at full canvas resolution. A local filter, a
+second GPU pass, dims isolated near-white pixels before publication. Pointer updates coalesce while a
 frame is rendering. The last GPU frame stays on the canvas when the target is
 reached, and the selected point contributes one history entry. If GPU rendering
 fails while rendering a map frame, exploration closes and leaves the last

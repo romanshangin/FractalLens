@@ -1,0 +1,54 @@
+#version 450
+// Second pass of the Julia preview: dims isolated near-white pixels of the
+// colored frame. Must match JuliaBrightPointFilter (the CPU reference) bit for
+// bit: integer arithmetic only, the one-pixel border is copied unchanged and
+// every decision reads the unfiltered neighborhood.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(std430, binding = 2) readonly buffer Source { uint source[]; };
+layout(std430, binding = 3) writeonly buffer Filtered { uint filtered[]; };
+layout(push_constant) uniform Settings {
+    uint width;
+    uint height;
+} p;
+
+const uint WHITE_CHANNEL_THRESHOLD = 224u;
+const uint ISOLATION_CONTRAST = 32u;
+const uint RETAINED_CONTRAST = 16u;
+
+uint luminance(uint color) {
+    return (54u * ((color >> 16) & 255u) + 183u * ((color >> 8) & 255u) + 19u * (color & 255u)) >> 8;
+}
+
+void main() {
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+    if (x >= p.width || y >= p.height) return;
+    uint index = y * p.width + x;
+    uint color = source[index];
+    filtered[index] = color;
+    if (x == 0u || y == 0u || x == p.width - 1u || y == p.height - 1u) return;
+    uint red = (color >> 16) & 255u;
+    uint green = (color >> 8) & 255u;
+    uint blue = color & 255u;
+    if (red < WHITE_CHANNEL_THRESHOLD || green < WHITE_CHANNEL_THRESHOLD
+            || blue < WHITE_CHANNEL_THRESHOLD) return;
+
+    uint center = luminance(color);
+    uint above = index - p.width, below = index + p.width;
+    uint brightest = luminance(source[above - 1u]);
+    brightest = max(brightest, luminance(source[above]));
+    brightest = max(brightest, luminance(source[above + 1u]));
+    brightest = max(brightest, luminance(source[index - 1u]));
+    brightest = max(brightest, luminance(source[index + 1u]));
+    brightest = max(brightest, luminance(source[below - 1u]));
+    brightest = max(brightest, luminance(source[below]));
+    brightest = max(brightest, luminance(source[below + 1u]));
+    // Unsigned form of the reference's center - brightest < ISOLATION_CONTRAST.
+    if (center < brightest + ISOLATION_CONTRAST) return;
+
+    uint limit = brightest + RETAINED_CONTRAST;
+    filtered[index] = (color & 0xff000000u)
+            | ((red * limit / center) << 16)
+            | ((green * limit / center) << 8)
+            | (blue * limit / center);
+}

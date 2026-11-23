@@ -1,14 +1,19 @@
-package com.shangin.fractal.controller;
+package com.shangin.fractal.gpu;
 
-/** Dims isolated near-white pixels in the animated Julia preview. */
-final class JuliaBrightPointFilter {
+/**
+ * CPU reference for the bright-point pass of the Julia preview kernel
+ * ({@code julia-bright-filter.comp}): dims isolated near-white pixels. The GPU
+ * pass must match it bit for bit. Callers apply it themselves when a result
+ * reports that the GPU pass did not run.
+ */
+public final class JuliaBrightPointFilter {
     private static final int WHITE_CHANNEL_THRESHOLD = 224;
     private static final int ISOLATION_CONTRAST = 32;
     private static final int RETAINED_CONTRAST = 16;
 
     private JuliaBrightPointFilter() {}
 
-    static void apply(int[] source, int[] destination, int width, int height) {
+    public static void apply(int[] source, int[] destination, int width, int height) {
         // Read the original neighborhood even when another pixel has already been dimmed.
         System.arraycopy(source, 0, destination, 0, source.length);
         for (int y = 1; y < height - 1; y++) {

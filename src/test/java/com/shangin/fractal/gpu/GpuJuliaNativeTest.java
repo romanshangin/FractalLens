@@ -82,6 +82,75 @@ class GpuJuliaNativeTest {
         }
     }
 
+    @Test
+    void frameThatFitsOnlyWithoutTheFilteredBufferIsReturnedUnfilteredAndKeepsTheRuntime() throws Exception {
+        if (Boolean.getBoolean("fractal.gpu.expectUnavailable")) return;
+        String previous = System.getProperty("fractal.gpu.juliaPreview.maxBytes");
+        // 2074x978 colors take about 8.1 MB: one color buffer fits 12 MiB, two do not.
+        System.setProperty("fractal.gpu.juliaPreview.maxBytes", Long.toString(12L * 1024 * 1024));
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        try (GpuRuntime runtime = GpuRuntimeFactory.createDefault()) {
+            for (int round = 0; round < 2; round++) {
+                RenderJob large = previewJob(2074, 978, 300, -0.8, 0.156);
+                RenderGrid largeGrid = RenderGrid.from(large.viewport(), 2074, 978);
+                int[] raw = new int[2074 * 978];
+                int[] requested = new int[raw.length];
+                runtime.renderJuliaPreview(new GpuJuliaPreviewRequest(large, largeGrid, ice, raw, false)).orElseThrow();
+                var result = runtime.renderJuliaPreview(
+                        new GpuJuliaPreviewRequest(large, largeGrid, ice, requested, true)).orElseThrow();
+                assertFalse(result.brightPointsFiltered());
+                assertArrayEquals(raw, requested, "An unfiltered result must be the raw frame");
+                assertEquals(GpuRuntimeState.AVAILABLE, runtime.capabilityReport().state());
+
+                // A smaller frame still gets the GPU pass.
+                RenderJob small = previewJob(641, 401, 300, -0.8, 0.156);
+                var smallResult = runtime.renderJuliaPreview(new GpuJuliaPreviewRequest(small,
+                        RenderGrid.from(small.viewport(), 641, 401), ice, new int[641 * 401], true)).orElseThrow();
+                assertTrue(smallResult.brightPointsFiltered());
+            }
+            assertEquals(GpuRuntimeState.AVAILABLE, runtime.capabilityReport().state());
+        } finally {
+            if (previous == null) System.clearProperty("fractal.gpu.juliaPreview.maxBytes");
+            else System.setProperty("fractal.gpu.juliaPreview.maxBytes", previous);
+        }
+    }
+
+    @Test
+    void brightPointPassMatchesTheCpuReferenceExactly() throws Exception {
+        if (Boolean.getBoolean("fractal.gpu.expectUnavailable")) return;
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        var fine = new SmoothPaletteColoring(PalettePreset.ICE.palette(), 0.2, 0.1);
+        int dimmed = 0;
+        try (GpuRuntime runtime = GpuRuntimeFactory.createDefault()) {
+            // Odd and degenerate sizes, a reallocation and filtering switched off and on again.
+            int[][] sizes = {{193, 129}, {2, 2}, {2, 3}, {3, 3}, {641, 401}, {193, 129}};
+            for (int[] size : sizes) {
+                for (double[] c : CONSTANTS) {
+                    for (var coloring : new SmoothPaletteColoring[]{ice, fine}) {
+                        for (int limit : new int[]{300, 1000}) {
+                            RenderJob job = previewJob(size[0], size[1], limit, c[0], c[1]);
+                            RenderGrid grid = RenderGrid.from(job.viewport(), size[0], size[1]);
+                            int[] raw = new int[size[0] * size[1]];
+                            int[] filtered = new int[raw.length];
+                            runtime.renderJuliaPreview(new GpuJuliaPreviewRequest(job, grid, coloring, raw, false))
+                                    .orElseThrow();
+                            assertTrue(runtime.renderJuliaPreview(new GpuJuliaPreviewRequest(
+                                    job, grid, coloring, filtered, true)).orElseThrow().brightPointsFiltered());
+                            int[] expected = new int[raw.length];
+                            JuliaBrightPointFilter.apply(raw, expected, size[0], size[1]);
+                            String frame = size[0] + "x" + size[1] + " c=(" + c[0] + "," + c[1] + ") limit=" + limit;
+                            assertArrayEquals(expected, filtered, frame);
+                            for (int i = 0; i < raw.length; i++) if (raw[i] != expected[i]) dimmed++;
+                        }
+                    }
+                }
+            }
+            assertEquals(GpuRuntimeState.AVAILABLE, runtime.capabilityReport().state());
+        }
+        // An all-copy pass would also match; the frames must exercise the dimming branch.
+        assertTrue(dimmed > 0, "No tested frame contained an isolated bright point");
+    }
+
     private static RenderJob previewJob(int width, int height, int limit, double real, double imaginary) {
         return GpuJuliaPreviewRequestTest.job(new Viewport(0, 0, 2.4), width, height, limit, real, imaginary);
     }

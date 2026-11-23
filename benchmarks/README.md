@@ -79,6 +79,7 @@ no measurements. [Policy](../docs/platform/MACOS_RUN.md#javafx-startup-and-prism
 | P2.7 deterministic deep Mandelbrot base and scalar escape check retained as correctness fixes: tile-order-independent samples; non-inferiority C3 passes 5 of 6 controls, `deep-glitch` first region inconclusive (+2% median); JavaFX completion passes on `deep-bla`/`deep-glitch`, first visible equal medians with inconclusive intervals; `main` renders the recovery-heavy antenna differently every time (exploratory only) | [Results](DEEP_BASE_DETERMINISM_RESULTS.md) | Selected numerical tables in report, [headless policy](policies/p27-deterministic-deep-base.json), [FX policy](policies/p27-deterministic-deep-base-fx.json) |
 | P2.7 uncertain deep Mandelbrot escapes retained as correctness fixes: exact reference margins, continued escaped references, BLA error bounds and near-radius refusal, margin-based decisions; complete frames match exact iteration off chaotic orbits; paired completion passes on `deep-glitch`, inconclusive on `deep-bla`; first region inconclusive, about 0.1 ms later on `deep-bla`; exploratory antenna about 5x faster | [Results](UNCERTAIN_DEEP_ESCAPES_RESULTS.md) | Selected numerical tables in report, [headless policy](policies/p27-uncertain-deep-escapes.json) |
 | GPU Julia: certified FP32 base pass rejected and removed (exact, but 1.45–2.90x slower than CPU in every 300-iteration case on M3 Pro); approximate FP32 preview kernel retained as a preview capability at 300 iterations (3024x1964 median 2.75–12.87 ms, 5.3–42x faster than CPU, ≤1.36% of pixels off by more than one channel level, ≤2.61% differing at all), inconclusive at 1000 iterations | [Results](GPU_JULIA_RESULTS.md) | Selected numerical tables in report |
+| Explore Julia Parameters latency on M3 Pro Retina: warm drag input → published frame 12–21 ms median (26–32 ms p95), frames every 10–17 ms; first frame after opening ~170 ms (kernel creation ~100 ms); click/drag arrival 7–10 s limited by pacing; per frame at 3360x2000 GPU dispatch 6.5 ms, CPU bright-point filter 3.6 ms, readback + copy + Prism paint ~4 ms; follow-up GPU bright-point pass retained (bit-exact; 3360x2000 frame 12.4 → 6.6 ms, one 120 Hz pulse; first frame after opening slower); direct GPU presentation inconclusive, not prototyped | [Results](JULIA_EXPLORER_LATENCY_RESULTS.md) | [Summary](JULIA_EXPLORER_LATENCY_SUMMARY.csv) |
 
 Selected campaigns contain retained summaries/provenance only; omitted-input
 references do not imply availability. Historical failures/rejected candidates/
@@ -98,7 +99,7 @@ incomplete platform gates remain recorded.
 
 ## Retained file inventory
 
-The inventory lists the 136 selected evidence/protocol files, excluding this index. No
+The inventory lists the 139 selected evidence/protocol files, excluding this index. No
 raw log file is included.
 
 - [AA_MEMORY_VALIDATION.md](AA_MEMORY_VALIDATION.md)
@@ -139,6 +140,9 @@ raw log file is included.
 - [INTERACTION_LATENCY_SCREEN_SUMMARY.csv](INTERACTION_LATENCY_SCREEN_SUMMARY.csv)
 - [INTERACTION_LATENCY_VALIDITY_SCAN.csv](INTERACTION_LATENCY_VALIDITY_SCAN.csv)
 - [INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv](INTERACTION_LATENCY_ZOOM_CONTROL_SUMMARY.csv)
+- [JULIA_EXPLORER_LATENCY.md](JULIA_EXPLORER_LATENCY.md)
+- [JULIA_EXPLORER_LATENCY_RESULTS.md](JULIA_EXPLORER_LATENCY_RESULTS.md)
+- [JULIA_EXPLORER_LATENCY_SUMMARY.csv](JULIA_EXPLORER_LATENCY_SUMMARY.csv)
 - [MEMORY_GATE_V2.md](MEMORY_GATE_V2.md)
 - [P1_5_PROMOTION_VALIDATION.md](P1_5_PROMOTION_VALIDATION.md)
 - [PALETTE_BENCHMARK_RESULTS.md](PALETTE_BENCHMARK_RESULTS.md)

@@ -103,6 +103,7 @@ final class JuliaExplorer extends Stage {
         setY(owner.getY() + 60);
         map.setOnMousePressed(e -> {
             if (e.getButton() != MouseButton.PRIMARY) return;
+            view.latency().input("map_press");
             timer.stop();
             previousFrameTime = 0;
             pacing.reset();
@@ -119,6 +120,7 @@ final class JuliaExplorer extends Stage {
         });
         map.setOnMouseDragged(e -> {
             if (!e.isPrimaryButtonDown() || pressedPoint == null) return;
+            view.latency().input("map_drag");
             if (!dragged && Math.hypot(e.getX() - pressX, e.getY() - pressY) < DRAG_THRESHOLD) return;
             dragged = true;
             editing = true;
@@ -127,6 +129,7 @@ final class JuliaExplorer extends Stage {
         });
         map.setOnMouseReleased(e -> {
             if (e.getButton() != MouseButton.PRIMARY || pressedPoint == null) return;
+            view.latency().input("map_release");
             editing = true;
             desired = dragged ? dragPoint(e.getX(), e.getY(), e.isShiftDown()) : point(e.getX(), e.getY());
             finish = true;
@@ -228,6 +231,7 @@ final class JuliaExplorer extends Stage {
         timer.stop();
         editing = finish = false;
         committed = submitted = desired;
+        view.latency().boundary("map_committed");
         view.commitExplorerPoint(desired);
         placeMarker(desired);
     }

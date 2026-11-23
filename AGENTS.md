@@ -455,8 +455,8 @@ Benchmarks are opt-in Maven profiles; never wire them into the default build.
   `./mvnw -Pperturbation-benchmark verify -DskipTests` (the `fp32-precision`
   docs use `-DskipTests integration-test`).
 - JavaFX-launched (replace the `javafx:run` main class): `palette-benchmark`,
-  `interaction-latency`, `gpu-render-benchmark`, `gpu-resident-benchmark`,
-  `gpu-diagnostics`. Example: `./mvnw -Ppalette-benchmark javafx:run`.
+  `interaction-latency`, `julia-explorer-latency`, `gpu-render-benchmark`,
+  `gpu-resident-benchmark`, `gpu-diagnostics`. Example: `./mvnw -Ppalette-benchmark javafx:run`.
 - Protocol-specific properties are in the matching `benchmarks/*_BENCHMARK.md`;
   paired A/B campaigns, frozen builds and analyzers live in `scripts/benchmarks/`.
 
