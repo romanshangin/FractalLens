@@ -110,7 +110,7 @@ class MainMenuBarFxTest {
                 .map(item -> item instanceof javafx.scene.control.SeparatorMenuItem ? "-" : item.getText())
                 .toList());
 
-        assertEquals(List.of("Edit Julia Parameters…", "-", MainMenuBar.JULIA_GPU_TITLE), titles);
+        assertEquals(List.of("Edit Julia Parameters…", JuliaExplorer.TITLE, "-", MainMenuBar.JULIA_GPU_TITLE), titles);
     }
 
     @Test

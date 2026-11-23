@@ -1,5 +1,6 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.PalettePreset;
 import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.controller.RenderStatus;
@@ -16,12 +17,18 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Arrays;
 import java.util.concurrent.Callable;
@@ -556,6 +563,657 @@ class JuliaGpuModeFxTest {
     }
 
     @Test
+    void parameterMapUsesCompactBadgeAndAllowsTheMainWindowToClose() throws Exception {
+        try (var window = new MainWindow()) {
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            fx(() -> {
+                assertEquals(javafx.stage.StageStyle.DECORATED, map.getStyle());
+                assertEquals(javafx.stage.Modality.NONE, map.getModality());
+                assertSame(window.stage, map.getOwner());
+                var badge = (RenderModeIndicator) window.view.getChildrenUnmodifiable().get(1);
+                badge.setDeepZoom(true);
+                badge.setRenderStatus(new RenderStatus(RenderStatus.State.RENDERING, 0));
+                assertEquals("Standard", badge.getText());
+                assertEquals("Standard", badge.getAccessibleText());
+                assertNull(badge.getTooltip());
+                var icons = (javafx.scene.layout.StackPane) badge.getGraphic();
+                assertTrue(icons.getChildren().get(0).isVisible());
+                assertFalse(icons.getChildren().get(1).isVisible());
+                map.close();
+                assertTrue(badge.getText().startsWith("Deep Zoom · Rendering"));
+                assertNotNull(badge.getTooltip());
+
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                var reopened = javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+                window.stage.fireEvent(new javafx.stage.WindowEvent(window.stage,
+                        javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST));
+                assertFalse(window.stage.isShowing());
+                assertFalse(reopened.isShowing());
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void parameterMapKeepsTheLastGpuFrameAndCommitsOneUndoableScene() throws Exception {
+        try (var window = new MainWindow()) {
+            window.runtime.showIsolatedBrightPixel();
+            var initial = fx(window.view::sceneSnapshot);
+            int cpuCalls = window.cpu.calls.get();
+            var toggle = window.juliaGpuItem();
+            assertFalse(fx(toggle::isSelected));
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                assertTrue(toggle.isSelected());
+                assertTrue(window.view.juliaGpu());
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow().getScene().getRoot();
+            });
+            awaitCondition(() -> fx(() -> window.view.showsJuliaGpuFrame() && window.view.isLatencyIdle()));
+            var surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().getFirst());
+            var imageView = fx(() -> (ImageView) surface.getChildrenUnmodifiable().getFirst());
+            fx(() -> {
+                assertEquals(surface.renderWidth(), imageView.getImage().getWidth());
+                assertEquals(surface.renderHeight(), imageView.getImage().getHeight());
+                assertEquals(0xff303030, imageView.getImage().getPixelReader().getArgb(1, 1));
+                return null;
+            });
+            var dragPositions = new java.util.ArrayList<Double>();
+            var marker = fx(() -> (javafx.scene.shape.Circle) map.getChildrenUnmodifiable().get(1));
+            fx(() -> {
+                dragPositions.add(marker.getCenterX());
+                marker.centerXProperty().addListener((obs, before, after) -> dragPositions.add(after.doubleValue()));
+                map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 70, 60, true));
+                map.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 70, true));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> dragPositions.size() >= 4));
+            fx(() -> {
+                assertTrue(marker.getCenterX() < 220);
+                assertEquals(surface.renderWidth(), imageView.getImage().getWidth());
+                assertEquals(surface.renderHeight(), imageView.getImage().getHeight());
+                assertEquals(surface.getWidth(), imageView.getFitWidth());
+                assertEquals(surface.getHeight(), imageView.getFitHeight());
+                assertEquals(0xff303030, imageView.getImage().getPixelReader().getArgb(1, 1));
+                assertEquals(0xff202020, imageView.getImage().getPixelReader().getArgb(2, 1));
+                assertEquals(initial, window.view.sceneSnapshot());
+                map.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 150, 90, true));
+                map.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 90, 75, false));
+                return null;
+            });
+            var dragged = initial.withJuliaParameters(JuliaExplorer.point(90, 75));
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()
+                    && window.view.sceneSnapshot().equals(dragged)));
+            var positions = new java.util.ArrayList<Double>();
+            var lastAnimatedImage = new AtomicReference<Image>();
+            var lastAnimatedGpuCall = new AtomicInteger();
+            fx(() -> {
+                imageView.imageProperty().addListener((observable, before, after) -> {
+                    if (window.view.sceneSnapshot().equals(dragged)) {
+                        lastAnimatedImage.set(after);
+                        lastAnimatedGpuCall.set(window.runtime.calls());
+                    }
+                });
+                int expectedWidth = surface.renderWidth();
+                int expectedHeight = surface.renderHeight();
+                assertNull(surface.completedRender(), "The map should retain its GPU frame");
+                assertTrue(window.view.showsJuliaGpuFrame());
+                assertEquals(cpuCalls, window.cpu.calls.get());
+                assertEquals(0xff303030, imageView.getImage().getPixelReader().getArgb(1, 1));
+                assertEquals(expectedWidth, window.view.exportTarget().width());
+                assertEquals(expectedHeight, window.view.exportTarget().height());
+                assertEquals(expectedWidth, imageView.getImage().getWidth());
+                assertEquals(expectedHeight, imageView.getImage().getHeight());
+                assertEquals(surface.getWidth(), imageView.getFitWidth());
+                assertEquals(surface.getHeight(), imageView.getFitHeight());
+                for (int i = 1; i < dragPositions.size(); i++) {
+                    assertTrue(Math.abs(dragPositions.get(i) - dragPositions.get(i - 1)) <= 2.520001);
+                }
+                assertEquals(90, marker.getCenterX(), 1e-9);
+                marker.centerXProperty().addListener((obs, before, after) -> positions.add(after.doubleValue()));
+                map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 169, 110, true));
+                map.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 170, 110, true));
+                map.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()
+                    && window.view.sceneSnapshot().equals(initial.withJuliaParameters(JuliaExplorer.point(170, 110)))));
+            fx(() -> {
+                assertEquals(cpuCalls, window.cpu.calls.get());
+                assertTrue(window.view.showsJuliaGpuFrame());
+                Image finalGpuFrame = imageView.getImage();
+                assertNotNull(lastAnimatedImage.get());
+                assertSame(lastAnimatedImage.get(), finalGpuFrame, "Committing the point must retain the published image");
+                assertEquals(lastAnimatedGpuCall.get(), window.runtime.calls(),
+                        "Committing the point must not dispatch another GPU frame");
+                double previous = 90;
+                for (double x : positions) {
+                    assertTrue(x >= previous - 1e-9 && x - previous <= 2.520001,
+                            "A click must advance through visible intermediate positions");
+                    previous = x;
+                }
+                assertEquals(170, previous, 1e-9);
+                ((Stage) map.getScene().getWindow()).close();
+                assertSame(finalGpuFrame, imageView.getImage());
+                assertTrue(window.view.canExportPng());
+                assertFalse(window.item("File", "Export PNG…").isDisable());
+                window.view.undoScene();
+                assertEquals(dragged, window.view.sceneSnapshot());
+                window.view.undoScene();
+                assertEquals(initial, window.view.sceneSnapshot());
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void closingParameterMapImmediatelyAfterPublicationCommitsTheVisiblePoint() throws Exception {
+        try (var window = new MainWindow()) {
+            var initial = fx(window.view::sceneSnapshot);
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            fx(() -> {
+                window.view.setOnRenderingChanged(active -> {
+                    // Close after GPU publication, before the animation timer moves the marker.
+                    if (!active) map.hide();
+                });
+                var root = map.getScene().getRoot();
+                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
+                root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> !map.isShowing()));
+            fx(() -> {
+                var committed = window.view.sceneSnapshot();
+                assertNotEquals(initial.juliaParameters(), committed.juliaParameters());
+                assertTrue(window.view.showsApproximateJuliaPoint(committed.juliaParameters()));
+                assertTrue(window.view.canExportPng());
+                return null;
+            });
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void unsupportedColoringKeepsTheVisiblePointAndAddsOneUndoStep(boolean histogram) throws Exception {
+        try (var window = new MainWindow()) {
+            var initial = fx(window.view::sceneSnapshot);
+            int cpuCalls = window.cpu.calls.get();
+            var errors = new AtomicReference<Throwable>();
+            var map = fx(() -> {
+                window.view.setOnRenderError(errors::set);
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
+            fx(() -> {
+                window.view.setOnRenderingChanged(active -> {
+                    if (active) return;
+                    window.view.setOnRenderingChanged(ignored -> {});
+                    if (histogram) {
+                        var item = (CheckMenuItem) window.item("Color", "Histogram Coloring");
+                        item.setSelected(true);
+                        item.fire();
+                    } else {
+                        window.view.setOrbitTrap(OrbitTrap.POINT);
+                    }
+                });
+                var root = map.getScene().getRoot();
+                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
+                root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle()));
+            fx(() -> {
+                assertNull(errors.get());
+                assertTrue(window.view.hasExportableFrame());
+                assertFalse(window.view.showsJuliaGpuFrame());
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                var scene = window.view.sceneSnapshot();
+                assertEquals(histogram, scene.coloring().histogramColoring());
+                assertEquals(histogram ? OrbitTrap.NONE : OrbitTrap.POINT, scene.coloring().orbitTrap());
+                assertNotEquals(initial.juliaParameters(), scene.juliaParameters());
+                assertEquals(scene, surface.completedRender().scene());
+                return null;
+            });
+            assertTrue(window.cpu.calls.get() > cpuCalls);
+            fx(() -> {
+                var changed = window.view.sceneSnapshot();
+                window.view.undoScene();
+                assertEquals(initial, window.view.sceneSnapshot());
+                window.view.redoScene();
+                assertEquals(changed, window.view.sceneSnapshot());
+                return null;
+            });
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void restoringASceneWithTheSameConstantCancelsTheMapDrag(boolean histogram) throws Exception {
+        try (var window = new MainWindow()) {
+            var initial = fx(window.view::sceneSnapshot);
+            var replacement = initial.withColoring(new ColoringSettings(
+                    PalettePreset.FIRE, PalettePreset.FIRE.stops(), initial.coloring().colorScale(),
+                    initial.coloring().offset(), histogram, initial.coloring().orbitTrap()));
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
+            var root = fx(() -> map.getScene().getRoot());
+            var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
+            double initialX = fx(marker::getCenterX);
+            fx(() -> {
+                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));
+            fx(() -> {
+                assertEquals(initial, window.view.sceneSnapshot(), "The drag must still be uncommitted");
+                window.view.applyScene(replacement);
+                assertEquals(replacement, window.view.sceneSnapshot());
+                assertEquals(!histogram, map.isShowing());
+                if (!histogram) {
+                    assertEquals(initialX, marker.getCenterX());
+                    root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 220, 90, false));
+                }
+                return null;
+            });
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            fx(() -> {
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                assertEquals(replacement, window.view.sceneSnapshot());
+                if (histogram) {
+                    assertEquals(replacement, surface.completedRender().scene());
+                } else {
+                    assertEquals(initialX, marker.getCenterX());
+                    assertTrue(window.view.showsApproximateJuliaPoint(replacement.juliaParameters()));
+                    assertEquals(FakeJuliaPreviewRuntime.expectedColor(
+                            replacement.coloring(), replacement.juliaParameters().real()), displayed(surface)[0]);
+                }
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void gpuRefusalOfAMainWindowRenderFallsBackWhileTheMapIsOpen() throws Exception {
+        try (var window = new MainWindow()) {
+            int cpuCalls = window.cpu.calls.get();
+            var errors = new AtomicReference<Throwable>();
+            var map = fx(() -> {
+                window.view.setOnRenderError(errors::set);
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
+            var iterations = new IterationSettings(123, 0);
+            window.runtime.setEmptyResult(true);
+            fx(() -> {
+                window.view.setIterations(iterations);
+                return null;
+            });
+            awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle()));
+            fx(() -> {
+                assertNull(errors.get());
+                assertFalse(window.view.juliaGpu());
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                assertEquals(iterations, surface.completedRender().scene().iterations());
+                return null;
+            });
+            assertTrue(window.cpu.calls.get() > cpuCalls);
+        }
+    }
+
+    @Test
+    void parameterMapClosesOnGpuRefusalWithoutRenderingOnCpu() throws Exception {
+        try (var window = new MainWindow()) {
+            int cpuCalls = window.cpu.calls.get();
+            var errors = new AtomicReference<Throwable>();
+            var map = fx(() -> {
+                window.view.setOnRenderError(errors::set);
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
+            var initial = fx(window.view::sceneSnapshot);
+            window.runtime.setEmptyResult(true);
+            fx(() -> {
+                var root = map.getScene().getRoot();
+                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
+                root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle() && errors.get() != null));
+            assertEquals(cpuCalls, window.cpu.calls.get());
+            assertEquals(initial, fx(window.view::sceneSnapshot));
+            assertTrue(fx(() -> window.item("Render", JuliaExplorer.TITLE).isDisable()));
+        }
+    }
+
+    private static MouseEvent pointer(javafx.event.EventType<MouseEvent> type, double x, double y, boolean down) {
+        return new MouseEvent(type, x, y, x, y, MouseButton.PRIMARY, 1, false, false, false, false,
+                down, false, false, false, false, true, null);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true, false", "true, true", "false, false", "false, true"})
+    void mainViewRenderPreservesTheFilteredMapFrame(boolean resize, boolean editing) throws Exception {
+        try (var window = new MainWindow()) {
+            window.runtime.showIsolatedBrightPixel();
+            var initial = fx(window.view::sceneSnapshot);
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
+            var root = fx(() -> map.getScene().getRoot());
+            var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
+            var surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().getFirst());
+            var imageView = fx(() -> (ImageView) surface.getChildrenUnmodifiable().getFirst());
+            double initialX = fx(marker::getCenterX);
+            double targetX = editing ? 220 : 143;
+            var targetPoint = JuliaExplorer.point(targetX, 90);
+            fx(() -> {
+                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                if (editing) root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, targetX, 90, true));
+                root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, targetX, 90, false));
+                return null;
+            });
+            if (editing) {
+                awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));
+            } else {
+                awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()
+                        && window.view.sceneSnapshot().juliaParameters().equals(targetPoint)));
+            }
+            var committedBeforeResize = fx(() -> window.view.sceneSnapshot().juliaParameters());
+            var firstUpdatedPixel = new AtomicInteger();
+            var firstUpdatedFrameUsesCommittedPoint = new AtomicReference<Boolean>();
+            fx(() -> {
+                int oldWidth = surface.renderWidth();
+                imageView.imageProperty().addListener((obs, before, after) -> {
+                    if (after != null && (!resize || after.getWidth() > oldWidth) && firstUpdatedFrameUsesCommittedPoint.get() == null) {
+                        firstUpdatedPixel.set(after.getPixelReader().getArgb(1, 1));
+                        firstUpdatedFrameUsesCommittedPoint.set(window.view.showsApproximateJuliaPoint(committedBeforeResize));
+                    }
+                });
+                if (resize) {
+                    window.stage.setWidth(window.stage.getWidth() * 1.5);
+                } else {
+                    window.view.setIterations(new IterationSettings(123, 0));
+                }
+                return null;
+            });
+            awaitCondition(() -> firstUpdatedFrameUsesCommittedPoint.get() != null);
+            fx(() -> {
+                assertEquals(!editing, firstUpdatedFrameUsesCommittedPoint.get());
+                assertEquals(0xff303030, firstUpdatedPixel.get());
+                assertTrue(map.isShowing());
+                if (editing) {
+                    assertEquals(initial.juliaParameters(), window.view.sceneSnapshot().juliaParameters());
+                } else {
+                    assertTrue(window.view.canExportPng());
+                }
+                return null;
+            });
+            if (editing) {
+                awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()
+                        && window.view.sceneSnapshot().juliaParameters().equals(targetPoint)));
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void escapeBeforeResizeDispatchKeepsTheFilteredFrameAndPng(boolean editing) throws Exception {
+        try (var window = new MainWindow()) {
+            window.runtime.showIsolatedBrightPixel();
+            var initialPoint = fx(() -> window.view.sceneSnapshot().juliaParameters());
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
+            var root = fx(() -> map.getScene().getRoot());
+            var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
+            var surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().getFirst());
+            double initialX = fx(marker::getCenterX);
+            if (editing) {
+                fx(() -> {
+                    root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                    root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                    return null;
+                });
+                awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));
+            }
+            var pointOnClose = new AtomicReference<JuliaParameters>();
+            int oldWidth = fx(() -> {
+                int width = surface.renderWidth();
+                window.view.widthProperty().addListener((obs, before, after) -> {
+                    if (!map.isShowing()) return;
+                    // The resize listener has scheduled work, but the debounce has not dispatched it.
+                    root.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
+                            "", "", javafx.scene.input.KeyCode.ESCAPE, false, false, false, false));
+                    pointOnClose.set(window.view.sceneSnapshot().juliaParameters());
+                });
+                window.stage.setWidth(window.stage.getWidth() * 1.5);
+                return width;
+            });
+            awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle()
+                    && surface.renderWidth() > oldWidth));
+            fx(() -> {
+                var image = ((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage();
+                assertEquals(surface.renderWidth(), image.getWidth());
+                assertEquals(0xff303030, image.getPixelReader().getArgb(1, 1));
+                assertEquals(!editing, initialPoint.equals(pointOnClose.get()));
+                assertEquals(pointOnClose.get(), window.view.sceneSnapshot().juliaParameters());
+                assertTrue(window.view.showsApproximateJuliaPoint(pointOnClose.get()));
+                assertTrue(window.view.canExportPng());
+                return null;
+            });
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true, false", "false, false", "true, true"})
+    void escapeBeforeQueuedNavigationKeepsTheMapPointAndPng(boolean zoom, boolean exceedsGpuLimit) throws Exception {
+        try (var window = new MainWindow()) {
+            window.runtime.showIsolatedBrightPixel();
+            if (exceedsGpuLimit) {
+                fx(() -> { window.view.setIterations(new IterationSettings(9990, 50)); return null; });
+                awaitCondition(() -> fx(window.view::isLatencyIdle));
+            } else if (!zoom) {
+                // The home viewport cannot pan past the preset bounds.
+                fx(() -> { window.view.zoom(true); return null; });
+                awaitCondition(() -> fx(window.view::isLatencyIdle));
+            }
+            var initial = fx(window.view::sceneSnapshot);
+            var errors = new AtomicReference<Throwable>();
+            var map = fx(() -> {
+                window.view.setOnRenderError(errors::set);
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
+            var root = fx(() -> map.getScene().getRoot());
+            var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
+            double initialX = fx(marker::getCenterX);
+            fx(() -> {
+                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));
+            var pointOnClose = fx(() -> {
+                if (zoom) {
+                    window.view.zoom(true);
+                } else {
+                    window.view.fireEvent(new ScrollEvent(ScrollEvent.SCROLL, 150, 100, 150, 100,
+                            false, false, false, false, false, false, 25, 0, 25, 0,
+                            ScrollEvent.HorizontalTextScrollUnits.NONE, 0,
+                            ScrollEvent.VerticalTextScrollUnits.NONE, 0, 0, null));
+                }
+                root.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
+                        "", "", javafx.scene.input.KeyCode.ESCAPE, false, false, false, false));
+                assertFalse(map.isShowing());
+                assertNotEquals(initial.viewport(), window.view.sceneSnapshot().viewport());
+                return window.view.sceneSnapshot().juliaParameters();
+            });
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            fx(() -> {
+                assertNull(errors.get());
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                var rendered = window.view.sceneSnapshot();
+                assertNotEquals(initial.juliaParameters(), pointOnClose);
+                assertEquals(pointOnClose, rendered.juliaParameters());
+                assertTrue(window.view.canExportPng());
+                if (exceedsGpuLimit) {
+                    assertEquals(rendered, surface.completedRender().scene());
+                } else {
+                    assertTrue(window.view.showsApproximateJuliaPoint(pointOnClose));
+                    var image = ((ImageView) surface.getChildrenUnmodifiable().getFirst()).getImage();
+                    assertEquals(0xff303030, image.getPixelReader().getArgb(1, 1));
+                }
+                return null;
+            });
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void gpuRefusalOnResizeRendersTheVisibleMapPointOnCpu(boolean escape) throws Exception {
+        try (var window = new MainWindow()) {
+            var initial = fx(window.view::sceneSnapshot);
+            var errors = new AtomicReference<Throwable>();
+            var map = fx(() -> {
+                window.view.setOnRenderError(errors::set);
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
+            var root = fx(() -> map.getScene().getRoot());
+            var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
+            double initialX = fx(marker::getCenterX);
+            fx(() -> {
+                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));
+            int oldWidth = fx(() -> {
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                int width = surface.renderWidth();
+                window.runtime.refuseFramesWiderThan(width);
+                if (escape) window.runtime.gateFramesWiderThan(width);
+                window.stage.setWidth(window.stage.getWidth() * 1.5);
+                return width;
+            });
+            if (escape) {
+                try {
+                    awaitCondition(() -> window.runtime.lastStartedWidth() > oldWidth);
+                    fx(() -> {
+                        root.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
+                                "", "", javafx.scene.input.KeyCode.ESCAPE, false, false, false, false));
+                        assertFalse(map.isShowing());
+                        return null;
+                    });
+                } finally {
+                    window.runtime.gateFramesWiderThan(Integer.MAX_VALUE);
+                    window.runtime.release();
+                }
+            }
+            awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle()));
+            fx(() -> {
+                assertNull(errors.get());
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                var restored = window.view.sceneSnapshot();
+                assertNotEquals(initial.juliaParameters(), restored.juliaParameters());
+                assertEquals(restored, surface.completedRender().scene());
+                assertTrue(window.view.canExportPng());
+                return null;
+            });
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true, false", "true, true", "false, false", "false, true"})
+    void gpuRefusalWhenChangingPaletteFallsBackToCpu(boolean mapOpen, boolean custom) throws Exception {
+        try (var window = new MainWindow()) {
+            var errors = new AtomicReference<Throwable>();
+            var map = fx(() -> {
+                window.view.setOnRenderError(errors::set);
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
+            fx(() -> {
+                if (!mapOpen) map.hide();
+                window.runtime.setEmptyResult(true);
+                if (custom) window.view.setPaletteStops(PalettePreset.FIRE.stops());
+                else window.view.setPalette(PalettePreset.FIRE);
+                return null;
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && !window.view.juliaGpu()
+                    && (window.view.hasExportableFrame() || errors.get() != null)));
+            fx(() -> {
+                assertNull(errors.get());
+                assertFalse(map.isShowing());
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                assertEquals(PalettePreset.FIRE.stops(), window.view.sceneSnapshot().coloring().paletteStops());
+                assertEquals(window.view.sceneSnapshot(), surface.completedRender().scene());
+                return null;
+            });
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void palettePublicationAfterMapCloseReenablesTheExportCommand(boolean custom) throws Exception {
+        try (var window = new MainWindow()) {
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
+            fx(() -> {
+                map.hide();
+                if (custom) window.view.setPaletteStops(PalettePreset.FIRE.stops());
+                else window.view.setPalette(PalettePreset.FIRE);
+                return null;
+            });
+            awaitCondition(() -> fx(window.view::canExportPng));
+            fx(() -> {
+                var export = window.item("File", "Export PNG…");
+                assertNotNull(export.getAccelerator());
+                assertFalse(export.isDisable(), "Publishing the palette must re-enable the export shortcut");
+                return null;
+            });
+        }
+    }
+
+    @Test
     void switchingJuliaGpuKeepsTheIterationLimitAResizePreserved() throws Exception {
         try (var window = new MainWindow()) {
             FractalSurface surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().stream()
@@ -663,6 +1321,7 @@ class JuliaGpuModeFxTest {
     /** A main window around the fake GPU runtime, showing Julia. */
     private static final class MainWindow implements AutoCloseable {
         final FakeJuliaPreviewRuntime runtime = new FakeJuliaPreviewRuntime();
+        final CountingBackend cpu = new CountingBackend();
         Stage stage;
         FractalView view;
         MainMenuBar menuBar;
@@ -671,7 +1330,7 @@ class JuliaGpuModeFxTest {
             var bookmarks = java.nio.file.Files.createTempDirectory("fractallens-julia-gpu-bookmarks");
             fx(() -> {
                 stage = new Stage();
-                view = new FractalView(JULIA, false, new FractalRenderService(new CountingBackend(), runtime));
+                view = new FractalView(JULIA, false, new FractalRenderService(cpu, runtime));
                 menuBar = new MainMenuBar(stage, view, JULIA, () -> {},
                         new com.shangin.fractal.app.BookmarkStore(bookmarks));
                 BorderPane root = new BorderPane(view);

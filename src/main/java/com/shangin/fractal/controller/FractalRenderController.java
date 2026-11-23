@@ -156,9 +156,16 @@ public final class FractalRenderController implements AutoCloseable {
 
     private record FallbackApplied(long generation, Runnable onApplied) {}
 
-    private record GpuRender(FractalScene scene, RenderTarget target, Viewport defaultViewport, RenderJob job) {
+    private record GpuRender(FractalScene scene, RenderTarget target, Viewport defaultViewport,
+                             RenderJob job, boolean exploringJulia, boolean requiresGpu, Runnable beforeCpuFallback) {
         GpuRender withColoring(ColoringSettings coloring) {
-            return new GpuRender(scene.withColoring(coloring), target, defaultViewport, job);
+            // Palette work uses the same presentation as the frame it recolors and can fall back to CPU.
+            return new GpuRender(scene.withColoring(coloring), target, defaultViewport, job, exploringJulia,
+                    false, beforeCpuFallback);
+        }
+
+        void prepareCpuFallback() {
+            if (beforeCpuFallback != null) beforeCpuFallback.run();
         }
     }
 
@@ -403,6 +410,64 @@ public final class FractalRenderController implements AutoCloseable {
 
     public void render(FractalScene scene, RenderTarget target,
                        Viewport defaultViewport, boolean preserveIterationLimit) {
+        render(scene, target, defaultViewport, preserveIterationLimit, juliaGpuEnabled);
+    }
+
+    /** Uses the GPU for Julia map frames and leaves the last image visible on failure. */
+    public void renderJuliaExplorerPoint(FractalScene scene, RenderTarget target, Viewport defaultViewport) {
+        render(scene, target, defaultViewport, false, true, true, null);
+    }
+
+    /** Preserves the map frame during a main-window render and allows CPU fallback. */
+    public void renderJuliaExplorerMainView(FractalScene scene, RenderTarget target, Viewport defaultViewport,
+                                         boolean preserveIterationLimit, Runnable beforeCpuFallback) {
+        render(scene, target, defaultViewport, preserveIterationLimit, juliaGpuEnabled, true,
+                Objects.requireNonNull(beforeCpuFallback));
+    }
+
+    public boolean supportsJuliaExplorer(FractalScene scene, RenderTarget target, Viewport defaultViewport,
+                                         boolean preserveIterationLimit) {
+        int iterations = iterationLimit(scene, defaultViewport, FormulaDefinition.forScene(scene), preserveIterationLimit);
+        return !DeepZoomRenderPolicy.isDeepZoom(scene, target)
+                && juliaGpu.supports(new RenderJob(FormulaDefinition.forScene(scene), scene.viewport(),
+                        target.width(), target.height(), iterations), scene.coloring());
+    }
+
+    private int iterationLimit(FractalScene scene, Viewport defaultViewport, FormulaDefinition formula,
+                               boolean preserveIterationLimit) {
+        // Resizing and panning retain the pixel scale, even if the resized default viewport
+        // changes the zoom policy. Reuse the limit only for the same formula.
+        if (preserveIterationLimit) {
+            if (activeFrame != null && formula.equals(formulaDefinition)) {
+                return activeFrame.request().maxIterations();
+            }
+            if (gpuLimitJob != null && formula.equals(gpuLimitJob.formula())) {
+                return gpuLimitJob.maxIterations();
+            }
+        }
+        return scene.iterations().maxIterations(defaultViewport.scaleExact(), scene.viewport().scaleExact());
+    }
+
+    public boolean showsExplorerFrame(FractalScene scene) {
+        return gpuRender != null && gpuRender.exploringJulia() && scene.equals(gpuShownScene);
+    }
+
+    public boolean isRenderingExplorerMainView() {
+        return gpuInFlight && gpuRender != null && gpuRender.beforeCpuFallback() != null;
+    }
+
+    public boolean isRenderingExplorerMainView(FractalScene scene) {
+        return isRenderingExplorerMainView() && scene.equals(gpuRender.scene());
+    }
+
+    private void render(FractalScene scene, RenderTarget target, Viewport defaultViewport,
+                        boolean preserveIterationLimit, boolean allowJuliaGpu) {
+        render(scene, target, defaultViewport, preserveIterationLimit, allowJuliaGpu, false, null);
+    }
+
+    private void render(FractalScene scene, RenderTarget target, Viewport defaultViewport,
+                        boolean preserveIterationLimit, boolean allowJuliaGpu, boolean juliaExplorerPreview,
+                        Runnable beforeCpuFallback) {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(target);
         Objects.requireNonNull(defaultViewport);
@@ -446,19 +511,7 @@ public final class FractalRenderController implements AutoCloseable {
         BigDecimal zoomFactor = defaultViewport.scaleExact()
                 .divide(viewport.scaleExact(), viewport.mathContext());
 
-        int maxIterations =
-                scene.iterations().maxIterations(
-                        defaultViewport.scaleExact(),
-                        viewport.scaleExact()
-                );
-        // Resizing and panning retain the pixel scale, so keep their samples
-        // compatible even if the resized default viewport changes zoom policy.
-        if (preserveIterationLimit && activeFrame != null) {
-            maxIterations = activeFrame.request().maxIterations();
-        } else if (preserveIterationLimit && gpuLimitJob != null
-                && gpuLimitJob.formula().equals(formulaDefinition)) {
-            maxIterations = gpuLimitJob.maxIterations();
-        }
+        int maxIterations = iterationLimit(scene, defaultViewport, requestedFormula, preserveIterationLimit);
         zoomChangedHandler.accept(zoomFactor);
         iterationsChangedHandler.accept(maxIterations);
 
@@ -477,8 +530,17 @@ public final class FractalRenderController implements AutoCloseable {
                                 ? SampleAccuracy.CERTIFIED_FP32 : SampleAccuracy.CPU_REFERENCE
                 );
 
-        if (juliaGpuEnabled && !deepZoom && juliaGpu.supports(renderRequest, scene.coloring())) {
-            renderOnGpu(scene, target, defaultViewport, renderRequest, renderGeneration);
+        boolean requiresGpu = juliaExplorerPreview && beforeCpuFallback == null;
+        if (allowJuliaGpu && !deepZoom && juliaGpu.supports(renderRequest, scene.coloring())) {
+            renderOnGpu(new GpuRender(scene, target, defaultViewport, renderRequest, juliaExplorerPreview,
+                    requiresGpu, beforeCpuFallback), renderGeneration);
+            return;
+        }
+        if (requiresGpu) {
+            invalidateGpuFrames();
+            gpuRender = null;
+            reportFailure(renderGeneration, new IllegalStateException(
+                    "Julia Parameter Map requires a GPU-supported view and coloring."));
             return;
         }
         // The CPU path owns the frame from here; late GPU results must not replace it.
@@ -486,6 +548,7 @@ public final class FractalRenderController implements AutoCloseable {
         gpuRender = null;
         gpuShownScene = null;
         gpuLimitJob = null;
+        if (beforeCpuFallback != null) beforeCpuFallback.run();
 
         previewRequest = renderRequest;
         surface.prepareWidePreview(renderRequest, scene.coloring(), scene.iterations(), widePreviewSettings);
@@ -801,8 +864,7 @@ public final class FractalRenderController implements AutoCloseable {
      * CPU frame are dropped from reuse: the GPU frame has none, so a later CPU render
      * starts from the completed-frame cache or a fresh frame.
      */
-    private void renderOnGpu(FractalScene scene, RenderTarget target, Viewport defaultViewport,
-                             RenderJob job, long renderGeneration) {
+    private void renderOnGpu(GpuRender render, long renderGeneration) {
         renderService.cancelCurrent();
         previewRequest = null;
         surface.clearWidePreview();
@@ -813,8 +875,8 @@ public final class FractalRenderController implements AutoCloseable {
         activeFrame = null;
         retainedFrame = null;
         gpuGeneration = renderGeneration;
-        gpuLimitJob = job;
-        submitGpu(new GpuRender(scene, target, defaultViewport, job), null);
+        gpuLimitJob = render.job();
+        submitGpu(render, null);
     }
 
     private void submitGpu(GpuRender render, Runnable onApplied) {
@@ -823,7 +885,8 @@ public final class FractalRenderController implements AutoCloseable {
         gpuInFlight = true;
         gpuPaletteOnlyCancel = false;
         long sequence = ++gpuSequence;
-        juliaGpu.submit(new JuliaGpuRenderer.Request(sequence, render.job(), render.scene().coloring()),
+        juliaGpu.submit(new JuliaGpuRenderer.Request(
+                        sequence, render.job(), render.scene().coloring(), render.exploringJulia()),
                 new JuliaGpuRenderer.Listener() {
                     @Override public void rendered(JuliaGpuRenderer.Request request, int[] colors) {
                         try {
@@ -854,17 +917,21 @@ public final class FractalRenderController implements AutoCloseable {
 
                     @Override public void unavailable(JuliaGpuRenderer.Request request) {
                         if (closed) return;
-                        // The runtime is disabled now, even when the request was superseded: turn
-                        // the mode off rather than show it as active.
+                        GpuRender latest = gpuRender;
+                        // A refusal disables the runtime even when the request was superseded.
                         if (juliaGpuEnabled) {
-                            System.getLogger(FractalRenderController.class.getName()).log(
-                                    System.Logger.Level.WARNING, "Julia GPU kernel unavailable; rendering on CPU");
+                            if (latest != null && !latest.requiresGpu()) {
+                                System.getLogger(FractalRenderController.class.getName()).log(
+                                        System.Logger.Level.WARNING, "Julia GPU kernel unavailable; rendering on CPU");
+                            }
                             juliaGpuEnabled = false;
                             juliaGpuChangedHandler.accept(false);
                         }
-                        GpuRender latest = gpuRender;
-                        // The CPU path already owns the frame after a newer CPU render.
                         if (latest == null) return;
+                        if (latest.requiresGpu()) {
+                            failed(request, new IllegalStateException("Julia Parameter Map GPU rendering became unavailable."));
+                            return;
+                        }
                         // The CPU render keeps the GPU job's iteration limit (gpuLimitJob), which a
                         // resize may have preserved; the CPU path then clears the GPU state.
                         if (request.sequence() == gpuSequence) {
@@ -873,6 +940,7 @@ public final class FractalRenderController implements AutoCloseable {
                             Runnable applied = pendingGpuRecolor != null ? pendingGpuRecolor : gpuOnApplied;
                             invalidateGpuFrames();
                             fallbackAppliedRequest = applied;
+                            latest.prepareCpuFallback();
                             render(latest.scene(), latest.target(), latest.defaultViewport(), true);
                             return;
                         }
@@ -884,6 +952,7 @@ public final class FractalRenderController implements AutoCloseable {
                         FractalScene shown = gpuShownScene == null ? latest.scene()
                                 : latest.scene().withColoring(gpuShownScene.coloring());
                         invalidateGpuFrames();
+                        latest.prepareCpuFallback();
                         render(shown, latest.target(), latest.defaultViewport(), true);
                     }
 

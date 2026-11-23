@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 final class JuliaGpuRenderer implements AutoCloseable {
 
     /** One frame to render with the given coloring. */
-    record Request(long sequence, RenderJob job, ColoringSettings coloring) {
+    record Request(long sequence, RenderJob job, ColoringSettings coloring, boolean filterBrightPoints) {
         Request {
             Objects.requireNonNull(job);
             Objects.requireNonNull(coloring);
@@ -117,6 +117,12 @@ final class JuliaGpuRenderer implements AutoCloseable {
                 release(colors);
                 resultExecutor.execute(() -> listener.unavailable(request));
                 return;
+            }
+            if (request.filterBrightPoints()) {
+                int[] filtered = acquire(colors.length);
+                JuliaBrightPointFilter.apply(colors, filtered, request.job().width(), request.job().height());
+                release(colors);
+                colors = filtered;
             }
             int[] rendered = colors;
             colors = null;

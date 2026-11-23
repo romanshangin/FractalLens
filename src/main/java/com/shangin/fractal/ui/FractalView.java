@@ -50,6 +50,9 @@ public class FractalView extends StackPane {
     private static final Duration RESIZE_SETTLE_DELAY = Duration.millis(75);
     private final PauseTransition resizeRender = new PauseTransition(RESIZE_SETTLE_DELAY);
     private boolean resizePending;
+    private boolean resizeKeepsExplorerFrame;
+    private boolean navigationKeepsExplorerFrame;
+    private JuliaExplorer juliaExplorer;
 
     // Coalesce wheel events, but flush immediately when a pinch gesture finishes.
     private static final double SWIPE_PAN_FRACTION = 0.2;
@@ -210,6 +213,9 @@ public class FractalView extends StackPane {
         showLoadingScreen(false);
         renderController.setOnRenderStatusChanged(status -> {
             modeIndicator.setRenderStatus(status);
+            if (status.state() == RenderStatus.State.FAILED && juliaExplorer != null) {
+                juliaExplorer.closeAfterRenderFailure();
+            }
             // A failed frame, including a failed Julia GPU palette frame, ends palette animation
             // instead of retrying every tick.
             if (status.state() == RenderStatus.State.FAILED && colorCycling) stopColorCyclingForSceneChange();
@@ -332,6 +338,7 @@ public class FractalView extends StackPane {
         renderController.cancelCurrent();
         showLoadingScreen(true);
         rememberedViews.put(scene.fractal(), camera.viewport());
+        resizeKeepsExplorerFrame = false;
         camera.setPreset(preset, width, height);
         if (destination != null && camera.canGoTo(destination, renderGridWidth(), renderGridHeight())) {
             camera.goTo(destination, width, height, renderGridWidth(), renderGridHeight());
@@ -553,17 +560,11 @@ public class FractalView extends StackPane {
         ColoringSettings settings = new ColoringSettings(
                 preset, preset.stops(), scene.coloring().colorScale(), scene.coloring().offset(),
                 scene.coloring().histogramColoring(), scene.coloring().orbitTrap());
+        boolean mapOpen = juliaExplorer != null;
         changeScene(scene.withColoring(settings));
         colorCycleOffset = settings.offset();
         configurePalette(preset);
-        renderController.cancelRecolor();
-        if (settings.histogramColoring() || settings.orbitTrap() != OrbitTrap.NONE) {
-            renderController.cancelCurrent();
-            fractalSurface.invalidateRefinement();
-            recalculate();
-        } else {
-            renderController.recolor(settings);
-        }
+        renderPaletteChange(settings, mapOpen);
     }
 
     void setIterations(IterationSettings settings) {
@@ -572,6 +573,70 @@ public class FractalView extends StackPane {
         renderController.cancelCurrent();
         fractalSurface.invalidateRefinement();
         recalculate();
+    }
+
+    void setJuliaExplorer(JuliaExplorer explorer) {
+        if (explorer == null && juliaExplorer != null) {
+            resizeKeepsExplorerFrame |= resizePending;
+            navigationKeepsExplorerFrame |= hasDeferredNavigationRender();
+        }
+        juliaExplorer = explorer;
+        modeIndicator.setJuliaExplorerOpen(explorer != null);
+    }
+
+    boolean supportsJuliaExplorer() {
+        return supportsJuliaExplorer(sceneSnapshot());
+    }
+
+    private boolean supportsJuliaExplorer(FractalScene candidate) {
+        if (fractalSurface.renderWidth() < 2 || fractalSurface.renderHeight() < 2) return false;
+        return renderController.supportsJuliaExplorer(candidate,
+                new RenderTarget(fractalSurface.renderWidth(), fractalSurface.renderHeight()),
+                camera.defaultViewport((int) getWidth(), (int) getHeight()), false);
+    }
+
+    void startJuliaExplorerRender() {
+        renderController.setJuliaGpu(true);
+        renderExplorerPoint(sceneSnapshot().juliaParameters());
+    }
+
+    void observeExplorerFrame(JuliaFramePacing pacing) {
+        fractalSurface.observeJuliaFrame(pacing);
+    }
+
+    boolean showsApproximateJuliaPoint(JuliaParameters point) {
+        return fractalSurface.showsApproximateJuliaPoint(point);
+    }
+
+    boolean showsExplorerPoint(JuliaParameters point) {
+        return renderController.showsExplorerFrame(sceneSnapshot().withJuliaParameters(point));
+    }
+
+    void renderExplorerPoint(JuliaParameters point) {
+        stopColorCyclingForSceneChange();
+        renderController.cancelCurrent();
+        var target = new RenderTarget(fractalSurface.renderWidth(), fractalSurface.renderHeight(), renderPriority);
+        var defaultViewport = camera.defaultViewport((int) getWidth(), (int) getHeight());
+        renderController.renderJuliaExplorerPoint(sceneSnapshot().withJuliaParameters(point), target, defaultViewport);
+    }
+
+    private boolean hasDeferredNavigationRender() {
+        return interactionRender.hasPendingRender() || panning && panChanged;
+    }
+
+    boolean hasPendingMainViewRender() {
+        return resizePending || hasDeferredNavigationRender() || renderController.isRenderingExplorerMainView();
+    }
+
+    void keepExplorerPointOnClose(JuliaParameters point) {
+        if (!resizePending && !hasDeferredNavigationRender() && !isLatencyIdle() && isJuliaGpuAvailable()
+                && !renderController.isRenderingExplorerMainView(sceneSnapshot().withJuliaParameters(point))) {
+            renderExplorerPoint(point);
+        }
+    }
+
+    void commitExplorerPoint(JuliaParameters point) {
+        changeScene(sceneSnapshot().withJuliaParameters(point));
     }
 
     void setJuliaParameters(JuliaParameters parameters) {
@@ -590,15 +655,20 @@ public class FractalView extends StackPane {
         ColoringSettings settings = new ColoringSettings(
                 current.palette(), stops, current.colorScale(), current.offset(),
                 current.histogramColoring(), current.orbitTrap());
+        boolean mapOpen = juliaExplorer != null;
         changeScene(scene.withColoring(settings));
         configurePalette(stops);
+        renderPaletteChange(settings, mapOpen);
+    }
+
+    private void renderPaletteChange(ColoringSettings settings, boolean mapOpen) {
         renderController.cancelRecolor();
-        if (settings.histogramColoring() || settings.orbitTrap() != OrbitTrap.NONE) {
+        if (mapOpen || settings.histogramColoring() || settings.orbitTrap() != OrbitTrap.NONE) {
             renderController.cancelCurrent();
             fractalSurface.invalidateRefinement();
             recalculate();
         } else {
-            renderController.recolor(settings);
+            renderController.recolor(settings, () -> sceneChangedHandler.accept(sceneSnapshot()));
         }
     }
 
@@ -679,7 +749,8 @@ public class FractalView extends StackPane {
     }
 
     private void advanceColorCycle(long now) {
-        if (!colorCycling || rendering || colorCyclePaused || !fractalSurface.hasCompletedFrame()) {
+        if (!colorCycling || rendering || colorCyclePaused || !fractalSurface.hasCompletedFrame()
+                || juliaExplorer != null && juliaExplorer.isEditing()) {
             lastCycleTick = 0L;
             return;
         }
@@ -726,6 +797,8 @@ public class FractalView extends StackPane {
             colorCyclePaused = true;
         } else {
             colorCyclePaused = false;
+            // An ordinary GPU render can complete on the CPU if the runtime refuses the job.
+            if (juliaExplorer != null && !renderController.juliaGpu()) juliaExplorer.closeWithoutCommit();
         }
         renderingChangedHandler.accept(active);
     }
@@ -902,7 +975,7 @@ public class FractalView extends StackPane {
 
         if (trackpadPanSourceViewport == null) {
             trackpadPanSourceViewport = sourceViewport;
-            interactionRender.cancel();
+            cancelNavigationRender();
             renderController.cancelCurrent();
             colorCyclePaused = true;
         }
@@ -923,7 +996,13 @@ public class FractalView extends StackPane {
             trackpadPanSourceViewport = null;
         }
 
-        recalculate(preserveIterationLimit);
+        renderAfterNavigation(preserveIterationLimit);
+    }
+
+    private void renderAfterNavigation(boolean preserveIterationLimit) {
+        boolean keepExplorerFrame = navigationKeepsExplorerFrame;
+        navigationKeepsExplorerFrame = false;
+        recalculate(preserveIterationLimit, keepExplorerFrame);
     }
 
     private void configureTrackpadGestures() {
@@ -1022,7 +1101,7 @@ public class FractalView extends StackPane {
         }
 
         stopColorCyclingForSceneChange();
-        interactionRender.cancel();
+        cancelNavigationRender();
         renderController.cancelCurrent();
         fractalSurface.showPreview(camera.viewport());
         camera.snapToRenderGrid(
@@ -1038,6 +1117,7 @@ public class FractalView extends StackPane {
         latency().input("resize");
         dismissContextMenu();
         resizePending = true;
+        resizeKeepsExplorerFrame |= juliaExplorer != null || navigationKeepsExplorerFrame;
         recordScene();
         stopColorCyclingForSceneChange();
         cancelSceneInteraction();
@@ -1085,10 +1165,12 @@ public class FractalView extends StackPane {
         fractalSurface.resizeBuffer(width, height);
         camera.resize(width, height, oldRenderHeight, fractalSurface.renderHeight());
         resizePending = false;
+        boolean keepExplorerFrame = resizeKeepsExplorerFrame;
+        resizeKeepsExplorerFrame = false;
         resetPriority();
         resizingScene = true;
         try {
-            recalculate(!resizeDefaultView);
+            recalculate(!resizeDefaultView, keepExplorerFrame);
         } finally {
             resizingScene = false;
         }
@@ -1099,6 +1181,10 @@ public class FractalView extends StackPane {
     }
 
     private void recalculate(boolean preserveIterationLimit) {
+        recalculate(preserveIterationLimit, false);
+    }
+
+    private void recalculate(boolean preserveIterationLimit, boolean keepExplorerFrame) {
         int logicalWidth = (int) getWidth();
         int logicalHeight = (int) getHeight();
 
@@ -1119,24 +1205,31 @@ public class FractalView extends StackPane {
                         logicalHeight
                 );
 
+        RenderTarget target = new RenderTarget(renderWidth, renderHeight, renderPriority);
         scene = scene.withViewport(camera.viewport());
+        if (!resizingScene && juliaExplorer != null && scene.fractal() == FractalPreset.JULIA
+                && !renderController.supportsJuliaExplorer(scene, target, defaultViewport, preserveIterationLimit)) {
+            scene = scene.withJuliaParameters(juliaExplorer.closeForMainViewRender());
+        }
         if (resizingScene) history.replaceCurrent(scene);
         else if (!restoringScene && !continuousGesture) history.record(scene);
         sceneChangedHandler.accept(scene);
         viewportChangedHandler.accept(scene.viewport());
 
-        RenderTarget target = new RenderTarget(
-                renderWidth,
-                renderHeight,
-                renderPriority
-        );
-
-        renderController.render(
-                scene,
-                target,
-                defaultViewport,
-                preserveIterationLimit
-        );
+        JuliaExplorer explorer = juliaExplorer;
+        if (explorer != null || keepExplorerFrame && scene.fractal() == FractalPreset.JULIA
+                && renderController.juliaGpu()) {
+            JuliaParameters point = explorer != null ? explorer.prepareForMainViewRender() : scene.juliaParameters();
+            renderController.renderJuliaExplorerMainView(scene.withJuliaParameters(point), target, defaultViewport,
+                    preserveIterationLimit, () -> {
+                        if (explorer != null) {
+                            explorer.closeWithoutCommit();
+                            commitExplorerPoint(point);
+                        }
+                    });
+        } else {
+            renderController.render(scene, target, defaultViewport, preserveIterationLimit);
+        }
     }
 
     private void recordScene() {
@@ -1145,8 +1238,17 @@ public class FractalView extends StackPane {
     }
 
     private void changeScene(FractalScene next) {
-        history.record(sceneSnapshot());
-        scene = next.withViewport(camera.viewport());
+        FractalScene previous = sceneSnapshot();
+        history.record(previous);
+        next = next.withViewport(previous.viewport());
+        // Include the point already on screen in the same history entry as the edit
+        // that requires CPU rendering. An explicit change to c owns its own value.
+        if (juliaExplorer != null && juliaExplorer.isEditing()
+                && next.juliaParameters().equals(previous.juliaParameters())
+                && !supportsJuliaExplorer(next)) {
+            next = next.withJuliaParameters(juliaExplorer.closeForMainViewRender());
+        }
+        scene = next;
         recordScene();
     }
 
@@ -1188,8 +1290,13 @@ public class FractalView extends StackPane {
         restoreScene(replacement);
     }
 
-    private void cancelSceneInteraction() {
+    private void cancelNavigationRender() {
         interactionRender.cancel();
+        navigationKeepsExplorerFrame = false;
+    }
+
+    private void cancelSceneInteraction() {
+        cancelNavigationRender();
         continuousGesture = false;
         trackpadScrollActive = false;
         trackpadPanSourceViewport = null;
@@ -1202,6 +1309,9 @@ public class FractalView extends StackPane {
         dismissContextMenu();
         stopColorCyclingForSceneChange();
         cancelSceneInteraction();
+        if (juliaExplorer != null && replacement.fractal() == FractalPreset.JULIA) {
+            juliaExplorer.resetToParameters(replacement.juliaParameters());
+        }
         renderController.cancelCurrent();
         // AA pixels stay valid when only the antialiasing modes differ, so the controller
         // can change the presentation in place and keep finished AA work.
@@ -1211,6 +1321,7 @@ public class FractalView extends StackPane {
         // Restored snapshots own their scale; an earlier resize must not rescale them.
         resizeRender.stop();
         resizePending = false;
+        resizeKeepsExplorerFrame = false;
         fractalSurface.resizeBuffer((int) getWidth(), (int) getHeight());
         if (scene.fractal() != replacement.fractal()) {
             rememberedViews.put(scene.fractal(), camera.viewport());
@@ -1235,7 +1346,7 @@ public class FractalView extends StackPane {
         if (loadingScreen != null) loadingScreen.close();
         modeIndicator.close();
         contextMenu.close();
-        interactionRender.cancel();
+        cancelNavigationRender();
         resizeRender.stop();
         colorCycleTimer.stop();
         renderController.close();
@@ -1281,6 +1392,10 @@ public class FractalView extends StackPane {
         dismissContextMenu();
         stopColorCyclingForSceneChange();
         renderController.setJuliaGpu(enabled);
+        if (!enabled) {
+            resizeKeepsExplorerFrame = false;
+            navigationKeepsExplorerFrame = false;
+        }
         if (scene.fractal() == FractalPreset.JULIA) {
             renderController.cancelCurrent();
             fractalSurface.invalidateRefinement();
@@ -1294,10 +1409,15 @@ public class FractalView extends StackPane {
         modeIndicator.setExportStatus(message);
     }
 
+    boolean canExportPng() {
+        return hasExportableFrame() || renderController.showsExplorerFrame(sceneSnapshot());
+    }
+
     RenderTarget exportTarget() {
         CompletedRender completed = fractalSurface.completedRender();
-        if (completed == null) throw new IllegalStateException("No completed frame is available");
-        return new RenderTarget(completed.frame().job().width(), completed.frame().job().height());
+        if (completed != null) return new RenderTarget(completed.frame().job().width(), completed.frame().job().height());
+        if (canExportPng()) return new RenderTarget(fractalSurface.renderWidth(), fractalSurface.renderHeight());
+        throw new IllegalStateException("No completed frame is available");
     }
 
     public void exportAntialiasedPng(
@@ -1324,11 +1444,9 @@ public class FractalView extends StackPane {
     public String suggestedExportFileName() {
         CompletedRender completed = fractalSurface.completedRender();
 
-        if (completed == null) {
-            return "fractal.png";
-        }
+        if (completed == null && !canExportPng()) return "fractal.png";
 
-        FractalScene completedScene = completed.scene();
+        FractalScene completedScene = completed == null ? sceneSnapshot() : completed.scene();
         Viewport viewport = completedScene.viewport();
 
         return ExportFileName.create(
@@ -1393,7 +1511,7 @@ public class FractalView extends StackPane {
 
             if (!panChanged) {
                 stopColorCyclingForSceneChange();
-                interactionRender.cancel();
+                cancelNavigationRender();
                 renderController.cancelCurrent();
                 panChanged = true;
             }
@@ -1416,7 +1534,7 @@ public class FractalView extends StackPane {
                 );
 
                 resetPriority();
-                recalculate(true);
+                renderAfterNavigation(true);
             } else {
                 colorCyclePaused = false;
                 lastCycleTick = 0L;

@@ -169,7 +169,7 @@ public class MainView extends BorderPane {
             setExportStatus("PNG export cancelled.");
             return;
         }
-        if (!fractalView.hasExportableFrame()) {
+        if (!fractalView.canExportPng()) {
             showError(
                     "Export unavailable",
                     fractalView.showsJuliaGpuFrame()

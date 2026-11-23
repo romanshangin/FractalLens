@@ -39,6 +39,7 @@ final class RenderModeIndicator extends Label implements AutoCloseable {
     private WidePreviewSnapshot preview;
     private String exportStatus = "";
     private boolean deepZoom;
+    private boolean juliaExplorerOpen;
     private RenderStatus status = new RenderStatus(RenderStatus.State.IDLE, 0);
     private double progress;
     private BigDecimal zoom = BigDecimal.ONE;
@@ -177,8 +178,16 @@ final class RenderModeIndicator extends Label implements AutoCloseable {
         update();
     }
 
+    void setJuliaExplorerOpen(boolean open) {
+        juliaExplorerOpen = open;
+        if (open) details.hide();
+        setTooltip(open ? null : details);
+        update();
+    }
+
     private void update() {
-        String mode = deepZoom ? "Deep Zoom" : "Standard";
+        boolean showsDeepZoom = deepZoom && !juliaExplorerOpen;
+        String mode = showsDeepZoom ? "Deep Zoom" : "Standard";
         String state = switch (status.state()) {
             case IDLE -> "Waiting";
             // Progress covers the whole frame, including any antialiasing pass.
@@ -187,12 +196,12 @@ final class RenderModeIndicator extends Label implements AutoCloseable {
             case CANCELLED -> "Interrupted";
             case FAILED -> "Failed";
         };
-        setText(mode + " · " + state + (exportStatus.isEmpty() ? "" : " · " + exportStatus));
+        setText(juliaExplorerOpen ? mode : mode + " · " + state + (exportStatus.isEmpty() ? "" : " · " + exportStatus));
         String widest = RenderValueFormat.widestText(getText());
-        String color = deepZoom ? "#e89a91" : "#7dc9e8";
+        String color = showsDeepZoom ? "#e89a91" : "#7dc9e8";
         dot.setFill(Color.web(color));
         spinner.setStyle("-fx-progress-color: " + color + "; -fx-padding: 0;");
-        boolean rendering = status.state() == RenderStatus.State.RENDERING;
+        boolean rendering = !juliaExplorerOpen && status.state() == RenderStatus.State.RENDERING;
         spinner.setVisible(rendering);
         dot.setVisible(!rendering);
         // Mode descriptions belong in Help; hover keeps only the values behind the frame.
@@ -207,8 +216,8 @@ final class RenderModeIndicator extends Label implements AutoCloseable {
                     + (preview.plan().physicalStep() > preview.plan().settings().pixelStep()
                     ? " — limited by preview budget" : "");
         }
-        details.setText(values);
-        setAccessibleText(getText() + ". " + values.replace('\n', ' '));
+        details.setText(juliaExplorerOpen ? "" : values);
+        setAccessibleText(juliaExplorerOpen ? getText() : getText() + ". " + values.replace('\n', ' '));
         setPrefWidth(snappedLeftInset() + ICON_SIZE + ICON_GAP
                 + Math.max(textWidth(getText()), textWidth(widest.replace('0', widestDigit())))
                 + snappedRightInset());
