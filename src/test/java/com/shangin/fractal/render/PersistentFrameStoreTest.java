@@ -22,11 +22,11 @@ import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
@@ -103,7 +103,8 @@ class PersistentFrameStoreTest {
     private Restored renderAgain(RenderJob job) throws Exception {
         RenderFrame frame = RenderFrame.create(job);
         CountingBackend counting = new CountingBackend();
-        List<RenderRegion> regions = new ArrayList<>();
+        // Tile workers report completed regions concurrently.
+        List<RenderRegion> regions = new CopyOnWriteArrayList<>();
         try (PersistentFrameRenderBackend backend = new PersistentFrameRenderBackend(counting, store())) {
             backend.render(frame, () -> false, regions::add, null);
         }
