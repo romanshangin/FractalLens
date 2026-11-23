@@ -11,6 +11,12 @@ public interface RenderBackend extends AutoCloseable {
         return true;
     }
 
+    /**
+     * Calculates the frame's missing pixels on the calling thread's behalf.
+     *
+     * <p>{@code regionCompleted} may be invoked concurrently from several worker threads,
+     * so it must be thread-safe; it is not called after this method returns.
+     */
     RenderFrame render(
             RenderFrame frame,
             BooleanSupplier cancelled,

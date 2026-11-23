@@ -6,12 +6,47 @@ import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class DirectDoubleRenderBackendTest {
+
+    @Test
+    void reportsCompletedTilesConcurrentlyFromWorkerThreads() throws Exception {
+        // Two 32-pixel tiles on two workers: each tile's callback waits for the other,
+        // so the barrier only trips when both callbacks run at the same time. Callers
+        // must therefore collect regions in a thread-safe container.
+        RenderJob job = new RenderJob(FormulaDefinition.forPreset(FractalPreset.MANDELBROT, OrbitTrap.NONE),
+                new Viewport(-0.75, 0.1, 2.4), 40, 28, 200);
+        RenderFrame frame = RenderFrame.create(job);
+        CyclicBarrier bothTilesReporting = new CyclicBarrier(2);
+        Set<Thread> reportingThreads = ConcurrentHashMap.newKeySet();
+        List<Throwable> failures = new CopyOnWriteArrayList<>();
+
+        try (DirectDoubleRenderBackend backend = new DirectDoubleRenderBackend(new ParallelFractalCalculator(2))) {
+            backend.render(frame, () -> false, region -> {
+                reportingThreads.add(Thread.currentThread());
+                try {
+                    bothTilesReporting.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException | BrokenBarrierException | TimeoutException exception) {
+                    failures.add(exception);
+                }
+            }, null);
+        }
+
+        assertEquals(List.of(), failures, "both tiles report their regions at the same time");
+        assertEquals(2, reportingThreads.size());
+        assertFalse(reportingThreads.contains(Thread.currentThread()));
+        assertTrue(frame.isComplete());
+    }
 
     @Test
     void matchesThePreviousDirectDoubleOutput() throws Exception {
@@ -20,7 +55,7 @@ class DirectDoubleRenderBackendTest {
                 FractalPreset.MANDELBROT, OrbitTrap.NONE);
         RenderJob job = new RenderJob(formula, viewport, 48, 32, 300);
         RenderFrame frame = RenderFrame.create(job);
-        List<RenderRegion> progress = new ArrayList<>();
+        List<RenderRegion> progress = new CopyOnWriteArrayList<>();
 
         try (DirectDoubleRenderBackend backend = new DirectDoubleRenderBackend()) {
             backend.render(frame, () -> false, progress::add, null);
