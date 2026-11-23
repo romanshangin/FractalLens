@@ -115,6 +115,29 @@ already resolved before this PR stay `absent`). `scripts/quality/check_qodana.py
 accepted all 58. Local evidence only, not the GitHub run; raw logs/reports stay
 private.
 
+## Reviewed Julia explorer latency and GPU bright-point pass (PR #88, 2026-11-23)
+
+PR #88's first CI analysis, at `0eedd3a`, found 48 unchanged and 15 new findings.
+
+- Four `BusyWait` findings were bounded polls in the new `JuliaExplorerLatencyBenchmark`.
+  They were fixed in code, not accepted: the driver now waits on a future that an
+  `AnimationTimer` completes when the condition holds on the FX thread.
+- One `AutoCloseableResource` was a local optional `Buffer` for the bright-point output.
+  It was fixed in code: the budget is checked before the `Buffer` is constructed, and
+  the constructor is unchanged from `main`.
+- Ten `AutoCloseableResource` findings in `VulkanJuliaPreviewKernel.java` are the
+  accepted PR #86 entries. The second pipeline, the fourth descriptor and the budget
+  check shifted their lines to 82/89/98/144/145/230/266/267/318/394. Rule, message,
+  column and code match the saved entries (only `buffers[i]` became the equivalent
+  local `buffer` at line 266). Their locations and fingerprints were migrated.
+  No new contract was accepted, and the other entries are unchanged.
+
+Pinned-image local analysis on disposable copies reproduced the findings. A copy with
+both code fixes reported exactly the ten shifted entries. A fresh copy with the
+migrated baseline gave 58 unchanged, zero new, exit 0, and `check_qodana.py` accepted
+the result. This is local evidence only, not the GitHub run; raw logs and reports
+stay private.
+
 ## Acceptance and report handling
 
 CI freshly imports Maven without IDE metadata, compiles production/tests with

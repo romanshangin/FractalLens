@@ -223,16 +223,37 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
         for (int index = 0; index < DESCRIPTORS; index++) {
             if (buffers[index] == null && sizes[index] > 0) {
                 if (index == 1) residentPalette = null;
-                if (index == FILTERED) {
-                    if (sizes[index] == refusedFilteredBytes) continue;
-                    Buffer optional = new Buffer(sizes[index], true);
-                    if (optional.handle == 0) refusedFilteredBytes = sizes[index];
-                    else buffers[index] = optional;
-                } else {
-                    buffers[index] = new Buffer(sizes[index], false);
+                if (index == FILTERED && (sizes[index] == refusedFilteredBytes || !fitsBudget(sizes[index]))) {
+                    refusedFilteredBytes = sizes[index];
+                    continue;
                 }
+                buffers[index] = new Buffer(sizes[index]);
             }
         }
+    }
+
+    /** Whether a buffer of {@code bytes} would fit the budget beside the allocated buffers. */
+    private boolean fitsBudget(int bytes) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer out = stack.callocLong(1);
+            check(vkCreateBuffer(device, VkBufferCreateInfo.calloc(stack).sType$Default().size(bytes)
+                    .usage(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).sharingMode(VK_SHARING_MODE_EXCLUSIVE),
+                    null, out), "create preview buffer");
+            long handle = out.get(0);
+            try {
+                VkMemoryRequirements requirements = VkMemoryRequirements.calloc(stack);
+                vkGetBufferMemoryRequirements(device, handle, requirements);
+                return withinBudget(requirements.size());
+            } finally {
+                vkDestroyBuffer(device, handle, null);
+            }
+        }
+    }
+
+    private boolean withinBudget(long allocationBytes) {
+        long total = allocationBytes;
+        for (Buffer buffer : buffers) if (buffer != null) total += buffer.allocationBytes;
+        return budget > 0 && total <= budget;
     }
 
     private void dispatch(GpuJuliaPreviewRequest request, boolean filtered) {
@@ -322,8 +343,7 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
         private ByteBuffer mapped;
         private boolean coherent;
 
-        /** An optional buffer that would exceed the budget is left unallocated, with no handle. */
-        private Buffer(int bytes, boolean optional) {
+        private Buffer(int bytes) {
             this.bytes = bytes;
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 LongBuffer out = stack.callocLong(1);
@@ -334,13 +354,7 @@ final class VulkanJuliaPreviewKernel implements AutoCloseable {
                 VkMemoryRequirements requirements = VkMemoryRequirements.calloc(stack);
                 vkGetBufferMemoryRequirements(device, handle, requirements);
                 allocationBytes = requirements.size();
-                long total = allocationBytes;
-                for (Buffer buffer : buffers) if (buffer != null) total += buffer.allocationBytes;
-                if (budget <= 0 || total > budget) {
-                    if (optional) {
-                        close();
-                        return;
-                    }
+                if (!withinBudget(allocationBytes)) {
                     throw new GpuException("Julia preview allocation budget exceeded", false);
                 }
                 VkPhysicalDeviceMemoryProperties props = VkPhysicalDeviceMemoryProperties.calloc(stack);

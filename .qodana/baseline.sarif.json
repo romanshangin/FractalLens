@@ -1299,15 +1299,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 76,
+                  "startLine": 82,
                   "startColumn": 33
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "0aa91eb7c9c16dd1",
-            "equalIndicator/v1": "e61fbe0d5059bdd898c3e52aa36a5fb1819dabbca5f44a4ece93bbb0d84a0ef6"
+            "equalIndicator/v2": "7878b73b8124322a",
+            "equalIndicator/v1": "26e748c84efebee04419650f727c8850de4751bcdaa2cab5387d4f9e42948e54"
           }
         },
         {
@@ -1324,15 +1324,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 83,
+                  "startLine": 89,
                   "startColumn": 27
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "39b77598e2444c7a",
-            "equalIndicator/v1": "da6b903d0dd55055694e73beed560399e887c88a195990576ec159c48bc72f90"
+            "equalIndicator/v2": "a4c0c6b5ef394b08",
+            "equalIndicator/v1": "144fed30758d564e584836a55ebad560bcd2ff1e8c010b621e853bb78c64be3b"
           }
         },
         {
@@ -1349,15 +1349,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 91,
+                  "startLine": 98,
                   "startColumn": 30
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "48787fc04b54261d",
-            "equalIndicator/v1": "6ece5595d7d194eedf2b659dd167ad55b9f1dc9e951ed3dfd2e2642ea3613642"
+            "equalIndicator/v2": "e2be4389fc5e7147",
+            "equalIndicator/v1": "3df773cfb0712d136f5f1fdea223edb2a38bff57253e4ad4027d23aadcba4748"
           }
         },
         {
@@ -1374,15 +1374,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 138,
+                  "startLine": 144,
                   "startColumn": 25
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "2ab183d8aba1e348",
-            "equalIndicator/v1": "d91d89c79166399d464b8e0734debb85f40efca4aea7804cc6f5376992fd1253"
+            "equalIndicator/v2": "f4791b57f107715e",
+            "equalIndicator/v1": "a371e92e1e70a513d155542f68a767f3e4e80d088a4503d161f9c4ed05d93509"
           }
         },
         {
@@ -1399,15 +1399,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 139,
+                  "startLine": 145,
                   "startColumn": 25
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "27f6c1bfd2c8c04f",
-            "equalIndicator/v1": "c9cddc02d79e65025f1ade5f3b1dab16595fe87eaf815afe2180789ecd964708"
+            "equalIndicator/v2": "e67ff65194c89536",
+            "equalIndicator/v1": "c38faec83cf17a7e58c8b3cd773493db062030c98fcfed4adf2d5dd5618bc26b"
           }
         },
         {
@@ -1424,15 +1424,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 210,
+                  "startLine": 230,
                   "startColumn": 38
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "4900fa115399023f",
-            "equalIndicator/v1": "63a87386a45e9790ee7e51764b920d12a0a76c7c52ddc440133f693a229f806f"
+            "equalIndicator/v2": "5923b616eed8b48b",
+            "equalIndicator/v1": "2e1249a93e9b02f9a880294ef4a025e2edd3e1151f58b2d86df370f9c70ae257"
           }
         },
         {
@@ -1449,15 +1449,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 220,
+                  "startLine": 266,
                   "startColumn": 29
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "763657b36db4cccd",
-            "equalIndicator/v1": "1287cd2ced1c577db6e3260a8ce2adf2f702e3673a85ac26be39a2ebe1b30890"
+            "equalIndicator/v2": "3ce6dcdfb7759162",
+            "equalIndicator/v1": "4544ca9f6b8bd8c9c5a9bccde7dc2d6c8e0473b1e7ef5a6c0253a067ad636e8f"
           }
         },
         {
@@ -1474,15 +1474,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 221,
+                  "startLine": 267,
                   "startColumn": 31
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "d88b7280ffa55cbe",
-            "equalIndicator/v1": "b856fa7482bb0f50084db680933e8ea5355def662e84912e98242164b9cf1e62"
+            "equalIndicator/v2": "8baf033bbc1f4fcc",
+            "equalIndicator/v1": "d851c932506cd8bbac8f6278c0332870a84bad25f964d5cb177c1c0659dc6f03"
           }
         },
         {
@@ -1499,15 +1499,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 265,
+                  "startLine": 318,
                   "startColumn": 24
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "30d47785a292626a",
-            "equalIndicator/v1": "b157b618cd747d9ae8ed66b2111d86cd8ccd6b927d33ee68ddfb87e6f4efa511"
+            "equalIndicator/v2": "3884cd8967c738f0",
+            "equalIndicator/v1": "0e70ce0a8309653b131867b575b236a42df7311a350397c8e592e3e7b558f52e"
           }
         },
         {
@@ -1524,15 +1524,15 @@
                   "uri": "src/main/java/com/shangin/fractal/gpu/VulkanJuliaPreviewKernel.java"
                 },
                 "region": {
-                  "startLine": 342,
+                  "startLine": 394,
                   "startColumn": 30
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "equalIndicator/v2": "700ad10b07915eec",
-            "equalIndicator/v1": "aac2acffb45e2859c39d87d644c7590710a02cd48b487de071752a2e340eccc4"
+            "equalIndicator/v2": "0800d5af5c9191d1",
+            "equalIndicator/v1": "419ead2e4b6b8be5bd83a24dde37d93096f7a53849b99aca798fe2b53e0acf49"
           }
         }
       ]

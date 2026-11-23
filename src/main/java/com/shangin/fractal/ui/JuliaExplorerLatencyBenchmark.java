@@ -269,29 +269,17 @@ public final class JuliaExplorerLatencyBenchmark {
         });
         Thread.sleep(120);
         if (screen) {
-            long resetDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-            while (!fx(() -> screenBlack)) {
-                if (System.nanoTime() > resetDeadline) throw new IllegalStateException("Black marker reset was not observed; refusing stale screen timestamps");
-                Thread.sleep(20);
-            }
+            awaitPulse(() -> screenBlack, 3, "Black marker reset was not observed; refusing stale screen timestamps");
         }
         fx(() -> { view.latency().arm(this::published); recording = true; return null; });
         gesture.perform();
         JuliaParameters expected = JuliaExplorer.point(target.getX(), target.getY());
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
         Thread.sleep(50);
-        while (!fx(() -> explorer.isShowing() && !explorer.isEditing() && view.isLatencyIdle()
-                && view.showsApproximateJuliaPoint(expected))) {
-            if (failure != null) throw new IllegalStateException("Screen probe failed", failure);
-            if (System.nanoTime() > deadline) throw new IllegalStateException("Explorer did not settle at the target");
-            Thread.sleep(10);
-        }
+        awaitPulse(() -> explorer.isShowing() && !explorer.isEditing() && view.isLatencyIdle()
+                && view.showsApproximateJuliaPoint(expected), 60, "Explorer did not settle at the target");
         if (screen) {
-            long screenDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-            while (!fx(() -> currentCode != 0 && observedCodes.contains(currentCode))) {
-                if (System.nanoTime() > screenDeadline) throw new IllegalStateException("Final frame marker did not reach the screen");
-                Thread.sleep(10);
-            }
+            awaitPulse(() -> currentCode != 0 && observedCodes.contains(currentCode), 3,
+                    "Final frame marker did not reach the screen");
         } else Thread.sleep(50);
         List<InteractionLatency.Event> events = fx(() -> {
             view.latency().boundary("trial_end");
@@ -363,13 +351,39 @@ public final class JuliaExplorerLatencyBenchmark {
     }
 
     private void awaitIdle() throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
         // Includes resize and interaction debounce even when a render has not started yet.
         Thread.sleep(160);
-        while (!fx(() -> view.hasCompletedFrame() && view.isLatencyIdle())) {
-            if (failure != null) throw new IllegalStateException("Screen probe failed", failure);
-            if (System.nanoTime() > deadline) throw new IllegalStateException("Renderer did not settle");
-            Thread.sleep(20);
+        awaitPulse(() -> view.hasCompletedFrame() && view.isLatencyIdle(), 60, "Renderer did not settle");
+    }
+
+    /**
+     * Waits until {@code condition}, evaluated on the FX thread at every pulse, holds.
+     * Fails on timeout or when the screen probe has failed.
+     */
+    private static void awaitPulse(java.util.function.BooleanSupplier condition, long timeoutSeconds, String timeout)
+            throws Exception {
+        CompletableFuture<Void> reached = new CompletableFuture<>();
+        Platform.runLater(() -> new AnimationTimer() {
+            @Override public void handle(long now) {
+                try {
+                    if (failure != null) {
+                        reached.completeExceptionally(new IllegalStateException("Screen probe failed", failure));
+                    } else if (condition.getAsBoolean()) {
+                        reached.complete(null);
+                    }
+                } catch (Throwable error) {
+                    reached.completeExceptionally(error);
+                }
+                if (reached.isDone()) stop();
+            }
+        }.start());
+        try {
+            reached.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException expired) {
+            reached.cancel(false);
+            throw new IllegalStateException(timeout, expired);
+        } catch (java.util.concurrent.ExecutionException error) {
+            throw new IllegalStateException(timeout, error.getCause());
         }
     }
 
