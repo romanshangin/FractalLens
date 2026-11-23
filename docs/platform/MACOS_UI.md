@@ -1291,3 +1291,32 @@ rejects further samples; the next palette change samples them again in place.
 Growth copies the arrays, so old and new arrays coexist briefly, and a snapshot
 still in use keeps its generation of arrays alive; neither is charged to the
 budget.
+
+In a Julia view, **Render > Explore Julia Parameters…** opens a non-modal
+Mandelbrot map for GPU-supported Julia views and automatically enables **Render > Julia GPU**.
+The main window can close with the map open. While the map is open, the lower-left
+badge shows only a dot and Standard. The mode stays selected after the map closes. Drag to vary the Julia constant at the current camera position,
+Shift-drag for one-tenth sensitivity, or click to move to a new point.
+Click and drag share the same motion. Each frame closes a time-based fraction of
+the remaining gap to the target. Near the target, the motion decelerates smoothly
+to a stop at the exact selection. Motion slows near changing edges in a 64 by 40 sample of the displayed frame.
+Within the map, speed is limited to 210 logical points per second and each frame moves
+at most 2.52 points. Drag events replace the destination. Releasing the pointer finishes
+the remaining motion to the drop position before recording the scene.
+Movement under four map points from the press remains a click.
+The Julia GPU kernel renders at full canvas resolution. A local filter dims
+isolated near-white pixels before publication. Pointer updates coalesce while a
+frame is rendering. The last GPU frame stays on the canvas when the target is
+reached, and the selected point contributes one history entry. If GPU rendering
+fails while rendering a map frame, exploration closes and leaves the last
+displayed image on screen. A main-window edit that the GPU cannot render, such
+as enabling histogram coloring, closes the map and renders the updated scene
+at the last visible Julia point on the CPU. PNG export calculates the committed
+scene on demand. Resizing or editing the main view with the map open keeps the
+visible Julia point and the bright-point filter while the GPU can render.
+If the CPU takes over, the map closes and the last visible point is saved.
+Closing the map while a resize, zoom, or pan is queued or rendering keeps that render and the selected point.
+Restoring a saved scene or using Undo/Redo cancels any active map gesture.
+The restored scene uses its saved Julia constant, and the map stays open
+when the restored Julia view supports GPU rendering.
+Escape or closing the map during an edit commits the last visible point.

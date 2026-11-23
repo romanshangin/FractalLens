@@ -72,6 +72,7 @@ final class MainMenuBar extends MenuBar {
     private boolean exporting;
     private boolean rendering = true;
     private FractalPreset currentFractal;
+    private JuliaExplorer explorer;
     private MacJuliaSheet juliaSheet;
     private MacSettingsSheet settingsSheet;
     private final MenuItem fileSettings;
@@ -148,6 +149,7 @@ final class MainMenuBar extends MenuBar {
                 new SeparatorMenuItem(), trap, histogram, animation,
                 new SeparatorMenuItem(), command("Reset Colors to Defaults", null, this::resetColors));
         juliaGpu.setOnAction(event -> {
+            if (!juliaGpu.isSelected() && explorer != null && explorer.isShowing()) explorer.close();
             fractalView.setJuliaGpu(juliaGpu.isSelected());
             updateAvailability();
         });
@@ -156,7 +158,23 @@ final class MainMenuBar extends MenuBar {
             updateAvailability();
         });
         render.getItems().setAll(command("Edit Julia Parameters…", null, this::showJuliaParameters),
-                new SeparatorMenuItem(), juliaGpu);
+                command(JuliaExplorer.TITLE, null, () -> {
+                    if (explorer != null && explorer.isShowing()) {
+                        explorer.toFront();
+                        return;
+                    }
+                    if (currentFractal == FractalPreset.JULIA && !parameterSheetOpen()) {
+                        if (!fractalView.supportsJuliaExplorer()) {
+                            FractalDialogs.message(stage, "Julia Parameter Map unavailable",
+                                    "Choose a GPU-supported Julia view and coloring to explore the parameter map.");
+                            return;
+                        }
+                        explorer = new JuliaExplorer(stage, fractalView);
+                        explorer.show();
+                        fractalView.startJuliaExplorerRender();
+                        juliaGpu.setSelected(fractalView.juliaGpu());
+                    }
+                }), new SeparatorMenuItem(), juliaGpu);
         Menu window = new Menu("Window", null,
                 command("Minimize", shortcut(KeyCode.M), () -> stage.setIconified(true)),
                 command("Zoom", null, () -> stage.setMaximized(!stage.isMaximized())));
@@ -246,11 +264,12 @@ final class MainMenuBar extends MenuBar {
         // when only the parent is re-enabled after rendering.
         setCommandsDisabled(color, rendering);
         setCommandsDisabled(render, rendering);
-        export.setDisable(!exporting && !fractalView.hasExportableFrame());
+        export.setDisable(!exporting && !fractalView.canExportPng());
         animation.setDisable(rendering || histogram.isSelected() || orbitTrap != OrbitTrap.NONE);
         render.getItems().stream()
-                .filter(item -> "Edit Julia Parameters…".equals(item.getText()))
-                .forEach(item -> item.setDisable(rendering || currentFractal != FractalPreset.JULIA));
+                .filter(item -> "Edit Julia Parameters…".equals(item.getText()) || JuliaExplorer.TITLE.equals(item.getText()))
+                .forEach(item -> item.setDisable(rendering || currentFractal != FractalPreset.JULIA
+                        || JuliaExplorer.TITLE.equals(item.getText()) && !fractalView.isJuliaGpuAvailable()));
         // A mode switch, not a scene edit: available whenever Julia is shown and the GPU works.
         juliaGpu.setDisable(currentFractal != FractalPreset.JULIA
                 || !juliaGpu.isSelected() && !fractalView.isJuliaGpuAvailable());
@@ -405,6 +424,7 @@ final class MainMenuBar extends MenuBar {
         FractalDialogs.close(stage);
         sceneActions.close();
         gallery.close();
+        if (explorer != null) explorer.closeWithoutCommit();
         if (juliaSheet != null) juliaSheet.close();
         if (settingsSheet != null) settingsSheet.close();
         closed = true;
@@ -413,6 +433,10 @@ final class MainMenuBar extends MenuBar {
 
     private void syncScene(FractalScene scene) {
         currentFractal = scene.fractal();
+        if (explorer != null && explorer.isShowing()) {
+            if (currentFractal == FractalPreset.JULIA) explorer.syncParameters(scene.juliaParameters());
+            else explorer.closeWithoutCommit();
+        }
         paletteStops = scene.coloring().paletteStops();
         orbitTrap = scene.coloring().orbitTrap();
         fractals.selectToggle(fractals.getToggles().get(scene.fractal().ordinal()));

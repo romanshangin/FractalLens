@@ -20,8 +20,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class FakeJuliaPreviewRuntime implements GpuRuntime {
     private volatile boolean available = true;
     private volatile boolean emptyResult;
+    private volatile int maxFrameWidth = Integer.MAX_VALUE;
+    private volatile int maxUngatedWidth = Integer.MAX_VALUE;
+    private volatile int lastStartedWidth;
     private volatile RuntimeException failure;
     private volatile boolean gated;
+    private volatile boolean isolatedBrightPixel;
     private final BlockingQueue<Object> releases = new LinkedBlockingQueue<>();
     private final AtomicInteger calls = new AtomicInteger();
     private final AtomicInteger started = new AtomicInteger();
@@ -37,9 +41,13 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
     public void setAvailable(boolean available) { this.available = available; }
     /** The next calls return empty, like a runtime that disabled itself. */
     public void setEmptyResult(boolean empty) { emptyResult = empty; }
+    public void refuseFramesWiderThan(int width) { maxFrameWidth = width; }
+    public void gateFramesWiderThan(int width) { maxUngatedWidth = width; }
+    public int lastStartedWidth() { return lastStartedWidth; }
     public void setFailure(RuntimeException failure) { this.failure = failure; }
     /** Each call waits for one {@link #release()} after it starts. */
     public void setGated(boolean gated) { this.gated = gated; }
+    public void showIsolatedBrightPixel() { isolatedBrightPixel = true; }
     public void release() { releases.add(Boolean.TRUE); }
     public int calls() { return calls.get(); }
     public int started() { return started.get(); }
@@ -77,20 +85,26 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
     @Override
     public synchronized Optional<GpuJuliaPreviewResult> renderJuliaPreview(GpuJuliaPreviewRequest request)
             throws InterruptedException {
+        lastStartedWidth = request.width();
         started.incrementAndGet();
-        if (gated && releases.poll(15, TimeUnit.SECONDS) == null) {
+        if ((gated || request.width() > maxUngatedWidth) && releases.poll(15, TimeUnit.SECONDS) == null) {
             throw new IllegalStateException("Gated fake GPU call was never released");
         }
         calls.incrementAndGet();
         lastMaxIterations = request.maxIterations();
         if (failure != null) throw failure;
-        if (!available || emptyResult) {
+        if (!available || emptyResult || request.width() > maxFrameWidth) {
             available = false;
             return Optional.empty();
         }
         int palette = request.palette().color(0.25);
         int color = 0xff000000 | ((palette ^ Float.hashCode(request.cReal()) * 0x9e3779b9) & 0xffffff);
-        java.util.Arrays.fill(request.colors(), color);
+        if (isolatedBrightPixel) {
+            java.util.Arrays.fill(request.colors(), 0xff202020);
+            request.colors()[request.width() + 1] = 0xffffffff;
+        } else {
+            java.util.Arrays.fill(request.colors(), color);
+        }
         return Optional.of(new GpuJuliaPreviewResult(request.colors(), 0, 0, 1, 0, 1, 0));
     }
 

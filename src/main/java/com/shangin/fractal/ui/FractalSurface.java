@@ -2,6 +2,7 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.ColoringStrategy;
 import com.shangin.fractal.coloring.Palette;
+import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.ColoringSettings;
@@ -9,6 +10,7 @@ import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.InteractiveRenderMode;
 import com.shangin.fractal.scene.WidePreviewSettings;
 import com.shangin.fractal.scene.IterationSettings;
+import com.shangin.fractal.scene.JuliaParameters;
 import javafx.beans.value.ChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Rectangle2D;
@@ -169,18 +171,11 @@ public final class FractalSurface extends Region {
             progressiveImageView.setImage(null);
         }
 
-        if (stagingFrame == null
-                || !stagingFrame.matches(
-                renderWidth,
-                renderHeight
-        )) {
-
-            stagingFrame =
-                    new SurfaceBuffer(
-                            renderWidth,
-                            renderHeight
-                    );
-            stagingRefinementValidity = new ValidityMask(renderWidth, renderHeight);
+        int width = renderFrame.request().width();
+        int height = renderFrame.request().height();
+        if (stagingFrame == null || !stagingFrame.matches(width, height)) {
+            stagingFrame = new SurfaceBuffer(width, height);
+            stagingRefinementValidity = new ValidityMask(width, height);
         }
 
         if (stagingRenderFrame != renderFrame) {
@@ -347,7 +342,7 @@ public final class FractalSurface extends Region {
     public boolean displayApproximateFrame(FractalScene scene, int width, int height, int[] colors) {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(colors);
-        if (width != renderWidth || height != renderHeight || colors.length != width * height) {
+        if (width != renderWidth || height != renderHeight || colors.length != (long) width * height) {
             return false;
         }
         if (stagingFrame == null || !stagingFrame.matches(width, height)) {
@@ -430,6 +425,17 @@ public final class FractalSurface extends Region {
 
     public int renderHeight() {
         return renderHeight;
+    }
+
+    void observeJuliaFrame(JuliaFramePacing pacing) {
+        if (displayedFrame != null) {
+            pacing.observe(displayedFrame.intBuffer().array(), displayedFrame.width(), displayedFrame.height());
+        }
+    }
+
+    boolean showsApproximateJuliaPoint(JuliaParameters point) {
+        return displayedFrame != null && displayedRenderFrame == null
+                && displayedScene.fractal() == FractalPreset.JULIA && displayedScene.juliaParameters().equals(point);
     }
 
     public boolean hasCompletedFrame() {
