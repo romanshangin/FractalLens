@@ -1,6 +1,10 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.render.FractalColorizer;
+import com.shangin.fractal.render.MandelbrotBoundaryDistance;
+import com.shangin.fractal.render.SamplePlane;
 import com.shangin.fractal.render.ScenePreviewRenderer;
 import com.shangin.fractal.scene.FractalScene;
 import com.shangin.fractal.scene.ColoringSettings;
@@ -29,6 +33,12 @@ final class JuliaExplorer extends Stage {
     private static final RenderGrid GRID = RenderGrid.from(FractalPreset.MANDELBROT.defaultViewport(), WIDTH, HEIGHT);
     private final FractalView view;
     private final Circle marker = new Circle(5, Color.ORANGERED);
+    // One image for the window's lifetime: thumbnail colors are written into it in place.
+    private final WritableImage thumbnail = new WritableImage(WIDTH, HEIGHT);
+    private final FractalColorizer colorizer = new FractalColorizer();
+    private SamplePlane thumbnailSamples;
+    private MandelbrotBoundaryDistance boundary;
+    private ColoringSettings thumbnailColoring;
     private JuliaParameters displayed;
     private JuliaParameters submitted;
     private JuliaParameters desired;
@@ -74,7 +84,7 @@ final class JuliaExplorer extends Stage {
             previousFrameTime = now;
             double distance = Math.hypot((desired.real() - submitted.real()) / unitsPerPoint,
                     (desired.imaginary() - submitted.imaginary()) / unitsPerPoint);
-            double advance = pacing.advance(distance, elapsed);
+            double advance = pacing.advance(distance, elapsed, boundaryDistance(submitted));
             if (advance == 0 && distance > 0) return;
             JuliaParameters next = advance >= distance ? desired : interpolate(submitted, desired, advance / distance);
             replacePrevious = false;
@@ -85,11 +95,14 @@ final class JuliaExplorer extends Stage {
 
     JuliaExplorer(Stage owner, FractalView view) {
         this.view = view;
-        committed = submitted = desired = view.sceneSnapshot().juliaParameters();
+        FractalScene initialScene = view.sceneSnapshot();
+        committed = submitted = desired = initialScene.juliaParameters();
+        thumbnailColoring = thumbnailColoring(initialScene.coloring());
         initOwner(owner);
         setResizable(false);
         setTitle("Julia Parameter Map");
-        var imageView = new ImageView();
+        fillThumbnail(thumbnailColoring.paletteStops().getFirst().color());
+        var imageView = new ImageView(thumbnail);
         marker.setStroke(Color.WHITE);
         marker.setMouseTransparent(true);
         var map = new Pane(imageView, marker);
@@ -139,13 +152,13 @@ final class JuliaExplorer extends Stage {
         getScene().setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ESCAPE) close();
         });
-        Thread thumbnail = Thread.ofVirtual().unstarted(() -> loadThumbnail(imageView));
+        Thread thumbnailLoader = Thread.ofVirtual().unstarted(this::loadThumbnail);
         setOnShown(e -> {
             view.setJuliaExplorer(this);
-            thumbnail.start();
+            thumbnailLoader.start();
         });
         setOnHidden(e -> {
-            thumbnail.interrupt();
+            thumbnailLoader.interrupt();
             timer.stop();
             view.setJuliaExplorer(null);
             if (editing && owner.isShowing()) {
@@ -156,8 +169,40 @@ final class JuliaExplorer extends Stage {
         });
     }
 
-    void syncParameters(JuliaParameters parameters) {
-        if (!committed.equals(parameters)) resetToParameters(parameters);
+    /** Follows a main-scene change: its Julia constant and the palette used for the map. */
+    void syncScene(FractalScene scene) {
+        if (!committed.equals(scene.juliaParameters())) resetToParameters(scene.juliaParameters());
+        ColoringSettings coloring = thumbnailColoring(scene.coloring());
+        if (!coloring.equals(thumbnailColoring)) {
+            thumbnailColoring = coloring;
+            colorThumbnail();
+        }
+    }
+
+    // The thumbnail stops at 80 iterations, so it stretches the scene's color scale to show
+    // the whole palette near the set's boundary. Any valid scene scale stays finite.
+    private static final double THUMBNAIL_SCALE_FACTOR = 8;
+
+    /**
+     * The main scene's palette, color scale and offset, adapted to the thumbnail's iteration
+     * limit, without frame-dependent (histogram) or orbit-trap coloring.
+     */
+    private static ColoringSettings thumbnailColoring(ColoringSettings scene) {
+        return new ColoringSettings(scene.palette(), scene.paletteStops(),
+                Math.min(scene.colorScale() * THUMBNAIL_SCALE_FACTOR, Double.MAX_VALUE),
+                scene.offset(), false, OrbitTrap.NONE);
+    }
+
+    ColoringSettings thumbnailColoring() {
+        return thumbnailColoring;
+    }
+
+    boolean hasThumbnail() {
+        return thumbnailSamples != null;
+    }
+
+    int thumbnailArgb(int x, int y) {
+        return thumbnail.getPixelReader().getArgb(x, y);
     }
 
     void resetToParameters(JuliaParameters parameters) {
@@ -205,26 +250,54 @@ final class JuliaExplorer extends Stage {
         close();
     }
 
-    private void loadThumbnail(ImageView imageView) {
+    private static final int BOUNDARY_ITERATIONS = 1_000;
+
+    private void loadThumbnail() {
         var scene = FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
-                .withIterations(new IterationSettings(80, 0))
-                .withColoring(new ColoringSettings(PalettePreset.ICE, 0.06, 0.25));
+                .withIterations(new IterationSettings(80, 0));
         try (var renderer = new ScenePreviewRenderer()) {
             Thread worker = Thread.currentThread();
-            int[] pixels = renderer.render(scene, WIDTH, HEIGHT, worker::isInterrupted);
-            if (pixels == null) return;
+            SamplePlane samples = renderer.renderSamples(scene, WIDTH, HEIGHT, worker::isInterrupted);
+            if (samples == null) return;
+            // The boundary needs more iterations than the colors: slowly escaping points near
+            // the set would otherwise widen its interior.
+            SamplePlane boundarySamples = renderer.renderSamples(
+                    scene.withIterations(new IterationSettings(BOUNDARY_ITERATIONS, 0)), WIDTH, HEIGHT, worker::isInterrupted);
+            if (boundarySamples == null) return;
+            var field = MandelbrotBoundaryDistance.of(boundarySamples, GRID, JuliaFramePacing.BOUNDARY_RANGE);
             javafx.application.Platform.runLater(() -> {
                 if (!isShowing()) return;
-                var image = new WritableImage(WIDTH, HEIGHT);
-                image.getPixelWriter().setPixels(0, 0, WIDTH, HEIGHT,
-                        PixelFormat.getIntArgbInstance(), pixels, 0, WIDTH);
-                imageView.setImage(image);
+                thumbnailSamples = samples;
+                boundary = field;
+                colorThumbnail();
             });
         } catch (InterruptedException cancelled) {
             Thread.currentThread().interrupt();
         } catch (java.util.concurrent.CancellationException cancelled) {
             if (!Thread.currentThread().isInterrupted()) throw cancelled;
         }
+    }
+
+    /**
+     * Distance from the Mandelbrot set's boundary in map points, whatever the gesture's scale;
+     * unknown, so not limiting, until the thumbnail has loaded.
+     */
+    double boundaryDistance(JuliaParameters c) {
+        if (boundary == null) return Double.POSITIVE_INFINITY;
+        return boundary.pixels(c.real(), c.imaginary());
+    }
+
+    private void colorThumbnail() {
+        if (thumbnailSamples == null) return;
+        int[] pixels = new int[WIDTH * HEIGHT];
+        colorizer.color(thumbnailSamples, java.nio.IntBuffer.wrap(pixels), thumbnailColoring.createStrategy(thumbnailSamples));
+        thumbnail.getPixelWriter().setPixels(0, 0, WIDTH, HEIGHT, PixelFormat.getIntArgbInstance(), pixels, 0, WIDTH);
+    }
+
+    private void fillThumbnail(int argb) {
+        int[] pixels = new int[WIDTH * HEIGHT];
+        java.util.Arrays.fill(pixels, 0xff000000 | argb);
+        thumbnail.getPixelWriter().setPixels(0, 0, WIDTH, HEIGHT, PixelFormat.getIntArgbInstance(), pixels, 0, WIDTH);
     }
 
     private void commit() {

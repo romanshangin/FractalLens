@@ -5,74 +5,132 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JuliaExplorerTest {
-    @Test void changingFramesReduceClickSpeedAndQuietFramesGraduallyRestoreIt() {
-        var pacing = new JuliaFramePacing();
-        int[] colors = new int[64 * 40];
-        pacing.reset();
-        pacing.observe(colors, 64, 40);
-        long initial = pacing.step(40_000_000);
-        java.util.Arrays.fill(colors, 0xff555555);
-        pacing.observe(colors, 64, 40);
-        assertEquals(initial, pacing.step(40_000_000), "A uniform color change has no moving branches");
-        for (int i = 0; i < colors.length; i += 2) colors[i] = 0xffffffff;
-        pacing.observe(colors, 64, 40);
-        long slower = pacing.step(40_000_000);
-        assertTrue(slower > 0 && slower < initial);
-        pacing.observe(colors, 64, 40);
-        long recovering = pacing.step(40_000_000);
-        assertTrue(recovering > slower && recovering < initial);
-        pacing.reset();
-        assertEquals(initial, pacing.step(40_000_000));
-    }
+    private static final long FRAME_120_HZ = 8_333_333;
 
-    @Test void mapMotionCapsFastFramesAndAcceleratesGraduallyAfterASlowFrame() {
-        var pacing = new JuliaFramePacing();
-        pacing.reset();
-        double distance = 0;
-        for (int frame = 0; frame < 100; frame++) {
-            distance = pacing.advance(100, 16_000_000);
-            assertTrue(distance <= 2.52 + 1e-9);
+    @Test void shortAndLongMovesCruiseAtTheSameSpeed() {
+        for (double distance : new double[] {30, 72, 300}) {
+            var pacing = new JuliaFramePacing();
+            pacing.reset();
+            double remaining = distance;
+            for (int i = 0; i < 7; i++) remaining -= pacing.advance(remaining, FRAME_120_HZ);
+            assertEquals(JuliaFramePacing.SPEED * FRAME_120_HZ * 1e-9, pacing.advance(remaining, FRAME_120_HZ), 1e-12,
+                    "Cruise speed must not depend on the distance " + distance);
         }
-        assertEquals(2.52, distance, 1e-9);
-        double afterStall = pacing.advance(100, 200_000_000);
-        double next = pacing.advance(100, 8_000_000);
-        assertTrue(next / 0.008 <= afterStall / 0.032 + 700 * 0.008 + 1e-9);
-        assertTrue(next < 1);
     }
 
-    @Test void approachingTheCursorClosesTheSameGapAtDifferentFrameRates() {
-        var slower = new JuliaFramePacing();
-        var faster = new JuliaFramePacing();
-        slower.reset();
-        faster.reset();
-
-        double remainingAt60 = 1;
-        double remainingAt120 = 1;
-        for (int i = 0; i < 6; i++) {
-            remainingAt60 -= slower.advance(remainingAt60, 16_000_000);
-            remainingAt120 -= faster.advance(remainingAt120, 8_000_000);
-            remainingAt120 -= faster.advance(remainingAt120, 8_000_000);
+    @Test void travelTimeGrowsInProportionToTheDistance() {
+        double accelerationSeconds = JuliaFramePacing.SPEED / JuliaFramePacing.ACCELERATION;
+        for (double distance : new double[] {72, 144, 300}) {
+            double seconds = arrivalFrames(distance, FRAME_120_HZ) * FRAME_120_HZ * 1e-9;
+            assertEquals(distance / JuliaFramePacing.SPEED + accelerationSeconds, seconds, 0.02,
+                    "Travel time for " + distance + " points");
         }
-        assertEquals(Math.exp(-0.096 / 0.325), remainingAt60, 1e-9);
-        assertEquals(remainingAt60, remainingAt120, 1e-9);
     }
 
-    @Test void finalStepsKeepGettingSmallerUntilTheyReachTheTarget() {
+    @Test void travelTimeDoesNotDependOnTheFrameRate() {
+        double at60 = arrivalFrames(100, 16_666_667) * 16_666_667e-9;
+        double at120 = arrivalFrames(100, FRAME_120_HZ) * FRAME_120_HZ * 1e-9;
+        assertEquals(at60, at120, 0.017);
+    }
+
+    @Test void motionAcceleratesGraduallyAndBrakesWithoutAFinalJump() {
         var pacing = new JuliaFramePacing();
         pacing.reset();
-        double remaining = 0.11;
-        double previous = Double.POSITIVE_INFINITY;
+        double cruise = JuliaFramePacing.SPEED * FRAME_120_HZ * 1e-9;
+        double remaining = 40;
+        double previous = 0;
+        boolean braking = false;
         int frames = 0;
-        while (remaining > 0 && frames < 60) {
-            double advance = pacing.advance(remaining, 16_000_000);
-            assertTrue(advance > 0);
-            assertTrue(advance <= previous, "The final frame must not jump farther than the previous one");
+        while (remaining > 0) {
+            double advance = pacing.advance(remaining, FRAME_120_HZ);
+            assertTrue(advance > 0, "Every frame before arrival must move");
+            assertTrue(advance <= cruise + 1e-12);
+            if (advance < previous - 1e-12) braking = true;
+            else if (braking) fail("Braking must not speed up again, including the final frame");
+            if (frames == 0) assertTrue(advance < cruise / 2, "The first frame must not start at full speed");
             remaining -= advance;
             previous = advance;
             frames++;
         }
-        assertTrue(frames > 10);
         assertEquals(0, remaining);
+        assertTrue(braking);
+        assertEquals(0, pacing.advance(0, FRAME_120_HZ));
+    }
+
+    @Test void changingFramesSlowTheCruiseGraduallyButNotBelowTheMinimumSpeed() {
+        var pacing = new JuliaFramePacing();
+        pacing.reset();
+        int[] colors = new int[64 * 40];
+        pacing.observe(colors, 64, 40);
+        double remaining = 1_000;
+        for (int i = 0; i < 20; i++) remaining -= pacing.advance(remaining, FRAME_120_HZ);
+        double cruise = JuliaFramePacing.SPEED * FRAME_120_HZ * 1e-9;
+        java.util.Arrays.fill(colors, 0xff555555);
+        pacing.observe(colors, 64, 40);
+        assertEquals(cruise, pacing.advance(remaining, FRAME_120_HZ), 1e-12, "A uniform color change has no moving edges");
+
+        double previous = cruise;
+        for (int frame = 0; frame < 120; frame++) {
+            for (int i = 0; i < colors.length; i++) colors[i] = (i + frame) % 2 == 0 ? 0xffffffff : 0xff000000;
+            pacing.observe(colors, 64, 40);
+            double step = pacing.advance(remaining, FRAME_120_HZ);
+            remaining -= step;
+            assertTrue(step <= previous + 1e-12, "Busy frames must not speed the point up");
+            assertTrue(step >= previous * 0.85, "The slowdown must be gradual");
+            assertTrue(step >= JuliaFramePacing.MIN_SPEED * FRAME_120_HZ * 1e-9 - 1e-12);
+            previous = step;
+        }
+        assertEquals(JuliaFramePacing.MIN_SPEED * FRAME_120_HZ * 1e-9, previous, 1e-4);
+
+        for (int frame = 0; frame < 240; frame++) {
+            pacing.observe(colors, 64, 40); // Unchanged frames: quiet again.
+            double step = pacing.advance(remaining, FRAME_120_HZ);
+            remaining -= step;
+            assertTrue(step >= previous - 1e-12, "Quiet frames must restore the speed");
+            previous = step;
+        }
+        assertEquals(cruise, previous, cruise * 0.01);
+    }
+
+    @Test void theBoundarySlowsThePointInProportionToItsDistance() {
+        for (double boundary : new double[] {0, 0.2, 2, 4, JuliaFramePacing.BOUNDARY_RANGE, 20}) {
+            var pacing = new JuliaFramePacing();
+            pacing.reset();
+            double remaining = 1_000;
+            for (int i = 0; i < 20; i++) remaining -= pacing.advance(remaining, FRAME_120_HZ, boundary);
+            double expected = Math.clamp(JuliaFramePacing.SPEED * boundary / JuliaFramePacing.BOUNDARY_RANGE,
+                    JuliaFramePacing.BOUNDARY_SPEED, JuliaFramePacing.SPEED);
+            assertEquals(expected * FRAME_120_HZ * 1e-9, pacing.advance(remaining, FRAME_120_HZ, boundary), 1e-12,
+                    "Cruise " + boundary + " points from the boundary");
+        }
+    }
+
+    @Test void aStalledFrameDoesNotJump() {
+        var pacing = new JuliaFramePacing();
+        pacing.reset();
+        double remaining = 200;
+        for (int i = 0; i < 20; i++) remaining -= pacing.advance(remaining, FRAME_120_HZ);
+        assertEquals(JuliaFramePacing.SPEED * 0.05, pacing.advance(remaining, 300_000_000), 1e-9);
+    }
+
+    @Test void resetStartsTheNextMotionFromRest() {
+        var pacing = new JuliaFramePacing();
+        pacing.reset();
+        for (int i = 0; i < 20; i++) pacing.advance(100, FRAME_120_HZ);
+        pacing.reset();
+        assertTrue(pacing.advance(100, FRAME_120_HZ) < JuliaFramePacing.SPEED * FRAME_120_HZ * 1e-9 / 2);
+    }
+
+    private static int arrivalFrames(double distance, long frame) {
+        var pacing = new JuliaFramePacing();
+        pacing.reset();
+        double remaining = distance;
+        int frames = 0;
+        while (remaining > 0) {
+            remaining -= pacing.advance(remaining, frame);
+            frames++;
+        }
+        return frames;
     }
 
     @Test void mapClampsToTheDrawnPlaneAndInterpolatesBothComponents() {

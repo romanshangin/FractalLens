@@ -434,7 +434,7 @@ final class MainMenuBar extends MenuBar {
     private void syncScene(FractalScene scene) {
         currentFractal = scene.fractal();
         if (explorer != null && explorer.isShowing()) {
-            if (currentFractal == FractalPreset.JULIA) explorer.syncParameters(scene.juliaParameters());
+            if (currentFractal == FractalPreset.JULIA) explorer.syncScene(scene);
             else explorer.closeWithoutCommit();
         }
         paletteStops = scene.coloring().paletteStops();

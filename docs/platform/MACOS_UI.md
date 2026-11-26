@@ -1297,12 +1297,31 @@ Mandelbrot map for GPU-supported Julia views and automatically enables **Render 
 The main window can close with the map open. While the map is open, the lower-left
 badge shows only a dot and Standard. The mode stays selected after the map closes. Drag to vary the Julia constant at the current camera position,
 Shift-drag for one-tenth sensitivity, or click to move to a new point.
-Click and drag share the same motion. Each frame closes a time-based fraction of
-the remaining gap to the target. Near the target, the motion decelerates smoothly
-to a stop at the exact selection. Motion slows near changing edges in a 64 by 40 sample of the displayed frame.
-Within the map, speed is limited to 210 logical points per second and each frame moves
-at most 2.52 points. Drag events replace the destination. Releasing the pointer finishes
-the remaining motion to the drop position before recording the scene.
+The map is drawn in the main scene's palette, color scale and offset (stretched
+eightfold for its 80-iteration limit, without histogram or orbit-trap coloring)
+and is colored again whenever those settings change while it is open (Animate
+Palette's moving offset is not followed). Until its CPU
+preview is ready, the map shows the palette's first color.
+Click and drag share the same motion: the point moves toward its target at a
+speed that does not depend on the distance, so a longer move takes
+proportionally longer. In quiet areas it moves at 40 logical map points per
+second (72 points take about 1.85 s). Where the displayed Julia frames change
+quickly, measured on edges in a 64 by 40 sample of each frame, it slows down to
+as little as 10 points per second; the speed falls within about 0.1 s and
+recovers over about 0.4 s. Near the Mandelbrot set's boundary, where the Julia
+set changes most for the smallest step, the speed also falls in proportion to
+the distance from the boundary: from 40 points per second at 8 map points away to
+3 points per second on the boundary. Outside the set the distance comes from the
+exterior distance estimate (1,000 iterations), which also sees filaments thinner
+than a map point; inside it comes from a 1,000-iteration sample of the map grid,
+accurate to about a map point (a dent thinner than a point, such as the main
+cardioid's cusp, is not resolved). This slowdown starts once the map's preview
+is ready. A path that follows the boundary, such as one through Seahorse Valley,
+takes several times as long as one through quiet areas. It reaches cruise speed within 50 ms and brakes
+smoothly to a stop at the exact selection. A frame longer than 50 ms advances
+only as far as a 50 ms frame. Drag events replace the destination, and the point
+trails a pointer moving faster than the current speed. Releasing the pointer
+finishes the remaining motion to the drop position before recording the scene.
 Movement under four map points from the press remains a click.
 The Julia GPU kernel renders at full canvas resolution. A local filter, a
 second GPU pass, dims isolated near-white pixels before publication. Pointer updates coalesce while a

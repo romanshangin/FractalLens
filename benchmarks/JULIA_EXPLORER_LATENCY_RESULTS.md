@@ -7,7 +7,8 @@ worth prototyping. Protocol: [JULIA_EXPLORER_LATENCY.md](JULIA_EXPLORER_LATENCY.
 Selected numbers: [summary CSV](JULIA_EXPLORER_LATENCY_SUMMARY.csv). A
 [follow-up](#follow-up-bright-point-filter-on-the-gpu) moved the bright-point
 filter to the GPU and was retained; the measurements before it describe the
-code state of PR #87.
+code state of PR #87. A [second follow-up](#follow-up-map-pacing) made
+the map point's speed independent of the distance and slower near the set's boundary.
 
 ## Environment and code state
 
@@ -166,7 +167,8 @@ trial. No unperturbed compositor or panel timestamp was measured.
 - **Pacing: reported for an owner decision.** Clicks and drags across
   dendrite-like regions take 7–10 s to settle at the selected point. Whether
   that is the intended visual continuity is a product question outside this
-  measurement.
+  measurement. The owner later chose a speed independent of the distance; see
+  [map pacing](#follow-up-map-pacing).
 
 ## Not covered
 
@@ -271,3 +273,134 @@ about 6.5 ms from submission to publication, of which readback (0.9 ms) and the
 painting after the pulse. It already fits one 120 Hz pulse; direct presentation
 could shorten input → pulse by at most a few milliseconds and stays
 inconclusive and not prototyped.
+
+## Follow-up: map pacing
+
+Date: 2026-11-23 (UTC). Candidate: branch `feature/julia-explorer-pacing` on
+base and merge base `2a33d4f`. Control: `main` at `2a33d4f` (the code state of
+the GPU-filter follow-up), built in a separate worktree. Environment as above
+(Apple M3 Pro, macOS 27.2.1, Java 26.0.1, JavaFX 26.0.2, AC power). Each run is
+one JVM with the full default matrix (2 warmup and 10 measured rounds of click
+and drag per size and limit, no screen capture) under `caffeinate -di`, with
+nothing else running; every trial committed exactly its target constant. Raw
+CSVs and logs are in a private archive
+(`benchmarks/julia-explorer-pacing-private-20261122/`). No paired-process gate
+was declared: the change is a decided product behavior, not an optimization.
+
+**Rejected first candidate: ease-out to a deadline.** The owner first asked for
+a click to arrive within about 0.6 s and a drag to settle within 0.5 s of
+release. That candidate eased out (cubic, bent toward quadratic near changing
+edges) to 0.55 s after a click and 0.45 s after each drag event. Measured
+against the control in one controller script (control first): release → final
+frame 6.9–8.0 s → 563–570 ms median for clicks and 5.4–6.5 s → 202–208 ms for
+drags. On inspection the owner found that long moves changed frames too fast,
+because the speed grew with the distance, and asked for one constant speed
+instead, with no slowdown near edges.
+
+**Rejected second candidate: constant 130 points per second.** One cruise speed
+with no edge sample, reached in 50 ms (2,600 points/s²) and braked at the same
+rate, measured in its own JVM against the same control run: release → final
+frame 593–600 ms median for the 72-point click. On inspection the owner found it
+visually too fast.
+
+**Rejected third candidate: 100 points per second** (2,000 points/s²), measured
+the same way: release → final frame 758–768 ms median for the 72-point click;
+the workload's drag (about 94 points per second) settled before release. The
+owner found it still too fast.
+
+**Rejected fourth candidate: 70 points per second** (1,400 points/s²), measured
+the same way: release → final frame 1,068–1,078 ms median for the 72-point
+click and 77–81 ms for the drag. The owner found it still too fast.
+
+**Rejected fifth candidate: 50 points per second** (1,000 points/s²), measured
+the same way: release → final frame 1,483–1,495 ms median for the 72-point
+click and 490–498 ms for the drag. The owner found it still too fast, especially
+where detailed Julia sets change quickly, and asked to bring back a speed that
+depends on the area.
+
+**Rejected sixth candidate: 40 points per second, slowing to 10 on changing frames.**
+`JuliaFramePacing` keeps the speed independent of the distance but restores the
+64x40 edge sample: where consecutive published frames change on more than 2.5% of
+the sampled edges, the cruise speed drops toward 10 logical map points per second
+(within about 0.1 s) and recovers toward 40 points per second in quiet areas
+(over about 0.4 s). The point reaches cruise speed in 50 ms (800 points/s²) and
+brakes at the same rate to stop exactly at the target; a frame longer than 50 ms
+advances only as far as a 50 ms frame. Unlike the original pacing, the speed
+cannot fall below 10 points per second and does not grow with the distance.
+Measured in its own JVM against the same control run:
+
+| Size | Limit | Release → final frame, click | Release → final frame, drag | Frames after release, click / drag |
+| --- | ---: | ---: | ---: | ---: |
+| 2400x1520 | 300 | 7,645 → 2,783 (p95 2,823) | 5,829 → 1,624 (p95 1,650) | 764 → 239 / 536 → 146 |
+| 2400x1520 | 1000 | 8,005 → 2,739 (p95 2,811) | 6,497 → 1,650 (p95 1,695) | 753 → 252 / 523 → 163 |
+| 3360x2000 | 300 | 6,908 → 2,677 (p95 2,706) | 5,422 → 1,567 (p95 1,594) | 730 → 240 / 546 → 134 |
+| 3360x2000 | 1000 | 8,031 → 2,699 (p95 2,778) | 6,340 → 1,619 (p95 1,656) | 711 → 221 / 478 → 147 |
+
+Medians in ms, control → candidate. At 40 points per second the 72-point click
+would take about 1.85 s; edge adaptation adds about 0.9 s on this path between a
+dendrite and the rabbit (at most 7.2 s if every frame of the path changed
+heavily). The workload's drag moves about 94 points per second, faster than the
+cruise speed, so the point trails the pointer and finishes about 1.6 s after
+release. Frame cadence is unchanged (publication interval median 8.8–9.7 ms
+against 8.4–10.6 ms).
+
+Drag input → first published frame changed from 11.2 / 11.6 to 16.0 / 14.0 ms
+median at 2400x1520 (1000 / 300 iterations) and from 9.3 / 10.6 to 21.2 /
+12.6 ms at 3360x2000; p95 at 3360x2000 from 23.0 / 20.9 to 39.2 / 23.2 ms. The
+GPU call during drags is up to 1.1 ms longer in the median at 3360x2000. All
+rejected candidates showed the same direction with smaller medians at 1000
+iterations. The edge sample costs the same per frame as in the control. The
+likely cause is the workload: the control's point trails far behind the pointer
+and renders constants near the start of the path, while the candidates render
+constants along the whole path, where frames at 1000 iterations cost more. The
+recording does not log each frame's constant, so this attribution is not proven;
+no input-latency threshold exists, and the change is recorded, not waived.
+
+On inspection the owner found it still too fast at the Mandelbrot set's
+boundary.
+
+**Retained candidate: the sixth candidate plus a boundary slowdown.** Close to
+the set's boundary the cruise speed also falls in proportion to the distance from
+it, from 40 points per second at 8 map points to 3 points per second on the
+boundary, whichever of the two limits is lower. The slowdown is predictive: it
+does not wait for frames to change. Outside the set the distance is the exterior
+distance estimate (1,000 iterations, one orbit per frame on the FX thread);
+inside it is the distance to the nearest escaping sample of a 280x192,
+1,000-iteration render of the map grid, built once with the thumbnail (about
+3 ms to render and 10 ms to build on this Mac). Interior distances are accurate to
+about a map point; a dent thinner than that, such as the main cardioid's cusp, is
+not resolved. Measured in its own JVM (`boundary3-1`), compared with the sixth
+candidate's run:
+
+| Size | Limit | Release → final frame, click | Release → final frame, drag | Frames after release, click / drag |
+| --- | ---: | ---: | ---: | ---: |
+| 2400x1520 | 300 | 2,783 → 9,710 (p95 9,721) | 1,624 → 8,684 (p95 16,822) | 239 → 881 / 146 → 789 |
+| 2400x1520 | 1000 | 2,739 → 9,707 (p95 10,727) | 1,650 → 8,684 (p95 9,765) | 252 → 823 / 163 → 727 |
+| 3360x2000 | 300 | 2,677 → 9,704 (p95 18,769) | 1,567 → 8,689 (p95 10,587) | 240 → 972 / 134 → 913 |
+| 3360x2000 | 1000 | 2,699 → 9,707 (p95 10,841) | 1,619 → 8,692 (p95 8,701) | 221 → 793 / 147 → 698 |
+
+Medians in ms. The measured path from Seahorse Valley to the period-3 bulb runs
+along the main cardioid's boundary: the point is within one map point of it for
+most of the way, so the 72-point click takes about 9.7 s, the same as a
+simulation of the pacing over the boundary distance alone (9.69 s). The
+changing-frame limit did not add measurable time on this path. A path through
+quiet areas still moves at 40 points per second. The drag's point trails the
+pointer and finishes about 8.7 s after release.
+
+Nine of the 80 measured trials took more than 0.3 s longer than the median and
+set the p95 values above. In four of them (one click and three drags, all at
+300 iterations) published frames arrived every 70–150 ms for part of the motion
+while each GPU call still took 7–12 ms: the click took 18.9 s, the drags
+9.7–16.9 s. In the other five (two clicks, three drags) a single gap of
+1.1–1.2 s between published frames added about 1 s (9.8–10.8 s). The pacing
+advances at most 50 ms per frame, so such gaps stretch the motion. These data do
+not show where the delays arose; their cause remains open, and a repeat run is
+needed to tell whether they recur.
+Drag input → first published frame: 13.3 / 15.8 ms median
+at 2400x1520 (300 / 1000 iterations) and 12.6 / 16.3 ms at 3360x2000.
+
+**Decision: retain** the boundary-aware pacing as the owner's requested
+behavior. Not covered: physical pointer input, other hardware, frame rates other
+than the display's 120 Hz (the changed-sample count, and so the frame-based
+slowdown, grows with the step per frame), moves longer than the measured
+72 points, and the cause of the slow-frame episodes.
