@@ -601,6 +601,109 @@ class JuliaGpuModeFxTest {
     }
 
     @Test
+    void parameterMapThumbnailUsesTheScenePaletteAndFollowsPaletteChanges() throws Exception {
+        try (var window = new MainWindow()) {
+            var explorer = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
+            });
+            var imageView = fx(() -> (ImageView) explorer.getScene().getRoot().getChildrenUnmodifiable().getFirst());
+            Image initialImage = fx(imageView::getImage);
+            assertNotNull(initialImage, "The map must show an image of its full size before the thumbnail is ready");
+            assertEquals(JuliaExplorer.WIDTH, initialImage.getWidth());
+            assertEquals(JuliaExplorer.HEIGHT, initialImage.getHeight());
+            awaitCondition(() -> fx(explorer::hasThumbnail));
+            fx(() -> {
+                assertSame(initialImage, imageView.getImage(), "The thumbnail must be written into the shown image");
+                assertEquals(PalettePreset.ICE.stops(), explorer.thumbnailColoring().paletteStops());
+                return null;
+            });
+            assertThumbnailMatchesPreview(explorer);
+
+            fx(() -> {
+                window.view.setPalette(PalettePreset.FIRE);
+                return null;
+            });
+            awaitCondition(() -> fx(() -> explorer.thumbnailColoring().paletteStops().equals(PalettePreset.FIRE.stops())));
+            fx(() -> {
+                assertTrue(explorer.isShowing());
+                assertSame(initialImage, imageView.getImage());
+                return null;
+            });
+            assertThumbnailMatchesPreview(explorer);
+        }
+    }
+
+    @Test
+    void applyingASceneWithTheLargestColorScaleKeepsRenderingWithTheMapOpen() throws Exception {
+        try (var window = new MainWindow()) {
+            var explorer = openExplorer(window);
+            awaitCondition(() -> fx(explorer::hasThumbnail));
+            var replacement = fx(() -> {
+                var current = window.view.sceneSnapshot();
+                var coloring = current.coloring();
+                return current.withColoring(new ColoringSettings(coloring.palette(), coloring.paletteStops(),
+                        3e307, coloring.offset(), false, OrbitTrap.NONE));
+            });
+            // Eight times the scale overflows a double; the map must not abort applying the scene.
+            fx(() -> { window.view.applyScene(replacement); return null; });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.hasExportableFrame()
+                    && window.view.sceneSnapshot().equals(replacement)));
+            fx(() -> {
+                if (explorer.isShowing()) assertEquals(Double.MAX_VALUE, explorer.thumbnailColoring().colorScale());
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void aPointFarOutsideTheMapMeasuresTheBoundaryInMapPoints() throws Exception {
+        try (var window = new MainWindow()) {
+            fx(() -> { window.view.setJuliaParameters(new JuliaParameters(4, 4)); return null; });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.hasExportableFrame()));
+            var explorer = openExplorer(window);
+            awaitCondition(() -> fx(explorer::hasThumbnail));
+            fx(() -> {
+                var map = explorer.getScene().getRoot();
+                // The press scales the gesture to reach (4, 4); the boundary must still be in map points.
+                map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, JuliaExplorer.WIDTH - 1, 0, true));
+                assertEquals(JuliaFramePacing.BOUNDARY_RANGE, explorer.boundaryDistance(new JuliaParameters(4, 4)));
+                assertEquals(JuliaFramePacing.BOUNDARY_RANGE,
+                        explorer.boundaryDistance(JuliaExplorer.point(JuliaExplorer.WIDTH - 1, 0)));
+                map.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, JuliaExplorer.WIDTH - 1, 0, false));
+                return null;
+            });
+        }
+    }
+
+    private static JuliaExplorer openExplorer(MainWindow window) throws Exception {
+        return fx(() -> {
+            window.item("Render", JuliaExplorer.TITLE).fire();
+            return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                    .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
+        });
+    }
+
+    private static void assertThumbnailMatchesPreview(JuliaExplorer explorer) throws Exception {
+        var coloring = fx(explorer::thumbnailColoring);
+        int[] expected;
+        try (var renderer = new com.shangin.fractal.render.ScenePreviewRenderer()) {
+            expected = renderer.render(FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE)
+                    .withIterations(new IterationSettings(80, 0)).withColoring(coloring),
+                    JuliaExplorer.WIDTH, JuliaExplorer.HEIGHT, () -> false);
+        }
+        int[] actual = fx(() -> {
+            int[] pixels = new int[JuliaExplorer.WIDTH * JuliaExplorer.HEIGHT];
+            for (int y = 0; y < JuliaExplorer.HEIGHT; y++) {
+                for (int x = 0; x < JuliaExplorer.WIDTH; x++) pixels[y * JuliaExplorer.WIDTH + x] = explorer.thumbnailArgb(x, y);
+            }
+            return pixels;
+        });
+        assertArrayEquals(expected, actual, "The thumbnail must use the scene palette");
+    }
+
+    @Test
     void parameterMapKeepsTheLastGpuFrameAndCommitsOneUndoableScene() throws Exception {
         try (var window = new MainWindow()) {
             window.runtime.showIsolatedBrightPixel();
@@ -650,6 +753,9 @@ class JuliaGpuModeFxTest {
             var dragged = initial.withJuliaParameters(JuliaExplorer.point(90, 75));
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()
                     && window.view.sceneSnapshot().equals(dragged)));
+            // The boundary slowdown starts with the thumbnail; the click below checks it.
+            var explorer = (JuliaExplorer) fx(() -> map.getScene().getWindow());
+            awaitCondition(() -> fx(explorer::hasThumbnail));
             var positions = new java.util.ArrayList<Double>();
             var lastAnimatedImage = new AtomicReference<Image>();
             var lastAnimatedGpuCall = new AtomicInteger();
@@ -672,9 +778,6 @@ class JuliaGpuModeFxTest {
                 assertEquals(expectedHeight, imageView.getImage().getHeight());
                 assertEquals(surface.getWidth(), imageView.getFitWidth());
                 assertEquals(surface.getHeight(), imageView.getFitHeight());
-                for (int i = 1; i < dragPositions.size(); i++) {
-                    assertTrue(Math.abs(dragPositions.get(i) - dragPositions.get(i - 1)) <= 2.520001);
-                }
                 assertEquals(90, marker.getCenterX(), 1e-9);
                 marker.centerXProperty().addListener((obs, before, after) -> positions.add(after.doubleValue()));
                 map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 169, 110, true));
@@ -684,6 +787,28 @@ class JuliaGpuModeFxTest {
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()
                     && window.view.sceneSnapshot().equals(initial.withJuliaParameters(JuliaExplorer.point(170, 110)))));
+            // The path crosses the main cardioid's edge. Each marker position is one advance of
+            // the pacing from the previous one, which never covers more than the boundary speed
+            // over the longest counted frame, however long the real frame took.
+            fx(() -> {
+                double length = Math.hypot(80, 35) / 80; // Map points per point along x on this line.
+                int nearBoundary = 0;
+                double previous = 90;
+                for (double x : positions) {
+                    var start = JuliaExplorer.point(previous, 75 + (previous - 90) * 35 / 80);
+                    double boundary = explorer.boundaryDistance(start);
+                    if (boundary < 0.5) {
+                        nearBoundary++;
+                        double limit = Math.clamp(JuliaFramePacing.SPEED * boundary / JuliaFramePacing.BOUNDARY_RANGE,
+                                JuliaFramePacing.BOUNDARY_SPEED, JuliaFramePacing.SPEED) * JuliaFramePacing.MAX_FRAME_SECONDS;
+                        assertTrue((x - previous) * length <= limit + 1e-9, "A step " + boundary
+                                + " points from the boundary moved " + (x - previous) * length + ", limit " + limit);
+                    }
+                    previous = x;
+                }
+                assertTrue(nearBoundary >= 10, "The click must pass close to the boundary, steps: " + nearBoundary);
+                return null;
+            });
             fx(() -> {
                 assertEquals(cpuCalls, window.cpu.calls.get());
                 assertTrue(window.view.showsJuliaGpuFrame());
@@ -694,11 +819,11 @@ class JuliaGpuModeFxTest {
                         "Committing the point must not dispatch another GPU frame");
                 double previous = 90;
                 for (double x : positions) {
-                    assertTrue(x >= previous - 1e-9 && x - previous <= 2.520001,
-                            "A click must advance through visible intermediate positions");
+                    assertTrue(x >= previous - 1e-9, "A click must move steadily toward its target");
                     previous = x;
                 }
                 assertEquals(170, previous, 1e-9);
+                assertTrue(positions.size() >= 5, "A click must advance through visible intermediate positions");
                 ((Stage) map.getScene().getWindow()).close();
                 assertSame(finalGpuFrame, imageView.getImage());
                 assertTrue(window.view.canExportPng());

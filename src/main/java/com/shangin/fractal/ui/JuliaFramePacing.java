@@ -1,33 +1,49 @@
 package com.shangin.fractal.ui;
 
-/** Limits the next map-animation step using colors from the last two published Julia frames. */
+/**
+ * Moves the map point toward its target at a speed that does not depend on the distance.
+ * The speed is lower where the published Julia frames change quickly, within a bounded range,
+ * and lower still close to the Mandelbrot set's boundary, where the Julia set changes most for
+ * the smallest step. The motion accelerates briefly at the start and brakes smoothly to a stop.
+ */
 final class JuliaFramePacing {
+    /** Cruise speed in quiet areas, in logical map points per second. */
+    static final double SPEED = 40;
+    /** Lowest cruise speed, where the frames change most, in logical map points per second. */
+    static final double MIN_SPEED = 10;
+    /** Speed on the Mandelbrot set's boundary, in logical map points per second. */
+    static final double BOUNDARY_SPEED = 3;
+    /** Distance from the boundary, in logical map points, at which the boundary stops slowing the point. */
+    static final int BOUNDARY_RANGE = 8;
+    /** Acceleration and braking in logical map points per second squared: full speed in 50 ms. */
+    static final double ACCELERATION = SPEED / 0.05;
+    private static final double MIN_PACE = MIN_SPEED / SPEED;
+    // Changes slow the point within about 0.1 s; quiet frames restore the speed over about 0.4 s.
+    private static final double SLOWDOWN_SECONDS = 0.1;
+    private static final double RECOVERY_SECONDS = 0.4;
+    /** A longer frame advances as if it had taken this long, so a stall does not become a jump. */
+    static final double MAX_FRAME_SECONDS = 0.05;
     private static final int COLUMNS = 64;
     private static final int ROWS = 40;
-    private static final long MAX_STEP = 12_000_000;
-    private static final long MIN_STEP = 125_000;
+    // Visibly changed edge samples between two frames that the pace aims for.
+    private static final double TARGET_CHANGED = COLUMNS * ROWS * 0.025;
     private int[] previous = new int[COLUMNS * ROWS];
     private int[] current = new int[COLUMNS * ROWS];
     private int previousWidth;
     private int previousHeight;
-    private static final double MAX_SPEED = 210; // Logical map points per second.
-    private static final double ACCELERATION = 700; // Logical map points per second squared.
-    // A 325 ms time constant closes 5% of the gap at 60 Hz.
-    private static final double FOLLOW_TIME_SECONDS = 0.325;
-    private static final double SETTLE_DISTANCE = 0.1; // Logical map points.
-    private double lastDistance;
-    private double lastSpeed;
-    private long budget;
-    private long lastStep;
+    private boolean moved;
+    private double pace = 1;
+    private double targetPace = 1;
+    private double speed;
 
     void reset() {
         previousWidth = 0;
-        lastStep = 0;
-        lastDistance = 0;
-        lastSpeed = 0;
-        budget = MAX_STEP;
+        moved = false;
+        pace = targetPace = 1;
+        speed = 0;
     }
 
+    /** Compares a published frame with the previous one and sets the pace that the motion approaches. */
     void observe(int[] pixels, int width, int height) {
         boolean comparable = previousWidth == width && previousHeight == height;
         int changed = 0;
@@ -35,8 +51,7 @@ final class JuliaFramePacing {
             int y = (int) ((row + 0.5) * height / ROWS);
             for (int column = 0; column < COLUMNS; column++) {
                 int x = (int) ((column + 0.5) * width / COLUMNS);
-                int index = row * COLUMNS + column;
-                current[index] = pixels[y * width + x];
+                current[row * COLUMNS + column] = pixels[y * width + x];
             }
         }
         if (comparable) {
@@ -51,10 +66,9 @@ final class JuliaFramePacing {
         current = swap;
         previousWidth = width;
         previousHeight = height;
-        if (comparable && lastStep > 0) {
-            // Aim for at most 2.5% visibly changed samples. Recover speed gradually in quiet areas.
-            double ratio = Math.clamp(previous.length * 0.025 / Math.max(1, changed), 0.25, 1.07);
-            budget = Math.clamp((long) (lastStep * ratio), MIN_STEP, MAX_STEP);
+        if (comparable && moved) {
+            // The number of changed samples grows with the step, so scale the pace toward the target.
+            targetPace = Math.clamp(pace * TARGET_CHANGED / Math.max(1, changed), MIN_PACE, 1);
         }
     }
 
@@ -70,33 +84,39 @@ final class JuliaFramePacing {
                 || Math.abs(((first >> 16) & 255) - ((second >> 16) & 255)) >= 20;
     }
 
+    /** Returns how far to move this frame away from the Mandelbrot set's boundary. */
     double advance(double remaining, long elapsedNanos) {
+        return advance(remaining, elapsedNanos, Double.POSITIVE_INFINITY);
+    }
+
+    /**
+     * Returns how far to move this frame, never more than the remaining distance.
+     * {@code boundaryDistance} is the point's distance from the Mandelbrot set's boundary in map
+     * points, even when {@code remaining} uses a coarser gesture scale: within
+     * {@link #BOUNDARY_RANGE} map points it scales the cruise speed down to the boundary speed.
+     */
+    double advance(double remaining, long elapsedNanos, double boundaryDistance) {
         if (remaining <= 0 || elapsedNanos <= 0) return 0;
-        double seconds = elapsedNanos * 1e-9;
-        double dt = Math.min(seconds, 0.032);
-        double previousSpeed = Math.min(lastSpeed, lastDistance / seconds);
-        double limit = Math.min((previousSpeed + ACCELERATION * dt) * dt,
-                MAX_SPEED * step(elapsedNanos) * 1e-9);
-        lastDistance = Math.min(followStep(remaining, dt), limit);
-        lastSpeed = lastDistance / dt;
-        return lastDistance;
-    }
-
-    private static double followStep(double remaining, double seconds) {
-        if (remaining > SETTLE_DISTANCE) {
-            return remaining * -Math.expm1(-seconds / FOLLOW_TIME_SECONDS);
+        double seconds = Math.min(elapsedNanos * 1e-9, MAX_FRAME_SECONDS);
+        moved = true;
+        double settle = targetPace < pace ? SLOWDOWN_SECONDS : RECOVERY_SECONDS;
+        pace += (targetPace - pace) * -Math.expm1(-seconds / settle);
+        // The speed falls in proportion to the distance from the boundary, so the point approaches
+        // it gradually and crosses it at the boundary speed.
+        double nearBoundary = Math.clamp(SPEED * boundaryDistance / BOUNDARY_RANGE, BOUNDARY_SPEED, SPEED);
+        // The braking limit lets the point stop exactly at the target with the same deceleration.
+        speed = Math.min(Math.min(Math.min(SPEED * pace, nearBoundary), speed + ACCELERATION * seconds),
+                Math.sqrt(2 * ACCELERATION * remaining));
+        double step = speed * seconds;
+        if (step >= remaining) {
+            speed = 0;
+            return remaining;
         }
-
-        // Join the exponential approach at the same speed, then bring the speed to zero
-        // in finite time. The last frame follows the same curve as the preceding frames.
-        double timeToStop = 2 * FOLLOW_TIME_SECONDS * Math.sqrt(remaining / SETTLE_DISTANCE);
-        double progress = seconds / timeToStop;
-        if (progress >= 1) return remaining;
-        return remaining * progress * (2 - progress);
+        return step;
     }
 
-    long step(long elapsed) {
-        lastStep = Math.min(elapsed, budget);
-        return lastStep;
+    /** Fraction of the quiet-area speed currently in use. */
+    double pace() {
+        return pace;
     }
 }

@@ -33,6 +33,22 @@ public final class ScenePreviewRenderer implements AutoCloseable {
      */
     public int[] render(FractalScene scene, int width, int height, BooleanSupplier cancelled)
             throws InterruptedException {
+        SamplePlane samples = renderSamples(scene, width, height, cancelled);
+        if (samples == null) return null;
+        int[] pixels = new int[samples.size()];
+        colorizer.color(samples, IntBuffer.wrap(pixels), scene.coloring().createStrategy(samples));
+        return pixels;
+    }
+
+    /**
+     * Returns the uncolored samples of a completed preview, so a caller can color them
+     * again with other palettes, or {@code null} when {@code cancelled} reported
+     * cancellation before the preview completed.
+     *
+     * @throws IllegalArgumentException if no CPU backend supports the scene precision
+     */
+    public SamplePlane renderSamples(FractalScene scene, int width, int height, BooleanSupplier cancelled)
+            throws InterruptedException {
         Objects.requireNonNull(scene);
         Objects.requireNonNull(cancelled);
         RenderJob job = new RenderJob(FormulaDefinition.forScene(scene), scene.viewport(), width, height,
@@ -43,10 +59,7 @@ public final class ScenePreviewRenderer implements AutoCloseable {
         }
         RenderFrame frame = backend.render(RenderFrame.create(job), cancelled, region -> {}, null);
         if (cancelled.getAsBoolean() || !frame.isComplete()) return null;
-        SamplePlane samples = frame.samplePlane();
-        int[] pixels = new int[samples.size()];
-        colorizer.color(samples, IntBuffer.wrap(pixels), scene.coloring().createStrategy(samples));
-        return pixels;
+        return frame.samplePlane();
     }
 
     @Override

@@ -255,15 +255,37 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   (26–32 ms p95) at 2400x1520 and 3360x2000, 300 and 1000 iterations, with frames
   every 10–17 ms. The first frame after opening takes about 170 ms (kernel
   creation about 100 ms), and a gesture started at once waits up to about 130 ms.
-  Clicks and drags across the measured 72-point path take 7–10 s to settle at the
-  selected point because the pacing slows near changing edges; owner decision
-  pending. The bright-point filter then moved to a second GPU pass (retained,
+  Clicks and drags across the measured 72-point path took 7–10 s to settle at the
+  selected point because the pacing slowed near changing edges. Per the owner's
+  decision (2026-11-22), the speed no longer depends on the distance: 40 map points
+  per second in quiet areas, slowing to no less than 10 where frames change
+  quickly and, in proportion to the distance from the Mandelbrot set's boundary,
+  to 3 points per second on the boundary. The measured path follows the main
+  cardioid's boundary, so its click arrives about 9.7 s and its drag about 8.7 s
+  after release (previously 5.4–8 s;
+  [map pacing](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md#follow-up-map-pacing)).
+  The map is drawn in the main scene's palette and is colored again when the
+  palette changes.
+  The bright-point filter then moved to a second GPU pass (retained,
   bit-exact against the CPU reference): at 3360x2000 the software frame fell from
   about 12.4 to 6.6 ms and now fits one 120 Hz pulse, drag input → pulse improved
   up to 46%, and settling took 8–32% less time; the first frame after opening the
   map became slower (cold about 160 → 260 ms, n = 3). Still open: acceptance
   thresholds, earlier kernel warm-up, physical input and display timing, other
   hardware.
+- [ ] **Map speed settings in Explore Julia Parameters:** let the user adjust
+  how fast the map point moves instead of relying only on the fixed pacing
+  (currently 40 map points per second in quiet areas, no less than 10 where frames
+  change quickly, 3 on the Mandelbrot set's boundary within 8 map points; see
+  [map pacing](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md#follow-up-map-pacing)).
+  Decide which values are exposed (for example the quiet-area speed and the
+  strength of the boundary and changing-frame slowdowns), their ranges, defaults
+  and where the control lives (the map window or Render Settings). Persist the
+  choice with the application preferences, not in scenes, so sessions, bookmarks
+  and exported scenes stay unchanged. Apply a change to the next motion without
+  a jump or a stale frame, keep click and drag on the same pacing, and cover the
+  settings with unit and JavaFX tests and the visible control in light and dark
+  appearance.
 - [ ] **Interesting-places gallery:** ship a curated set of named scenes with
   descriptions and previews, grouped by fractal. Open entries through the same
   scene/history pipeline as bookmarks; preserve exact coordinates and parameters.
