@@ -74,6 +74,18 @@ public interface GpuRuntime extends AutoCloseable {
         return java.util.Optional.empty();
     }
 
+    /**
+     * Prepares the Julia preview kernel by rendering {@code request} and discarding its
+     * colors, so the first real frame does not wait for shader compilation and pipeline
+     * creation. Returns whether the kernel ran. Unlike a frame, a failure other than
+     * device loss leaves the runtime's state unchanged: the next real frame repeats the
+     * work and reports the failure through its usual path.
+     */
+    default boolean warmUpJuliaPreview(GpuJuliaPreviewRequest request) throws InterruptedException {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Julia preview warm-up cancelled");
+        return false;
+    }
+
     @Override
     void close();
 }

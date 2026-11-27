@@ -1496,6 +1496,41 @@ class JuliaGpuModeFxTest {
     }
 
     @Test
+    void aCompletedCpuJuliaViewWarmsTheKernelOnce() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.render(FractalScene.create(FractalPreset.MANDELBROT, PalettePreset.ICE));
+            fixture.render(JULIA);
+            awaitCondition(() -> fixture.runtime.warmUps() == 1);
+            assertEquals(16, fixture.runtime.lastWarmUpWidth());
+            assertEquals(16, fixture.runtime.lastWarmUpHeight());
+            assertEquals(fixture.lastIterations.get(), fixture.runtime.lastWarmUpMaxIterations());
+            assertTrue(fixture.runtime.lastWarmUpFilterBrightPoints());
+            assertEquals(0, fixture.runtime.calls(), "the warm-up shows no frame");
+
+            fixture.render(JULIA.withJuliaParameters(new JuliaParameters(-0.123, 0.745)));
+            // The worker runs in order, so this frame follows any warm-up queued before it.
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            assertEquals(1, fixture.runtime.calls());
+            assertEquals(1, fixture.runtime.warmUps());
+        }
+    }
+
+    @Test
+    void aJuliaGpuFrameLeavesNoWarmUpForLaterCpuViews() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            fixture.controller(controller -> controller.setJuliaGpu(false));
+            fixture.render(JULIA.withJuliaParameters(new JuliaParameters(-0.123, 0.745)));
+            fixture.controller(controller -> controller.setJuliaGpu(true));
+            fixture.render(JULIA);
+            assertEquals(2, fixture.runtime.calls());
+            assertEquals(0, fixture.runtime.warmUps());
+        }
+    }
+
+    @Test
     void renderMenuTogglesJuliaGpuOnlyForJuliaAndDisablesExport() throws Exception {
         var runtime = new FakeJuliaPreviewRuntime();
         var backend = new CountingBackend();

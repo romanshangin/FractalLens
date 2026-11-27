@@ -1328,6 +1328,11 @@ pointer position. The same motion continues after release, rendering the exact
 drop position once the remaining distance is within 0.01 map points at the
 gesture's scale. The scene is recorded after that frame is displayed.
 Movement under four map points from the press remains a click.
+Once a Julia view the map supports has finished rendering, the GPU kernel is
+prepared in the background, which takes a fraction of a second. Once it is
+ready, the map's first frame and a gesture started at once do not wait for
+shader compilation. Opening the map during the view's first render or before
+the kernel is ready waits for the rest of that work.
 The Julia GPU kernel renders at full canvas resolution. A local filter, a
 second GPU pass, dims isolated near-white pixels before publication. Pointer updates coalesce while a
 frame is rendering. The last GPU frame stays on the canvas when the target is

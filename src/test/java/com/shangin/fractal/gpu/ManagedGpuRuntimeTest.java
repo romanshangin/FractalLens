@@ -211,6 +211,50 @@ class ManagedGpuRuntimeTest {
         assertEquals(1, session.closes);
     }
 
+    @Test
+    void juliaWarmUpRunsTheKernelWithoutChangingTheRuntimeOnAnOrdinaryFailure() throws Exception {
+        FakeSession session = new FakeSession();
+        try (GpuRuntime runtime = open(session)) {
+            assertTrue(runtime.warmUpJuliaPreview(juliaRequest()));
+            assertEquals(1, session.juliaRenders);
+
+            session.juliaFailure = new GpuException("shader compilation failed", false);
+            assertFalse(runtime.warmUpJuliaPreview(juliaRequest()));
+            // The first real frame reports such a failure; the warm-up leaves the runtime available.
+            assertEquals(GpuRuntimeState.AVAILABLE, runtime.capabilityReport().state());
+            assertEquals(0, session.closes);
+            assertTrue(runtime.renderJuliaPreview(juliaRequest()).isEmpty());
+            assertEquals(GpuRuntimeState.UNAVAILABLE, runtime.capabilityReport().state());
+            assertFalse(runtime.warmUpJuliaPreview(juliaRequest()));
+            assertEquals(3, session.juliaRenders);
+        }
+    }
+
+    @Test
+    void juliaWarmUpDisablesTheRuntimeWhenTheDeviceIsLost() throws Exception {
+        FakeSession session = new FakeSession();
+        GpuRuntime runtime = open(session);
+        session.juliaFailure = new GpuException("device lost", true);
+        assertFalse(runtime.warmUpJuliaPreview(juliaRequest()));
+        assertEquals(GpuRuntimeState.DEVICE_LOST, runtime.capabilityReport().state());
+        assertTrue(session.closedAsLost);
+        runtime.close();
+        assertEquals(1, session.closes);
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(InterruptedException.class, () -> runtime.warmUpJuliaPreview(juliaRequest()));
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    private static GpuJuliaPreviewRequest juliaRequest() {
+        var view = new com.shangin.fractal.math.Viewport(0, 0, 2.4);
+        RenderJob job = new RenderJob(FormulaDefinition.forPreset(FractalPreset.JULIA, OrbitTrap.NONE), view, 4, 4, 100);
+        return new GpuJuliaPreviewRequest(job, RenderGrid.from(view, 4, 4),
+                new SmoothPaletteColoring(PalettePreset.ICE.palette()), new int[16], true);
+    }
+
     private static GpuRuntime open(FakeSession session) {
         return ManagedGpuRuntime.open(GpuPlatform.MACOS, () -> session);
     }
@@ -224,6 +268,8 @@ class ManagedGpuRuntimeTest {
         boolean closedAsLost;
         boolean failClose;
         GpuException healthFailure;
+        GpuException juliaFailure;
+        int juliaRenders;
 
         public List<GpuDevice> devices() { return List.of(FLOAT_DEVICE, DOUBLE_DEVICE); }
         public GpuDevice selectedDevice() { return FLOAT_DEVICE; }
@@ -234,6 +280,11 @@ class ManagedGpuRuntimeTest {
             closes++;
             closedAsLost = lost;
             if (failClose) throw new IllegalStateException("cleanup failed");
+        }
+        @Override public GpuJuliaPreviewResult renderJuliaPreview(GpuJuliaPreviewRequest request) {
+            juliaRenders++;
+            if (juliaFailure != null) throw juliaFailure;
+            return new GpuJuliaPreviewResult(request.colors(), 0, 0, 0, 0, 0, 0, request.filterBrightPoints());
         }
     }
 }

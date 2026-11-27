@@ -151,6 +151,38 @@ class GpuJuliaNativeTest {
         assertTrue(dimmed > 0, "No tested frame contained an isolated bright point");
     }
 
+    @Test
+    void warmUpPreparesTheKernelWithoutChangingLaterFrames() throws Exception {
+        var ice = new SmoothPaletteColoring(PalettePreset.ICE.palette());
+        RenderJob small = previewJob(16, 16, 300, -0.8, 0.156);
+        var warmUp = new GpuJuliaPreviewRequest(small, RenderGrid.from(small.viewport(), 16, 16), ice,
+                new int[16 * 16], true);
+        RenderJob job = previewJob(641, 401, 300, -0.8, 0.156);
+        RenderGrid grid = RenderGrid.from(job.viewport(), 641, 401);
+        int[][] reference = new int[2][job.width() * job.height()];
+        try (GpuRuntime cold = GpuRuntimeFactory.createDefault()) {
+            if (Boolean.getBoolean("fractal.gpu.expectUnavailable")) {
+                assertFalse(cold.warmUpJuliaPreview(warmUp));
+                return;
+            }
+            for (int filter = 0; filter < 2; filter++) {
+                cold.renderJuliaPreview(new GpuJuliaPreviewRequest(job, grid, ice, reference[filter], filter == 1))
+                        .orElseThrow();
+            }
+        }
+        try (GpuRuntime runtime = GpuRuntimeFactory.createDefault()) {
+            assertTrue(runtime.warmUpJuliaPreview(warmUp), runtime.capabilityReport().toString());
+            assertEquals(GpuRuntimeState.AVAILABLE, runtime.capabilityReport().state());
+            // Both frames reallocate the warm-up's small buffers.
+            for (int filter = 1; filter >= 0; filter--) {
+                int[] colors = new int[reference[filter].length];
+                runtime.renderJuliaPreview(new GpuJuliaPreviewRequest(job, grid, ice, colors, filter == 1))
+                        .orElseThrow();
+                assertArrayEquals(reference[filter], colors, "filter=" + (filter == 1));
+            }
+        }
+    }
+
     private static RenderJob previewJob(int width, int height, int limit, double real, double imaginary) {
         return GpuJuliaPreviewRequestTest.job(new Viewport(0, 0, 2.4), width, height, limit, real, imaginary);
     }

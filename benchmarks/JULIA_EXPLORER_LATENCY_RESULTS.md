@@ -8,7 +8,9 @@ Selected numbers: [summary CSV](JULIA_EXPLORER_LATENCY_SUMMARY.csv). A
 [follow-up](#follow-up-bright-point-filter-on-the-gpu) moved the bright-point
 filter to the GPU and was retained; the measurements before it describe the
 code state of PR #87. A [second follow-up](#follow-up-map-pacing) made
-the map point's speed independent of the distance and slower near the set's boundary.
+the map point's speed independent of the distance and slower near the set's boundary. A
+[later follow-up](#follow-up-kernel-warm-up-after-the-julia-view-renders) warms the
+kernel once the Julia view has rendered and was retained.
 
 ## Environment and code state
 
@@ -462,3 +464,72 @@ the exact target. The elapsed time from release to the final publication was
 1594 ms before and 1723 ms after (medians). The post-layout frame interval was
 9.40 ms p95 in both. The driver used synthetic input on macOS arm64 with
 `caffeinate -di`. The owned sleep assertions were released on exit.
+
+## Follow-up: kernel warm-up after the Julia view renders
+
+Candidate: when a CPU render of a Julia view that the GPU kernel supports
+completes, the Julia GPU worker renders one 16x16 filtered frame of that view
+and discards it. This compiles both shaders and creates their pipelines before
+the map opens; see [GPU runtime](../docs/platform/GPU_RUNTIME.md#julia-gpu-paths).
+Control: a frozen build of `main` at `34db3c9`. The candidate is the
+uncommitted `feature/julia-kernel-warm-up` diff on the same base.
+
+Declared before the candidate was written:
+
+- **Workload:** `fractal.juliaLatency.sizes=1680x1000` (3360x2000 physical),
+  300 iterations, `samples=0`, `warmup=0`, no screen capture, one JVM per trial.
+  `cold=open` ran 5 JVM pairs in the order control, candidate, candidate,
+  control, control, candidate, candidate, control, control, candidate.
+  `cold=drag` ran 3 pairs in the order control, candidate, candidate, control,
+  control, candidate. The driver lets the main view settle before it opens the map.
+- **Correctness:** every trial commits exactly the target constant, and
+  `GpuJuliaNativeTest` (`-Pgpu-smoke`) passes. It includes a warm-up followed
+  by frames that must be bit-identical to those of a runtime without one.
+- **Retain:** median map opened → first published frame (`cold=open`) at least
+  50% shorter, and pooled p95 drag input → first published frame (`cold=drag`)
+  no more than 5% worse.
+- **Reject:** the median less than 20% shorter, or that p95 more than 10% worse.
+  Otherwise **inconclusive**.
+
+### Results
+
+The campaign ran on 2026-11-27 from 00:37 to 00:41 UTC on the machine described
+above, with Java 26.0.1, JavaFX 26.0.2 and LWJGL 3.4.2. Power was AC, with no
+thermal or performance warning before or after, under one `caffeinate -di`
+controller with nothing else running. After the campaign no `caffeinate`
+process or assertion remained. All 16 JVMs committed the exact target constant.
+The native check passed on the same machine.
+
+Medians, with p95 and the maximum in parentheses, in milliseconds, control →
+candidate:
+
+| Measure | Control | Candidate |
+| --- | ---: | ---: |
+| Map opened → first frame published (`cold=open`, 5 JVMs each) | 208.1 (241.7) | 52.3 (65.2) |
+| First frame's runtime call | 179.4 (210.4) | 22.6 (32.3) |
+| of which outside the kernel (shader compilation, pipelines) | 148.4 (165.7) | 1.7 (4.7) |
+| Map opened → first frame published (`cold=drag`, 3 JVMs each) | 203.1 (204.2) | 64.8 (68.2) |
+| Drag input → first published frame (`cold=drag`, 144 inputs each) | 20.2 (132.2, 159.0) | 16.6 (25.3, 27.7) |
+| Drag input → first post-layout pulse | 26.4 (134.2, 160.9) | 22.5 (32.4, 34.0) |
+
+The first frame after opening the map is 74.9% shorter. It still includes about
+22 ms from opening to the first submitted frame and the first full-size
+allocation and readback. A drag started in the same event as the opening no
+longer waits for kernel creation: its p95 fell by 80.8%. That puts it within
+the warm-drag range measured above.
+
+**Decision: retain.** Both retain conditions hold. The warm-up runs only after
+the view's render has completed, so the measured renders do not include it. A map
+opened while the first Julia render or the warm-up is still running waits for
+the kernel; this campaign does not measure that case.
+
+After this campaign, independent review led to two changes. The warm-up
+pixels now come from the center of the view's own grid, which the precision
+gate accepts whenever it accepts the frame. A 16x16 grid of the same viewport
+could leave the FP32 range in some portrait views. The worker also no longer
+skips the warm-up for a frame that is waiting, because that frame can still be
+cancelled. Neither change affects the measured path. The landscape initial view
+passed the gate either way. The settled main view queued the warm-up long
+before the map opened, with no frame waiting, and it still renders one 16x16
+frame. The measurements were not repeated. Not covered: other sizes and
+iteration limits, warm reopening (unchanged), physical input, other hardware.

@@ -33,6 +33,8 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
     private volatile int lastMaxIterations;
     private volatile boolean lastFilterBrightPoints;
     private volatile boolean gpuFilterRefused;
+    private final AtomicInteger warmUps = new AtomicInteger();
+    private volatile GpuJuliaPreviewRequest lastWarmUp;
 
     /** The solid color a frame of this coloring and constant receives. */
     public static int expectedColor(ColoringSettings coloring, double cReal) {
@@ -60,6 +62,19 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
     public boolean lastFilterBrightPoints() { return lastFilterBrightPoints; }
     /** Returns filter requests unfiltered, like a kernel whose filtered buffer exceeds its budget. */
     public void refuseGpuFilter(boolean refused) { gpuFilterRefused = refused; }
+    /** Kernel warm-ups, which are not frames and never count as {@link #calls()}. */
+    public int warmUps() { return warmUps.get(); }
+    public int lastWarmUpWidth() { return lastWarmUp.width(); }
+    public int lastWarmUpHeight() { return lastWarmUp.height(); }
+    public int lastWarmUpMaxIterations() { return lastWarmUp.maxIterations(); }
+    public boolean lastWarmUpFilterBrightPoints() { return lastWarmUp.filterBrightPoints(); }
+    /** The warm-up's FP32 axes: its real coordinates, then its imaginary ones. */
+    public float[] lastWarmUpAxes() {
+        GpuJuliaPreviewRequest request = lastWarmUp;
+        java.nio.FloatBuffer axes = java.nio.FloatBuffer.allocate(request.width() + request.height());
+        request.writeAxes(axes);
+        return axes.array();
+    }
 
     private static final GpuDevice DEVICE = new GpuDevice("fake", "1.1", 0, 0, 0, 1024, 1L << 30,
             java.util.Set.of(GpuNumericCapability.FLOAT32));
@@ -119,6 +134,14 @@ public final class FakeJuliaPreviewRuntime implements GpuRuntime {
             JuliaBrightPointFilter.apply(raw, request.colors(), request.width(), request.height());
         }
         return Optional.of(new GpuJuliaPreviewResult(request.colors(), 0, 0, 1, 0, 1, 0, filtered));
+    }
+
+    @Override
+    public synchronized boolean warmUpJuliaPreview(GpuJuliaPreviewRequest request) throws InterruptedException {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Julia preview warm-up cancelled");
+        lastWarmUp = request;
+        warmUps.incrementAndGet();
+        return available;
     }
 
     @Override public synchronized void close() {
