@@ -1,5 +1,6 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.config.JuliaClickSpeed;
 import com.shangin.fractal.scene.JuliaParameters;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +71,58 @@ class JuliaExplorerTest {
         double step = pacing.advance(0.5, FRAME_120_HZ);
         assertEquals(step / 2, pacing.advance(0.25, FRAME_120_HZ), 1e-12);
         assertEquals(0.008, pacing.advance(0.008, FRAME_120_HZ));
+    }
+
+    @Test void clickSpeedScalesCruiseBoundaryAndBrakingWithoutChangingTheTarget() {
+        for (var speed : JuliaClickSpeed.values()) {
+            var pacing = new JuliaFramePacing();
+            pacing.reset(speed);
+            double cruise = JuliaFramePacing.SPEED * speed.multiplier() * FRAME_120_HZ * 1e-9;
+            assertTrue(pacing.advance(100, FRAME_120_HZ) < cruise / 20);
+            for (int i = 0; i < 20; i++) pacing.advance(100, FRAME_120_HZ);
+            assertEquals(cruise, pacing.advance(100, FRAME_120_HZ), 1e-12);
+            assertEquals(cruise * JuliaFramePacing.BOUNDARY_SPEED / JuliaFramePacing.SPEED,
+                    pacing.advance(100, FRAME_120_HZ, 0), 1e-12);
+            double braking = pacing.advance(0.5, FRAME_120_HZ);
+            assertTrue(braking > 0 && braking < cruise);
+            assertEquals(braking / 2, pacing.advance(0.25, FRAME_120_HZ), 1e-12);
+            assertEquals(0.008, pacing.advance(0.008, FRAME_120_HZ));
+        }
+    }
+
+    @Test void changingFramesPreserveSpeedRatiosAtCruiseAndAtTheSlowdownFloor() {
+        for (int changesPerPoint : new int[] {480, 1440}) {
+            double defaultStep = settledStep(JuliaClickSpeed.DEFAULT, changesPerPoint);
+            assertTrue(defaultStep < JuliaFramePacing.SPEED * FRAME_120_HZ * 1e-9);
+            for (var speed : JuliaClickSpeed.values()) {
+                double expected = defaultStep * speed.multiplier();
+                // Counting whole pixels quantizes the simulated image changes.
+                assertEquals(expected, settledStep(speed, changesPerPoint), expected * 0.04,
+                        speed + " at " + changesPerPoint + " changed samples per map point");
+            }
+        }
+    }
+
+    private static double settledStep(JuliaClickSpeed speed, int changesPerPoint) {
+        var pacing = new JuliaFramePacing();
+        pacing.reset(speed);
+        int[] pixels = new int[64 * 40];
+        for (int i = 0; i < pixels.length; i++) {
+            pixels[i] = (i % 64 + i / 64) % 2 == 0 ? 0xffffffff : 0xff000000;
+        }
+        pacing.observe(pixels, 64, 40);
+        double step = 0;
+        for (int frame = 0; frame < 480; frame++) {
+            step = pacing.advance(100, FRAME_120_HZ);
+            int changed = (int) Math.round(step * changesPerPoint);
+            for (int i = 0; i < changed; i++) {
+                // Toggle only dark squares. Their white neighbors keep them detectable as edges.
+                int pixel = 2 * i + (1 - i / 32 % 2);
+                pixels[pixel] ^= 0x00ff0000;
+            }
+            pacing.observe(pixels, 64, 40);
+        }
+        return step;
     }
 
     @Test void changingFramesSlowTheCruiseGraduallyButNotBelowTheMinimumSpeed() {

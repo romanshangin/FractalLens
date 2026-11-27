@@ -280,22 +280,13 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   published frame. A map opened during the view's first render or its warm-up
   still waits for the kernel. Still open: acceptance thresholds, physical input and display
   timing, other hardware.
-- [ ] **Map speed settings in Explore Julia Parameters:** let the user adjust
-  how fast the map point moves instead of relying only on the fixed pacing
-  (currently, for clicks, 40 map points per second in quiet areas, no less than
-  10 where frames change quickly, 3 on the Mandelbrot set's boundary within 8 map
-  points; a drag advances 5% of the remaining distance per frame; see
-  [map pacing](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md#follow-up-map-pacing)
-  and [drag motion](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md#follow-up-separate-drag-and-click-motion)).
-  Decide which values are exposed (for example the quiet-area speed and the
-  strength of the boundary and changing-frame slowdowns), their ranges, defaults
-  and where the control lives (the map window or Render Settings). Persist the
-  choice with the application preferences, not in scenes, so sessions, bookmarks
-  and exported scenes stay unchanged. Apply a change to the next motion without
-  a jump or a stale frame, decide whether the drag step is adjustable alongside
-  the click pacing (they have been separate since 2026-11-26), and cover the
-  settings with unit and JavaFX tests and the visible control in light and dark
-  appearance.
+- [ ] **Map click speed in Explore Julia Parameters:** the map window offers
+  Very slow (0.25×), Slow (0.5×), Default (1×), Fast (2×), and Very fast (4×).
+  The preset scales adaptive click motion, including its speed near the
+  boundary, and takes effect on the next click. Dragging keeps its own
+  5%-per-frame pacing. The application remembers
+  the preset across launches. Validate preference persistence, exact arrival
+  without a final jump, and the visible control in light and dark appearance.
 - [ ] **Interesting-places gallery:** ship a curated set of named scenes with
   descriptions and previews, grouped by fractal. Open entries through the same
   scene/history pipeline as bookmarks; preserve exact coordinates and parameters.

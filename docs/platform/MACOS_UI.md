@@ -1302,11 +1302,17 @@ eightfold for its 80-iteration limit, without histogram or orbit-trap coloring)
 and is colored again whenever those settings change while it is open (Animate
 Palette's moving offset is not followed). Until its CPU
 preview is ready, the map shows the palette's first color.
-On click, the point moves toward its target at a speed that does not depend on
-the distance, so a longer move takes
-proportionally longer. In quiet areas it moves at 40 logical map points per
-second (72 points take about 2.0 s at 60–120 Hz, including acceleration and
-braking). Where the displayed Julia frames change quickly, measured on edges
+**Click speed** below the map offers **Very slow** (0.25×), **Slow** (0.5×),
+**Default** (1×), **Fast** (2×), and **Very fast** (4×). The selection is an
+application preference and takes effect on the next click. Each preset keeps
+the adaptive slowdowns and smooth start and finish. For every preset, cruise
+time grows in proportion to distance under comparable rendering conditions.
+The speeds below are for **Default**. Other presets multiply them by their
+selected factor, including the reduced speeds near the boundary and where
+the Julia image changes quickly.
+In quiet areas the point moves at 40 logical map points per second. With
+**Default**, 72 points take about 2.0 s at 60–120 Hz, including acceleration
+and braking. Where the displayed Julia frames change quickly, measured on edges
 in a 64 by 40 sample of each frame, it slows down to
 as little as 10 points per second; the speed falls within about 0.1 s and
 recovers over about 0.4 s. Near the Mandelbrot set's boundary, where the Julia

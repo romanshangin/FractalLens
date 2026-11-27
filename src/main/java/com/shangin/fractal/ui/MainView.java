@@ -4,6 +4,7 @@ import com.shangin.fractal.app.FractalViewStore;
 import com.shangin.fractal.app.LastSessionStore;
 import com.shangin.fractal.app.PreferencesStore;
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.config.JuliaClickSpeed;
 import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.export.AdaptivePngExportService;
 import com.shangin.fractal.formula.FractalPreset;
@@ -98,6 +99,7 @@ public class MainView extends BorderPane {
         restoreFractalViews();
         menuBar = new MainMenuBar(stage, fractalView, initialScene, this::exportPng);
         menuBar.setOnWidePreviewChanged(this::saveWidePreview);
+        menuBar.configureJuliaClickSpeed(restoreJuliaClickSpeed(), this::saveJuliaClickSpeed);
         if (System.getProperty("os.name", "").startsWith("Mac")) {
             // Glass falls back to this menu while no stage is focused, including
             // the activation gap when returning from another macOS Space.
@@ -143,6 +145,23 @@ public class MainView extends BorderPane {
             preferences.saveWidePreview(settings);
         } catch (IOException exception) {
             System.err.println("Could not save FractalLens preferences: " + exception.getMessage());
+        }
+    }
+
+    private JuliaClickSpeed restoreJuliaClickSpeed() {
+        try {
+            return preferences.juliaClickSpeed();
+        } catch (IOException exception) {
+            System.err.println("Could not read the Julia map click speed: " + exception.getMessage());
+            return JuliaClickSpeed.DEFAULT;
+        }
+    }
+
+    private void saveJuliaClickSpeed(JuliaClickSpeed speed) {
+        try {
+            preferences.saveJuliaClickSpeed(speed);
+        } catch (IOException exception) {
+            System.err.println("Could not save the Julia map click speed: " + exception.getMessage());
         }
     }
 

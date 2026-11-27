@@ -1,5 +1,6 @@
 package com.shangin.fractal.app;
 
+import com.shangin.fractal.config.JuliaClickSpeed;
 import com.shangin.fractal.scene.WidePreviewSettings;
 
 import java.io.IOException;
@@ -20,6 +21,7 @@ import java.util.Properties;
 public final class PreferencesStore {
     static final String FILE_NAME = "preferences.properties";
     static final String WIDE_PREVIEW = "widePreview";
+    private static final String JULIA_CLICK_SPEED = "juliaClickSpeed";
     private static final long MAX_BYTES = 65_536;
     private final Path file;
 
@@ -48,9 +50,7 @@ public final class PreferencesStore {
     public void saveWidePreview(boolean enabled) throws IOException {
         Properties properties = readForReplacement();
         properties.setProperty(WIDE_PREVIEW, enabled ? "on" : "off");
-        StringWriter text = new StringWriter();
-        properties.store(text, "FractalLens preferences");
-        LastSessionStore.atomicWrite(file, text.toString());
+        write(properties);
     }
 
     /** Restores each choice independently; old files retain the current size and quality defaults. */
@@ -82,6 +82,26 @@ public final class PreferencesStore {
         properties.setProperty(WIDE_PREVIEW, settings.enabled() ? "on" : "off");
         properties.setProperty("widePreviewExtent", Double.toString(settings.extent()));
         properties.setProperty("widePreviewPixelStep", Integer.toString(settings.pixelStep()));
+        write(properties);
+    }
+
+    /** Restores the map click speed, including for files saved before this setting existed. */
+    public JuliaClickSpeed juliaClickSpeed() throws IOException {
+        try {
+            return JuliaClickSpeed.valueOf(read().getProperty(JULIA_CLICK_SPEED, ""));
+        } catch (IllegalArgumentException unknownSpeed) {
+            return JuliaClickSpeed.DEFAULT;
+        }
+    }
+
+    /** Saves the map click speed alongside the other application preferences. */
+    public void saveJuliaClickSpeed(JuliaClickSpeed speed) throws IOException {
+        Properties properties = readForReplacement();
+        properties.setProperty(JULIA_CLICK_SPEED, speed.name());
+        write(properties);
+    }
+
+    private void write(Properties properties) throws IOException {
         StringWriter text = new StringWriter();
         properties.store(text, "FractalLens preferences");
         LastSessionStore.atomicWrite(file, text.toString());

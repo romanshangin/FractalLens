@@ -1,5 +1,6 @@
 package com.shangin.fractal.app;
 
+import com.shangin.fractal.config.JuliaClickSpeed;
 import com.shangin.fractal.scene.WidePreviewSettings;
 
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,22 @@ class PreferencesStoreTest {
         assertEquals(Optional.of(true), new PreferencesStore(file).widePreview(), "The choice survives a restart");
         store.saveWidePreview(false);
         assertEquals(Optional.of(false), store.widePreview());
+    }
+
+    @Test
+    void clickSpeedDefaultsForOldOrUnknownValuesAndKeepsOtherChoices() throws Exception {
+        Path file = temporaryDirectory.resolve(PreferencesStore.FILE_NAME);
+        var store = new PreferencesStore(file);
+        assertEquals(JuliaClickSpeed.DEFAULT, store.juliaClickSpeed());
+        Files.writeString(file, "widePreview=on\njuliaClickSpeed=UNKNOWN\n");
+        assertEquals(JuliaClickSpeed.DEFAULT, store.juliaClickSpeed());
+        for (var speed : JuliaClickSpeed.values()) {
+            store.saveJuliaClickSpeed(speed);
+            assertEquals(speed, new PreferencesStore(file).juliaClickSpeed());
+            assertEquals(Optional.of(true), store.widePreview());
+        }
+        store.saveWidePreview(false);
+        assertEquals(JuliaClickSpeed.VERY_FAST, store.juliaClickSpeed());
     }
 
     @Test
