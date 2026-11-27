@@ -116,6 +116,12 @@ public final class FractalRenderController implements AutoCloseable {
     /** Receives mode changes the controller makes itself, such as after a GPU refusal. */
     private Consumer<Boolean> juliaGpuChangedHandler = ignored -> {};
     /**
+     * A CPU render of a GPU-supported Julia view whose completion warms the Julia GPU
+     * kernel, so Explore Julia Parameters and Julia GPU start without kernel creation.
+     */
+    private record JuliaWarmUp(long generation, RenderJob job, ColoringSettings coloring) {}
+    private JuliaWarmUp pendingJuliaWarmUp;
+    /**
      * The latest GPU scene, shown or being produced; null while the CPU path owns the
      * frame. Its coloring is the latest requested palette. FX thread only, like the rest.
      */
@@ -549,6 +555,9 @@ public final class FractalRenderController implements AutoCloseable {
         gpuShownScene = null;
         gpuLimitJob = null;
         if (beforeCpuFallback != null) beforeCpuFallback.run();
+        // Warming after completion keeps the kernel's shader compilation off this render's path.
+        pendingJuliaWarmUp = !deepZoom && juliaGpu.needsWarmUp() && juliaGpu.supports(renderRequest, scene.coloring())
+                ? new JuliaWarmUp(renderGeneration, renderRequest, scene.coloring()) : null;
 
         previewRequest = renderRequest;
         surface.prepareWidePreview(renderRequest, scene.coloring(), scene.iterations(), widePreviewSettings);
@@ -1071,6 +1080,11 @@ public final class FractalRenderController implements AutoCloseable {
         if (activeFrame != null) spareFrameStorage.prepareFor(activeFrame.request());
         applyFallbackPalette(renderGeneration);
         renderActivity.finish(renderGeneration);
+        JuliaWarmUp warmUp = pendingJuliaWarmUp;
+        if (warmUp != null && warmUp.generation() == renderGeneration) {
+            pendingJuliaWarmUp = null;
+            juliaGpu.warmUp(warmUp.job(), warmUp.coloring());
+        }
         replenishWidePreview();
         DeferredRecoloring deferred = deferredRecoloring;
         deferredRecoloring = null;

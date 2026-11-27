@@ -28,7 +28,10 @@ Results are in [the measurement report](JULIA_EXPLORER_LATENCY_RESULTS.md).
   constant, waits for the main view to settle and records the opening of a new
   map (`open`). The first opening in a JVM is recorded as `cold`. With
   `fractal.juliaLatency.cold=drag` the first opening instead starts the drag in
-  the same FX event as the opening (`open-drag`).
+  the same FX event as the opening (`open-drag`). Since the kernel warm-up
+  (2026-11-27), the settled main view has already warmed the kernel before the
+  cold opening. Earlier code states created it at the opening, so their `cold`
+  numbers include kernel creation.
 - Per size and limit: `fractal.juliaLatency.warmup` (2) and `samples` (10)
   rounds of the gestures in `fractal.juliaLatency.gestures` (`click,drag`).
 - A trial ends when the map has committed the target constant, the view is idle

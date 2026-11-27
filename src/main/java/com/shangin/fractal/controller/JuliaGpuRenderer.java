@@ -56,6 +56,9 @@ final class JuliaGpuRenderer implements AutoCloseable {
         void failed(Request request, Throwable error);
     }
 
+    /** Width and height of the warm-up frame: enough for both passes, negligible to render. */
+    static final int WARM_UP_SIZE = 16;
+
     private final FractalRenderService renderService;
     private final Executor resultExecutor;
     private final ExecutorService worker = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
@@ -67,6 +70,10 @@ final class JuliaGpuRenderer implements AutoCloseable {
     private final AtomicReference<Pending> latest = new AtomicReference<>();
     private final ConcurrentLinkedDeque<int[]> buffers = new ConcurrentLinkedDeque<>();
     private volatile boolean closed;
+    /** Set on the worker once the kernel has run, by a frame or the warm-up. */
+    private volatile boolean warm;
+    /** FX thread only: the warm-up is queued at most once per renderer. */
+    private boolean warmUpRequested;
     /** True while a request may be using the runtime; paired with {@link #closed} for close. */
     private volatile boolean running;
 
@@ -80,9 +87,9 @@ final class JuliaGpuRenderer implements AutoCloseable {
     /** Whether the GPU kernel accepts this job and coloring; side-effect free and allocation-light. */
     boolean supports(RenderJob job, ColoringSettings coloring) {
         return job.formula().preset() == FractalPreset.JULIA
+                && renderService.isJuliaPreviewAvailable()
                 && strategy(coloring).filter(smooth -> GpuJuliaPreviewRequest.supports(job,
-                        RenderGrid.from(job.viewport(), job.width(), job.height()), smooth)).isPresent()
-                && renderService.isJuliaPreviewAvailable();
+                        RenderGrid.from(job.viewport(), job.width(), job.height()), smooth)).isPresent();
     }
 
     /** Replaces any request that has not started yet. */
@@ -92,6 +99,57 @@ final class JuliaGpuRenderer implements AutoCloseable {
         if (closed) return;
         latest.set(new Pending(request, listener));
         worker.execute(this::runLatest);
+    }
+
+    /**
+     * Whether {@link #warmUp} would still queue work: false once the warm-up was requested
+     * or the renderer closed. A frame that already ran makes the queued warm-up a no-op.
+     * FX thread only.
+     */
+    boolean needsWarmUp() {
+        return !closed && !warmUpRequested && !warm;
+    }
+
+    /**
+     * Queues, at most once, a small filtered frame cut from the center of this job's grid,
+     * with its formula, limit and coloring, and discards its colors. It compiles the
+     * kernel's shaders and creates its pipelines before the first real frame needs them.
+     * The worker skips it only when a frame already ran; a frame submitted meanwhile waits
+     * for it, as it would wait for kernel creation. Unsupported jobs queue nothing.
+     * FX thread only.
+     */
+    void warmUp(RenderJob job, ColoringSettings coloring) {
+        Objects.requireNonNull(job);
+        Objects.requireNonNull(coloring);
+        if (!needsWarmUp() || !supports(job, coloring)) return;
+        int width = Math.min(WARM_UP_SIZE, job.width());
+        int height = Math.min(WARM_UP_SIZE, job.height());
+        RenderGrid frame = RenderGrid.from(job.viewport(), job.width(), job.height());
+        // Pixels of the frame's own grid: the precision gate accepts them whenever it accepts the frame.
+        RenderGrid crop = new RenderGrid(frame.originReal(), frame.originImaginary(), frame.realStep(),
+                frame.imaginaryStep(), frame.offsetX() + (job.width() - width) / 2,
+                frame.offsetY() + (job.height() - height) / 2, frame.conjugateHeight());
+        RenderJob small = new RenderJob(job.formula(), job.viewport(), width, height, job.maxIterations());
+        warmUpRequested = true;
+        GpuJuliaPreviewRequest request = new GpuJuliaPreviewRequest(small, crop,
+                strategy(coloring).orElseThrow(), new int[width * height], true);
+        worker.execute(() -> runWarmUp(request));
+    }
+
+    private void runWarmUp(GpuJuliaPreviewRequest request) {
+        running = true;
+        try {
+            if (closed || warm) return;
+            if (renderService.warmUpJuliaPreview(request)) warm = true;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } catch (RuntimeException error) {
+            // The first real frame repeats this work and reports its failure to its listener.
+            System.getLogger(JuliaGpuRenderer.class.getName()).log(System.Logger.Level.WARNING,
+                    "Julia GPU kernel warm-up failed", error);
+        } finally {
+            running = false;
+        }
     }
 
     /** Drops the request that has not started yet; a running native submission completes safely. */
@@ -129,6 +187,7 @@ final class JuliaGpuRenderer implements AutoCloseable {
                     request.job(), RenderGrid.from(request.job().viewport(), request.job().width(),
                     request.job().height()), coloring, colors, request.filterBrightPoints()));
             long callNanos = System.nanoTime() - callStart;
+            if (result.isPresent()) warm = true;
             if (result.isEmpty()) {
                 release(colors);
                 resultExecutor.execute(() -> listener.unavailable(request));

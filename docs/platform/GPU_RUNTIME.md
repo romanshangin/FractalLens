@@ -230,6 +230,27 @@ on a non-daemon background thread after it drains, so the JVM does not exit
 before the service closes and persists pending frames. Visible behavior is in
 [macOS interface](MACOS_UI.md#julia-gpu).
 
+**Kernel warm-up.** Creating `VulkanJuliaPreviewKernel` compiles both shaders
+and creates their pipelines, about 100–170 ms on the first call. When a CPU
+render of a Julia view that the kernel supports (not deep zoom, smooth
+coloring, usable runtime) completes, `FractalRenderController` asks
+`JuliaGpuRenderer` to warm the kernel once. The renderer's worker then calls
+`GpuRuntime.warmUpJuliaPreview` with a filtered frame of at most 16x16 pixels
+cut from the center of that view's grid, with its formula and iteration limit,
+and discards its colors. Its pixels are pixels of the view's frame, so the FP32
+precision gate accepts them whenever it accepts the frame. The warm-up runs at
+most once per renderer, after the render it follows, so it adds nothing to that
+render. It is skipped only when a frame already ran. A frame submitted after it
+was queued, which may still be cancelled, waits for it on the worker, as it
+would wait for kernel creation; the warm-up adds only its small dispatch. The
+map's first frame therefore avoids kernel creation only once the warm-up has
+finished, a fraction of a second after the view's render. The warm-up is
+not a frame: it publishes nothing, and a failure other than device loss leaves
+the runtime state unchanged. The first real frame then repeats the work and
+reports the failure as before. Device loss disables the runtime as for a frame.
+The first map or Julia GPU frame still reallocates the small warm-up buffers to
+its own size.
+
 ```sh
 JAVA_TOOL_OPTIONS='-Xmx2g -Dfractal.gpu.enabled=true' ./mvnw -Pgpu-julia-benchmark javafx:run
 ```
@@ -332,7 +353,8 @@ No GPU fails this gate, never skips. Covers two runtimes/independent teardown,
 full reopen, simulated loss, ordinary/deep CPU; integrated Mandelbrot dispatch,
 recovery/pan reuse, shared palette, default-service opt-in/loss/reopen; the Julia
 preview within one color level on at least 95% of pixels (five constants), buffer
-reallocation, palette change, injected loss and reopen; actual
+reallocation, palette change, injected loss and reopen, a warm-up followed by
+frames bit-identical to those of a runtime without one; actual
 palette kernels across presets/wraps, exact base/one-level AA, zero repeat uploads,
 AA/scale/size/palette invalidation and dispatch cleanup/reopen.
 

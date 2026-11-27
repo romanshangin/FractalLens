@@ -131,6 +131,15 @@ public final class FractalRenderService implements AutoCloseable {
         return gpuRuntime.renderJuliaPreview(Objects.requireNonNull(request));
     }
 
+    /**
+     * Prepares the Julia preview kernel with a frame whose colors are discarded; see
+     * {@link com.shangin.fractal.gpu.GpuRuntime#warmUpJuliaPreview}.
+     */
+    public boolean warmUpJuliaPreview(com.shangin.fractal.gpu.GpuJuliaPreviewRequest request)
+            throws InterruptedException {
+        return gpuRuntime.warmUpJuliaPreview(Objects.requireNonNull(request));
+    }
+
     /** Shares the runtime-owned palette backend without exposing native handles. */
     public PaletteRecolorBackend paletteRecolorBackend() {
         return new PaletteRecolorBackend(gpuRuntime);

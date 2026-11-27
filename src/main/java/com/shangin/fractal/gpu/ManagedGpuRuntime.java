@@ -109,6 +109,27 @@ final class ManagedGpuRuntime implements GpuRuntime {
     }
 
     @Override
+    public synchronized boolean warmUpJuliaPreview(GpuJuliaPreviewRequest request) throws InterruptedException {
+        Objects.requireNonNull(request);
+        requireOutsideOperation();
+        if (Thread.currentThread().isInterrupted()) {
+            throw new InterruptedException("Julia preview warm-up cancelled");
+        }
+        if (!isUsableFor(GpuNumericCapability.FLOAT32)) return false;
+        executing = true;
+        try {
+            session.renderJuliaPreview(request);
+            return true;
+        } catch (GpuException failure) {
+            // Only a lost device is unusable for everything; other failures belong to the first frame.
+            if (failure.deviceLost()) disable(failure);
+            return false;
+        } finally {
+            executing = false;
+        }
+    }
+
+    @Override
     public <T> T runOrFallback(GpuNumericCapability required, GpuWork<T> gpu, GpuWork<T> cpu)
             throws InterruptedException {
         Objects.requireNonNull(required);
