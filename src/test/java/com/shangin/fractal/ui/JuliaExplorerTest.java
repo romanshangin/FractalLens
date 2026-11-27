@@ -1,5 +1,6 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.scene.JuliaParameters;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -12,18 +13,18 @@ class JuliaExplorerTest {
             var pacing = new JuliaFramePacing();
             pacing.reset();
             double remaining = distance;
-            for (int i = 0; i < 7; i++) remaining -= pacing.advance(remaining, FRAME_120_HZ);
+            for (int i = 0; i < 20; i++) remaining -= pacing.advance(remaining, FRAME_120_HZ);
             assertEquals(JuliaFramePacing.SPEED * FRAME_120_HZ * 1e-9, pacing.advance(remaining, FRAME_120_HZ), 1e-12,
                     "Cruise speed must not depend on the distance " + distance);
         }
     }
 
     @Test void travelTimeGrowsInProportionToTheDistance() {
-        double accelerationSeconds = JuliaFramePacing.SPEED / JuliaFramePacing.ACCELERATION;
+        double shortTime = arrivalFrames(30, FRAME_120_HZ) * FRAME_120_HZ * 1e-9;
         for (double distance : new double[] {72, 144, 300}) {
             double seconds = arrivalFrames(distance, FRAME_120_HZ) * FRAME_120_HZ * 1e-9;
-            assertEquals(distance / JuliaFramePacing.SPEED + accelerationSeconds, seconds, 0.02,
-                    "Travel time for " + distance + " points");
+            assertEquals((distance - 30) / JuliaFramePacing.SPEED, seconds - shortTime, 0.02,
+                    "Additional travel time for " + distance + " points");
         }
     }
 
@@ -45,9 +46,15 @@ class JuliaExplorerTest {
             double advance = pacing.advance(remaining, FRAME_120_HZ);
             assertTrue(advance > 0, "Every frame before arrival must move");
             assertTrue(advance <= cruise + 1e-12);
-            if (advance < previous - 1e-12) braking = true;
-            else if (braking) fail("Braking must not speed up again, including the final frame");
-            if (frames == 0) assertTrue(advance < cruise / 2, "The first frame must not start at full speed");
+            if (remaining <= JuliaFramePacing.SNAP_DISTANCE) {
+                assertEquals(remaining, advance, "A subpixel remainder must land on the exact selection");
+            } else if (advance < previous - 1e-12) {
+                braking = true;
+            } else if (braking) {
+                fail("Braking must not speed up before the final snap");
+            }
+            if (frames == 0) assertTrue(advance < cruise / 20, "The first frame must move gently");
+            if (frames == 5) assertTrue(advance < cruise / 2, "The motion must still be easing in at 50 ms");
             remaining -= advance;
             previous = advance;
             frames++;
@@ -55,6 +62,14 @@ class JuliaExplorerTest {
         assertEquals(0, remaining);
         assertTrue(braking);
         assertEquals(0, pacing.advance(0, FRAME_120_HZ));
+    }
+
+    @Test void finalStepsShrinkInProportionToTheRemainingDistance() {
+        var pacing = new JuliaFramePacing();
+        for (int frame = 0; frame < 20; frame++) pacing.advance(100, FRAME_120_HZ);
+        double step = pacing.advance(0.5, FRAME_120_HZ);
+        assertEquals(step / 2, pacing.advance(0.25, FRAME_120_HZ), 1e-12);
+        assertEquals(0.008, pacing.advance(0.008, FRAME_120_HZ));
     }
 
     @Test void changingFramesSlowTheCruiseGraduallyButNotBelowTheMinimumSpeed() {
@@ -131,6 +146,31 @@ class JuliaExplorerTest {
             frames++;
         }
         return frames;
+    }
+
+    @Test void eachFrameClosesFivePercentOfTheRemainingGap() {
+        var start = new JuliaParameters(-0.38, 0.61);
+        var target = new JuliaParameters(-0.44, 0.71);
+        var first = JuliaExplorer.nextFramePoint(start, target, 0.01);
+        var second = JuliaExplorer.nextFramePoint(first, target, 0.01);
+        assertEquals(-0.383, first.real(), 1e-12);
+        assertEquals(0.615, first.imaginary(), 1e-12);
+        assertEquals(-0.38585, second.real(), 1e-12);
+        assertEquals(0.61975, second.imaginary(), 1e-12);
+    }
+
+    @Test void motionFinishesAtTheExactTargetWithinTheSnapDistance() {
+        var target = new JuliaParameters(-0.44, 0.61);
+        var point = new JuliaParameters(-0.38, 0.61);
+        assertNotEquals(target, JuliaExplorer.nextFramePoint(new JuliaParameters(-0.43992, 0.61008), target, 0.01));
+        assertSame(target, JuliaExplorer.nextFramePoint(new JuliaParameters(-0.43994, 0.61006), target, 0.01));
+        for (int i = 0; i < 150 && !point.equals(target); i++) {
+            var next = JuliaExplorer.nextFramePoint(point, target, 0.01);
+            assertTrue(next.real() < point.real());
+            assertTrue(next.real() >= target.real());
+            point = next;
+        }
+        assertSame(target, point);
     }
 
     @Test void mapClampsToTheDrawnPlaneAndInterpolatesBothComponents() {

@@ -778,6 +778,10 @@ class JuliaGpuModeFxTest {
                 assertEquals(expectedHeight, imageView.getImage().getHeight());
                 assertEquals(surface.getWidth(), imageView.getFitWidth());
                 assertEquals(surface.getHeight(), imageView.getFitHeight());
+                for (int i = 1; i <= 3; i++) {
+                    double previous = dragPositions.get(i - 1);
+                    assertEquals(previous + 0.05 * (220 - previous), dragPositions.get(i), 1e-9);
+                }
                 assertEquals(90, marker.getCenterX(), 1e-9);
                 marker.centerXProperty().addListener((obs, before, after) -> positions.add(after.doubleValue()));
                 map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 169, 110, true));

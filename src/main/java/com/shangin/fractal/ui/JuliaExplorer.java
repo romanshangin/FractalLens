@@ -45,6 +45,7 @@ final class JuliaExplorer extends Stage {
     private JuliaParameters pressedPoint;
     private final JuliaFramePacing pacing = new JuliaFramePacing();
     private static final double DRAG_THRESHOLD = 4;
+    private static final double FRAME_FRACTION = 0.05;
     private long previousFrameTime;
     private double unitsPerPoint;
     private double pressX;
@@ -75,18 +76,8 @@ final class JuliaExplorer extends Stage {
                 }
                 return;
             }
-            if (idle) view.observeExplorerFrame(pacing);
-            if (previousFrameTime == 0) {
-                previousFrameTime = now;
-                return;
-            }
-            long elapsed = now - previousFrameTime;
-            previousFrameTime = now;
-            double distance = Math.hypot((desired.real() - submitted.real()) / unitsPerPoint,
-                    (desired.imaginary() - submitted.imaginary()) / unitsPerPoint);
-            double advance = pacing.advance(distance, elapsed, boundaryDistance(submitted));
-            if (advance == 0 && distance > 0) return;
-            JuliaParameters next = advance >= distance ? desired : interpolate(submitted, desired, advance / distance);
+            JuliaParameters next = dragged ? nextFramePoint(submitted, desired, unitsPerPoint) : nextClickPoint(now, idle);
+            if (next.equals(submitted)) return;
             replacePrevious = false;
             view.renderExplorerPoint(next);
             submitted = next;
@@ -317,6 +308,31 @@ final class JuliaExplorer extends Stage {
     static JuliaParameters point(double x, double y) {
         return new JuliaParameters(GRID.originReal() + GRID.realStep() * Math.clamp(x, 0, WIDTH - 1),
                 GRID.originImaginary() - GRID.imaginaryStep() * Math.clamp(y, 0, HEIGHT - 1));
+    }
+
+    private JuliaParameters nextClickPoint(long now, boolean idle) {
+        if (idle) view.observeExplorerFrame(pacing);
+        if (previousFrameTime == 0) {
+            previousFrameTime = now;
+            return submitted;
+        }
+        long elapsed = now - previousFrameTime;
+        previousFrameTime = now;
+        double distance = distanceInMapPoints(submitted, desired, unitsPerPoint);
+        double advance = pacing.advance(distance, elapsed, boundaryDistance(submitted));
+        if (advance == 0 && distance > 0) return submitted;
+        return advance >= distance ? desired : interpolate(submitted, desired, advance / distance);
+    }
+
+    static JuliaParameters nextFramePoint(JuliaParameters start, JuliaParameters target, double unitsPerPoint) {
+        // Finish at the exact target once the remaining distance is subpixel on the map.
+        return distanceInMapPoints(start, target, unitsPerPoint) <= JuliaFramePacing.SNAP_DISTANCE
+                ? target : interpolate(start, target, FRAME_FRACTION);
+    }
+
+    private static double distanceInMapPoints(JuliaParameters start, JuliaParameters target, double unitsPerPoint) {
+        return Math.hypot((target.real() - start.real()) / unitsPerPoint,
+                (target.imaginary() - start.imaginary()) / unitsPerPoint);
     }
 
     static JuliaParameters interpolate(JuliaParameters start, JuliaParameters end, double t) {

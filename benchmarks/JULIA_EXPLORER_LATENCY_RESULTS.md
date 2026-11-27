@@ -404,3 +404,61 @@ behavior. Not covered: physical pointer input, other hardware, frame rates other
 than the display's 120 Hz (the changed-sample count, and so the frame-based
 slowdown, grows with the step per frame), moves longer than the measured
 72 points, and the cause of the slow-frame episodes.
+
+## Experiment: 5% of the remaining Julia-parameter distance per frame
+
+On 2026-11-26 UTC, the control was local `main` at `2a33d4f` and the candidate
+was the uncommitted `feature/julia-explorer-five-percent` diff on that base.
+Both used the same Ice palette, GPU bright-point filter, 256 iterations and
+900x600 logical (1800x1200 physical) canvas. The Julia GPU diagnostic ran on
+macOS arm64 with Java 26.0.1, JavaFX 26.0.2 and the requested `mtl,es2,sw`
+pipeline. Each variant and path ran in its own JVM, with one warmup and four
+measured clicks in alternating directions. Inputs were synthetic JavaFX
+events, and screen capture was disabled. Both algorithms committed the exact
+target in every trial. `caffeinate -di` held both assertions throughout the
+campaign. The assertions were released on exit.
+
+| Path | Release to final publication, median | Published frames per click, median | Post-layout frame interval, p95 |
+| --- | ---: | ---: | ---: |
+| Short, -0.38 + 0.61i to -0.44 + 0.61i | 2429 to 1060 ms | 282 to 122 | 9.55 to 9.50 ms |
+| Standard, dendrite to rabbit (72 map points) | 6738 to 1586 ms | 733 to 175 | 16.45 to 16.01 ms |
+
+The candidate advances 5% on each submitted animation frame. It renders the
+exact target once the remaining distance is within 0.01 map points (using the
+gesture's scale). The shorter time comes from using fewer intermediate frames,
+with a larger initial step on longer paths. The experiment is inconclusive for
+adopting this behavior as a product default. It sampled two click paths on one
+machine. Drag timing, other displays, and physical presentation were outside
+this campaign.
+
+### Follow-up: separate drag and click motion
+
+The same branch then limited the 5% step to drag, including the motion after
+release. Clicks use the boundary distance and changes in the published Julia
+image to limit their speed. A fresh diagnostic on the standard 72-point path
+used the same canvas, iteration count, palette and GPU filter as above.
+The driver alternated gesture order between rounds so that both click and drag
+were measured twice in each direction, after one warmup round. All eight
+measured gestures committed the exact target.
+
+| Gesture | Release to final publication, median | Post-layout frame interval, p95 |
+| --- | ---: | ---: |
+| Click, adaptive speed | 9700 ms | 16.78 ms |
+| Drag, 5% per frame | 1050 ms | 16.58 ms |
+
+These durations describe the scripted path and gesture timing. The drag events
+already cover part of the distance before release. No physical pointer or
+display timing was measured. The session stayed active under `caffeinate -di`
+and the owned assertions were released afterwards.
+
+### Follow-up: gentler click start and finish
+
+After updating the branch to `53ff62b`, an A/B run compared adaptive clicks
+with the previous 50 ms acceleration and with the 140 ms eased start and
+distance-based braking. Both variants used the short path above, the Ice
+palette and 256 iterations on a 900x600 logical canvas. Each variant ran in its
+own JVM with one warmup and four measured clicks. All eight clicks committed
+the exact target. The elapsed time from release to the final publication was
+1594 ms before and 1723 ms after (medians). The post-layout frame interval was
+9.40 ms p95 in both. The driver used synthetic input on macOS arm64 with
+`caffeinate -di`. The owned sleep assertions were released on exit.
