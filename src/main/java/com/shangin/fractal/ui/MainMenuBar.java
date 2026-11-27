@@ -4,6 +4,7 @@ import com.shangin.fractal.app.BookmarkStore;
 import com.shangin.fractal.coloring.ColorStop;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.config.JuliaClickSpeed;
 import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.formula.FractalDestination;
 import com.shangin.fractal.scene.FractalScene;
@@ -79,6 +80,8 @@ final class MainMenuBar extends MenuBar {
     private MacApplicationMenuCommand applicationMenuSettings;
     private boolean closed;
     private Consumer<WidePreviewSettings> widePreviewChanged = settings -> {};
+    private JuliaClickSpeed juliaClickSpeed = JuliaClickSpeed.DEFAULT;
+    private Consumer<JuliaClickSpeed> juliaClickSpeedChanged = speed -> {};
 
     MainMenuBar(Stage stage, FractalView fractalView, FractalScene initialScene,
                 Runnable onExport) {
@@ -169,7 +172,10 @@ final class MainMenuBar extends MenuBar {
                                     "Choose a GPU-supported Julia view and coloring to explore the parameter map.");
                             return;
                         }
-                        explorer = new JuliaExplorer(stage, fractalView);
+                        explorer = new JuliaExplorer(stage, fractalView, juliaClickSpeed, speed -> {
+                            juliaClickSpeed = speed;
+                            juliaClickSpeedChanged.accept(speed);
+                        });
                         explorer.show();
                         fractalView.startJuliaExplorerRender();
                         juliaGpu.setSelected(fractalView.juliaGpu());
@@ -288,6 +294,11 @@ final class MainMenuBar extends MenuBar {
     /** Receives explicit wide-preview changes made in Settings, for persistence. */
     void setOnWidePreviewChanged(Consumer<WidePreviewSettings> handler) {
         widePreviewChanged = java.util.Objects.requireNonNull(handler);
+    }
+
+    void configureJuliaClickSpeed(JuliaClickSpeed initialSpeed, Consumer<JuliaClickSpeed> onChange) {
+        juliaClickSpeed = initialSpeed;
+        juliaClickSpeedChanged = onChange;
     }
 
     private void showSettings() {

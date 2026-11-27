@@ -1,7 +1,10 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.app.LastSessionStore;
+import com.shangin.fractal.app.PreferencesStore;
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.config.JuliaClickSpeed;
 import com.shangin.fractal.controller.FractalRenderController;
 import com.shangin.fractal.controller.RenderStatus;
 import com.shangin.fractal.formula.FractalPreset;
@@ -9,9 +12,11 @@ import com.shangin.fractal.gpu.FakeJuliaPreviewRuntime;
 import com.shangin.fractal.math.Viewport;
 import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.*;
+import javafx.application.ColorScheme;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.image.Image;
@@ -21,15 +26,18 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -590,13 +598,104 @@ class JuliaGpuModeFxTest {
 
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 var reopened = javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
                 window.stage.fireEvent(new javafx.stage.WindowEvent(window.stage,
                         javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST));
                 assertFalse(window.stage.isShowing());
                 assertFalse(reopened.isShowing());
                 return null;
             });
+        }
+    }
+
+    @Test
+    void mapClickSpeedPersistsAcrossApplicationWindows(@TempDir Path directory) throws Exception {
+        var session = new LastSessionStore(directory.resolve("session.json"));
+        session.save(JULIA);
+        var preferences = PreferencesStore.besides(session);
+        var expected = JuliaClickSpeed.DEFAULT;
+        for (var scheme : ColorScheme.values()) {
+            Stage stage = fx(Stage::new);
+            MainView main = fx(() -> new MainView(stage, session,
+                    new FractalRenderService(new CountingBackend(), new FakeJuliaPreviewRuntime())));
+            try {
+                var view = fx(() -> (FractalView) ((StackPane) main.getCenter()).getChildren().getFirst());
+                fx(() -> {
+                    stage.setScene(new Scene(main, 320, 240));
+                    stage.show();
+                    return null;
+                });
+                awaitCondition(() -> fx(() -> view.hasExportableFrame() && view.isLatencyIdle()));
+                var openingSpeed = expected;
+                var selectedSpeed = openingSpeed == JuliaClickSpeed.DEFAULT
+                        ? JuliaClickSpeed.VERY_SLOW : JuliaClickSpeed.VERY_FAST;
+                fx(() -> {
+                    item((MainMenuBar) main.getTop(), "Render", JuliaExplorer.TITLE).fire();
+                    var explorer = javafx.stage.Window.getWindows().stream()
+                            .filter(JuliaExplorer.class::isInstance).map(JuliaExplorer.class::cast)
+                            .findFirst().orElseThrow();
+                    var scene = explorer.getScene();
+                    scene.getPreferences().setColorScheme(scheme);
+                    scene.getRoot().applyCss();
+                    scene.getRoot().layout();
+                    var speed = (ChoiceBox<?>) scene.lookup("#julia-click-speed");
+                    assertTrue(speed.isVisible());
+                    assertTrue(speed.getBoundsInParent().getWidth() > 0);
+                    assertEquals(JuliaExplorer.HEIGHT, explorer.map().getHeight());
+                    assertEquals("Click speed", speed.getAccessibleText());
+                    assertEquals(java.util.List.of("Very slow", "Slow", "Default", "Fast", "Very fast"),
+                            speed.getItems().stream().map(Object::toString).toList());
+                    assertEquals(openingSpeed, speed.getValue());
+                    speed.getSelectionModel().select(speed.getItems().indexOf(selectedSpeed));
+                    assertEquals(JULIA, view.sceneSnapshot());
+                    return null;
+                });
+                assertEquals(selectedSpeed, preferences.juliaClickSpeed());
+                expected = selectedSpeed;
+            } finally {
+                fx(() -> {
+                    main.close();
+                    stage.close();
+                    return null;
+                });
+            }
+        }
+    }
+
+    @Test
+    void selectedClickSpeedChangesTheNextPublishedMarkerStep() throws Exception {
+        double slow = firstClickMarkerStep(JuliaClickSpeed.VERY_SLOW);
+        double fast = firstClickMarkerStep(JuliaClickSpeed.VERY_FAST);
+        assertTrue(slow > 0, "The first published click frame must move the marker");
+        assertEquals(slow * 16, fast, 1e-9);
+    }
+
+    private static double firstClickMarkerStep(JuliaClickSpeed speed) throws Exception {
+        try (var window = new MainWindow()) {
+            var explorer = openExplorer(window);
+            awaitCondition(() -> fx(() -> explorer.hasThumbnail() && window.view.isLatencyIdle()
+                    && window.view.showsJuliaGpuFrame()));
+            var step = new java.util.concurrent.CompletableFuture<Double>();
+            fx(() -> {
+                assertEquals(JULIA, window.view.sceneSnapshot());
+                var choice = (ChoiceBox<?>) explorer.getScene().lookup("#julia-click-speed");
+                choice.getSelectionModel().select(choice.getItems().indexOf(speed));
+                var map = explorer.map();
+                var marker = (javafx.scene.shape.Circle) map.getChildrenUnmodifiable().get(1);
+                double startX = marker.getCenterX();
+                double targetX = startX + 60;
+                double targetY = marker.getCenterY();
+                marker.centerXProperty().addListener((observable, before, after) ->
+                        step.complete(after.doubleValue() - startX));
+                map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, targetX, targetY, true));
+                map.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, targetX, targetY, false));
+                // Fix the first two pulse times in one FX turn. The render still publishes normally.
+                long now = System.nanoTime();
+                explorer.advanceFrame(now);
+                explorer.advanceFrame(now + 16_666_667);
+                return null;
+            });
+            return step.get(10, TimeUnit.SECONDS);
         }
     }
 
@@ -608,7 +707,7 @@ class JuliaGpuModeFxTest {
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
                         .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
-            var imageView = fx(() -> (ImageView) explorer.getScene().getRoot().getChildrenUnmodifiable().getFirst());
+            var imageView = fx(() -> (ImageView) explorer.map().getChildrenUnmodifiable().getFirst());
             Image initialImage = fx(imageView::getImage);
             assertNotNull(initialImage, "The map must show an image of its full size before the thumbnail is ready");
             assertEquals(JuliaExplorer.WIDTH, initialImage.getWidth());
@@ -665,7 +764,7 @@ class JuliaGpuModeFxTest {
             var explorer = openExplorer(window);
             awaitCondition(() -> fx(explorer::hasThumbnail));
             fx(() -> {
-                var map = explorer.getScene().getRoot();
+                var map = explorer.map();
                 // The press scales the gesture to reach (4, 4); the boundary must still be in map points.
                 map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, JuliaExplorer.WIDTH - 1, 0, true));
                 assertEquals(JuliaFramePacing.BOUNDARY_RANGE, explorer.boundaryDistance(new JuliaParameters(4, 4)));
@@ -716,7 +815,7 @@ class JuliaGpuModeFxTest {
                 assertTrue(toggle.isSelected());
                 assertTrue(window.view.juliaGpu());
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow().getScene().getRoot();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow().map();
             });
             awaitCondition(() -> fx(() -> window.view.showsJuliaGpuFrame() && window.view.isLatencyIdle()));
             var surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().getFirst());
@@ -848,7 +947,7 @@ class JuliaGpuModeFxTest {
             var map = fx(() -> {
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(window.view::isLatencyIdle));
             fx(() -> {
@@ -856,7 +955,7 @@ class JuliaGpuModeFxTest {
                     // Close after GPU publication, before the animation timer moves the marker.
                     if (!active) map.hide();
                 });
-                var root = map.getScene().getRoot();
+                var root = map.map();
                 root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
                 root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
                 return null;
@@ -883,7 +982,7 @@ class JuliaGpuModeFxTest {
                 window.view.setOnRenderError(errors::set);
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
             fx(() -> {
@@ -898,7 +997,7 @@ class JuliaGpuModeFxTest {
                         window.view.setOrbitTrap(OrbitTrap.POINT);
                     }
                 });
-                var root = map.getScene().getRoot();
+                var root = map.map();
                 root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
                 root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
                 return null;
@@ -939,10 +1038,10 @@ class JuliaGpuModeFxTest {
             var map = fx(() -> {
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
-            var root = fx(() -> map.getScene().getRoot());
+            var root = fx(() -> map.map());
             var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
             double initialX = fx(marker::getCenterX);
             fx(() -> {
@@ -988,7 +1087,7 @@ class JuliaGpuModeFxTest {
                 window.view.setOnRenderError(errors::set);
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
             var iterations = new IterationSettings(123, 0);
@@ -1018,13 +1117,13 @@ class JuliaGpuModeFxTest {
                 window.view.setOnRenderError(errors::set);
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
             var initial = fx(window.view::sceneSnapshot);
             window.runtime.setEmptyResult(true);
             fx(() -> {
-                var root = map.getScene().getRoot();
+                var root = map.map();
                 root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
                 root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
                 return null;
@@ -1050,10 +1149,10 @@ class JuliaGpuModeFxTest {
             var map = fx(() -> {
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
-            var root = fx(() -> map.getScene().getRoot());
+            var root = fx(() -> map.map());
             var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
             var surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().getFirst());
             var imageView = fx(() -> (ImageView) surface.getChildrenUnmodifiable().getFirst());
@@ -1118,10 +1217,10 @@ class JuliaGpuModeFxTest {
             var map = fx(() -> {
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
-            var root = fx(() -> map.getScene().getRoot());
+            var root = fx(() -> map.map());
             var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
             var surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().getFirst());
             double initialX = fx(marker::getCenterX);
@@ -1180,10 +1279,10 @@ class JuliaGpuModeFxTest {
                 window.view.setOnRenderError(errors::set);
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
-            var root = fx(() -> map.getScene().getRoot());
+            var root = fx(() -> map.map());
             var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
             double initialX = fx(marker::getCenterX);
             fx(() -> {
@@ -1237,10 +1336,10 @@ class JuliaGpuModeFxTest {
                 window.view.setOnRenderError(errors::set);
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
-            var root = fx(() -> map.getScene().getRoot());
+            var root = fx(() -> map.map());
             var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
             double initialX = fx(marker::getCenterX);
             fx(() -> {
@@ -1293,7 +1392,7 @@ class JuliaGpuModeFxTest {
                 window.view.setOnRenderError(errors::set);
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
             fx(() -> {
@@ -1323,7 +1422,7 @@ class JuliaGpuModeFxTest {
             var map = fx(() -> {
                 window.item("Render", JuliaExplorer.TITLE).fire();
                 return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
-                        .findFirst().orElseThrow();
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()));
             fx(() -> {

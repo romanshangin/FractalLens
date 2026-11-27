@@ -342,7 +342,7 @@ public final class JuliaExplorerLatencyBenchmark {
     }
 
     private void mouse(javafx.event.EventType<MouseEvent> type, Point2D point, boolean down) {
-        Node map = explorer.getScene().getRoot();
+        Node map = explorer.map();
         Point2D screenPoint = map.localToScreen(point);
         double screenX = screenPoint == null ? 0 : screenPoint.getX();
         double screenY = screenPoint == null ? 0 : screenPoint.getY();

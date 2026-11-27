@@ -1,5 +1,7 @@
 package com.shangin.fractal.ui;
 
+import com.shangin.fractal.config.JuliaClickSpeed;
+
 /**
  * Moves the map point toward a clicked target with a smooth start and finish.
  * Cruise speed depends on changes in the published Julia frames and proximity to the
@@ -25,7 +27,7 @@ final class JuliaFramePacing {
     static final double MAX_FRAME_SECONDS = 0.05;
     private static final int COLUMNS = 64;
     private static final int ROWS = 40;
-    // Visibly changed edge samples between two frames that the pace aims for.
+    // Visibly changed edge samples between two frames that the default speed aims for.
     private static final double TARGET_CHANGED = COLUMNS * ROWS * 0.025;
     private int[] previous = new int[COLUMNS * ROWS];
     private int[] current = new int[COLUMNS * ROWS];
@@ -35,6 +37,12 @@ final class JuliaFramePacing {
     private double pace = 1;
     private double targetPace = 1;
     private double startSeconds;
+    private double speedMultiplier = JuliaClickSpeed.DEFAULT.multiplier();
+
+    void reset(JuliaClickSpeed speed) {
+        speedMultiplier = speed.multiplier();
+        reset();
+    }
 
     void reset() {
         previousWidth = 0;
@@ -67,8 +75,10 @@ final class JuliaFramePacing {
         previousWidth = width;
         previousHeight = height;
         if (comparable && moved) {
-            // The number of changed samples grows with the step, so scale the pace toward the target.
-            targetPace = Math.clamp(pace * TARGET_CHANGED / Math.max(1, changed), MIN_PACE, 1);
+            // A larger step changes more samples. Scale the target as well so feedback keeps
+            // the selected speed ratio instead of steering all presets toward the same step.
+            double targetChanged = TARGET_CHANGED * speedMultiplier;
+            targetPace = Math.clamp(pace * targetChanged / Math.max(1, changed), MIN_PACE, 1);
         }
     }
 
@@ -108,10 +118,10 @@ final class JuliaFramePacing {
         startSeconds = Math.min(START_SECONDS, startSeconds + seconds);
         double t = startSeconds / START_SECONDS;
         double startFraction = t * t * (3 - 2 * t);
-        double travel = Math.min(SPEED * pace, nearBoundary) * startFraction * seconds;
+        double travel = Math.min(SPEED * pace, nearBoundary) * speedMultiplier * startFraction * seconds;
         // Integrate proportional braking over this frame so even a slow pulse keeps the
         // step below the remaining gap. The adaptive cruise speed can impose a lower limit.
-        double finalTravel = remaining * -Math.expm1(-SPEED * seconds / BRAKING_DISTANCE);
+        double finalTravel = remaining * -Math.expm1(-SPEED * speedMultiplier * seconds / BRAKING_DISTANCE);
         return Math.min(travel, finalTravel);
     }
 

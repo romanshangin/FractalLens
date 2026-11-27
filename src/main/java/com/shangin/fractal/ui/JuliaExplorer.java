@@ -2,6 +2,7 @@ package com.shangin.fractal.ui;
 
 import com.shangin.fractal.coloring.OrbitTrap;
 import com.shangin.fractal.coloring.PalettePreset;
+import com.shangin.fractal.config.JuliaClickSpeed;
 import com.shangin.fractal.render.FractalColorizer;
 import com.shangin.fractal.render.MandelbrotBoundaryDistance;
 import com.shangin.fractal.render.SamplePlane;
@@ -13,17 +14,26 @@ import com.shangin.fractal.formula.FractalPreset;
 import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.scene.JuliaParameters;
 import javafx.animation.AnimationTimer;
+import javafx.application.ColorScheme;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
+
+import java.util.function.Consumer;
 
 /** A floating parameter map. All gesture and publication decisions run on the FX thread. */
 final class JuliaExplorer extends Stage {
@@ -32,6 +42,7 @@ final class JuliaExplorer extends Stage {
     static final int HEIGHT = 192;
     private static final RenderGrid GRID = RenderGrid.from(FractalPreset.MANDELBROT.defaultViewport(), WIDTH, HEIGHT);
     private final FractalView view;
+    private final Pane map;
     private final Circle marker = new Circle(5, Color.ORANGERED);
     // One image for the window's lifetime: thumbnail colors are written into it in place.
     private final WritableImage thumbnail = new WritableImage(WIDTH, HEIGHT);
@@ -58,33 +69,42 @@ final class JuliaExplorer extends Stage {
 
     private final AnimationTimer timer = new AnimationTimer() {
         @Override public void handle(long now) {
-            boolean idle = view.isLatencyIdle();
-            if (!idle && (!replacePrevious || view.hasPendingMainViewRender())) return;
-            if (idle) {
-                if (!view.showsExplorerPoint(submitted)) {
-                    view.renderExplorerPoint(submitted);
-                    return;
-                }
-                placeMarker(submitted);
-            }
-            if (desired.equals(submitted)) {
-                if (!idle) return;
-                if (finish) commit();
-                else {
-                    previousFrameTime = 0;
-                    stop();
-                }
-                return;
-            }
-            JuliaParameters next = dragged ? nextFramePoint(submitted, desired, unitsPerPoint) : nextClickPoint(now, idle);
-            if (next.equals(submitted)) return;
-            replacePrevious = false;
-            view.renderExplorerPoint(next);
-            submitted = next;
+            advanceFrame(now);
         }
     };
 
+    void advanceFrame(long now) {
+        boolean idle = view.isLatencyIdle();
+        if (!idle && (!replacePrevious || view.hasPendingMainViewRender())) return;
+        if (idle) {
+            if (!view.showsExplorerPoint(submitted)) {
+                view.renderExplorerPoint(submitted);
+                return;
+            }
+            placeMarker(submitted);
+        }
+        if (desired.equals(submitted)) {
+            if (!idle) return;
+            if (finish) commit();
+            else {
+                previousFrameTime = 0;
+                timer.stop();
+            }
+            return;
+        }
+        JuliaParameters next = dragged ? nextFramePoint(submitted, desired, unitsPerPoint) : nextClickPoint(now, idle);
+        if (next.equals(submitted)) return;
+        replacePrevious = false;
+        view.renderExplorerPoint(next);
+        submitted = next;
+    }
+
     JuliaExplorer(Stage owner, FractalView view) {
+        this(owner, view, JuliaClickSpeed.DEFAULT, speed -> {});
+    }
+
+    JuliaExplorer(Stage owner, FractalView view, JuliaClickSpeed clickSpeed,
+                  Consumer<JuliaClickSpeed> onClickSpeedChanged) {
         this.view = view;
         FractalScene initialScene = view.sceneSnapshot();
         committed = submitted = desired = initialScene.juliaParameters();
@@ -96,13 +116,28 @@ final class JuliaExplorer extends Stage {
         var imageView = new ImageView(thumbnail);
         marker.setStroke(Color.WHITE);
         marker.setMouseTransparent(true);
-        var map = new Pane(imageView, marker);
+        map = new Pane(imageView, marker);
         map.setPrefSize(WIDTH, HEIGHT);
         map.setPickOnBounds(true);
         map.setAccessibleText("Mandelbrot parameter map");
         Tooltip.install(map, new Tooltip("Click to move, drag to explore, or Shift-drag for fine adjustment."));
         placeMarker(submitted);
-        setScene(new Scene(map));
+        var speedChoice = new ChoiceBox<JuliaClickSpeed>();
+        speedChoice.setId("julia-click-speed");
+        speedChoice.getItems().setAll(JuliaClickSpeed.values());
+        speedChoice.setValue(clickSpeed);
+        speedChoice.setOnAction(event -> onClickSpeedChanged.accept(speedChoice.getValue()));
+        var speedLabel = new Label("Click speed");
+        speedLabel.setLabelFor(speedChoice);
+        speedChoice.setAccessibleText(speedLabel.getText());
+        var controls = new HBox(8, speedLabel, speedChoice);
+        controls.setAlignment(Pos.CENTER_LEFT);
+        controls.setPadding(new Insets(6, 8, 6, 8));
+        var root = new VBox(map, controls);
+        var scene = new Scene(root);
+        root.styleProperty().bind(scene.getPreferences().colorSchemeProperty().map(scheme ->
+                scheme == ColorScheme.DARK ? "-fx-base: #383838;" : ""));
+        setScene(scene);
         setX(owner.getX() + 20);
         setY(owner.getY() + 60);
         map.setOnMousePressed(e -> {
@@ -110,7 +145,7 @@ final class JuliaExplorer extends Stage {
             view.latency().input("map_press");
             timer.stop();
             previousFrameTime = 0;
-            pacing.reset();
+            pacing.reset(speedChoice.getValue());
             // Keep even a user-entered constant far outside the map reachable.
             unitsPerPoint = Math.max(GRID.realStep(),
                     Math.max(Math.abs(displayed.real()), Math.abs(displayed.imaginary())) / WIDTH);
@@ -158,6 +193,10 @@ final class JuliaExplorer extends Stage {
                 commit();
             }
         });
+    }
+
+    Pane map() {
+        return map;
     }
 
     /** Follows a main-scene change: its Julia constant and the palette used for the map. */
