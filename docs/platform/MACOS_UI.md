@@ -1302,11 +1302,12 @@ eightfold for its 80-iteration limit, without histogram or orbit-trap coloring)
 and is colored again whenever those settings change while it is open (Animate
 Palette's moving offset is not followed). Until its CPU
 preview is ready, the map shows the palette's first color.
-Click and drag share the same motion: the point moves toward its target at a
-speed that does not depend on the distance, so a longer move takes
+On click, the point moves toward its target at a speed that does not depend on
+the distance, so a longer move takes
 proportionally longer. In quiet areas it moves at 40 logical map points per
-second (72 points take about 1.85 s). Where the displayed Julia frames change
-quickly, measured on edges in a 64 by 40 sample of each frame, it slows down to
+second (72 points take about 2.0 s at 60–120 Hz, including acceleration and
+braking). Where the displayed Julia frames change quickly, measured on edges
+in a 64 by 40 sample of each frame, it slows down to
 as little as 10 points per second; the speed falls within about 0.1 s and
 recovers over about 0.4 s. Near the Mandelbrot set's boundary, where the Julia
 set changes most for the smallest step, the speed also falls in proportion to
@@ -1317,11 +1318,15 @@ than a map point; inside it comes from a 1,000-iteration sample of the map grid,
 accurate to about a map point (a dent thinner than a point, such as the main
 cardioid's cusp, is not resolved). This slowdown starts once the map's preview
 is ready. A path that follows the boundary, such as one through Seahorse Valley,
-takes several times as long as one through quiet areas. It reaches cruise speed within 50 ms and brakes
-smoothly to a stop at the exact selection. A frame longer than 50 ms advances
-only as far as a 50 ms frame. Drag events replace the destination, and the point
-trails a pointer moving faster than the current speed. Releasing the pointer
-finishes the remaining motion to the drop position before recording the scene.
+takes several times as long as one through quiet areas. The click eases in over
+140 ms. Near the target, a braking limit based on the remaining distance reduces
+the step over the final 1.5 map points. At 0.01 map points or less, the next
+frame uses the exact selection. A frame longer than 50 ms advances only as far
+as a 50 ms frame.
+During a drag, each frame advances 5% of the remaining distance to the latest
+pointer position. The same motion continues after release, rendering the exact
+drop position once the remaining distance is within 0.01 map points at the
+gesture's scale. The scene is recorded after that frame is displayed.
 Movement under four map points from the press remains a click.
 The Julia GPU kernel renders at full canvas resolution. A local filter, a
 second GPU pass, dims isolated near-white pixels before publication. Pointer updates coalesce while a

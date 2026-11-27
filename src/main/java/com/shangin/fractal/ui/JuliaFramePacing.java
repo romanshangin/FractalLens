@@ -1,10 +1,9 @@
 package com.shangin.fractal.ui;
 
 /**
- * Moves the map point toward its target at a speed that does not depend on the distance.
- * The speed is lower where the published Julia frames change quickly, within a bounded range,
- * and lower still close to the Mandelbrot set's boundary, where the Julia set changes most for
- * the smallest step. The motion accelerates briefly at the start and brakes smoothly to a stop.
+ * Moves the map point toward a clicked target with a smooth start and finish.
+ * Cruise speed depends on changes in the published Julia frames and proximity to the
+ * Mandelbrot set's boundary.
  */
 final class JuliaFramePacing {
     /** Cruise speed in quiet areas, in logical map points per second. */
@@ -15,8 +14,9 @@ final class JuliaFramePacing {
     static final double BOUNDARY_SPEED = 3;
     /** Distance from the boundary, in logical map points, at which the boundary stops slowing the point. */
     static final int BOUNDARY_RANGE = 8;
-    /** Acceleration and braking in logical map points per second squared: full speed in 50 ms. */
-    static final double ACCELERATION = SPEED / 0.05;
+    static final double START_SECONDS = 0.14;
+    static final double BRAKING_DISTANCE = 1.5;
+    static final double SNAP_DISTANCE = 0.01;
     private static final double MIN_PACE = MIN_SPEED / SPEED;
     // Changes slow the point within about 0.1 s; quiet frames restore the speed over about 0.4 s.
     private static final double SLOWDOWN_SECONDS = 0.1;
@@ -34,13 +34,13 @@ final class JuliaFramePacing {
     private boolean moved;
     private double pace = 1;
     private double targetPace = 1;
-    private double speed;
+    private double startSeconds;
 
     void reset() {
         previousWidth = 0;
         moved = false;
         pace = targetPace = 1;
-        speed = 0;
+        startSeconds = 0;
     }
 
     /** Compares a published frame with the previous one and sets the pace that the motion approaches. */
@@ -97,6 +97,7 @@ final class JuliaFramePacing {
      */
     double advance(double remaining, long elapsedNanos, double boundaryDistance) {
         if (remaining <= 0 || elapsedNanos <= 0) return 0;
+        if (remaining <= SNAP_DISTANCE) return remaining;
         double seconds = Math.min(elapsedNanos * 1e-9, MAX_FRAME_SECONDS);
         moved = true;
         double settle = targetPace < pace ? SLOWDOWN_SECONDS : RECOVERY_SECONDS;
@@ -104,15 +105,14 @@ final class JuliaFramePacing {
         // The speed falls in proportion to the distance from the boundary, so the point approaches
         // it gradually and crosses it at the boundary speed.
         double nearBoundary = Math.clamp(SPEED * boundaryDistance / BOUNDARY_RANGE, BOUNDARY_SPEED, SPEED);
-        // The braking limit lets the point stop exactly at the target with the same deceleration.
-        speed = Math.min(Math.min(Math.min(SPEED * pace, nearBoundary), speed + ACCELERATION * seconds),
-                Math.sqrt(2 * ACCELERATION * remaining));
-        double step = speed * seconds;
-        if (step >= remaining) {
-            speed = 0;
-            return remaining;
-        }
-        return step;
+        startSeconds = Math.min(START_SECONDS, startSeconds + seconds);
+        double t = startSeconds / START_SECONDS;
+        double startFraction = t * t * (3 - 2 * t);
+        double travel = Math.min(SPEED * pace, nearBoundary) * startFraction * seconds;
+        // Integrate proportional braking over this frame so even a slow pulse keeps the
+        // step below the remaining gap. The adaptive cruise speed can impose a lower limit.
+        double finalTravel = remaining * -Math.expm1(-SPEED * seconds / BRAKING_DISTANCE);
+        return Math.min(travel, finalTravel);
     }
 
     /** Fraction of the quiet-area speed currently in use. */
