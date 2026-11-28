@@ -66,7 +66,10 @@ final class JuliaExplorer extends Stage {
     private JuliaParameters pressedPoint;
     private final JuliaFramePacing pacing = new JuliaFramePacing();
     private static final double DRAG_THRESHOLD = 4;
-    private static final double FRAME_FRACTION = 0.05;
+    /** A drag closes this fraction of the remaining distance every {@link #DRAG_STEP_NANOS}. */
+    static final double DRAG_FRACTION = 0.05;
+    /** One 120 Hz frame: a drag's motion follows time, not the rate at which frames render. */
+    static final long DRAG_STEP_NANOS = 8_333_333;
     private long previousFrameTime;
     private double unitsPerPoint;
     private double pressX;
@@ -99,7 +102,7 @@ final class JuliaExplorer extends Stage {
             }
             return;
         }
-        JuliaParameters next = dragged ? nextFramePoint(submitted, desired, unitsPerPoint) : nextClickPoint(now, idle);
+        JuliaParameters next = dragged ? nextDragPoint(now) : nextClickPoint(now, idle);
         if (next.equals(submitted)) return;
         replacePrevious = false;
         view.renderExplorerPoint(next);
@@ -295,7 +298,8 @@ final class JuliaExplorer extends Stage {
     void closeAfterRenderFailure() {
         if (editing && view.showsApproximateJuliaPoint(displayed)) {
             desired = displayed;
-            commit();
+            // Inside the failure report: record the point without rendering again.
+            commit(false);
         }
         closeWithoutCommit();
     }
@@ -374,11 +378,17 @@ final class JuliaExplorer extends Stage {
     }
 
     private void commit() {
+        commit(true);
+    }
+
+    /** With {@code settle}, a CPU map then renders the exact frame of the point. */
+    private void commit(boolean settle) {
         timer.stop();
         editing = finish = false;
         committed = submitted = desired;
         view.latency().boundary("map_committed");
-        view.commitExplorerPoint(desired);
+        if (settle) view.settleExplorerPoint(desired);
+        else view.commitExplorerPoint(desired);
     }
 
     private JuliaParameters dragPoint(double x, double y, boolean fine) {
@@ -405,10 +415,31 @@ final class JuliaExplorer extends Stage {
         return advance >= distance ? desired : interpolate(submitted, desired, advance / distance);
     }
 
-    static JuliaParameters nextFramePoint(JuliaParameters start, JuliaParameters target, double unitsPerPoint) {
+    private JuliaParameters nextDragPoint(long now) {
+        // The first frame of a motion counts as one step, so a drag responds at once.
+        long elapsed = previousFrameTime == 0 ? DRAG_STEP_NANOS : now - previousFrameTime;
+        previousFrameTime = now;
+        return nextFramePoint(submitted, desired, unitsPerPoint, elapsed);
+    }
+
+    /**
+     * The drag point after {@code elapsedNanos}: {@link #DRAG_FRACTION} of the remaining
+     * distance per {@link #DRAG_STEP_NANOS}, compounded, so the motion takes the same time
+     * at any frame rate. A longer frame counts as {@link JuliaFramePacing#MAX_FRAME_SECONDS},
+     * so a stall does not become a jump.
+     */
+    static JuliaParameters nextFramePoint(JuliaParameters start, JuliaParameters target, double unitsPerPoint,
+                                          long elapsedNanos) {
         // Finish at the exact target once the remaining distance is subpixel on the map.
-        return distanceInMapPoints(start, target, unitsPerPoint) <= JuliaFramePacing.SNAP_DISTANCE
-                ? target : interpolate(start, target, FRAME_FRACTION);
+        if (distanceInMapPoints(start, target, unitsPerPoint) <= JuliaFramePacing.SNAP_DISTANCE) return target;
+        double steps = Math.min(Math.max(0, elapsedNanos) * 1e-9, JuliaFramePacing.MAX_FRAME_SECONDS)
+                / (DRAG_STEP_NANOS * 1e-9);
+        return interpolate(start, target, dragFraction(steps));
+    }
+
+    /** Fraction of the remaining distance closed over {@code steps} drag steps. */
+    static double dragFraction(double steps) {
+        return 1 - Math.pow(1 - DRAG_FRACTION, steps);
     }
 
     private static double distanceInMapPoints(JuliaParameters start, JuliaParameters target, double unitsPerPoint) {

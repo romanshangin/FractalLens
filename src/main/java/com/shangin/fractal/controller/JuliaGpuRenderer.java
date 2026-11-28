@@ -7,6 +7,7 @@ import com.shangin.fractal.gpu.GpuJuliaPreviewRequest;
 import com.shangin.fractal.gpu.GpuJuliaPreviewResult;
 import com.shangin.fractal.gpu.JuliaBrightPointFilter;
 import com.shangin.fractal.render.FractalRenderService;
+import com.shangin.fractal.render.JuliaCpuPreview;
 import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.render.RenderJob;
 import com.shangin.fractal.scene.ColoringSettings;
@@ -19,21 +20,28 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Runs approximate whole-frame Julia renders on the GPU preview kernel for the
- * Julia GPU mode. Only the latest request runs; superseded requests are dropped
- * before they reach the GPU. Results return through the caller's executor (the
- * FX thread), which decides whether they are still current.
+ * Julia GPU mode, and CPU preview frames for Explore Julia Parameters where the GPU
+ * cannot render the view. Only the latest request runs; superseded requests are
+ * dropped before they start, and a cancelled CPU frame stops early. Results return
+ * through the caller's executor (the FX thread), which decides whether they are
+ * still current.
  */
 final class JuliaGpuRenderer implements AutoCloseable {
 
-    /** One frame to render with the given coloring. */
-    record Request(long sequence, RenderJob job, ColoringSettings coloring, boolean filterBrightPoints) {
+    /** One frame to render with the given coloring, on the GPU kernel or, with {@code cpu}, the CPU preview. */
+    record Request(long sequence, RenderJob job, ColoringSettings coloring, boolean filterBrightPoints, boolean cpu) {
         Request {
             Objects.requireNonNull(job);
             Objects.requireNonNull(coloring);
+        }
+
+        Request(long sequence, RenderJob job, ColoringSettings coloring, boolean filterBrightPoints) {
+            this(sequence, job, coloring, filterBrightPoints, false);
         }
     }
 
@@ -41,13 +49,21 @@ final class JuliaGpuRenderer implements AutoCloseable {
      * Host wall-clock costs of one frame on the worker, for opt-in latency diagnostics.
      * {@code startNanos} is when the worker took the request; {@code gpu} holds the
      * kernel's setup, upload, dispatch (including the bright-point pass) and readback
-     * times; {@code callNanos} spans the whole runtime call, including session or
-     * kernel creation on first use; {@code cpuFilterNanos} is the CPU bright-point
-     * filter, zero unless the GPU pass could not run; {@code readyNanos} is when the
-     * result was offered to the result executor.
+     * times, and is {@code null} for a CPU frame; {@code callNanos} spans the whole
+     * runtime call, including session or kernel creation on first use, or the whole CPU
+     * preview; {@code cpuFilterNanos} is the CPU bright-point filter after a GPU frame,
+     * zero unless the GPU pass could not run; {@code cpuScale} is a CPU frame's
+     * enlargement (zero for the GPU) and {@code cpuSampleNanos} its calculation, coloring
+     * and filter before enlargement; {@code readyNanos} is when the result was offered
+     * to the result executor.
      */
     record FrameTiming(GpuJuliaPreviewResult gpu, long startNanos, long callNanos, long cpuFilterNanos,
-                       long readyNanos) {}
+                       int cpuScale, long cpuSampleNanos, long readyNanos) {
+        FrameTiming(GpuJuliaPreviewResult gpu, long startNanos, long callNanos, long cpuFilterNanos,
+                    long readyNanos) {
+            this(gpu, startNanos, callNanos, cpuFilterNanos, 0, 0, readyNanos);
+        }
+    }
 
     /** Receives the outcome on the result executor. Colors must be returned with {@link #release}. */
     interface Listener {
@@ -59,6 +75,15 @@ final class JuliaGpuRenderer implements AutoCloseable {
     /** Width and height of the warm-up frame: enough for both passes, negligible to render. */
     static final int WARM_UP_SIZE = 16;
 
+    /**
+     * Target cost of a CPU preview frame's samples (calculation, coloring and filter):
+     * the coarsest-needed scale keeps it within this, about 40 frames per second.
+     */
+    static final long CPU_FRAME_BUDGET_NANOS = 25_000_000;
+
+    /** Assumed cost per sample before the first CPU frame has been measured. */
+    static final double INITIAL_CPU_NANOS_PER_SAMPLE = 40;
+
     private final FractalRenderService renderService;
     private final Executor resultExecutor;
     private final ExecutorService worker = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
@@ -69,6 +94,11 @@ final class JuliaGpuRenderer implements AutoCloseable {
             });
     private final AtomicReference<Pending> latest = new AtomicReference<>();
     private final ConcurrentLinkedDeque<int[]> buffers = new ConcurrentLinkedDeque<>();
+    private final JuliaCpuPreview cpuPreview;
+    /** Incremented by {@link #cancelPending}: a CPU frame submitted before it stops. */
+    private final AtomicLong cancellations = new AtomicLong();
+    /** Worker only: measured cost per sample of the latest CPU frame. */
+    private double cpuNanosPerSample = INITIAL_CPU_NANOS_PER_SAMPLE;
     private volatile boolean closed;
     /** Set on the worker once the kernel has run, by a frame or the warm-up. */
     private volatile boolean warm;
@@ -77,11 +107,25 @@ final class JuliaGpuRenderer implements AutoCloseable {
     /** True while a request may be using the runtime; paired with {@link #closed} for close. */
     private volatile boolean running;
 
-    private record Pending(Request request, Listener listener) {}
+    /** {@code cancellation} is {@link #cancellations} at submission: a later cancelPending cancels it. */
+    private record Pending(Request request, Listener listener, long cancellation) {}
 
     JuliaGpuRenderer(FractalRenderService renderService, Executor resultExecutor) {
+        this(renderService, resultExecutor, new JuliaCpuPreview());
+    }
+
+    JuliaGpuRenderer(FractalRenderService renderService, Executor resultExecutor, JuliaCpuPreview cpuPreview) {
         this.renderService = Objects.requireNonNull(renderService);
         this.resultExecutor = Objects.requireNonNull(resultExecutor);
+        this.cpuPreview = Objects.requireNonNull(cpuPreview);
+    }
+
+    /**
+     * Whether the CPU preview accepts this job and coloring: a Julia view within direct
+     * double precision with smooth palette coloring, as the GPU kernel requires. Side-effect free.
+     */
+    boolean supportsCpu(RenderJob job, ColoringSettings coloring) {
+        return cpuPreview.supports(job) && strategy(coloring).isPresent();
     }
 
     /** Whether the GPU kernel accepts this job and coloring; side-effect free and allocation-light. */
@@ -97,7 +141,7 @@ final class JuliaGpuRenderer implements AutoCloseable {
         Objects.requireNonNull(request);
         Objects.requireNonNull(listener);
         if (closed) return;
-        latest.set(new Pending(request, listener));
+        latest.set(new Pending(request, listener, cancellations.get()));
         worker.execute(this::runLatest);
     }
 
@@ -152,8 +196,12 @@ final class JuliaGpuRenderer implements AutoCloseable {
         }
     }
 
-    /** Drops the request that has not started yet; a running native submission completes safely. */
+    /**
+     * Drops the request that has not started yet and stops a running CPU frame; a running
+     * native submission completes safely.
+     */
     void cancelPending() {
+        cancellations.incrementAndGet();
         latest.set(null);
     }
 
@@ -167,7 +215,9 @@ final class JuliaGpuRenderer implements AutoCloseable {
         try {
             if (closed) return;
             Pending pending = latest.getAndSet(null);
-            if (pending != null) run(pending);
+            if (pending == null) return;
+            if (pending.request().cpu()) runCpu(pending);
+            else run(pending);
         } finally {
             running = false;
         }
@@ -216,6 +266,54 @@ final class JuliaGpuRenderer implements AutoCloseable {
         }
     }
 
+    private void runCpu(Pending pending) {
+        Request request = pending.request();
+        Listener listener = pending.listener();
+        long startNanos = System.nanoTime();
+        int[] colors = null;
+        try {
+            ColoringStrategy coloring = strategy(request.coloring()).orElseThrow(
+                    () -> new IllegalArgumentException("The Julia CPU preview requires smooth palette coloring"));
+            RenderJob job = request.job();
+            colors = acquire(job.width() * job.height());
+            int scale = cpuScale(job.width(), job.height(), cpuNanosPerSample);
+            long callStart = System.nanoTime();
+            JuliaCpuPreview.Frame frame = cpuPreview.render(job, scale, coloring, request.filterBrightPoints(),
+                    colors, () -> closed || cancellations.get() != pending.cancellation());
+            long callNanos = System.nanoTime() - callStart;
+            if (frame == null) {
+                release(colors);
+                return;
+            }
+            cpuNanosPerSample = Math.max(1, (double) frame.sampleNanos() / (frame.width() * frame.height()));
+            int[] rendered = colors;
+            colors = null;
+            var timing = new FrameTiming(null, startNanos, callNanos, 0, frame.scale(), frame.sampleNanos(),
+                    System.nanoTime());
+            resultExecutor.execute(() -> listener.rendered(request, rendered, timing));
+        } catch (InterruptedException interrupted) {
+            release(colors);
+            Thread.currentThread().interrupt();
+        } catch (RuntimeException error) {
+            release(colors);
+            resultExecutor.execute(() -> listener.failed(request, error));
+        }
+    }
+
+    /**
+     * The finest scale whose samples are predicted to cost at most
+     * {@link #CPU_FRAME_BUDGET_NANOS} at {@code nanosPerSample}, never coarser than
+     * {@link JuliaCpuPreview#MAX_SCALE}.
+     */
+    static int cpuScale(int width, int height, double nanosPerSample) {
+        for (int scale = 1; scale < JuliaCpuPreview.MAX_SCALE; scale++) {
+            double samples = (double) JuliaCpuPreview.coarseLength(width, scale)
+                    * JuliaCpuPreview.coarseLength(height, scale);
+            if (samples * nanosPerSample <= CPU_FRAME_BUDGET_NANOS) return scale;
+        }
+        return JuliaCpuPreview.MAX_SCALE;
+    }
+
     private int[] acquire(int size) {
         int[] buffer;
         while ((buffer = buffers.pollFirst()) != null) {
@@ -250,10 +348,18 @@ final class JuliaGpuRenderer implements AutoCloseable {
         latest.set(null);
         buffers.clear();
         worker.shutdown();
+        // The CPU preview's workers are idle once no request runs: a running CPU frame sees closed and stops.
+        Runnable afterWork = () -> {
+            try {
+                cpuPreview.close();
+            } finally {
+                afterNativeWork.run();
+            }
+        };
         // Volatile closed/running form a handshake: a request either sees closed and
         // returns, or close sees it running and defers the callback.
         if (!running) {
-            afterNativeWork.run();
+            afterWork.run();
             return;
         }
         Thread closer = new Thread(() -> {
@@ -264,7 +370,7 @@ final class JuliaGpuRenderer implements AutoCloseable {
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
             } finally {
-                afterNativeWork.run();
+                afterWork.run();
             }
         }, "fractal-julia-gpu-close");
         // Holds the JVM open: the callback closes the service and may still persist frames.

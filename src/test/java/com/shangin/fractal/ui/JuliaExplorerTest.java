@@ -201,24 +201,66 @@ class JuliaExplorerTest {
         return frames;
     }
 
-    @Test void eachFrameClosesFivePercentOfTheRemainingGap() {
+    private static final long DRAG_STEP = JuliaExplorer.DRAG_STEP_NANOS;
+
+    @Test void eachDragStepClosesFivePercentOfTheRemainingGap() {
         var start = new JuliaParameters(-0.38, 0.61);
         var target = new JuliaParameters(-0.44, 0.71);
-        var first = JuliaExplorer.nextFramePoint(start, target, 0.01);
-        var second = JuliaExplorer.nextFramePoint(first, target, 0.01);
+        var first = JuliaExplorer.nextFramePoint(start, target, 0.01, DRAG_STEP);
+        var second = JuliaExplorer.nextFramePoint(first, target, 0.01, DRAG_STEP);
         assertEquals(-0.383, first.real(), 1e-12);
         assertEquals(0.615, first.imaginary(), 1e-12);
         assertEquals(-0.38585, second.real(), 1e-12);
         assertEquals(0.61975, second.imaginary(), 1e-12);
+        // Two steps in one frame close the same gap as two frames of one step.
+        var both = JuliaExplorer.nextFramePoint(start, target, 0.01, 2 * DRAG_STEP);
+        assertEquals(second.real(), both.real(), 1e-12);
+        assertEquals(second.imaginary(), both.imaginary(), 1e-12);
+        assertEquals(start, JuliaExplorer.nextFramePoint(start, target, 0.01, 0));
+    }
+
+    @Test void dragArrivalTimeDoesNotDependOnTheFrameRate() {
+        var target = new JuliaParameters(-0.44, 0.61);
+        double at120 = dragArrivalSeconds(target, DRAG_STEP);
+        // 72 map points shrink to the 0.01-point snap distance after this many 5% steps.
+        double steps = Math.log(JuliaFramePacing.SNAP_DISTANCE / 72) / Math.log(1 - JuliaExplorer.DRAG_FRACTION);
+        assertEquals(Math.ceil(steps) * DRAG_STEP * 1e-9, at120, DRAG_STEP * 1e-9);
+        for (long frame : new long[] {4_166_667, 16_666_667, 25_000_000, 40_000_000}) {
+            // Frames quantize the arrival, and the snap to the target takes one more frame.
+            assertEquals(at120, dragArrivalSeconds(target, frame), 2 * frame * 1e-9,
+                    "Arrival at " + frame + " ns frames");
+        }
+    }
+
+    @Test void aStalledDragFrameAdvancesAsFarAsTheLongestCountedFrame() {
+        var start = new JuliaParameters(-0.38, 0.61);
+        var target = new JuliaParameters(-0.44, 0.61);
+        var stalled = JuliaExplorer.nextFramePoint(start, target, 0.01, 900_000_000);
+        var longest = JuliaExplorer.nextFramePoint(start, target, 0.01,
+                (long) (JuliaFramePacing.MAX_FRAME_SECONDS * 1e9));
+        assertEquals(longest, stalled);
+        assertEquals(JuliaExplorer.dragFraction(JuliaFramePacing.MAX_FRAME_SECONDS * 1e9 / DRAG_STEP),
+                (start.real() - stalled.real()) / (start.real() - target.real()), 1e-12);
+    }
+
+    private static double dragArrivalSeconds(JuliaParameters target, long frameNanos) {
+        // 72 map points of 0.01 units, as the measured path.
+        var point = new JuliaParameters(target.real() + 0.72, target.imaginary());
+        int frames = 0;
+        while (!point.equals(target)) {
+            point = JuliaExplorer.nextFramePoint(point, target, 0.01, frameNanos);
+            frames++;
+        }
+        return frames * frameNanos * 1e-9;
     }
 
     @Test void motionFinishesAtTheExactTargetWithinTheSnapDistance() {
         var target = new JuliaParameters(-0.44, 0.61);
         var point = new JuliaParameters(-0.38, 0.61);
-        assertNotEquals(target, JuliaExplorer.nextFramePoint(new JuliaParameters(-0.43992, 0.61008), target, 0.01));
-        assertSame(target, JuliaExplorer.nextFramePoint(new JuliaParameters(-0.43994, 0.61006), target, 0.01));
+        assertNotEquals(target, JuliaExplorer.nextFramePoint(new JuliaParameters(-0.43992, 0.61008), target, 0.01, DRAG_STEP));
+        assertSame(target, JuliaExplorer.nextFramePoint(new JuliaParameters(-0.43994, 0.61006), target, 0.01, DRAG_STEP));
         for (int i = 0; i < 150 && !point.equals(target); i++) {
-            var next = JuliaExplorer.nextFramePoint(point, target, 0.01);
+            var next = JuliaExplorer.nextFramePoint(point, target, 0.01, DRAG_STEP);
             assertTrue(next.real() < point.real());
             assertTrue(next.real() >= target.real());
             point = next;

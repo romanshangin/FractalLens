@@ -112,5 +112,23 @@ reports nearest-rank p95 and rejects failed or uncommitted recordings. A screen
 run omits `noScreen` and needs screen-recording permission; the driver refuses to
 start when it cannot read the strip's calibration sentinel.
 
-The GPU runtime must be enabled (the default on macOS); without it the map does
-not open and the run fails.
+With the GPU runtime enabled (the default on macOS) the map renders on the GPU.
+With `-Dfractal.gpu.enabled=false` in `JAVA_TOOL_OPTIONS`, or where the kernel
+cannot render the view, it renders on the CPU; the CSV header records
+`gpuEnabled` and each configuration a `# mapEngine=gpu|cpu` line. The summary
+refuses to pool recordings of different engines (a recording without the line
+predates the CPU map and counts as GPU) and records the engine in its header.
+
+### CPU map stages
+
+A CPU map frame replaces the GPU stages with `cpu_preview_worker_start` (the
+worker takes the request), `cpu_preview_x<scale>` (the whole CPU preview, whose
+name carries the frame's scale `s`: one sample per `s` by `s` canvas pixels),
+`cpu_preview_samples` (calculation, coloring and bright-point filter before
+enlargement), and `cpu_preview_ready` → `cpu_preview_callback` (the FX queue).
+`approximate_copy` and `approximate_publish` are as above. A CPU map's trial
+ends when the committed target's exact frame is complete and the view is idle;
+the main render's `complete` mark after `map_committed` gives
+`commit_to_exact_complete_ms` and `release_to_exact_complete_ms`. Opening a CPU
+map renders nothing, so its `open` trials have no frame metrics; any other trial
+without a published frame, including opening a GPU map, fails the summary.

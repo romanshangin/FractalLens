@@ -162,12 +162,17 @@ public final class FractalRenderController implements AutoCloseable {
 
     private record FallbackApplied(long generation, Runnable onApplied) {}
 
+    /**
+     * One approximate whole frame: a GPU kernel frame or, with {@code cpu}, a CPU preview
+     * frame of Explore Julia Parameters.
+     */
     private record GpuRender(FractalScene scene, RenderTarget target, Viewport defaultViewport,
-                             RenderJob job, boolean exploringJulia, boolean requiresGpu, Runnable beforeCpuFallback) {
+                             RenderJob job, boolean exploringJulia, boolean requiresGpu, Runnable beforeCpuFallback,
+                             boolean cpu) {
         GpuRender withColoring(ColoringSettings coloring) {
             // Palette work uses the same presentation as the frame it recolors and can fall back to CPU.
             return new GpuRender(scene.withColoring(coloring), target, defaultViewport, job, exploringJulia,
-                    false, beforeCpuFallback);
+                    false, beforeCpuFallback, cpu);
         }
 
         void prepareCpuFallback() {
@@ -245,7 +250,7 @@ public final class FractalRenderController implements AutoCloseable {
 
     /** Whether the visible frame came from the approximate Julia GPU kernel. FX thread only. */
     public boolean showsJuliaGpuFrame() {
-        return gpuRender != null && surface.hasCompletedFrame() && surface.completedRender() == null;
+        return gpuRender != null && !gpuRender.cpu() && surface.hasCompletedFrame() && surface.completedRender() == null;
     }
 
     private Consumer<BigDecimal> zoomChangedHandler = ignored -> {};
@@ -419,9 +424,27 @@ public final class FractalRenderController implements AutoCloseable {
         render(scene, target, defaultViewport, preserveIterationLimit, juliaGpuEnabled);
     }
 
+    /**
+     * Renders on the CPU even while the Julia GPU mode is on: the main view of a CPU
+     * parameter map, which must settle on an exact frame.
+     */
+    public void renderOnCpu(FractalScene scene, RenderTarget target, Viewport defaultViewport,
+                            boolean preserveIterationLimit) {
+        render(scene, target, defaultViewport, preserveIterationLimit, false);
+    }
+
     /** Uses the GPU for Julia map frames and leaves the last image visible on failure. */
     public void renderJuliaExplorerPoint(FractalScene scene, RenderTarget target, Viewport defaultViewport) {
         render(scene, target, defaultViewport, false, true, true, null);
+    }
+
+    /**
+     * Renders a Julia map frame with the CPU preview, at the resolution that keeps its cost
+     * within the frame budget, and leaves the last image visible on failure. The frame is
+     * approximate: the caller renders the exact frame once the point settles.
+     */
+    public void renderJuliaExplorerPointOnCpu(FractalScene scene, RenderTarget target, Viewport defaultViewport) {
+        render(scene, target, defaultViewport, false, false, true, null);
     }
 
     /** Preserves the map frame during a main-window render and allows CPU fallback. */
@@ -436,6 +459,15 @@ public final class FractalRenderController implements AutoCloseable {
         int iterations = iterationLimit(scene, defaultViewport, FormulaDefinition.forScene(scene), preserveIterationLimit);
         return !DeepZoomRenderPolicy.isDeepZoom(scene, target)
                 && juliaGpu.supports(new RenderJob(FormulaDefinition.forScene(scene), scene.viewport(),
+                        target.width(), target.height(), iterations), scene.coloring());
+    }
+
+    /** Whether the CPU preview can render the Julia map frames of this scene; see {@link #renderJuliaExplorerPointOnCpu}. */
+    public boolean supportsJuliaExplorerOnCpu(FractalScene scene, RenderTarget target, Viewport defaultViewport,
+                                              boolean preserveIterationLimit) {
+        int iterations = iterationLimit(scene, defaultViewport, FormulaDefinition.forScene(scene), preserveIterationLimit);
+        return !DeepZoomRenderPolicy.isDeepZoom(scene, target)
+                && juliaGpu.supportsCpu(new RenderJob(FormulaDefinition.forScene(scene), scene.viewport(),
                         target.width(), target.height(), iterations), scene.coloring());
     }
 
@@ -454,8 +486,16 @@ public final class FractalRenderController implements AutoCloseable {
         return scene.iterations().maxIterations(defaultViewport.scaleExact(), scene.viewport().scaleExact());
     }
 
+    /**
+     * Whether the visible frame shows this map scene: its approximate frame or, after the
+     * point settled on CPU, the exact frame rendered for it.
+     */
     public boolean showsExplorerFrame(FractalScene scene) {
-        return gpuRender != null && gpuRender.exploringJulia() && scene.equals(gpuShownScene);
+        if (gpuRender == null) {
+            CompletedRender completed = surface.completedRender();
+            return completed != null && scene.equals(completed.scene());
+        }
+        return gpuRender.exploringJulia() && scene.equals(gpuShownScene);
     }
 
     public boolean isRenderingExplorerMainView() {
@@ -539,7 +579,21 @@ public final class FractalRenderController implements AutoCloseable {
         boolean requiresGpu = juliaExplorerPreview && beforeCpuFallback == null;
         if (allowJuliaGpu && !deepZoom && juliaGpu.supports(renderRequest, scene.coloring())) {
             renderOnGpu(new GpuRender(scene, target, defaultViewport, renderRequest, juliaExplorerPreview,
-                    requiresGpu, beforeCpuFallback), renderGeneration);
+                    requiresGpu, beforeCpuFallback, false), renderGeneration);
+            return;
+        }
+        if (requiresGpu && !allowJuliaGpu) {
+            // A CPU map frame: the CPU preview's support was checked when the map opened,
+            // but the scene may have changed since.
+            if (!deepZoom && juliaGpu.supportsCpu(renderRequest, scene.coloring())) {
+                renderOnGpu(new GpuRender(scene, target, defaultViewport, renderRequest, true,
+                        true, null, true), renderGeneration);
+                return;
+            }
+            invalidateGpuFrames();
+            gpuRender = null;
+            reportFailure(renderGeneration, new IllegalStateException(
+                    "Julia Parameter Map requires a Julia view with smooth palette coloring outside deep zoom."));
             return;
         }
         if (requiresGpu) {
@@ -895,7 +949,7 @@ public final class FractalRenderController implements AutoCloseable {
         gpuPaletteOnlyCancel = false;
         long sequence = ++gpuSequence;
         juliaGpu.submit(new JuliaGpuRenderer.Request(
-                        sequence, render.job(), render.scene().coloring(), render.exploringJulia()),
+                        sequence, render.job(), render.scene().coloring(), render.exploringJulia(), render.cpu()),
                 new JuliaGpuRenderer.Listener() {
                     @Override public void rendered(JuliaGpuRenderer.Request request, int[] colors,
                                                    JuliaGpuRenderer.FrameTiming timing) {
@@ -995,6 +1049,15 @@ public final class FractalRenderController implements AutoCloseable {
         if (!latency.isEnabled()) return;
         long ready = timing.readyNanos();
         var gpu = timing.gpu();
+        if (gpu == null) {
+            latency.measured("cpu_preview_worker_start", timing.startNanos(), 0);
+            // The stage name carries the enlargement: one sample per scale x scale pixels.
+            latency.measured("cpu_preview_x" + timing.cpuScale(), ready, timing.callNanos());
+            latency.measured("cpu_preview_samples", ready, timing.cpuSampleNanos());
+            latency.measured("cpu_preview_ready", ready, 0);
+            latency.measured("cpu_preview_callback", System.nanoTime(), 0);
+            return;
+        }
         latency.measured("gpu_worker_start", timing.startNanos(), 0);
         latency.measured("gpu_call", ready, timing.callNanos());
         latency.measured("gpu_setup", ready, gpu.setupNanos());
