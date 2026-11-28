@@ -1,0 +1,83 @@
+.julia-parameter-map {
+    -map-window: #f5f5f5;
+    -map-text: #202020;
+    -map-secondary-text: #606060;
+    -map-frame-border: #c6c6c8;
+    -map-button: #ffffff;
+    -map-button-hover: #eeeeee;
+    -map-button-border: #bdbdbf;
+    -fx-font-family: "System";
+    -fx-font-size: 13px;
+    -fx-background-color: -map-window;
+    -fx-base: -map-window;
+    -fx-background: -map-window;
+    -fx-control-inner-background: -map-button;
+    -fx-text-base-color: -map-text;
+    -fx-text-background-color: -map-text;
+    -fx-focus-color: -fx-accent;
+    -fx-padding: 10 12;
+}
+
+.julia-parameter-map:dark {
+    -map-window: #292929;
+    -map-text: #f2f2f2;
+    -map-secondary-text: #bbbbbb;
+    -map-frame-border: #565659;
+    -map-button: #414143;
+    -map-button-hover: #505052;
+    -map-button-border: #6a6a6e;
+}
+
+.julia-parameter-map .speed-label,
+.julia-parameter-map .coordinate-value,
+.julia-parameter-map .choice-box > .label {
+    -fx-text-fill: -map-text;
+}
+
+.julia-parameter-map .coordinate-caption {
+    -fx-text-fill: -map-secondary-text;
+}
+
+.julia-parameter-map .coordinate-value {
+    -fx-font-family: "Monospaced";
+}
+
+.julia-parameter-map .map-frame {
+    -fx-border-color: -map-frame-border;
+    -fx-padding: 1;
+}
+
+.julia-parameter-map .choice-box {
+    -fx-background-color: -map-button;
+    -fx-background-insets: 0;
+    -fx-background-radius: 6;
+    -fx-border-color: -map-button-border;
+    -fx-border-radius: 6;
+}
+
+.julia-parameter-map .choice-box:hover {
+    -fx-background-color: -map-button-hover;
+}
+
+.julia-parameter-map .choice-box:focused {
+    -fx-border-color: -map-text, -fx-focus-color;
+    -fx-border-insets: -2, 0;
+    -fx-border-radius: 8, 6;
+    -fx-border-width: 2, 1;
+}
+
+.julia-parameter-map .choice-box > .label {
+    -fx-padding: 3 0 3 8;
+}
+
+.julia-parameter-map .choice-box > .open-button {
+    -fx-padding: 0 7 0 6;
+}
+
+.julia-parameter-map .choice-box > .open-button > .arrow {
+    -fx-background-color: -map-secondary-text;
+    -fx-background-insets: 0;
+    -fx-effect: null;
+    -fx-padding: 5 3;
+    -fx-shape: "M 0 3 L 3 0 L 6 3 L 5 4 L 3 2 L 1 4 Z M 0 7 L 1 6 L 3 8 L 5 6 L 6 7 L 3 10 Z";
+}

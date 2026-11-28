@@ -24,13 +24,20 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.stage.PopupWindow;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -650,10 +657,20 @@ class JuliaGpuModeFxTest {
                     var imaginary = (Label) scene.lookup("#julia-coordinate-imaginary");
                     assertNotNull(real);
                     assertNotNull(imaginary);
-                    assertEquals("Re -0.800", real.getText());
-                    assertEquals("Im 0.156", imaginary.getText());
-                    assertTrue(real.localToScene(real.getBoundsInLocal()).getMaxY()
-                            <= explorer.map().localToScene(explorer.map().getBoundsInLocal()).getMinY());
+                    assertEquals("-0.800", real.getText());
+                    assertEquals("0.156", imaginary.getText());
+                    assertCoordinateCaption(scene, "Re", real);
+                    assertCoordinateCaption(scene, "Im", imaginary);
+                    var mapBounds = explorer.map().localToScene(explorer.map().getLayoutBounds());
+                    assertEquals(JuliaExplorer.WIDTH, mapBounds.getWidth());
+                    assertTrue(mapBounds.getMinX() > 0 && mapBounds.getMaxX() < scene.getWidth());
+                    assertTrue(real.localToScene(real.getBoundsInLocal()).getMaxY() < mapBounds.getMinY());
+                    assertTrue(imaginary.localToScene(imaginary.getBoundsInLocal()).getMaxY() < mapBounds.getMinY());
+                    assertTrue(speed.localToScene(speed.getBoundsInLocal()).getMinY() > mapBounds.getMaxY());
+                    var panel = (VBox) scene.getRoot();
+                    var panelColor = (Color) panel.getBackground().getFills().getFirst().getFill();
+                    var numberColor = (Color) real.getTextFill();
+                    assertEquals(scheme == ColorScheme.DARK, panelColor.getBrightness() < numberColor.getBrightness());
                     assertEquals("Click speed", speed.getAccessibleText());
                     assertEquals(java.util.List.of("Very slow", "Slow", "Default", "Fast", "Very fast"),
                             speed.getItems().stream().map(Object::toString).toList());
@@ -672,6 +689,84 @@ class JuliaGpuModeFxTest {
                 });
             }
         }
+    }
+
+    private static void assertCoordinateCaption(Scene scene, String text, Label value) {
+        var caption = scene.getRoot().lookupAll(".coordinate-caption").stream().map(Label.class::cast)
+                .filter(label -> label.getText().equals(text)).findFirst().orElseThrow();
+        assertSame(value, caption.getLabelFor());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"LIGHT, #ffcc00", "DARK, #ffd60a", "LIGHT, #001466", "DARK, #001466"})
+    void parameterMapFocusAndPopupStayLegible(ColorScheme scheme, String accentHex) throws Exception {
+        try (var window = new MainWindow()) {
+            var explorer = openExplorer(window);
+            awaitCondition(() -> fx(explorer::isFocused));
+            fx(() -> {
+                var accent = Color.web(accentHex);
+                var scene = explorer.getScene();
+                var panel = (VBox) scene.getRoot();
+                var speed = (ChoiceBox<?>) scene.lookup("#julia-click-speed");
+                scene.getPreferences().setColorScheme(scheme);
+                panel.styleProperty().unbind();
+                panel.setStyle(JuliaExplorer.accentStyle(accent));
+                panel.applyCss();
+                panel.layout();
+
+                var panelColor = (Color) panel.getBackground().getFills().getFirst().getFill();
+                var buttonColor = (Color) speed.getBackground().getFills().getFirst().getFill();
+                var keyboardFocus = scene.getFocusOwner();
+                keyboardFocus.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.TAB,
+                        false, false, false, false));
+                assertSame(speed, scene.getFocusOwner(), "Tab must reach the speed control");
+                panel.applyCss();
+                var strokes = speed.getBorder().getStrokes();
+                var outer = strokes.getFirst();
+                assertTrue(outer.getInsets().getTop() < 0, "Focus must have an outer outline");
+                assertTrue(contrast((Color) outer.getTopStroke(), panelColor) >= 3);
+                assertTrue(contrast((Color) outer.getTopStroke(), buttonColor) >= 3);
+                assertEquals(accent, strokes.getLast().getTopStroke());
+
+                speed.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.SPACE,
+                        false, false, false, false));
+                assertTrue(speed.isShowing(), "Space must open the speed choices");
+                try {
+                    var popup = Window.getWindows().stream().filter(PopupWindow.class::isInstance)
+                            .map(PopupWindow.class::cast).filter(w -> w.getOwnerWindow() == explorer)
+                            .filter(w -> w.getScene().getRoot().lookup(".menu-item") != null)
+                            .findFirst().orElseThrow();
+                    var popupRoot = popup.getScene().getRoot();
+                    popup.getScene().getFocusOwner().fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.DOWN,
+                            false, false, false, false));
+                    popupRoot.applyCss();
+                    var activeRow = (Region) popup.getScene().getFocusOwner();
+                    assertTrue(activeRow.getStyleClass().contains("menu-item"), "Down must focus a menu item");
+                    var text = (Label) activeRow.lookup(".label");
+                    var highlight = (Color) activeRow.getBackground().getFills().getFirst().getFill();
+                    assertEquals(accent, highlight);
+                    assertTrue(contrast((Color) text.getTextFill(), highlight) >= 4.5,
+                            () -> "The focused menu item must be legible against " + highlight);
+                } finally {
+                    speed.hide();
+                }
+                return null;
+            });
+        }
+    }
+
+    private static double contrast(Color first, Color second) {
+        double a = luminance(first);
+        double b = luminance(second);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+
+    private static double luminance(Color color) {
+        return 0.2126 * linear(color.getRed()) + 0.7152 * linear(color.getGreen()) + 0.0722 * linear(color.getBlue());
+    }
+
+    private static double linear(double value) {
+        return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
     }
 
     @Test
@@ -1237,8 +1332,8 @@ class JuliaGpuModeFxTest {
         var scene = map.getScene();
         var real = (Label) scene.lookup("#julia-coordinate-real");
         var imaginary = (Label) scene.lookup("#julia-coordinate-imaginary");
-        assertEquals(String.format(Locale.ROOT, "Re %.3f", expected.real()), real.getText());
-        assertEquals(String.format(Locale.ROOT, "Im %.3f", expected.imaginary()), imaginary.getText());
+        assertEquals(String.format(Locale.ROOT, "%.3f", expected.real()), real.getText());
+        assertEquals(String.format(Locale.ROOT, "%.3f", expected.imaginary()), imaginary.getText());
     }
 
     private static MouseEvent pointer(Node map, javafx.event.EventType<MouseEvent> type,

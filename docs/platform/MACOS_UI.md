@@ -1302,6 +1302,8 @@ eightfold for its 80-iteration limit, without histogram or orbit-trap coloring)
 and is colored again whenever those settings change while it is open (Animate
 Palette's moving offset is not followed). Until its CPU
 preview is ready, the map shows the palette's first color.
+The window uses the standard title bar and follows the system appearance and
+accent color. The map is inset from the window edges.
 Above the map, **Re** and **Im** show the Mandelbrot marker's current coordinates
 to three decimal places. The marker and coordinates follow the visible Julia
 frame, including while a click, drag, undo, or redo is waiting for rendering.
