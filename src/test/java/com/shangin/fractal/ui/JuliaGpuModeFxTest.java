@@ -14,9 +14,11 @@ import com.shangin.fractal.render.*;
 import com.shangin.fractal.scene.*;
 import javafx.application.ColorScheme;
 import javafx.application.Platform;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.image.Image;
@@ -26,6 +28,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterAll;
@@ -39,6 +42,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
@@ -642,6 +646,14 @@ class JuliaGpuModeFxTest {
                     assertTrue(speed.isVisible());
                     assertTrue(speed.getBoundsInParent().getWidth() > 0);
                     assertEquals(JuliaExplorer.HEIGHT, explorer.map().getHeight());
+                    var real = (Label) scene.lookup("#julia-coordinate-real");
+                    var imaginary = (Label) scene.lookup("#julia-coordinate-imaginary");
+                    assertNotNull(real);
+                    assertNotNull(imaginary);
+                    assertEquals("Re -0.800", real.getText());
+                    assertEquals("Im 0.156", imaginary.getText());
+                    assertTrue(real.localToScene(real.getBoundsInLocal()).getMaxY()
+                            <= explorer.map().localToScene(explorer.map().getBoundsInLocal()).getMinY());
                     assertEquals("Click speed", speed.getAccessibleText());
                     assertEquals(java.util.List.of("Very slow", "Slow", "Default", "Fast", "Very fast"),
                             speed.getItems().stream().map(Object::toString).toList());
@@ -687,8 +699,8 @@ class JuliaGpuModeFxTest {
                 double targetY = marker.getCenterY();
                 marker.centerXProperty().addListener((observable, before, after) ->
                         step.complete(after.doubleValue() - startX));
-                map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, targetX, targetY, true));
-                map.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, targetX, targetY, false));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_PRESSED, targetX, targetY, true));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_RELEASED, targetX, targetY, false));
                 // Fix the first two pulse times in one FX turn. The render still publishes normally.
                 long now = System.nanoTime();
                 explorer.advanceFrame(now);
@@ -766,11 +778,11 @@ class JuliaGpuModeFxTest {
             fx(() -> {
                 var map = explorer.map();
                 // The press scales the gesture to reach (4, 4); the boundary must still be in map points.
-                map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, JuliaExplorer.WIDTH - 1, 0, true));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_PRESSED, JuliaExplorer.WIDTH - 1, 0, true));
                 assertEquals(JuliaFramePacing.BOUNDARY_RANGE, explorer.boundaryDistance(new JuliaParameters(4, 4)));
                 assertEquals(JuliaFramePacing.BOUNDARY_RANGE,
                         explorer.boundaryDistance(JuliaExplorer.point(JuliaExplorer.WIDTH - 1, 0)));
-                map.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, JuliaExplorer.WIDTH - 1, 0, false));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_RELEASED, JuliaExplorer.WIDTH - 1, 0, false));
                 return null;
             });
         }
@@ -831,13 +843,14 @@ class JuliaGpuModeFxTest {
             fx(() -> {
                 dragPositions.add(marker.getCenterX());
                 marker.centerXProperty().addListener((obs, before, after) -> dragPositions.add(after.doubleValue()));
-                map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 70, 60, true));
-                map.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 70, true));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_PRESSED, 70, 60, true));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_DRAGGED, 220, 70, true));
                 return null;
             });
             awaitCondition(() -> fx(() -> dragPositions.size() >= 4));
             fx(() -> {
                 assertTrue(marker.getCenterX() < 220);
+                assertMapCoordinates(map, JuliaExplorer.point(marker.getCenterX(), marker.getCenterY()));
                 assertEquals(surface.renderWidth(), imageView.getImage().getWidth());
                 assertEquals(surface.renderHeight(), imageView.getImage().getHeight());
                 assertEquals(surface.getWidth(), imageView.getFitWidth());
@@ -845,8 +858,8 @@ class JuliaGpuModeFxTest {
                 assertEquals(0xff303030, imageView.getImage().getPixelReader().getArgb(1, 1));
                 assertEquals(0xff202020, imageView.getImage().getPixelReader().getArgb(2, 1));
                 assertEquals(initial, window.view.sceneSnapshot());
-                map.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 150, 90, true));
-                map.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 90, 75, false));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_DRAGGED, 150, 90, true));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_RELEASED, 90, 75, false));
                 return null;
             });
             var dragged = initial.withJuliaParameters(JuliaExplorer.point(90, 75));
@@ -882,10 +895,11 @@ class JuliaGpuModeFxTest {
                     assertEquals(previous + 0.05 * (220 - previous), dragPositions.get(i), 1e-9);
                 }
                 assertEquals(90, marker.getCenterX(), 1e-9);
+                assertMapCoordinates(map, dragged.juliaParameters());
                 marker.centerXProperty().addListener((obs, before, after) -> positions.add(after.doubleValue()));
-                map.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 169, 110, true));
-                map.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 170, 110, true));
-                map.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_PRESSED, 169, 110, true));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_DRAGGED, 170, 110, true));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_RELEASED, 170, 110, false));
                 return null;
             });
             awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.canExportPng()
@@ -926,6 +940,7 @@ class JuliaGpuModeFxTest {
                     previous = x;
                 }
                 assertEquals(170, previous, 1e-9);
+                assertMapCoordinates(map, JuliaExplorer.point(170, 110));
                 assertTrue(positions.size() >= 5, "A click must advance through visible intermediate positions");
                 ((Stage) map.getScene().getWindow()).close();
                 assertSame(finalGpuFrame, imageView.getImage());
@@ -956,8 +971,8 @@ class JuliaGpuModeFxTest {
                     if (!active) map.hide();
                 });
                 var root = map.map();
-                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
-                root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, 170, 110, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_RELEASED, 170, 110, false));
                 return null;
             });
             awaitCondition(() -> fx(() -> !map.isShowing()));
@@ -998,8 +1013,8 @@ class JuliaGpuModeFxTest {
                     }
                 });
                 var root = map.map();
-                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
-                root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, 170, 110, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_RELEASED, 170, 110, false));
                 return null;
             });
             awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle()));
@@ -1027,6 +1042,87 @@ class JuliaGpuModeFxTest {
         }
     }
 
+    @Test
+    void pressingAgainKeepsTheMarkerAndCoordinatesWithThePublishedFrame() throws Exception {
+        try (var window = new MainWindow()) {
+            var map = openExplorer(window).map();
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
+            JuliaParameters initial = JULIA.juliaParameters();
+            var expected = JuliaExplorer.interpolate(initial, JuliaExplorer.point(220, 90), 0.05);
+            int started = window.runtime.started();
+            window.runtime.setGated(true);
+            try {
+                fx(() -> {
+                    map.fireEvent(pointer(map, MouseEvent.MOUSE_PRESSED, 70, 60, true));
+                    map.fireEvent(pointer(map, MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                    return null;
+                });
+                awaitCondition(() -> window.runtime.started() > started);
+                fx(() -> {
+                    map.fireEvent(pointer(map, MouseEvent.MOUSE_PRESSED, 180, 100, true));
+                    assertPublishedMapPoint(window, map, initial);
+                    return null;
+                });
+            } finally {
+                window.runtime.setGated(false);
+                window.runtime.release();
+            }
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            fx(() -> {
+                assertPublishedMapPoint(window, map, expected);
+                assertEquals(JULIA, window.view.sceneSnapshot(), "The second press is still held");
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void undoAndRedoKeepTheMarkerAndCoordinatesWithThePublishedFrame() throws Exception {
+        try (var window = new MainWindow()) {
+            var map = openExplorer(window).map();
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.showsJuliaGpuFrame()));
+            var initial = fx(window.view::sceneSnapshot);
+            var next = new JuliaParameters(-0.25, -0.5);
+            fx(() -> {
+                window.view.applyScene(initial.withJuliaParameters(next));
+                return null;
+            });
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            assertMapHistoryRender(window, map, next, initial.juliaParameters(), window.view::undoScene);
+            assertMapHistoryRender(window, map, initial.juliaParameters(), next, window.view::redoScene);
+        }
+    }
+
+    private static void assertMapHistoryRender(MainWindow window, Pane map, JuliaParameters previous,
+                                               JuliaParameters next, Runnable restore) throws Exception {
+        int started = window.runtime.started();
+        window.runtime.setGated(true);
+        try {
+            fx(() -> { restore.run(); return null; });
+            awaitCondition(() -> window.runtime.started() > started);
+            fx(() -> {
+                assertEquals(next, window.view.sceneSnapshot().juliaParameters());
+                assertPublishedMapPoint(window, map, previous);
+                return null;
+            });
+        } finally {
+            window.runtime.setGated(false);
+            window.runtime.release();
+        }
+        awaitCondition(() -> fx(window.view::isLatencyIdle));
+        fx(() -> { assertPublishedMapPoint(window, map, next); return null; });
+    }
+
+    private static void assertPublishedMapPoint(MainWindow window, Pane map, JuliaParameters expected) {
+        assertTrue(window.view.showsApproximateJuliaPoint(expected), "The canvas must show the expected Julia point");
+        var marker = (javafx.scene.shape.Circle) map.getChildrenUnmodifiable().get(1);
+        assertTrue(marker.isVisible());
+        var marked = JuliaExplorer.point(marker.getCenterX(), marker.getCenterY());
+        assertEquals(expected.real(), marked.real(), 1e-12);
+        assertEquals(expected.imaginary(), marked.imaginary(), 1e-12);
+        assertMapCoordinates(map, expected);
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void restoringASceneWithTheSameConstantCancelsTheMapDrag(boolean histogram) throws Exception {
@@ -1045,19 +1141,21 @@ class JuliaGpuModeFxTest {
             var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
             double initialX = fx(marker::getCenterX);
             fx(() -> {
-                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
-                root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_DRAGGED, 220, 90, true));
                 return null;
             });
             awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));
             fx(() -> {
                 assertEquals(initial, window.view.sceneSnapshot(), "The drag must still be uncommitted");
+                var published = JuliaExplorer.point(marker.getCenterX(), marker.getCenterY());
                 window.view.applyScene(replacement);
                 assertEquals(replacement, window.view.sceneSnapshot());
                 assertEquals(!histogram, map.isShowing());
                 if (!histogram) {
-                    assertEquals(initialX, marker.getCenterX());
-                    root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 220, 90, false));
+                    assertEquals(published, JuliaExplorer.point(marker.getCenterX(), marker.getCenterY()));
+                    assertMapCoordinates(root, published);
+                    root.fireEvent(pointer(root, MouseEvent.MOUSE_RELEASED, 220, 90, false));
                 }
                 return null;
             });
@@ -1124,8 +1222,8 @@ class JuliaGpuModeFxTest {
             window.runtime.setEmptyResult(true);
             fx(() -> {
                 var root = map.map();
-                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, 170, 110, true));
-                root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, 170, 110, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_RELEASED, 170, 110, false));
                 return null;
             });
             awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle() && errors.get() != null));
@@ -1135,8 +1233,19 @@ class JuliaGpuModeFxTest {
         }
     }
 
-    private static MouseEvent pointer(javafx.event.EventType<MouseEvent> type, double x, double y, boolean down) {
-        return new MouseEvent(type, x, y, x, y, MouseButton.PRIMARY, 1, false, false, false, false,
+    private static void assertMapCoordinates(Node map, JuliaParameters expected) {
+        var scene = map.getScene();
+        var real = (Label) scene.lookup("#julia-coordinate-real");
+        var imaginary = (Label) scene.lookup("#julia-coordinate-imaginary");
+        assertEquals(String.format(Locale.ROOT, "Re %.3f", expected.real()), real.getText());
+        assertEquals(String.format(Locale.ROOT, "Im %.3f", expected.imaginary()), imaginary.getText());
+    }
+
+    private static MouseEvent pointer(Node map, javafx.event.EventType<MouseEvent> type,
+                                      double x, double y, boolean down) {
+        var scenePoint = map.localToScene(x, y);
+        return new MouseEvent(type, scenePoint.getX(), scenePoint.getY(), x, y,
+                MouseButton.PRIMARY, 1, false, false, false, false,
                 down, false, false, false, false, true, null);
     }
 
@@ -1160,9 +1269,9 @@ class JuliaGpuModeFxTest {
             double targetX = editing ? 220 : 143;
             var targetPoint = JuliaExplorer.point(targetX, 90);
             fx(() -> {
-                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
-                if (editing) root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, targetX, 90, true));
-                root.fireEvent(pointer(MouseEvent.MOUSE_RELEASED, targetX, 90, false));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                if (editing) root.fireEvent(pointer(root, MouseEvent.MOUSE_DRAGGED, targetX, 90, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_RELEASED, targetX, 90, false));
                 return null;
             });
             if (editing) {
@@ -1226,8 +1335,8 @@ class JuliaGpuModeFxTest {
             double initialX = fx(marker::getCenterX);
             if (editing) {
                 fx(() -> {
-                    root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
-                    root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                    root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                    root.fireEvent(pointer(root, MouseEvent.MOUSE_DRAGGED, 220, 90, true));
                     return null;
                 });
                 awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));
@@ -1286,8 +1395,8 @@ class JuliaGpuModeFxTest {
             var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
             double initialX = fx(marker::getCenterX);
             fx(() -> {
-                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
-                root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_DRAGGED, 220, 90, true));
                 return null;
             });
             awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));
@@ -1343,8 +1452,8 @@ class JuliaGpuModeFxTest {
             var marker = fx(() -> (javafx.scene.shape.Circle) root.getChildrenUnmodifiable().get(1));
             double initialX = fx(marker::getCenterX);
             fx(() -> {
-                root.fireEvent(pointer(MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
-                root.fireEvent(pointer(MouseEvent.MOUSE_DRAGGED, 220, 90, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, initialX, marker.getCenterY(), true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_DRAGGED, 220, 90, true));
                 return null;
             });
             awaitCondition(() -> fx(() -> marker.getCenterX() > initialX));

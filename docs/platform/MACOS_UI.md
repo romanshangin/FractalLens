@@ -1302,6 +1302,10 @@ eightfold for its 80-iteration limit, without histogram or orbit-trap coloring)
 and is colored again whenever those settings change while it is open (Animate
 Palette's moving offset is not followed). Until its CPU
 preview is ready, the map shows the palette's first color.
+Above the map, **Re** and **Im** show the Mandelbrot marker's current coordinates
+to three decimal places. The marker and coordinates follow the visible Julia
+frame, including while a click, drag, undo, or redo is waiting for rendering.
+Large off-map values use scientific notation.
 **Click speed** below the map offers **Very slow** (0.25×), **Slow** (0.5×),
 **Default** (1×), **Fast** (2×), and **Very fast** (4×). The selection is an
 application preference and takes effect on the next click. Each preset keeps

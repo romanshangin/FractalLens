@@ -346,7 +346,8 @@ public final class JuliaExplorerLatencyBenchmark {
         Point2D screenPoint = map.localToScreen(point);
         double screenX = screenPoint == null ? 0 : screenPoint.getX();
         double screenY = screenPoint == null ? 0 : screenPoint.getY();
-        Event.fireEvent(map, new MouseEvent(type, point.getX(), point.getY(), screenX, screenY,
+        Point2D scenePoint = map.localToScene(point);
+        Event.fireEvent(map, new MouseEvent(type, scenePoint.getX(), scenePoint.getY(), screenX, screenY,
                 MouseButton.PRIMARY, 1, false, false, false, false, down, false, false, false, false, true, null));
     }
 

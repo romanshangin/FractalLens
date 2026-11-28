@@ -36,6 +36,7 @@ import java.util.function.Consumer;
 public final class FractalSurface extends Region {
 
     private final InteractionLatency latency = new InteractionLatency();
+    private Consumer<FractalScene> approximateFramePublished = ignored -> {};
 
     public InteractionLatency latency() { return latency; }
 
@@ -356,7 +357,12 @@ public final class FractalSurface extends Region {
         stagingRefinementValidity.clear();
         promoteStagingFrame(null, scene);
         latency.frame("approximate_publish");
+        approximateFramePublished.accept(scene);
         return true;
+    }
+
+    void setOnApproximateFramePublished(Consumer<FractalScene> listener) {
+        approximateFramePublished = Objects.requireNonNull(listener);
     }
 
     /** Shows preserved refined pixels and prepares the overlay for new AA tiles. */
@@ -438,8 +444,13 @@ public final class FractalSurface extends Region {
     }
 
     boolean showsApproximateJuliaPoint(JuliaParameters point) {
-        return displayedFrame != null && displayedRenderFrame == null
-                && displayedScene.fractal() == FractalPreset.JULIA && displayedScene.juliaParameters().equals(point);
+        JuliaParameters displayed = displayedJuliaPoint();
+        return displayedRenderFrame == null && displayed != null && displayed.equals(point);
+    }
+
+    JuliaParameters displayedJuliaPoint() {
+        return displayedFrame != null && displayedScene.fractal() == FractalPreset.JULIA
+                ? displayedScene.juliaParameters() : null;
     }
 
     public boolean hasCompletedFrame() {
