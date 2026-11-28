@@ -15,7 +15,9 @@ import com.shangin.fractal.render.RenderGrid;
 import com.shangin.fractal.scene.JuliaParameters;
 import javafx.animation.AnimationTimer;
 import javafx.application.ColorScheme;
-import javafx.geometry.Insets;
+import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.ChoiceBox;
@@ -28,6 +30,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -125,29 +128,37 @@ final class JuliaExplorer extends Stage {
         map.setPickOnBounds(true);
         map.setAccessibleText("Mandelbrot parameter map");
         Tooltip.install(map, new Tooltip("Click to move, drag to explore, or Shift-drag for fine adjustment."));
-        realCoordinate.setId("julia-coordinate-real");
-        imaginaryCoordinate.setId("julia-coordinate-imaginary");
-        double coordinateWidth = (WIDTH - 16) / 2.0;
-        realCoordinate.setPrefWidth(coordinateWidth);
-        imaginaryCoordinate.setPrefWidth(coordinateWidth);
-        var coordinates = new HBox(realCoordinate, imaginaryCoordinate);
-        coordinates.setPadding(new Insets(6, 8, 6, 8));
+        var coordinates = new HBox(coordinate("Re", "Real coordinate", "julia-coordinate-real", realCoordinate),
+                coordinate("Im", "Imaginary coordinate", "julia-coordinate-imaginary", imaginaryCoordinate));
+        var framedMap = new StackPane(map);
+        framedMap.getStyleClass().add("map-frame");
         showPublishedPoint(Objects.requireNonNullElse(view.displayedJuliaPoint(), submitted));
+
         var speedChoice = new ChoiceBox<JuliaClickSpeed>();
         speedChoice.setId("julia-click-speed");
         speedChoice.getItems().setAll(JuliaClickSpeed.values());
         speedChoice.setValue(clickSpeed);
         speedChoice.setOnAction(event -> onClickSpeedChanged.accept(speedChoice.getValue()));
         var speedLabel = new Label("Click speed");
+        speedLabel.getStyleClass().add("speed-label");
         speedLabel.setLabelFor(speedChoice);
         speedChoice.setAccessibleText(speedLabel.getText());
         var controls = new HBox(8, speedLabel, speedChoice);
-        controls.setAlignment(Pos.CENTER_LEFT);
-        controls.setPadding(new Insets(6, 8, 6, 8));
-        var root = new VBox(coordinates, map, controls);
+        controls.setAlignment(Pos.CENTER_RIGHT);
+
+        var root = new VBox(8, coordinates, framedMap, controls);
+        root.getStyleClass().add("julia-parameter-map");
         var scene = new Scene(root);
-        root.styleProperty().bind(scene.getPreferences().colorSchemeProperty().map(scheme ->
-                scheme == ColorScheme.DARK ? "-fx-base: #383838;" : ""));
+        scene.getStylesheets().add(Objects.requireNonNull(
+                JuliaExplorer.class.getResource("julia-parameter-map.css")).toExternalForm());
+        var appearance = scene.getPreferences();
+        var platform = Platform.getPreferences();
+        var dark = PseudoClass.getPseudoClass("dark");
+        root.pseudoClassStateChanged(dark, appearance.getColorScheme() == ColorScheme.DARK);
+        appearance.colorSchemeProperty().addListener((observable, before, after) ->
+                root.pseudoClassStateChanged(dark, after == ColorScheme.DARK));
+        root.styleProperty().bind(Bindings.createStringBinding(() -> accentStyle(platform.getAccentColor()),
+                platform.accentColorProperty()));
         setScene(scene);
         setX(owner.getX() + 20);
         setY(owner.getY() + 60);
@@ -191,6 +202,7 @@ final class JuliaExplorer extends Stage {
         });
         Thread thumbnailLoader = Thread.ofVirtual().unstarted(this::loadThumbnail);
         setOnShown(e -> {
+            root.requestFocus();
             view.setJuliaExplorer(this);
             thumbnailLoader.start();
         });
@@ -204,6 +216,33 @@ final class JuliaExplorer extends Stage {
                 commit();
             }
         });
+    }
+
+    static String accentStyle(Color accent) {
+        double luminance = 0.2126 * linearComponent(accent.getRed())
+                + 0.7152 * linearComponent(accent.getGreen()) + 0.0722 * linearComponent(accent.getBlue());
+        // Choose the text color with the higher contrast against the menu highlight.
+        return String.format(Locale.ROOT, "-fx-accent: rgb(%d,%d,%d); -fx-focused-text-base-color: %s;",
+                Math.round(accent.getRed() * 255), Math.round(accent.getGreen() * 255),
+                Math.round(accent.getBlue() * 255), luminance >= 0.17913 ? "black" : "white");
+    }
+
+    private static double linearComponent(double value) {
+        return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+    }
+
+    private static HBox coordinate(String caption, String accessibleName, String id, Label value) {
+        var label = new Label(caption);
+        label.getStyleClass().add("coordinate-caption");
+        label.setLabelFor(value);
+        value.setId(id);
+        value.getStyleClass().add("coordinate-value");
+        value.setAccessibleHelp(accessibleName);
+        var field = new HBox(6, label, value);
+        field.setAlignment(Pos.BASELINE_LEFT);
+        field.setPrefWidth(WIDTH / 2.0);
+        field.setMinWidth(0);
+        return field;
     }
 
     Pane map() {
@@ -388,8 +427,8 @@ final class JuliaExplorer extends Stage {
 
     void showPublishedPoint(JuliaParameters c) {
         if (!c.equals(displayed)) {
-            realCoordinate.setText("Re " + formatCoordinate(c.real()));
-            imaginaryCoordinate.setText("Im " + formatCoordinate(c.imaginary()));
+            realCoordinate.setText(formatCoordinate(c.real()));
+            imaginaryCoordinate.setText(formatCoordinate(c.imaginary()));
             displayed = c;
         }
         double x = mapX(c), y = mapY(c);
