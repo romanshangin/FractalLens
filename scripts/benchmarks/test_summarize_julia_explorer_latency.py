@@ -43,6 +43,29 @@ def drag_trace(screen=False):
     return rows
 
 
+def cpu_frame(gesture, phase, input_number, render, start_ms, publish_ms, scale):
+    return [row(gesture, phase, input_number, render, "render_start", start_ms),
+            row(gesture, phase, input_number, render, "cpu_preview_worker_start", start_ms + 0.5),
+            row(gesture, phase, input_number, render, f"cpu_preview_x{scale}", publish_ms - 2, 6),
+            row(gesture, phase, input_number, render, "cpu_preview_samples", publish_ms - 2, 5),
+            row(gesture, phase, input_number, render, "cpu_preview_ready", publish_ms - 2),
+            row(gesture, phase, input_number, render, "cpu_preview_callback", publish_ms - 1.5),
+            row(gesture, phase, input_number, render, "approximate_copy", publish_ms - 1, 0.5),
+            row(gesture, phase, input_number, render, "approximate_publish", publish_ms)]
+
+
+def cpu_click_trace():
+    rows = [row("click", "sample", 1, 0, "input_map_press", 0),
+            row("click", "sample", 2, 0, "input_map_release", 5)]
+    rows += cpu_frame("click", "sample", 2, 1, 8, 20, 3)
+    rows += cpu_frame("click", "sample", 2, 2, 22, 34, 2)
+    rows.append(row("click", "sample", 2, 0, "map_committed", 36))
+    # The exact render after the commit marks its base and its completion.
+    rows.append(row("click", "sample", 2, 3, "base_complete", 90))
+    rows.append(row("click", "sample", 2, 3, "complete", 120))
+    return rows
+
+
 class SummarizeJuliaExplorerLatencyTest(unittest.TestCase):
     def write(self, directory, name, rows, screen=False):
         path = Path(directory) / name
@@ -132,6 +155,65 @@ class SummarizeJuliaExplorerLatencyTest(unittest.TestCase):
         self.assertEqual(2.5, rows["prism_paint_ms"]["mean"])
         self.assertEqual(1, rows["prism_present_ms"]["max"])
         self.assertEqual(8, rows["pulse_interval_ms"]["median"])
+
+
+    def test_cpu_map_frames_report_scale_and_exact_completion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            rows, _ = summary.summarize([self.write(directory, "cpu.csv", cpu_click_trace())])
+        scale = self.metric(rows, "click", "cpu_preview_scale")
+        self.assertEqual((2, 2.5, 3), (scale["count"], scale["median"], scale["max"]))
+        self.assertEqual(6.0, self.metric(rows, "click", "cpu_preview_ms")["median"])
+        self.assertEqual(5.0, self.metric(rows, "click", "cpu_preview_samples_ms")["median"])
+        self.assertEqual(0.5, self.metric(rows, "click", "submit_to_worker_ms")["median"])
+        self.assertEqual(0.5, self.metric(rows, "click", "fx_queue_ms")["median"])
+        self.assertEqual(84.0, self.metric(rows, "click", "commit_to_exact_complete_ms")["median"])
+        self.assertEqual(115.0, self.metric(rows, "click", "release_to_exact_complete_ms")["median"])
+        self.assertEqual(29.0, self.metric(rows, "click", "release_to_final_publish_ms")["median"])
+
+    def test_opening_a_cpu_map_without_a_map_frame_is_not_a_failure(self):
+        trace = [row("open", "open", 0, 0, "map_open", 0)]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "open.csv"
+            path.write_text(HEADER.format(screen="false") + "# mapEngine=cpu\n" + COLUMNS + "".join(trace))
+            rows, _ = summary.summarize([path])
+        self.assertEqual(0, self.metric(rows, "open", "frames_per_trial")["median"])
+        self.assertFalse(any(r["metric"].startswith("open_to_first") for r in rows))
+
+    def test_opening_a_gpu_map_without_a_map_frame_fails(self):
+        trace = [row("open", "open", 0, 0, "map_open", 0)]
+        with tempfile.TemporaryDirectory() as directory:
+            explicit = Path(directory) / "gpu.csv"
+            explicit.write_text(HEADER.format(screen="false") + "# mapEngine=gpu\n" + COLUMNS + "".join(trace))
+            legacy = self.write(directory, "legacy.csv", trace)
+            for path in (explicit, legacy):
+                with self.assertRaisesRegex(ValueError, "published no frame"):
+                    summary.summarize([path])
+
+
+    def test_gpu_and_cpu_recordings_are_never_pooled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            gpu = self.write(directory, "gpu.csv", drag_trace())
+            cpu = Path(directory) / "cpu.csv"
+            cpu.write_text(HEADER.format(screen="false") + "# mapEngine=cpu\n" + COLUMNS + "".join(cpu_click_trace()))
+            self.assertEqual("gpu", summary.map_engine([gpu]))
+            self.assertEqual("cpu", summary.map_engine([cpu]))
+            with self.assertRaisesRegex(ValueError, "mix map engines"):
+                summary.summarize([gpu, cpu])
+            mixed = Path(directory) / "mixed.csv"
+            mixed.write_text(HEADER.format(screen="false") + "# mapEngine=cpu\n# mapEngine=gpu\n"
+                             + COLUMNS + "".join(cpu_click_trace()))
+            with self.assertRaisesRegex(ValueError, "mixes map engines"):
+                summary.summarize([mixed])
+
+    def test_output_header_records_the_map_engine(self):
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as directory:
+            cpu = Path(directory) / "cpu.csv"
+            cpu.write_text(HEADER.format(screen="false") + "# mapEngine=cpu\n" + COLUMNS + "".join(cpu_click_trace()))
+            output = Path(directory) / "summary.csv"
+            subprocess.run([sys.executable, summary.__file__, str(cpu), "--output", str(output)], check=True)
+            self.assertEqual("# screenProbe=false; mapEngine=cpu; inputs=1", output.read_text().splitlines()[0])
 
 
 if __name__ == "__main__":

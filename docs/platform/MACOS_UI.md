@@ -1293,7 +1293,11 @@ still in use keeps its generation of arrays alive; neither is charged to the
 budget.
 
 In a Julia view, **Render > Explore Julia Parameters…** opens a non-modal
-Mandelbrot map for GPU-supported Julia views and automatically enables **Render > Julia GPU**.
+Mandelbrot map. When the Julia GPU kernel can render the view, the map renders
+on the GPU and automatically enables **Render > Julia GPU**; otherwise it renders
+on the CPU (see [CPU parameter map](#cpu-parameter-map)). The map needs palette
+coloring without Histogram Coloring or an orbit trap, outside deep zoom; in other
+views the command explains this instead of opening the map.
 The main window can close with the map open. While the map is open, the lower-left
 badge shows only a dot and Standard. The mode stays selected after the map closes. Drag to vary the Julia constant at the current camera position,
 Shift-drag for one-tenth sensitivity, or click to move to a new point.
@@ -1335,8 +1339,11 @@ takes several times as long as one through quiet areas. The click eases in over
 the step over the final 1.5 map points. At 0.01 map points or less, the next
 frame uses the exact selection. A frame longer than 50 ms advances only as far
 as a 50 ms frame.
-During a drag, each frame advances 5% of the remaining distance to the latest
-pointer position. The same motion continues after release, rendering the exact
+During a drag, the point closes 5% of the remaining distance to the latest
+pointer position every 8.33 ms (one 120 Hz frame), compounded over each frame's
+time, so the motion takes the same time at any frame rate: a 25 ms frame closes
+about 14%. The first frame of a motion counts as one step, and a frame longer
+than 50 ms counts as 50 ms. The same motion continues after release, rendering the exact
 drop position once the remaining distance is within 0.01 map points at the
 gesture's scale. The scene is recorded after that frame is displayed.
 Movement under four map points from the press remains a click.
@@ -1361,3 +1368,35 @@ Restoring a saved scene or using Undo/Redo cancels any active map gesture.
 The restored scene uses its saved Julia constant, and the map stays open
 when the restored Julia view supports GPU rendering.
 Escape or closing the map during an edit commits the last visible point.
+
+### CPU parameter map
+
+Where the GPU kernel cannot render the view (no usable Vulkan device, as on
+Windows and Linux today, the GPU disabled with `-Dfractal.gpu.enabled=false`, or
+a view beyond the kernel's FP32 precision), the map renders its frames with the
+CPU preview and leaves **Render > Julia GPU** off. Opening the map keeps the
+current frame on screen; the first gesture replaces it. Gestures, pacing, the
+marker and coordinates, click speed and history work as on the GPU.
+
+During a gesture each frame calculates binary64 samples on a grid with the
+view's center and `s` times its pixel spacing, colors them with the scene's
+palette, applies the same bright-point filter at that resolution and shows each
+sample as an `s` by `s` block of canvas pixels (nearest sample). The scene's
+iteration limit is kept. The scale `s`, from 1 to 8, is the finest whose samples
+are predicted to cost at most 25 ms, from the cost per sample of the previous
+CPU frame (40 ns per sample is assumed before the first one), so a slower view,
+a larger canvas or a higher iteration limit renders coarser rather than slower.
+These frames are approximate and cannot be exported themselves.
+
+When the point settles, the map records it as one history entry and the main
+view renders the exact frame of that point with the selected display quality;
+that frame can be exported. A new gesture cancels it. Resizing, zooming or
+panning the main view with a CPU map open renders the main view exactly and
+keeps the map open. While a CPU map is open, for its final point, and for a
+resize or navigation requested while it was open that renders after it closes,
+the main view renders on the CPU even if **Render > Julia GPU** is turned on (for example
+after zooming back into the kernel's range); the mode applies once the map
+closes, and turning it off does not close a CPU map. A main-window edit that the CPU preview cannot render
+(Histogram Coloring, an orbit trap or deep zoom) closes the map as above. If
+the GPU refuses a GPU map's frame, the map closes as described above; opened
+again, it uses the CPU.

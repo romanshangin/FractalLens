@@ -533,3 +533,110 @@ passed the gate either way. The settled main view queued the warm-up long
 before the map opened, with no frame waiting, and it still renders one 16x16
 frame. The measurements were not repeated. Not covered: other sizes and
 iteration limits, warm reopening (unchanged), physical input, other hardware.
+
+## Follow-up: CPU parameter map without the GPU
+
+Candidate: the uncommitted `feature/julia-explorer-cpu-fallback` diff on
+`0551747`. Where the GPU kernel cannot render the view, the map renders its
+frames with the CPU preview: binary64 samples on a grid `s` times coarser
+(`s` = 1–8, the finest predicted to cost at most 25 ms from the previous frame),
+the same bright-point filter at that resolution, enlarged to the canvas; the
+settled point then renders exactly through the normal CPU pipeline (see
+[CPU parameter map](../docs/platform/MACOS_UI.md#cpu-parameter-map)). There is no
+CPU control: the map did not open without the GPU before this change. GPU rows
+earlier in this report are a different engine and code state, quoted only for
+orientation.
+
+The campaign ran on 2026-11-28 from 02:11 UTC on the machine described above
+(Apple M3 Pro, 12 cores, 18 GiB), Java 26.0.1, JavaFX 26.0.2, AC power, under one
+`caffeinate -di` controller with nothing else running. No thermal or performance
+warning was recorded afterwards, and no `caffeinate` process remained. The
+default workload ran (1200x760 and 1680x1000 logical, 2400x1520 and 3360x2000
+physical; 300 and 1000 iterations; 2 warmup and 10 sample rounds of click and
+drag), with `-Dfractal.gpu.enabled=false` and no screen capture. Every
+configuration reported `mapEngine=cpu`, and every trial committed the exact
+target constant. The raw CSV, log and summary are in a private archive
+(`benchmarks/julia-explorer-cpu-private-20261127/`), not in the public checkout.
+
+Medians, with p95 in parentheses, in milliseconds, of the sample rounds (frames
+of click and drag pooled for the frame rows):
+
+| Physical size, iterations | 2400x1520, 300 | 2400x1520, 1000 | 3360x2000, 300 | 3360x2000, 1000 |
+| --- | ---: | ---: | ---: | ---: |
+| Frame scale `s` | 2 (3) | 3 (4) | 3 (3) | 4 (5) |
+| CPU preview frame (worker) | 13.2–16.0 (25.2) | 16.1–17.8 (23.4) | 18.1–19.7 (24.8) | 20.0–20.4 (25.8) |
+| Frame interval at publication | 17.4–19.4 (33.0) | 19.6–24.6 (26.4) | 24.3–24.9 (28.2) | 24.9–25.0 (30.9) |
+| Drag input → first published frame | 31.6 (51.2) | 33.6 (48.8) | 32.6 (46.9) | 36.5 (57.0) |
+| Drag release → commit | 3107 (3198) | 3223 (3269) | 3252 (3389) | 3661 (4929) |
+| Click release → commit | 9973 (9999) | 9964 (9976) | 9956 (9972) | 9970 (9999) |
+| Commit → exact frame complete, drag | 34.4 (44.3) | 31.6 (38.9) | 554 (571) | 1325 (1403) |
+
+Ranges are the click and drag medians. The CPU preview frame includes the copy
+to the canvas size; its samples (calculation, coloring, filter) take 0.6–1.5 ms
+less. `approximate_copy` on the FX thread is 0.3 ms at 2400x1520 and 0.6 ms at
+3360x2000. One FX stall of about 0.9 s (a single frame interval and FX queue
+wait) occurred in a 3360x2000, 1000-iteration drag; its cause was not
+identified.
+
+Observations:
+
+- **Frame cost stays bounded.** The scale grows with canvas size and iteration
+  limit, keeping frames at 40–60 per second; p95 frame cost stays near the
+  25 ms budget. Frames are coarser than the GPU's full-resolution frames by
+  design.
+- **Drag settles about three times slower than on the GPU.** A drag advances 5%
+  of the remaining distance per frame, so at about 40 frames per second it
+  reaches the drop point 3.1–3.7 s after release, against about 1.05 s on the
+  GPU at 120 Hz. Clicks use time-based pacing and arrive at the same time as on
+  the GPU (about 10 s on this path along the main cardioid's boundary).
+- **Exact frame after the commit.** At 3360x2000 the settled point renders
+  fresh: in an inspected 300-iteration trial its base frame completed 118 ms
+  after the commit, and the whole frame with antialiasing completes at about
+  0.55 s (300 iterations) and 1.3 s (1000 iterations). At 2400x1520 the
+  alternating endpoints were served from the completed-frame cache (base reused
+  in about 8 ms), so those rows do not measure a fresh exact render.
+
+Decision: the CPU map is functional within its frame budget. Its slow drag
+settling led to time-based drag pacing, measured below; no acceptance
+threshold is defined. Not covered: physical input and display timing, the screen-capture
+proxy, Windows and Linux (the path is portable Java, but not run there), other
+hardware, deep views near the direct-precision limit.
+
+### Follow-up: time-based drag pacing
+
+Per the owner's decision (2026-11-28), a drag closes 5% of the remaining
+distance per 8.33 ms (one 120 Hz frame), compounded over each frame's time,
+instead of 5% per frame; the first frame of a motion counts as one step and a
+frame longer than 50 ms as 50 ms. Control: a frozen build of `main` at
+`0551747` (5% per frame, GPU only). Candidate: the uncommitted
+`feature/julia-explorer-cpu-fallback` diff with this change.
+
+The campaign ran on 2026-11-28 from 02:50 UTC on the same machine and software,
+AC power, under one `caffeinate -di` controller in the order control (GPU),
+candidate (GPU), candidate (CPU, `-Dfractal.gpu.enabled=false`), with
+`gestures=drag`, the default sizes and limits, 2 warmup and 10 sample rounds and
+no screen capture. No thermal or performance warning was recorded and no
+`caffeinate` process remained. Every trial committed the exact target.
+
+Medians, with p95 in parentheses, in milliseconds:
+
+| Physical size, iterations | 2400x1520, 300 | 2400x1520, 1000 | 3360x2000, 300 | 3360x2000, 1000 |
+| --- | ---: | ---: | ---: | ---: |
+| Drag release → commit, GPU control | 1151 (1328) | 1342 (1761) | 982 (1221) | 1528 (1883) |
+| Drag release → commit, GPU candidate | 949 (964) | 957 (973) | 950 (967) | 957 (978) |
+| Drag release → commit, CPU candidate | 984 (993) | 986 (995) | 964 (975) | 999 (1034) |
+| Drag input → first frame, GPU control | 12.9 (23.9) | 12.9 (23.8) | 13.2 (24.8) | 16.5 (34.0) |
+| Drag input → first frame, GPU candidate | 13.3 (24.8) | 12.1 (25.8) | 13.3 (23.7) | 15.4 (32.9) |
+| Drag input → first frame, CPU candidate | 29.1 (52.2) | 30.3 (57.6) | 33.2 (46.9) | 35.6 (99.8) |
+| Frame interval, CPU candidate | 23.8 (32.7) | 24.6 (27.8) | 23.6 (27.7) | 25.0 (33.3) |
+
+With per-frame pacing the GPU's settling time depended on its frame rate
+(0.98–1.53 s across configurations, p95 up to 1.88 s); time-based pacing
+settles in 0.95–0.96 s on the GPU and 0.96–1.00 s on the CPU at about 40 frames
+per second, with a p95 within 4% of the median. Drag input response on the GPU
+is unchanged. The CPU's 3360x2000, 1000-iteration p95 input response (99.8 ms)
+is higher than in the first CPU campaign (57.0 ms); both runs show occasional
+frames far above the 25 ms budget whose cause was not identified.
+
+**Decision: retain.** Not covered: physical input, the screen-capture proxy,
+displays other than this 120 Hz Retina panel, other hardware.

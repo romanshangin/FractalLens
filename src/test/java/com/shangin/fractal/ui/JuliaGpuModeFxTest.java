@@ -985,9 +985,15 @@ class JuliaGpuModeFxTest {
                 assertEquals(expectedHeight, imageView.getImage().getHeight());
                 assertEquals(surface.getWidth(), imageView.getFitWidth());
                 assertEquals(surface.getHeight(), imageView.getFitHeight());
-                for (int i = 1; i <= 3; i++) {
+                // The first frame closes one drag step; later ones as many as their frame time.
+                double start = dragPositions.get(0);
+                assertEquals(start + JuliaExplorer.DRAG_FRACTION * (220 - start), dragPositions.get(1), 1e-9);
+                double longest = JuliaExplorer.dragFraction(
+                        JuliaFramePacing.MAX_FRAME_SECONDS * 1e9 / JuliaExplorer.DRAG_STEP_NANOS);
+                for (int i = 2; i <= 3; i++) {
                     double previous = dragPositions.get(i - 1);
-                    assertEquals(previous + 0.05 * (220 - previous), dragPositions.get(i), 1e-9);
+                    double fraction = (dragPositions.get(i) - previous) / (220 - previous);
+                    assertTrue(fraction > 0 && fraction <= longest + 1e-9, "Drag step " + i + ": " + fraction);
                 }
                 assertEquals(90, marker.getCenterX(), 1e-9);
                 assertMapCoordinates(map, dragged.juliaParameters());
@@ -1324,8 +1330,254 @@ class JuliaGpuModeFxTest {
             awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle() && errors.get() != null));
             assertEquals(cpuCalls, window.cpu.calls.get());
             assertEquals(initial, fx(window.view::sceneSnapshot));
-            assertTrue(fx(() -> window.item("Render", JuliaExplorer.TITLE).isDisable()));
+            // The refusal left the GPU unavailable: the map opens again on the CPU.
+            fx(() -> {
+                var item = window.item("Render", JuliaExplorer.TITLE);
+                assertFalse(item.isDisable());
+                item.fire();
+                assertTrue(window.view.explorerOnCpu());
+                javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow().close();
+                return null;
+            });
         }
+    }
+
+    @Test
+    void parameterMapWithoutAGpuShowsCpuFramesAndSettlesOnTheExactFrame() throws Exception {
+        try (var window = new MainWindow()) {
+            window.runtime.setAvailable(false);
+            var initial = fx(window.view::sceneSnapshot);
+            int cpuCalls = window.cpu.calls.get();
+            var toggle = window.juliaGpuItem();
+            var map = fx(() -> {
+                var item = window.item("Render", JuliaExplorer.TITLE);
+                assertFalse(item.isDisable(), "The map does not need the GPU");
+                item.fire();
+                assertTrue(window.view.explorerOnCpu());
+                assertFalse(window.view.juliaGpu(), "A CPU map leaves the Julia GPU mode off");
+                assertFalse(toggle.isSelected());
+                // The exact frame stays on screen until the first gesture.
+                assertTrue(window.view.hasExportableFrame());
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow().map();
+            });
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            assertEquals(cpuCalls, window.cpu.calls.get(), "Opening the map renders nothing");
+            var dragPositions = new java.util.ArrayList<Double>();
+            var marker = fx(() -> (javafx.scene.shape.Circle) map.getChildrenUnmodifiable().get(1));
+            fx(() -> {
+                marker.centerXProperty().addListener((obs, before, after) -> dragPositions.add(after.doubleValue()));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_PRESSED, 70, 60, true));
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_DRAGGED, 220, 70, true));
+                return null;
+            });
+            // The marker follows published frames: CPU preview frames are shown during the drag.
+            awaitCondition(() -> fx(() -> dragPositions.size() >= 3));
+            fx(() -> {
+                assertFalse(window.view.hasExportableFrame(), "A CPU map frame is approximate");
+                assertFalse(window.view.showsJuliaGpuFrame());
+                assertTrue(window.view.showsApproximateJuliaPoint(window.view.displayedJuliaPoint()));
+                assertEquals(initial, window.view.sceneSnapshot());
+                assertEquals(cpuCalls, window.cpu.calls.get(), "Map frames do not use the main render");
+                map.fireEvent(pointer(map, MouseEvent.MOUSE_RELEASED, 90, 75, false));
+                return null;
+            });
+            var dragged = initial.withJuliaParameters(JuliaExplorer.point(90, 75));
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.hasExportableFrame()
+                    && window.view.sceneSnapshot().equals(dragged)));
+            fx(() -> {
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                assertEquals(dragged, surface.completedRender().scene(), "The settled point renders exactly");
+                assertTrue(window.cpu.calls.get() > cpuCalls);
+                assertEquals(0, window.runtime.calls(), "Nothing reaches the GPU runtime");
+                assertTrue(map.getScene().getWindow().isShowing(), "The map stays open");
+                assertMapCoordinates(map, dragged.juliaParameters());
+                window.view.undoScene();
+                assertEquals(initial, window.view.sceneSnapshot());
+                return null;
+            });
+            // The marker and coordinates follow the exact frame Undo and Redo render.
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.hasExportableFrame()));
+            fx(() -> {
+                assertMapCoordinates(map, initial.juliaParameters());
+                assertMarkerAt(marker, initial.juliaParameters());
+                window.view.redoScene();
+                assertEquals(dragged, window.view.sceneSnapshot());
+                return null;
+            });
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.hasExportableFrame()));
+            fx(() -> {
+                assertMapCoordinates(map, dragged.juliaParameters());
+                assertMarkerAt(marker, dragged.juliaParameters());
+                return null;
+            });
+            // Resizing the main window renders it exactly and keeps a CPU map open.
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            var surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().getFirst());
+            int width = fx(surface::renderWidth);
+            fx(() -> {
+                window.stage.setWidth(window.stage.getWidth() + 40);
+                return null;
+            });
+            awaitCondition(() -> fx(() -> surface.renderWidth() != width && window.view.isLatencyIdle()
+                    && window.view.hasExportableFrame()));
+            fx(() -> {
+                assertEquals(surface.renderWidth(), surface.completedRender().frame().job().width());
+                assertTrue(map.getScene().getWindow().isShowing());
+                assertEquals(dragged.juliaParameters(), window.view.sceneSnapshot().juliaParameters());
+                ((Stage) map.getScene().getWindow()).close();
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void aCpuMapKeepsRenderingExactlyOnTheCpuAfterTheJuliaGpuModeIsTurnedOn() throws Exception {
+        try (var window = new MainWindow()) {
+            // Beyond the GPU kernel's iteration cap the map opens on the CPU although a GPU works.
+            fx(() -> { window.view.setIterations(new IterationSettings(10_001, 0)); return null; });
+            awaitCondition(() -> fx(() -> window.view.hasExportableFrame() && window.view.isLatencyIdle()));
+            var toggle = window.juliaGpuItem();
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                assertTrue(window.view.explorerOnCpu());
+                assertFalse(window.view.juliaGpu());
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
+            });
+            // Back within the GPU's range, then the Julia GPU mode on: the CPU map's main view stays exact.
+            fx(() -> { window.view.setIterations(new IterationSettings(300, 0)); return null; });
+            awaitCondition(() -> fx(() -> window.view.hasExportableFrame() && window.view.isLatencyIdle()));
+            fx(() -> {
+                assertFalse(toggle.isDisable());
+                toggle.setSelected(true);
+                toggle.fire();
+                assertTrue(window.view.juliaGpu());
+                return null;
+            });
+            awaitCondition(() -> fx(() -> window.view.hasExportableFrame() && window.view.isLatencyIdle()));
+            var initial = fx(window.view::sceneSnapshot);
+            fx(() -> {
+                var root = map.map();
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, 70, 60, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_DRAGGED, 150, 90, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_RELEASED, 90, 75, false));
+                return null;
+            });
+            var dragged = initial.withJuliaParameters(JuliaExplorer.point(90, 75));
+            awaitCondition(() -> fx(() -> window.view.isLatencyIdle() && window.view.hasExportableFrame()
+                    && window.view.sceneSnapshot().equals(dragged)));
+            fx(() -> {
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                assertEquals(dragged, surface.completedRender().scene(), "The settled point renders exactly");
+                assertFalse(window.view.showsJuliaGpuFrame());
+                assertEquals(0, window.runtime.calls(), "Neither map frames nor the exact frame use the GPU");
+                assertTrue(map.isShowing());
+                // Turning the mode off again does not close a CPU map.
+                toggle.setSelected(false);
+                toggle.fire();
+                assertTrue(map.isShowing());
+                map.close();
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void closingACpuMapDuringAPendingResizeKeepsTheResizedFrameExactInTheJuliaGpuMode() throws Exception {
+        try (var window = new MainWindow()) {
+            fx(() -> { window.view.setIterations(new IterationSettings(10_001, 0)); return null; });
+            awaitCondition(() -> fx(() -> window.view.hasExportableFrame() && window.view.isLatencyIdle()));
+            var toggle = window.juliaGpuItem();
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                assertTrue(window.view.explorerOnCpu());
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
+            });
+            fx(() -> { window.view.setIterations(new IterationSettings(300, 0)); return null; });
+            awaitCondition(() -> fx(() -> window.view.hasExportableFrame() && window.view.isLatencyIdle()));
+            fx(() -> { toggle.setSelected(true); toggle.fire(); return null; });
+            awaitCondition(() -> fx(() -> window.view.hasExportableFrame() && window.view.isLatencyIdle()));
+            var surface = fx(() -> (FractalSurface) window.view.getChildrenUnmodifiable().getFirst());
+            int width = fx(surface::renderWidth);
+            fx(() -> {
+                var root = map.map();
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, 70, 60, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_DRAGGED, 220, 70, true));
+                return null;
+            });
+            // A CPU map frame is on screen mid-gesture.
+            awaitCondition(() -> fx(() -> map.isEditing() && window.view.displayedJuliaPoint() != null
+                    && !window.view.hasExportableFrame()));
+            fx(() -> { window.stage.setWidth(window.stage.getWidth() + 40); return null; });
+            // Close the map while the resize still waits to render.
+            awaitCondition(() -> fx(() -> {
+                if (!window.view.hasPendingMainViewRender()) return false;
+                map.hide();
+                return true;
+            }));
+            awaitCondition(() -> fx(() -> surface.renderWidth() != width && window.view.isLatencyIdle()
+                    && window.view.hasExportableFrame()));
+            fx(() -> {
+                var committed = window.view.sceneSnapshot();
+                assertEquals(committed, surface.completedRender().scene(), "The committed point renders exactly");
+                assertEquals(surface.renderWidth(), surface.completedRender().frame().job().width());
+                assertFalse(window.view.showsJuliaGpuFrame());
+                assertEquals(0, window.runtime.calls(), "The deferred resize of a CPU map stays on the CPU");
+                assertTrue(window.view.juliaGpu());
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void closingACpuMapWhileEditingCommitsAndRendersTheVisiblePoint() throws Exception {
+        try (var window = new MainWindow()) {
+            window.runtime.setAvailable(false);
+            var initial = fx(window.view::sceneSnapshot);
+            var map = fx(() -> {
+                window.item("Render", JuliaExplorer.TITLE).fire();
+                return javafx.stage.Window.getWindows().stream().filter(JuliaExplorer.class::isInstance)
+                        .map(JuliaExplorer.class::cast).findFirst().orElseThrow();
+            });
+            awaitCondition(() -> fx(window.view::isLatencyIdle));
+            var published = new AtomicReference<JuliaParameters>();
+            fx(() -> {
+                window.view.setOnRenderingChanged(active -> {
+                    // Close after the first CPU frame, before the click reaches its target.
+                    if (!active && published.get() == null && window.view.displayedJuliaPoint() != null
+                            && !window.view.hasExportableFrame()) {
+                        published.set(window.view.displayedJuliaPoint());
+                        map.hide();
+                    }
+                });
+                var root = map.map();
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_PRESSED, 170, 110, true));
+                root.fireEvent(pointer(root, MouseEvent.MOUSE_RELEASED, 170, 110, false));
+                return null;
+            });
+            awaitCondition(() -> fx(() -> !map.isShowing() && window.view.isLatencyIdle()
+                    && window.view.hasExportableFrame()));
+            fx(() -> {
+                window.view.setOnRenderingChanged(ignored -> {});
+                var committed = window.view.sceneSnapshot();
+                assertEquals(published.get(), committed.juliaParameters());
+                assertNotEquals(initial.juliaParameters(), committed.juliaParameters());
+                var surface = (FractalSurface) window.view.getChildrenUnmodifiable().getFirst();
+                assertEquals(committed, surface.completedRender().scene());
+                window.view.undoScene();
+                assertEquals(initial, window.view.sceneSnapshot());
+                return null;
+            });
+        }
+    }
+
+    private static void assertMarkerAt(javafx.scene.shape.Circle marker, JuliaParameters expected) {
+        var shown = JuliaExplorer.point(marker.getCenterX(), marker.getCenterY());
+        assertEquals(expected.real(), shown.real(), 1e-9);
+        assertEquals(expected.imaginary(), shown.imaginary(), 1e-9);
     }
 
     private static void assertMapCoordinates(Node map, JuliaParameters expected) {

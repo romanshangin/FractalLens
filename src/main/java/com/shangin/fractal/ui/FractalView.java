@@ -53,6 +53,14 @@ public class FractalView extends StackPane {
     private boolean resizeKeepsExplorerFrame;
     private boolean navigationKeepsExplorerFrame;
     private JuliaExplorer juliaExplorer;
+    /**
+     * Whether the latest parameter map renders its frames with the CPU preview because the
+     * GPU kernel could not render the view when it opened. Kept after the map closes for
+     * its final commit.
+     */
+    private boolean explorerOnCpu;
+    /** True while a closed CPU map's settled point renders: it renders exactly on the CPU too. */
+    private boolean settlingCpuExplorer;
 
     // Coalesce wheel events, but flush immediately when a pinch gesture finishes.
     private static final double SWIPE_PAN_FRACTION = 0.2;
@@ -229,7 +237,9 @@ public class FractalView extends StackPane {
             }
         });
         fractalSurface.setOnWidePreviewChanged(modeIndicator::setWidePreview);
-        fractalSurface.setOnApproximateFramePublished(published -> {
+        // The map's marker follows the displayed frame: a map frame, or the exact frame a CPU map
+        // settles on or Undo/Redo restores.
+        fractalSurface.setOnFramePublished(published -> {
             if (juliaExplorer != null && published.fractal() == FractalPreset.JULIA) {
                 juliaExplorer.showPublishedPoint(published.juliaParameters());
             }
@@ -589,20 +599,44 @@ public class FractalView extends StackPane {
         modeIndicator.setJuliaExplorerOpen(explorer != null);
     }
 
+    /** Whether the parameter map can open for the current scene, on the GPU or on the CPU. */
     boolean supportsJuliaExplorer() {
-        return supportsJuliaExplorer(sceneSnapshot());
+        FractalScene current = sceneSnapshot();
+        return supportsJuliaExplorer(current, false) || supportsJuliaExplorer(current, true);
     }
 
+    /** Whether the open map's engine supports the candidate scene. */
     private boolean supportsJuliaExplorer(FractalScene candidate) {
-        if (fractalSurface.renderWidth() < 2 || fractalSurface.renderHeight() < 2) return false;
-        return renderController.supportsJuliaExplorer(candidate,
-                new RenderTarget(fractalSurface.renderWidth(), fractalSurface.renderHeight()),
-                camera.defaultViewport((int) getWidth(), (int) getHeight()), false);
+        return supportsJuliaExplorer(candidate, explorerOnCpu);
     }
 
+    private boolean supportsJuliaExplorer(FractalScene candidate, boolean cpu) {
+        if (fractalSurface.renderWidth() < 2 || fractalSurface.renderHeight() < 2) return false;
+        return supportsJuliaExplorer(candidate,
+                new RenderTarget(fractalSurface.renderWidth(), fractalSurface.renderHeight()),
+                camera.defaultViewport((int) getWidth(), (int) getHeight()), false, cpu);
+    }
+
+    private boolean supportsJuliaExplorer(FractalScene candidate, RenderTarget target, Viewport defaultViewport,
+                                          boolean preserveIterationLimit, boolean cpu) {
+        return cpu ? renderController.supportsJuliaExplorerOnCpu(candidate, target, defaultViewport, preserveIterationLimit)
+                : renderController.supportsJuliaExplorer(candidate, target, defaultViewport, preserveIterationLimit);
+    }
+
+    /**
+     * Starts the opened map: on the GPU, in the Julia GPU mode, when the kernel supports the
+     * view; otherwise on the CPU, keeping the frame on screen until the first gesture.
+     */
     void startJuliaExplorerRender() {
+        explorerOnCpu = !supportsJuliaExplorer(sceneSnapshot(), false);
+        if (explorerOnCpu) return;
         renderController.setJuliaGpu(true);
         renderExplorerPoint(sceneSnapshot().juliaParameters());
+    }
+
+    /** Whether the latest parameter map renders on the CPU. */
+    boolean explorerOnCpu() {
+        return explorerOnCpu;
     }
 
     void observeExplorerFrame(JuliaFramePacing pacing) {
@@ -626,7 +660,9 @@ public class FractalView extends StackPane {
         renderController.cancelCurrent();
         var target = new RenderTarget(fractalSurface.renderWidth(), fractalSurface.renderHeight(), renderPriority);
         var defaultViewport = camera.defaultViewport((int) getWidth(), (int) getHeight());
-        renderController.renderJuliaExplorerPoint(sceneSnapshot().withJuliaParameters(point), target, defaultViewport);
+        FractalScene pointScene = sceneSnapshot().withJuliaParameters(point);
+        if (explorerOnCpu) renderController.renderJuliaExplorerPointOnCpu(pointScene, target, defaultViewport);
+        else renderController.renderJuliaExplorerPoint(pointScene, target, defaultViewport);
     }
 
     private boolean hasDeferredNavigationRender() {
@@ -638,7 +674,8 @@ public class FractalView extends StackPane {
     }
 
     void keepExplorerPointOnClose(JuliaParameters point) {
-        if (!resizePending && !hasDeferredNavigationRender() && !isLatencyIdle() && isJuliaGpuAvailable()
+        // A CPU map's commit renders the exact frame of the point instead.
+        if (!explorerOnCpu && !resizePending && !hasDeferredNavigationRender() && !isLatencyIdle() && isJuliaGpuAvailable()
                 && !renderController.isRenderingExplorerMainView(sceneSnapshot().withJuliaParameters(point))) {
             renderExplorerPoint(point);
         }
@@ -646,6 +683,24 @@ public class FractalView extends StackPane {
 
     void commitExplorerPoint(JuliaParameters point) {
         changeScene(sceneSnapshot().withJuliaParameters(point));
+    }
+
+    /**
+     * Records the map's settled point. A CPU map has shown approximate frames, so the exact
+     * frame of the point (with the selected display quality) renders next.
+     */
+    void settleExplorerPoint(JuliaParameters point) {
+        commitExplorerPoint(point);
+        if (explorerOnCpu && scene.fractal() == FractalPreset.JULIA) {
+            renderController.cancelCurrent();
+            fractalSurface.invalidateRefinement();
+            settlingCpuExplorer = true;
+            try {
+                recalculate();
+            } finally {
+                settlingCpuExplorer = false;
+            }
+        }
     }
 
     void setJuliaParameters(JuliaParameters parameters) {
@@ -807,7 +862,9 @@ public class FractalView extends StackPane {
         } else {
             colorCyclePaused = false;
             // An ordinary GPU render can complete on the CPU if the runtime refuses the job.
-            if (juliaExplorer != null && !renderController.juliaGpu()) juliaExplorer.closeWithoutCommit();
+            if (juliaExplorer != null && !explorerOnCpu && !renderController.juliaGpu()) {
+                juliaExplorer.closeWithoutCommit();
+            }
         }
         renderingChangedHandler.accept(active);
     }
@@ -1217,7 +1274,7 @@ public class FractalView extends StackPane {
         RenderTarget target = new RenderTarget(renderWidth, renderHeight, renderPriority);
         scene = scene.withViewport(camera.viewport());
         if (!resizingScene && juliaExplorer != null && scene.fractal() == FractalPreset.JULIA
-                && !renderController.supportsJuliaExplorer(scene, target, defaultViewport, preserveIterationLimit)) {
+                && !supportsJuliaExplorer(scene, target, defaultViewport, preserveIterationLimit, explorerOnCpu)) {
             scene = scene.withJuliaParameters(juliaExplorer.closeForMainViewRender());
         }
         if (resizingScene) history.replaceCurrent(scene);
@@ -1226,7 +1283,15 @@ public class FractalView extends StackPane {
         viewportChangedHandler.accept(scene.viewport());
 
         JuliaExplorer explorer = juliaExplorer;
-        if (explorer != null || keepExplorerFrame && scene.fractal() == FractalPreset.JULIA
+        // keepExplorerFrame: a resize or navigation requested while the map was open and
+        // rendered after it closed belongs to that map, as does a closed CPU map's settled point.
+        if (explorerOnCpu && (explorer != null || settlingCpuExplorer || keepExplorerFrame)) {
+            // The main view renders exactly on the CPU, even in the Julia GPU mode, with the
+            // point on screen while the map is editing.
+            FractalScene rendered = explorer != null && scene.fractal() == FractalPreset.JULIA
+                    ? scene.withJuliaParameters(explorer.prepareForMainViewRender()) : scene;
+            renderController.renderOnCpu(rendered, target, defaultViewport, preserveIterationLimit);
+        } else if (explorer != null || keepExplorerFrame && scene.fractal() == FractalPreset.JULIA
                 && renderController.juliaGpu()) {
             JuliaParameters point = explorer != null ? explorer.prepareForMainViewRender() : scene.juliaParameters();
             renderController.renderJuliaExplorerMainView(scene.withJuliaParameters(point), target, defaultViewport,

@@ -36,7 +36,8 @@ import java.util.function.Consumer;
 public final class FractalSurface extends Region {
 
     private final InteractionLatency latency = new InteractionLatency();
-    private Consumer<FractalScene> approximateFramePublished = ignored -> {};
+    /** Receives the scene of every frame that becomes the displayed image, exact or approximate. */
+    private Consumer<FractalScene> framePublished = ignored -> {};
 
     public InteractionLatency latency() { return latency; }
 
@@ -357,12 +358,11 @@ public final class FractalSurface extends Region {
         stagingRefinementValidity.clear();
         promoteStagingFrame(null, scene);
         latency.frame("approximate_publish");
-        approximateFramePublished.accept(scene);
         return true;
     }
 
-    void setOnApproximateFramePublished(Consumer<FractalScene> listener) {
-        approximateFramePublished = Objects.requireNonNull(listener);
+    void setOnFramePublished(Consumer<FractalScene> listener) {
+        framePublished = Objects.requireNonNull(listener);
     }
 
     /** Shows preserved refined pixels and prepares the overlay for new AA tiles. */
@@ -408,6 +408,7 @@ public final class FractalSurface extends Region {
         retainedProgressRenderFrame = null;
         retainedProgressRefinementValidity = null;
         latency.mark("frame_promoted");
+        framePublished.accept(scene);
     }
 
     public void resizeBuffer(

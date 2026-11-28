@@ -36,10 +36,11 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Drives Render > Explore Julia Parameters in a visible window: opening the map, clicks
- * and drags on it at fixed logical sizes and iteration limits. Every published GPU frame
- * carries a unique code in a diagnostic strip; JavaFX Robot capture of that strip is a
- * compositor proxy for presentation, not panel scanout. Input is synthetic JavaFX
- * dispatch: hardware and OS input latency is excluded.
+ * and drags on it at fixed logical sizes and iteration limits. Every published map frame
+ * (GPU, or CPU preview when the GPU kernel cannot render the view) carries a unique code
+ * in a diagnostic strip; JavaFX Robot capture of that strip is a compositor proxy for
+ * presentation, not panel scanout. Input is synthetic JavaFX dispatch: hardware and OS
+ * input latency is excluded.
  */
 public final class JuliaExplorerLatencyBenchmark {
     private static final String PREFIX = "fractal.juliaLatency.";
@@ -190,6 +191,7 @@ public final class JuliaExplorerLatencyBenchmark {
                     + "; os=" + System.getProperty("os.name") + " " + System.getProperty("os.version")
                     + "; arch=" + System.getProperty("os.arch")
                     + "; requestedPipeline=" + System.getProperty("prism.order", "default")
+                    + "; gpuEnabled=" + System.getProperty("fractal.gpu.enabled", "default")
                     + "; screenProbe=" + screen + "; cold=" + cold
                     + "; time=" + java.time.Instant.now());
             rows.add("size,iterations,gesture,phase,iteration,input,render,stage,nanos,duration_nanos");
@@ -226,6 +228,7 @@ public final class JuliaExplorerLatencyBenchmark {
                     trial(config + openGesture + "," + (firstOpen ? "cold" : "open") + ",0,",
                             () -> open(coldDrag), coldDrag ? SECOND : FIRST);
                     firstOpen = false;
+                    rows.add("# mapEngine=" + (fx(view::explorerOnCpu) ? "cpu" : "gpu"));
                     Point2D current = coldDrag ? SECOND : FIRST;
                     for (int iteration = -warmups; iteration < samples; iteration++) {
                         for (String gesture : gestures) {
@@ -275,9 +278,13 @@ public final class JuliaExplorerLatencyBenchmark {
         gesture.perform();
         JuliaParameters expected = JuliaExplorer.point(target.getX(), target.getY());
         Thread.sleep(50);
+        // A GPU map keeps its last frame; a CPU map settles on the exact frame of the target.
         awaitPulse(() -> explorer.isShowing() && !explorer.isEditing() && view.isLatencyIdle()
-                && view.showsApproximateJuliaPoint(expected), 60, "Explorer did not settle at the target");
-        if (screen) {
+                && (view.explorerOnCpu() ? view.hasExportableFrame()
+                        && view.sceneSnapshot().juliaParameters().equals(expected)
+                        : view.showsApproximateJuliaPoint(expected)), 60, "Explorer did not settle at the target");
+        // Opening a CPU map shows no map frame: the exact frame stays on screen.
+        if (screen && !fx(() -> currentCode == 0 && view.explorerOnCpu())) {
             awaitPulse(() -> currentCode != 0 && observedCodes.contains(currentCode), 3,
                     "Final frame marker did not reach the screen");
         } else Thread.sleep(50);

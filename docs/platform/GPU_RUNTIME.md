@@ -230,6 +230,24 @@ on a non-daemon background thread after it drains, so the JVM does not exit
 before the service closes and persists pending frames. Visible behavior is in
 [macOS interface](MACOS_UI.md#julia-gpu).
 
+**CPU parameter map.** Explore Julia Parameters does not require the GPU. When
+the kernel cannot render the view when the map opens (no usable device,
+`fractal.gpu.enabled=false`, a view beyond its FP32 gate), the map's frames go to
+the same `JuliaGpuRenderer` worker as CPU requests: `JuliaCpuPreview` renders the
+view with its own `DirectDoubleRenderBackend` on a grid with `s` times the pixel
+spacing (`s` = 1–8, chosen from the previous frame's cost per sample to keep the
+samples within 25 ms), colors and filters it (`JuliaBrightPointFilter`, the
+reference the GPU pass matches) and enlarges it to the canvas. The controller
+shows these frames through the approximate-frame path above, with the same
+sequence checks; `cancelPending` also stops a running CPU frame, and closing
+the renderer closes the preview's backend once its frame has stopped. The Julia
+GPU mode stays off, and the settled point renders exactly through the normal CPU
+pipeline (`FractalRenderController.renderOnCpu`), as do main-view renders while
+the CPU map is open (and a resize or navigation it deferred past its closing),
+even if the user turns the Julia GPU mode on meanwhile. This is a CPU path, not a GPU fallback: it makes no GPU call and is
+covered by the portable suite. Visible behavior is in
+[CPU parameter map](MACOS_UI.md#cpu-parameter-map).
+
 **Kernel warm-up.** Creating `VulkanJuliaPreviewKernel` compiles both shaders
 and creates their pipelines, about 100–170 ms on the first call. When a CPU
 render of a Julia view that the kernel supports (not deep zoom, smooth

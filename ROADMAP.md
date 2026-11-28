@@ -263,8 +263,9 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   cardioid's boundary, so its click arrives about 9.7 s after release (previously
   5.4–8 s;
   [map pacing](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md#follow-up-map-pacing)).
-  Since 2026-11-26 a drag instead advances 5% of the remaining distance per frame,
-  also after release, and arrives on the same path about 1.05 s after release
+  Since 2026-11-26 a drag instead advances 5% of the remaining distance per frame
+  (per 8.33 ms since 2026-11-28, see below), also after release, and arrives on
+  the same path about 1.05 s after release
   ([drag motion](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md#follow-up-separate-drag-and-click-motion)).
   The map is drawn in the main scene's palette and is colored again when the
   palette changes.
@@ -278,13 +279,27 @@ scope-matched baseline (9.1). Direct user tasks take precedence.
   at 3360x2000 and 300 iterations the first frame after opening the map fell from
   208 to 52 ms median, and a drag started at once from 132 to 25 ms p95 input →
   published frame. A map opened during the view's first render or its warm-up
-  still waits for the kernel. Still open: acceptance thresholds, physical input and display
-  timing, other hardware.
+  still waits for the kernel. CPU fallback implemented (2026-11-28), awaiting
+  review and owner acceptance: where the GPU kernel cannot render the view, the
+  map renders on the CPU at a coarser grid (scale 1–8, chosen to keep each frame
+  within 25 ms) with the same filter, and the settled point renders exactly
+  through the normal CPU pipeline; see
+  [CPU parameter map](docs/platform/MACOS_UI.md#cpu-parameter-map). With the GPU
+  disabled on the M3 Pro it shows 40–57 frames per second at 2400x1520 and
+  3360x2000 (scale 2–4) and 29–37 ms median drag input → published frame
+  ([CPU map](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md#follow-up-cpu-parameter-map-without-the-gpu)).
+  Per the owner's decision (2026-11-28) a drag now closes 5% of the remaining
+  distance per 8.33 ms instead of per frame, so it settles 0.95–1.00 s after
+  release on both engines (GPU previously 0.98–1.53 s depending on frame rate,
+  CPU 3.1–3.7 s;
+  [time-based drag](benchmarks/JULIA_EXPLORER_LATENCY_RESULTS.md#follow-up-time-based-drag-pacing)).
+  The CPU map was not run on Windows or Linux. Still open: acceptance thresholds,
+  physical input and display timing, other hardware.
 - [ ] **Map click speed in Explore Julia Parameters:** the map window offers
   Very slow (0.25×), Slow (0.5×), Default (1×), Fast (2×), and Very fast (4×).
   The preset scales adaptive click motion, including its speed near the
   boundary, and takes effect on the next click. Dragging keeps its own
-  5%-per-frame pacing. The application remembers
+  pacing (5% of the remaining distance per 8.33 ms). The application remembers
   the preset across launches. Validate preference persistence, exact arrival
   without a final jump, and the visible control in light and dark appearance.
 - [ ] **Interesting-places gallery:** ship a curated set of named scenes with

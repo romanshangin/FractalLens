@@ -152,7 +152,11 @@ final class MainMenuBar extends MenuBar {
                 new SeparatorMenuItem(), trap, histogram, animation,
                 new SeparatorMenuItem(), command("Reset Colors to Defaults", null, this::resetColors));
         juliaGpu.setOnAction(event -> {
-            if (!juliaGpu.isSelected() && explorer != null && explorer.isShowing()) explorer.close();
+            // A GPU map needs the mode; a CPU map does not use it.
+            if (!juliaGpu.isSelected() && explorer != null && explorer.isShowing()
+                    && !fractalView.explorerOnCpu()) {
+                explorer.close();
+            }
             fractalView.setJuliaGpu(juliaGpu.isSelected());
             updateAvailability();
         });
@@ -169,7 +173,8 @@ final class MainMenuBar extends MenuBar {
                     if (currentFractal == FractalPreset.JULIA && !parameterSheetOpen()) {
                         if (!fractalView.supportsJuliaExplorer()) {
                             FractalDialogs.message(stage, "Julia Parameter Map unavailable",
-                                    "Choose a GPU-supported Julia view and coloring to explore the parameter map.");
+                                    "Choose a Julia view with palette coloring, without Histogram Coloring or an "
+                                            + "orbit trap, outside deep zoom to explore the parameter map.");
                             return;
                         }
                         explorer = new JuliaExplorer(stage, fractalView, juliaClickSpeed, speed -> {
@@ -274,8 +279,7 @@ final class MainMenuBar extends MenuBar {
         animation.setDisable(rendering || histogram.isSelected() || orbitTrap != OrbitTrap.NONE);
         render.getItems().stream()
                 .filter(item -> "Edit Julia Parameters…".equals(item.getText()) || JuliaExplorer.TITLE.equals(item.getText()))
-                .forEach(item -> item.setDisable(rendering || currentFractal != FractalPreset.JULIA
-                        || JuliaExplorer.TITLE.equals(item.getText()) && !fractalView.isJuliaGpuAvailable()));
+                .forEach(item -> item.setDisable(rendering || currentFractal != FractalPreset.JULIA));
         // A mode switch, not a scene edit: available whenever Julia is shown and the GPU works.
         juliaGpu.setDisable(currentFractal != FractalPreset.JULIA
                 || !juliaGpu.isSelected() && !fractalView.isJuliaGpuAvailable());
