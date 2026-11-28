@@ -229,6 +229,11 @@ public class FractalView extends StackPane {
             }
         });
         fractalSurface.setOnWidePreviewChanged(modeIndicator::setWidePreview);
+        fractalSurface.setOnApproximateFramePublished(published -> {
+            if (juliaExplorer != null && published.fractal() == FractalPreset.JULIA) {
+                juliaExplorer.showPublishedPoint(published.juliaParameters());
+            }
+        });
         renderController.setOnRenderProgressChanged(modeIndicator::setProgress);
         renderController.setOnZoomChanged(modeIndicator::setZoom);
         renderController.setOnIterationsChanged(modeIndicator::setIterations);
@@ -602,6 +607,10 @@ public class FractalView extends StackPane {
 
     void observeExplorerFrame(JuliaFramePacing pacing) {
         fractalSurface.observeJuliaFrame(pacing);
+    }
+
+    JuliaParameters displayedJuliaPoint() {
+        return fractalSurface.displayedJuliaPoint();
     }
 
     boolean showsApproximateJuliaPoint(JuliaParameters point) {

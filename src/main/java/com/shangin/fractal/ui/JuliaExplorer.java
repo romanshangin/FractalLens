@@ -33,6 +33,10 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /** A floating parameter map. All gesture and publication decisions run on the FX thread. */
@@ -44,6 +48,9 @@ final class JuliaExplorer extends Stage {
     private final FractalView view;
     private final Pane map;
     private final Circle marker = new Circle(5, Color.ORANGERED);
+    private final Label realCoordinate = new Label();
+    private final Label imaginaryCoordinate = new Label();
+    private final DecimalFormat coordinateFormat = new DecimalFormat("0.000", DecimalFormatSymbols.getInstance(Locale.ROOT));
     // One image for the window's lifetime: thumbnail colors are written into it in place.
     private final WritableImage thumbnail = new WritableImage(WIDTH, HEIGHT);
     private final FractalColorizer colorizer = new FractalColorizer();
@@ -76,12 +83,9 @@ final class JuliaExplorer extends Stage {
     void advanceFrame(long now) {
         boolean idle = view.isLatencyIdle();
         if (!idle && (!replacePrevious || view.hasPendingMainViewRender())) return;
-        if (idle) {
-            if (!view.showsExplorerPoint(submitted)) {
-                view.renderExplorerPoint(submitted);
-                return;
-            }
-            placeMarker(submitted);
+        if (idle && !view.showsExplorerPoint(submitted)) {
+            view.renderExplorerPoint(submitted);
+            return;
         }
         if (desired.equals(submitted)) {
             if (!idle) return;
@@ -121,7 +125,14 @@ final class JuliaExplorer extends Stage {
         map.setPickOnBounds(true);
         map.setAccessibleText("Mandelbrot parameter map");
         Tooltip.install(map, new Tooltip("Click to move, drag to explore, or Shift-drag for fine adjustment."));
-        placeMarker(submitted);
+        realCoordinate.setId("julia-coordinate-real");
+        imaginaryCoordinate.setId("julia-coordinate-imaginary");
+        double coordinateWidth = (WIDTH - 16) / 2.0;
+        realCoordinate.setPrefWidth(coordinateWidth);
+        imaginaryCoordinate.setPrefWidth(coordinateWidth);
+        var coordinates = new HBox(realCoordinate, imaginaryCoordinate);
+        coordinates.setPadding(new Insets(6, 8, 6, 8));
+        showPublishedPoint(Objects.requireNonNullElse(view.displayedJuliaPoint(), submitted));
         var speedChoice = new ChoiceBox<JuliaClickSpeed>();
         speedChoice.setId("julia-click-speed");
         speedChoice.getItems().setAll(JuliaClickSpeed.values());
@@ -133,7 +144,7 @@ final class JuliaExplorer extends Stage {
         var controls = new HBox(8, speedLabel, speedChoice);
         controls.setAlignment(Pos.CENTER_LEFT);
         controls.setPadding(new Insets(6, 8, 6, 8));
-        var root = new VBox(map, controls);
+        var root = new VBox(coordinates, map, controls);
         var scene = new Scene(root);
         root.styleProperty().bind(scene.getPreferences().colorSchemeProperty().map(scheme ->
                 scheme == ColorScheme.DARK ? "-fx-base: #383838;" : ""));
@@ -188,7 +199,7 @@ final class JuliaExplorer extends Stage {
             timer.stop();
             view.setJuliaExplorer(null);
             if (editing && owner.isShowing()) {
-                desired = visiblePoint();
+                desired = displayed;
                 view.keepExplorerPointOnClose(desired);
                 commit();
             }
@@ -240,13 +251,11 @@ final class JuliaExplorer extends Stage {
         editing = finish = false;
         pressedPoint = null;
         committed = submitted = desired = parameters;
-        placeMarker(parameters);
     }
 
     void closeAfterRenderFailure() {
-        JuliaParameters visible = visiblePoint();
-        if (editing && view.showsApproximateJuliaPoint(visible)) {
-            desired = visible;
+        if (editing && view.showsApproximateJuliaPoint(displayed)) {
+            desired = displayed;
             commit();
         }
         closeWithoutCommit();
@@ -257,22 +266,17 @@ final class JuliaExplorer extends Stage {
     }
 
     JuliaParameters closeForMainViewRender() {
-        JuliaParameters point = editing ? visiblePoint() : committed;
+        JuliaParameters point = editing ? displayed : committed;
         closeWithoutCommit();
         return point;
     }
 
     JuliaParameters prepareForMainViewRender() {
-        submitted = visiblePoint();
+        submitted = editing ? displayed : committed;
         previousFrameTime = 0;
         replacePrevious = false;
         pacing.reset();
-        placeMarker(submitted);
         return submitted;
-    }
-
-    private JuliaParameters visiblePoint() {
-        return view.showsApproximateJuliaPoint(submitted) ? submitted : displayed;
     }
 
     void closeWithoutCommit() {
@@ -336,7 +340,6 @@ final class JuliaExplorer extends Stage {
         committed = submitted = desired;
         view.latency().boundary("map_committed");
         view.commitExplorerPoint(desired);
-        placeMarker(desired);
     }
 
     private JuliaParameters dragPoint(double x, double y, boolean fine) {
@@ -383,13 +386,24 @@ final class JuliaExplorer extends Stage {
     private static double mapX(JuliaParameters c) { return (c.real() - GRID.originReal()) / GRID.realStep(); }
     private static double mapY(JuliaParameters c) { return (GRID.originImaginary() - c.imaginary()) / GRID.imaginaryStep(); }
 
-    private void placeMarker(JuliaParameters c) {
-        displayed = c;
+    void showPublishedPoint(JuliaParameters c) {
+        if (!c.equals(displayed)) {
+            realCoordinate.setText("Re " + formatCoordinate(c.real()));
+            imaginaryCoordinate.setText("Im " + formatCoordinate(c.imaginary()));
+            displayed = c;
+        }
         double x = mapX(c), y = mapY(c);
         marker.setVisible(x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT);
         if (marker.isVisible()) {
             marker.setCenterX(x);
             marker.setCenterY(y);
         }
+    }
+
+    private String formatCoordinate(double value) {
+        double magnitude = Math.abs(value);
+        // Keep user-entered off-map constants readable in the fixed-width row.
+        if (magnitude >= 1_000_000) return String.format(Locale.ROOT, "%.3e", value);
+        return coordinateFormat.format(magnitude < 0.0005 ? 0 : value);
     }
 }
